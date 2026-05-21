@@ -3119,6 +3119,24 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             }
 
             if let Some(frame_id) = live_frame_id {
+                if face_name == "default" {
+                    let frame_param = match attr_name_str {
+                        ":foreground" => Some("foreground-color"),
+                        ":background" => Some("background-color"),
+                        _ => None,
+                    };
+                    if let Some(param_name) = frame_param {
+                        if let Some(frame) = eval.frames.get_mut(frame_id) {
+                            frame.set_parameter(Value::symbol(param_name), public_effective_value);
+                        }
+                        if attr_name_str == ":background"
+                            && let Some(function) =
+                                eval.obarray().symbol_function("frame-set-background-mode")
+                        {
+                            let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
+                        }
+                    }
+                }
                 mirror_runtime_face_into_frame(eval, frame_id, &face_name);
             }
         }

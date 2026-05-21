@@ -193,6 +193,40 @@ fn vm_integer_arg_descriptor_does_not_dynamic_bind_dummy_args_like_gnu() {
 }
 
 #[test]
+fn vm_dynamic_bytecode_args_do_not_occupy_bytecode_stack_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_vm_runtime_harness();
+    let mut func = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("ignored")],
+        optional: vec![],
+        rest: None,
+    });
+    let list_idx = func.add_symbol("list");
+    let one_idx = func.add_constant(Value::fixnum(1));
+    let two_idx = func.add_constant(Value::fixnum(2));
+    func.ops = vec![
+        Op::Constant(list_idx),
+        Op::Constant(one_idx),
+        Op::Constant(two_idx),
+        Op::Call(2),
+        Op::Return,
+    ];
+    func.max_stack = 3;
+    func.lexical = false;
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&func, vec![Value::fixnum(42)])
+            .expect("dynamic bytecode args should be specbound outside the bytecode stack")
+    };
+
+    assert_eq!(
+        result,
+        Value::list_from_slice(&[Value::fixnum(1), Value::fixnum(2)])
+    );
+}
+
+#[test]
 fn vm_handler_bind_1_leaves_shared_condition_stack_balanced() {
     crate::test_utils::init_test_tracing();
     with_vm_eval_full_context_state(
@@ -6232,6 +6266,25 @@ fn vm_font_face_frame_sensitive_builtins_use_shared_runtime_state() {
                       (equal (internal-get-lisp-face-attribute face :foreground f) "blue"))))"##
         ),
         r#"OK (t t t t t)"#
+    );
+}
+
+#[test]
+fn vm_default_face_color_updates_frame_parameters_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r##"(let ((f (selected-frame)))
+                  (internal-set-lisp-face-attribute 'default :foreground "#112233" f)
+                  (internal-set-lisp-face-attribute 'default :background "#445566" f)
+                  (list (frame-parameter f 'foreground-color)
+                        (frame-parameter f 'background-color)
+                        (internal-get-lisp-face-attribute
+                         'default :foreground f)
+                        (internal-get-lisp-face-attribute
+                         'default :background f)))"##,
+        ),
+        r##"OK ("#112233" "#445566" "#112233" "#445566")"##
     );
 }
 

@@ -44,6 +44,61 @@ fn invalid_bytecode_flow() -> Flow {
     signal("error", vec![Value::string("Invalid byte-code")])
 }
 
+#[cold]
+#[inline(never)]
+fn trace_invalid_bytecode_site(
+    func: &ByteCodeFunction,
+    reason: &str,
+    pc: usize,
+    frame_base: usize,
+    frame_limit: usize,
+    stack_len: usize,
+    op: Option<&Op>,
+) {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    if !*ENABLED.get_or_init(|| std::env::var_os("NEOMACS_TRACE_INVALID_BYTECODE").is_some()) {
+        return;
+    }
+
+    let gnu_byte_offset = func.gnu_byte_offset_map.as_ref().and_then(|map| {
+        map.iter()
+            .find_map(|(byte_offset, op_index)| (*op_index == pc).then_some(*byte_offset))
+    });
+    let op_window_start = pc.saturating_sub(8);
+    let op_window_end = (pc + 8).min(func.ops.len());
+    let op_window = func.ops[op_window_start..op_window_end]
+        .iter()
+        .enumerate()
+        .map(|(idx, op)| format!("{}:{:?}", op_window_start + idx, op))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let raw_bytes = func.gnu_bytecode_bytes.as_ref().map(|bytes| {
+        let start = gnu_byte_offset.unwrap_or(0).saturating_sub(12);
+        let end = (gnu_byte_offset.unwrap_or(0) + 24).min(bytes.len());
+        bytes[start..end]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
+    tracing::error!(
+        reason,
+        pc,
+        gnu_byte_offset,
+        ?op,
+        op_window,
+        raw_bytes,
+        stack_len,
+        frame_base,
+        frame_limit,
+        max_stack = func.max_stack,
+        ops_len = func.ops.len(),
+        constants_len = func.constants.len(),
+        lexical = func.lexical,
+        "Invalid byte-code"
+    );
+}
+
 #[derive(Clone, Copy)]
 enum DirectSubrCallee {
     Symbol(SymId),
@@ -433,55 +488,6 @@ impl<'a> Vm<'a> {
                 .reserve_exact(frame_limit - self.ctx.bc_buf.len());
         }
 
-        // Push required + optional args (pad with nil for missing optionals)
-        for i in 0..nonrest {
-            if self.ctx.bc_buf.len() >= frame_limit {
-                self.ctx.bc_buf.truncate(frame_base);
-                self.ctx.bc_frames.pop();
-                return Err(invalid_bytecode_flow());
-            }
-            if i < nargs {
-                let v = args[i];
-                if v.is_string() {
-                    let ptr = v.as_string_ptr().unwrap();
-                    let hdr =
-                        unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
-                    if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
-                        panic!(
-                            "RUN_FRAME ARG BUG: arg[{}] = {:#x} (ptr {:?}, kind={:?}) is corrupt string. \
-                             nargs={}, func has {} required, {} optional, rest={}",
-                            i,
-                            v.0,
-                            ptr,
-                            hdr.kind,
-                            nargs,
-                            func.params.required.len(),
-                            func.params.optional.len(),
-                            func.params.rest.is_some(),
-                        );
-                    }
-                }
-                self.ctx.bc_buf.push(v);
-            } else {
-                self.ctx.bc_buf.push(Value::NIL);
-            }
-        }
-
-        // If &rest, collect remaining args into a list
-        if has_rest {
-            if self.ctx.bc_buf.len() >= frame_limit {
-                self.ctx.bc_buf.truncate(frame_base);
-                self.ctx.bc_frames.pop();
-                return Err(invalid_bytecode_flow());
-            }
-            let rest_list = if nargs > nonrest {
-                Value::list_from_slice(&args[nonrest..])
-            } else {
-                Value::NIL
-            };
-            self.ctx.bc_buf.push(rest_list);
-        }
-
         // GNU's bytecode stores lexical params at known stack positions; the
         // byte-compiler emits `byte-stack-ref` for every lexical reference,
         // so the param names are NOT looked up at runtime and don't need any
@@ -494,8 +500,61 @@ impl<'a> Vm<'a> {
         // code did even for the lexical case) is dead work that dominated
         // debug-build batch-byte-compile runtime.
         let has_named_params = nonrest > 0 || has_rest;
+        let params_on_stack = func.lexical || func.env.is_some();
+        if params_on_stack {
+            // Lexical bytecode follows GNU bytecode.c: exec_byte_code receives
+            // the encoded arg template and pushes incoming arguments into the
+            // bytecode frame before executing the first instruction.
+            for i in 0..nonrest {
+                if self.ctx.bc_buf.len() >= frame_limit {
+                    self.ctx.bc_buf.truncate(frame_base);
+                    self.ctx.bc_frames.pop();
+                    return Err(invalid_bytecode_flow());
+                }
+                if i < nargs {
+                    let v = args[i];
+                    if v.is_string() {
+                        let ptr = v.as_string_ptr().unwrap();
+                        let hdr =
+                            unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
+                        if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
+                            panic!(
+                                "RUN_FRAME ARG BUG: arg[{}] = {:#x} (ptr {:?}, kind={:?}) is corrupt string. \
+                                 nargs={}, func has {} required, {} optional, rest={}",
+                                i,
+                                v.0,
+                                ptr,
+                                hdr.kind,
+                                nargs,
+                                func.params.required.len(),
+                                func.params.optional.len(),
+                                func.params.rest.is_some(),
+                            );
+                        }
+                    }
+                    self.ctx.bc_buf.push(v);
+                } else {
+                    self.ctx.bc_buf.push(Value::NIL);
+                }
+            }
+
+            if has_rest {
+                if self.ctx.bc_buf.len() >= frame_limit {
+                    self.ctx.bc_buf.truncate(frame_base);
+                    self.ctx.bc_frames.pop();
+                    return Err(invalid_bytecode_flow());
+                }
+                let rest_list = if nargs > nonrest {
+                    Value::list_from_slice(&args[nonrest..])
+                } else {
+                    Value::NIL
+                };
+                self.ctx.bc_buf.push(rest_list);
+            }
+        }
+
         if has_named_params {
-            if func.lexical || func.env.is_some() {
+            if params_on_stack {
                 // Lexical bytecode functions: params live on bc_buf at the
                 // bottom of the frame.  Just install the captured closure
                 // env (if any) and run; the body's stack-ref opcodes find
@@ -529,8 +588,9 @@ impl<'a> Vm<'a> {
 
             // Dynamic bytecode functions: each param needs a specbind so
             // that varref opcodes inside the body can find it via the
-            // obarray.  Bind params directly from `args`/the rest list with
-            // no intermediate map.
+            // obarray.  GNU eval.c:funcall_lambda then calls exec_byte_code
+            // with zero bytecode arguments, so dynamic params must not occupy
+            // bytecode stack slots.
             let mut arg_idx = 0;
             for param in &func.params.required {
                 let val = if arg_idx < nargs {
@@ -660,6 +720,16 @@ impl<'a> Vm<'a> {
                 }
                 let len = self.ctx.bc_buf.len();
                 if len >= frame_limit {
+                    let invalid_pc = pc_local.saturating_sub(1);
+                    trace_invalid_bytecode_site(
+                        func,
+                        "push-frame-limit",
+                        invalid_pc,
+                        frame_base,
+                        frame_limit,
+                        len,
+                        ops.get(invalid_pc),
+                    );
                     self.resume_nonlocal(
                         func,
                         &mut pc_local,
@@ -705,7 +775,17 @@ impl<'a> Vm<'a> {
         }
 
         macro_rules! invalid_bytecode {
-            () => {{
+            ($reason:expr) => {{
+                let invalid_pc = pc_local.saturating_sub(1);
+                trace_invalid_bytecode_site(
+                    func,
+                    $reason,
+                    invalid_pc,
+                    frame_base,
+                    frame_limit,
+                    self.ctx.bc_buf.len(),
+                    ops.get(invalid_pc),
+                );
                 self.resume_nonlocal(
                     func,
                     &mut pc_local,
@@ -725,6 +805,16 @@ impl<'a> Vm<'a> {
                 // -- Constants and stack --
                 Op::Constant(idx) => {
                     let Some(value) = constants.get(*idx as usize).copied() else {
+                        let invalid_pc = pc_local.saturating_sub(1);
+                        trace_invalid_bytecode_site(
+                            func,
+                            "constant-index-out-of-range",
+                            invalid_pc,
+                            frame_base,
+                            frame_limit,
+                            self.ctx.bc_buf.len(),
+                            ops.get(invalid_pc),
+                        );
                         self.resume_nonlocal(
                             func,
                             &mut pc_local,
@@ -740,7 +830,7 @@ impl<'a> Vm<'a> {
                 Op::True => stk_push!(Value::T),
                 Op::Pop => {
                     if stk!().is_empty() {
-                        invalid_bytecode!();
+                        invalid_bytecode!("pop-empty-stack");
                     }
                     stk!().pop();
                 }
@@ -754,10 +844,10 @@ impl<'a> Vm<'a> {
                         {
                             let len = self.ctx.bc_buf.len();
                             if len == 0 {
-                                invalid_bytecode!();
+                                invalid_bytecode!("dup-lss-gotoifnil-empty-stack");
                             }
                             if len >= frame_limit {
-                                invalid_bytecode!();
+                                invalid_bytecode!("dup-lss-gotoifnil-stack-at-frame-limit");
                             }
 
                             let top = unsafe { *self.ctx.bc_buf.get_unchecked(len - 1) };
@@ -771,7 +861,7 @@ impl<'a> Vm<'a> {
                                     stack.set_len(after_dup_len);
                                 }
                                 pc_local += 1;
-                                invalid_bytecode!();
+                                invalid_bytecode!("dup-lss-gotoifnil-stackref-out-of-range");
                             }
 
                             let ref_index = after_dup_len - offset;
@@ -794,7 +884,7 @@ impl<'a> Vm<'a> {
                     if let Some(&top) = stk!().last() {
                         stk_push!(top);
                     } else {
-                        invalid_bytecode!();
+                        invalid_bytecode!("dup-empty-stack");
                     }
                 }
                 Op::StackRef(n) => {
@@ -807,6 +897,16 @@ impl<'a> Vm<'a> {
                         let val = unsafe { *stk!().get_unchecked(len - offset) };
                         stk_push!(val);
                     } else {
+                        let invalid_pc = pc_local.saturating_sub(1);
+                        trace_invalid_bytecode_site(
+                            func,
+                            "stack-ref-out-of-range",
+                            invalid_pc,
+                            frame_base,
+                            frame_limit,
+                            len,
+                            ops.get(invalid_pc),
+                        );
                         self.resume_nonlocal(
                             func,
                             &mut pc_local,
@@ -820,7 +920,7 @@ impl<'a> Vm<'a> {
                 Op::StackSet(n) => {
                     let len = stk!().len();
                     if len == 0 {
-                        invalid_bytecode!();
+                        invalid_bytecode!("stack-set-empty-stack");
                     }
                     let n = *n as usize;
                     if n == 0 {
@@ -836,7 +936,7 @@ impl<'a> Vm<'a> {
                             stack.set_len(len - 1);
                         }
                     } else {
-                        invalid_bytecode!();
+                        invalid_bytecode!("stack-set-out-of-range");
                     }
                 }
                 Op::DiscardN(raw) => {
@@ -847,12 +947,12 @@ impl<'a> Vm<'a> {
                     }
                     let len = stk!().len();
                     if n > len {
-                        invalid_bytecode!();
+                        invalid_bytecode!("discard-n-out-of-range");
                     }
                     let stack = &mut self.ctx.bc_buf;
                     if preserve_tos {
                         if n >= len {
-                            invalid_bytecode!();
+                            invalid_bytecode!("discard-n-preserve-tos-out-of-range");
                         }
                         let top = unsafe { *stack.get_unchecked(len - 1) };
                         let target = len - 1 - n;
@@ -1039,7 +1139,7 @@ impl<'a> Vm<'a> {
                     let stack = &mut self.ctx.bc_buf;
                     let len = stack.len();
                     if len == 0 {
-                        invalid_bytecode!();
+                        invalid_bytecode!("goto-if-nil-empty-stack");
                     }
                     let val = unsafe { *stack.get_unchecked(len - 1) };
                     unsafe {
@@ -1053,7 +1153,7 @@ impl<'a> Vm<'a> {
                     let stack = &mut self.ctx.bc_buf;
                     let len = stack.len();
                     if len == 0 {
-                        invalid_bytecode!();
+                        invalid_bytecode!("goto-if-not-nil-empty-stack");
                     }
                     let val = unsafe { *stack.get_unchecked(len - 1) };
                     unsafe {
@@ -1067,7 +1167,7 @@ impl<'a> Vm<'a> {
                     let stack = &mut self.ctx.bc_buf;
                     let len = stack.len();
                     if len == 0 {
-                        invalid_bytecode!();
+                        invalid_bytecode!("goto-if-nil-else-pop-empty-stack");
                     }
                     if unsafe { stack.get_unchecked(len - 1) }.is_nil() {
                         branch_to!(*addr as usize);
@@ -1081,7 +1181,7 @@ impl<'a> Vm<'a> {
                     let stack = &mut self.ctx.bc_buf;
                     let len = stack.len();
                     if len == 0 {
-                        invalid_bytecode!();
+                        invalid_bytecode!("goto-if-not-nil-else-pop-empty-stack");
                     }
                     if unsafe { stack.get_unchecked(len - 1) }.is_truthy() {
                         branch_to!(*addr as usize);
@@ -1210,7 +1310,7 @@ impl<'a> Vm<'a> {
                         let stack = &mut self.ctx.bc_buf;
                         let len = stack.len();
                         if len < 2 {
-                            invalid_bytecode!();
+                            invalid_bytecode!("add-stack-underflow");
                         }
                         let b = unsafe { *stack.get_unchecked(len - 1) };
                         let a = unsafe { *stack.get_unchecked(len - 2) };
@@ -1358,7 +1458,7 @@ impl<'a> Vm<'a> {
                         let stack = &mut self.ctx.bc_buf;
                         let len = stack.len();
                         if len == 0 {
-                            invalid_bytecode!();
+                            invalid_bytecode!("add1-empty-stack");
                         }
                         let top = unsafe { *stack.get_unchecked(len - 1) };
                         if top.is_fixnum() {
@@ -1465,7 +1565,7 @@ impl<'a> Vm<'a> {
                         let stack = &mut self.ctx.bc_buf;
                         let len = stack.len();
                         if len < 2 {
-                            invalid_bytecode!();
+                            invalid_bytecode!("lss-stack-underflow");
                         }
                         let b = unsafe { *stack.get_unchecked(len - 1) };
                         let a = unsafe { *stack.get_unchecked(len - 2) };

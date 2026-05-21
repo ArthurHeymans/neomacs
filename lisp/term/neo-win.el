@@ -122,15 +122,6 @@ DISPLAY is the name of the display Emacs should connect to."
   ;; Create fontsets specified in X resources "Fontset-N" (N is 0, 1, ...).
   (create-fontset-from-x-resource)
 
-  ;; Set default frame colors only if not already configured by the user
-  ;; (e.g., via set-face-attribute in early-init.el).
-  ;; Use assq to check by key, not add-to-list which compares the whole cons.
-  (dolist (param '((foreground-color . "black")
-                   (background-color . "white")
-                   (cursor-color . "black")))
-    (unless (assq (car param) default-frame-alist)
-      (push param default-frame-alist)))
-
   (add-hook 'suspend-hook #'neomacs-suspend-error)
   (add-hook 'window-setup-hook #'neomacs--window-setup)
 
