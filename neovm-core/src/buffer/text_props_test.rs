@@ -222,6 +222,23 @@ fn remove_property_partial_range() {
 }
 
 #[test]
+fn remove_property_preserves_nil_interval_boundaries() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+
+    assert!(table.remove_property(0, 1, Value::symbol("face")));
+
+    assert_eq!(table.debug_interval_bounds(), vec![(0, 1, true)]);
+    assert_eq!(
+        table.object_interval_runs(2),
+        vec![(0, 1, Vec::new()), (1, 2, Vec::new())]
+    );
+    assert_eq!(table.next_interval_boundary(0), Some(1));
+    assert_eq!(table.next_property_change(0), None);
+}
+
+#[test]
 fn remove_all_properties_basic() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();
@@ -828,19 +845,14 @@ fn adjust_delete_produces_no_negative_len_runs() {
     assert_eq!(table.next_property_change(30), None);
 
     // Verify no intervals have start >= end
-    for (start, node) in &table.intervals {
-        assert!(
-            *start < node.end,
-            "interval [{},{}) has start >= end",
-            start,
-            node.end
-        );
+    let interval_bounds = table.debug_interval_bounds();
+    for (start, end, _) in &interval_bounds {
+        assert!(start < end, "interval [{},{}) has start >= end", start, end);
     }
     // There should be exactly 2 non-empty intervals
-    let non_empty: Vec<_> = table
-        .intervals
+    let non_empty: Vec<_> = interval_bounds
         .iter()
-        .filter(|(_, r)| !r.is_empty_plist())
+        .filter(|(_, _, is_empty)| !is_empty)
         .collect();
     assert_eq!(non_empty.len(), 2);
 }
