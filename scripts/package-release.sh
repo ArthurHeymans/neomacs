@@ -80,11 +80,7 @@ for binary in neomacs neomacs-temacs bootstrap-neomacs mock-display; do
   fi
 done
 
-shopt -s nullglob
-for image in "$release_dir"/*.pdump; do
-  install -m 0644 "$image" "$package_dir/bin/$(basename "$image")"
-done
-shopt -u nullglob
+install -m 0644 "$release_dir/neomacs.pdump" "$package_dir/bin/neomacs.pdump"
 
 cp -a lisp "$package_dir/share/neomacs/"
 cp -a etc "$package_dir/share/neomacs/"

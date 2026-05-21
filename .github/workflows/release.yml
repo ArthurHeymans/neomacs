@@ -2,6 +2,8 @@ name: release
 
 on:
   push:
+    branches:
+      - "pkg/v*"
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -59,6 +61,7 @@ jobs:
             libsystemd-dev \
             libsqlite3-dev \
             libxml2-dev \
+            curl \
             gnutls-bin \
             libgnutls28-dev
 
@@ -78,12 +81,28 @@ jobs:
       - name: Package release archive
         run: scripts/package-release.sh --target linux-x86_64
 
+      - name: Install AppImage packaging tools
+        run: |
+          curl -L https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            -o /tmp/linuxdeploy-x86_64.AppImage
+          curl -L https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o /tmp/appimagetool-x86_64.AppImage
+          chmod 0755 /tmp/linuxdeploy-x86_64.AppImage /tmp/appimagetool-x86_64.AppImage
+
+      - name: Package AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          LINUXDEPLOY_APPIMAGE: /tmp/linuxdeploy-x86_64.AppImage
+          APPIMAGETOOL_APPIMAGE: /tmp/appimagetool-x86_64.AppImage
+        run: scripts/package-appimage.sh --target linux-x86_64 --skip-build
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
           name: neomacs-linux-x86_64
           path: |
             dist/neomacs-linux-x86_64.tar.gz
+            dist/neomacs-linux-x86_64.AppImage
             dist/SHA256SUMS
 
       - name: Upload GitHub release assets
@@ -93,4 +112,5 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/neomacs-linux-x86_64.tar.gz
+            dist/neomacs-linux-x86_64.AppImage
             dist/SHA256SUMS
