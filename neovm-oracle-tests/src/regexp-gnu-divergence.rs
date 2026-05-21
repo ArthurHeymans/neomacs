@@ -166,7 +166,6 @@ fn oracle_prop_regexp_gnu_category_tables() {
 }
 
 #[test]
-#[ignore = "known divergence: Neomacs case folding is incomplete for non-ASCII regexp matches"]
 fn oracle_prop_regexp_gnu_unicode_case_folding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

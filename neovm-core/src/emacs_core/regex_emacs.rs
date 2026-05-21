@@ -246,8 +246,12 @@ pub(crate) struct CompiledPattern {
     pub uses_syntax: bool,
 
     /// Character translation table for case-folding.
-    /// Maps each character to its canonical form (e.g., 'A' → 'a').
-    pub translate: Option<Vec<char>>,
+    ///
+    /// GNU stores the active case-canon char-table in `re_pattern_buffer.translate`.
+    /// Keep the same shape at the matcher boundary: literal compilation and input
+    /// matching both call through this translator, with a 256-entry byte fast path
+    /// only for fastmap/bitmap operations.
+    pub translate: Option<CaseTranslation>,
 
     /// Multibyte (non-ASCII) character ranges for Charset/CharsetNot opcodes.
     /// Key = bytecode position of the Charset/CharsetNot opcode.
@@ -268,6 +272,36 @@ pub(crate) struct CompiledPattern {
     /// `execute_charset` (regex-emacs.c:3795-3802). See audit
     /// finding #8 in `drafts/regex-search-audit.md`.
     pub charset_class_bits: HashMap<usize, u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CaseTranslation {
+    byte: [u32; 256],
+}
+
+impl CaseTranslation {
+    fn standard() -> Self {
+        let mut byte = [0u32; 256];
+        for i in 0..=255u32 {
+            byte[i as usize] = Self::canonicalize_char(i);
+        }
+        Self { byte }
+    }
+
+    fn translate(&self, c: u32) -> u32 {
+        self.byte
+            .get(c as usize)
+            .copied()
+            .unwrap_or_else(|| Self::canonicalize_char(c))
+    }
+
+    fn translate_byte(&self, c: u8) -> u8 {
+        self.byte[c as usize] as u8
+    }
+
+    fn canonicalize_char(c: u32) -> u32 {
+        crate::emacs_core::builtins::downcase_char_code_emacs_compat(c as i64) as u32
+    }
 }
 
 /// Bit set on a `Charset`/`CharsetNot` opcode for `[[:word:]]`. The
@@ -453,43 +487,8 @@ pub(crate) fn regex_compile_lisp(
     buf.multibyte = pattern.is_multibyte();
     buf.target_multibyte = pattern.is_multibyte();
 
-    // Build case-fold translation table if needed.
-    //
-    // GNU `compile_pattern` (search.c:287-289) passes the buffer's
-    // `case_canon_table` here, which is a full Unicode char-table
-    // configurable per buffer via `(set-case-table ...)`. neomacs's
-    // translate is a 256-entry `Vec<char>` populated from Rust's
-    // `to_lowercase()` on each ASCII byte, which:
-    //
-    //   - covers ASCII A-Z → a-z exactly (the only common case),
-    //   - is identity for the rest of the byte range (no
-    //     buffer-specific case folding for Latin-1 or higher),
-    //   - is unreachable for code points > 0xFF (the matcher's
-    //     `tr()` short-circuits when `c >= 256`).
-    //
-    // Audit finding #5 in `drafts/regex-search-audit.md` flags this
-    // as "translate table byte-only, no buffer case table". A
-    // GNU-parity refactor would require:
-    //
-    //   1. A char-keyed translate table (HashMap<char, char> or a
-    //      sparse char-table backed by the buffer's own case_canon).
-    //   2. Threading the buffer's case_canon table down through
-    //      `compile_search_pattern_with_posix`.
-    //   3. Decoding the input as full UTF-8 chars in `RegexOp::Exactn`
-    //      (instead of byte-by-byte) so non-ASCII chars can be
-    //      case-folded against the pattern.
-    //
-    // That is the audit's Phase B Task 2.1 (1-2 days). Until it
-    // lands, the byte-only table here is documented intentional; it
-    // matches GNU exactly for ASCII letters and silently no-ops for
-    // multibyte case folds.
     if case_fold {
-        let mut table = Vec::with_capacity(256);
-        for i in 0..256u32 {
-            let c = char::from_u32(i).expect("0..=255 must be valid Unicode scalars");
-            table.push(c.to_lowercase().next().unwrap_or(c));
-        }
-        buf.translate = Some(table);
+        buf.translate = Some(CaseTranslation::standard());
     }
 
     let pattern_bytes = pattern.as_bytes();
@@ -1205,11 +1204,7 @@ fn goto_normal_char(
     laststart_is_group: &mut bool,
 ) {
     let c = if let Some(table) = buf.translate.as_ref() {
-        if (c as usize) < table.len() {
-            table[c as usize] as u32
-        } else {
-            c
-        }
+        table.translate(c)
     } else {
         c
     };
@@ -1598,7 +1593,7 @@ fn compile_charset(
                     .unwrap_or((pattern[*p] as u32, 1));
                 let range_end = emacs_char_to_rust_char(range_end);
                 *p += rlen;
-                let translate = buf.translate.as_deref();
+                let translate = buf.translate.as_ref();
                 if range_start <= range_end {
                     if range_start.is_ascii() && range_end.is_ascii() {
                         // Both ASCII — use the bitmap
@@ -1657,7 +1652,7 @@ fn compile_charset(
                         &mut buf.buffer,
                         bitmap_start,
                         c as u8,
-                        buf.translate.as_deref(),
+                        buf.translate.as_ref(),
                     );
                 } else {
                     add_multibyte_range(&mut mb_ranges, c, c, case_fold);
@@ -1686,7 +1681,7 @@ fn compile_charset(
                             &mut buf.buffer,
                             bitmap_start,
                             c as u8,
-                            buf.translate.as_deref(),
+                            buf.translate.as_ref(),
                         );
                     } else {
                         add_multibyte_range(&mut mb_ranges, c, c, case_fold);
@@ -1698,7 +1693,7 @@ fn compile_charset(
                     bitmap_start,
                     &mut mb_ranges,
                     &mut class_bits,
-                    buf.translate.as_deref(),
+                    buf.translate.as_ref(),
                 )?;
                 continue;
             }
@@ -1712,7 +1707,7 @@ fn compile_charset(
                     &mut buf.buffer,
                     bitmap_start,
                     prev as u8,
-                    buf.translate.as_deref(),
+                    buf.translate.as_ref(),
                 );
             } else {
                 add_multibyte_range(&mut mb_ranges, prev, prev, case_fold);
@@ -1733,7 +1728,7 @@ fn compile_charset(
                 &mut buf.buffer,
                 bitmap_start,
                 c as u8,
-                buf.translate.as_deref(),
+                buf.translate.as_ref(),
             );
         } else {
             add_multibyte_range(&mut mb_ranges, c, c, case_fold);
@@ -1800,12 +1795,14 @@ fn add_multibyte_range(ranges: &mut Vec<(char, char)>, start: char, end: char, c
 /// practical difference only shows up when Rust's Unicode case
 /// mapping disagrees with Emacs's case canon table, but the GNU-
 /// parity fix is to consult the same translate table both sides.
-fn set_bitmap_bit(buffer: &mut Vec<u8>, bitmap_start: usize, c: u8, translate: Option<&[char]>) {
+fn set_bitmap_bit(
+    buffer: &mut Vec<u8>,
+    bitmap_start: usize,
+    c: u8,
+    translate: Option<&CaseTranslation>,
+) {
     let target = match translate {
-        Some(table) => table
-            .get(c as usize)
-            .map(|ch| *ch as u32 as u8)
-            .unwrap_or(c),
+        Some(table) => table.translate_byte(c),
         None => c,
     };
     let byte_idx = bitmap_start + (target as usize / 8);
@@ -1859,7 +1856,7 @@ fn apply_posix_class(
     bitmap_start: usize,
     mb_ranges: &mut Vec<(char, char)>,
     class_bits: &mut u8,
-    translate: Option<&[char]>,
+    translate: Option<&CaseTranslation>,
 ) -> Result<(), RegexCompileError> {
     // GNU `regex-emacs.c:2100-2101` records `BIT_SPACE` and
     // `BIT_WORD` on the charset so the matcher can later consult
@@ -2403,7 +2400,7 @@ pub(crate) fn re_match(
     // Helper: translate a character for case-folding
     let tr = |c: u32| -> u32 {
         if let Some(table) = translate {
-            if c < 256 { table[c as usize] as u32 } else { c }
+            table.translate(c)
         } else {
             c
         }
@@ -3608,7 +3605,7 @@ pub(crate) fn re_search(
 ) -> Option<(usize, MatchRegisters)> {
     let text_len = text.len();
     let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !pattern.uses_syntax;
-    let translate = pattern.translate.as_deref();
+    let translate = pattern.translate.as_ref();
 
     if range >= 0 {
         // Forward search
@@ -3634,8 +3631,7 @@ pub(crate) fn re_search(
                     // is what lets a fastmap built for a bitmap of lowercase
                     // characters still catch uppercase input (audit #9).
                     if pos < text_len {
-                        debug_assert!(table.len() >= 256);
-                        let idx = table[text[pos] as usize] as u32 as u8 as usize;
+                        let idx = table.translate_byte(text[pos]) as usize;
                         if !pattern.fastmap[idx] {
                             pos += 1;
                             continue;
@@ -3693,8 +3689,7 @@ pub(crate) fn re_search(
                     // GNU disables fastmap skipping for nullable patterns so zero-width
                     // matches like `\\(?:...\\)\\=` are still considered at every point.
                     if pos < text_len {
-                        debug_assert!(table.len() >= 256);
-                        let idx = table[text[pos] as usize] as u32 as u8 as usize;
+                        let idx = table.translate_byte(text[pos]) as usize;
                         if !pattern.fastmap[idx] {
                             continue;
                         }

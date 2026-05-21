@@ -1442,6 +1442,18 @@ fn search_forward_case_fold_true_unicode_literal() {
 }
 
 #[test]
+fn string_match_case_fold_non_latin_unicode_literals() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+
+    let greek = string_match_full_with_case_fold("Ω", "ω", 0, true, &mut md);
+    assert_eq!(greek.unwrap(), Some(0));
+
+    let cyrillic = string_match_full_with_case_fold("Д", "д", 0, true, &mut md);
+    assert_eq!(cyrillic.unwrap(), Some(0));
+}
+
+#[test]
 fn search_forward_case_fold_true_ascii_literal_in_non_ascii_buffer() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("α GENERATED-AUTOLOAD-FILE");
