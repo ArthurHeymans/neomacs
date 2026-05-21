@@ -3359,7 +3359,8 @@ impl LayoutEngine {
         // returning. Mirrors GNU's single `face_cache->used`
         // counter per frame at `src/xfaces.c::lookup_face` /
         // `init_frame_faces`.
-        let mut current_face_id: u32 = self.frame_face_id_counter.max(1);
+        let mut current_face_id: u32 = self.frame_face_id_counter.max(BasicFaceId::SENTINEL);
+        let mut current_text_face_id: u32 = BasicFaceId::Default.into();
         let mut _current_fg: Color = default_fg; // tracks foreground across face changes
         let mut current_bg: Color = default_bg; // tracks background across face changes
         let mut current_font_family = if default_resolved.font_family.is_empty() {
@@ -3659,6 +3660,7 @@ impl LayoutEngine {
                     current_font_italic = resolved.italic;
                     current_font_size_px = resolved.font_size.max(1.0).round() as i32;
                     current_resolved_face = resolved.clone();
+                    current_text_face_id = face_id;
                     self.current_resolved_family = current_font_family.clone();
                     self.resolved_family_face_id = face_id;
                     face_space_w = char_advance(
@@ -3892,7 +3894,7 @@ impl LayoutEngine {
                             );
                             self.matrix_builder.push_char_with_pixel_width(
                                 '.',
-                                current_face_id.saturating_sub(1),
+                                current_text_face_id,
                                 charpos.max(0) as usize,
                                 dot_advance,
                             );
@@ -3939,7 +3941,7 @@ impl LayoutEngine {
                                     overlay_string.string,
                                     face_resolver,
                                     &current_resolved_face,
-                                    current_face_id.saturating_sub(1),
+                                    current_text_face_id,
                                     &mut x,
                                     &mut y,
                                     &mut col,
@@ -4150,14 +4152,14 @@ impl LayoutEngine {
                                 if rch_is_wide {
                                     self.matrix_builder.push_wide_char_with_pixel_width(
                                         rch,
-                                        current_face_id.saturating_sub(1),
+                                        current_text_face_id,
                                         charpos as usize,
                                         rch_advance,
                                     );
                                 } else {
                                     self.matrix_builder.push_char_with_pixel_width(
                                         rch,
-                                        current_face_id.saturating_sub(1),
+                                        current_text_face_id,
                                         charpos as usize,
                                         rch_advance,
                                     );
@@ -4224,7 +4226,7 @@ impl LayoutEngine {
                             let _bg = Color::from_pixel(default_resolved.bg);
                             self.matrix_builder.push_stretch(
                                 (space_width / face_char_w).ceil() as u16,
-                                current_face_id.saturating_sub(1),
+                                current_text_face_id,
                             );
                             x += space_width;
                             col += (space_width / face_char_w).ceil() as usize;
@@ -4994,7 +4996,7 @@ impl LayoutEngine {
                 );
                 self.matrix_builder.push_stretch(
                     (next_tab_col.saturating_sub(col)).max(1) as u16,
-                    current_face_id.saturating_sub(1),
+                    current_text_face_id,
                 );
                 x += advance;
                 col = next_tab_col;
@@ -5650,7 +5652,7 @@ impl LayoutEngine {
                             overlay_string.string,
                             face_resolver,
                             &current_resolved_face,
-                            current_face_id.saturating_sub(1),
+                            current_text_face_id,
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5688,7 +5690,7 @@ impl LayoutEngine {
                     gy,
                     face_h,
                     face_ascent_val,
-                    current_face_id.saturating_sub(1),
+                    current_text_face_id,
                     false,
                     height_scale,
                 );
@@ -5701,13 +5703,13 @@ impl LayoutEngine {
                 self.run_buf.push(suffix, face_char_w);
                 self.matrix_builder.push_char_with_pixel_width(
                     prefix,
-                    current_face_id.saturating_sub(1),
+                    current_text_face_id,
                     charpos as usize,
                     face_char_w,
                 );
                 self.matrix_builder.push_char_with_pixel_width(
                     suffix,
-                    current_face_id.saturating_sub(1),
+                    current_text_face_id,
                     charpos as usize,
                     face_char_w,
                 );
@@ -5717,14 +5719,14 @@ impl LayoutEngine {
                 if char_cols == 2 {
                     self.matrix_builder.push_wide_char_with_pixel_width(
                         ch,
-                        current_face_id.saturating_sub(1),
+                        current_text_face_id,
                         charpos as usize,
                         advance,
                     );
                 } else {
                     self.matrix_builder.push_char_with_pixel_width(
                         ch,
-                        current_face_id.saturating_sub(1),
+                        current_text_face_id,
                         charpos as usize,
                         advance,
                     );
@@ -5777,7 +5779,7 @@ impl LayoutEngine {
                             overlay_string.string,
                             face_resolver,
                             &current_resolved_face,
-                            current_face_id.saturating_sub(1),
+                            current_text_face_id,
                             &mut x,
                             &mut y,
                             &mut col,
@@ -5882,7 +5884,7 @@ impl LayoutEngine {
                     overlay_string.string,
                     face_resolver,
                     &current_resolved_face,
-                    current_face_id.saturating_sub(1),
+                    current_text_face_id,
                     &mut x,
                     &mut y,
                     &mut col,

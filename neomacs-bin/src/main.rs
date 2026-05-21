@@ -1589,7 +1589,18 @@ fn initialize_reused_gui_startup_frame(eval: &mut Context, frame_id: FrameId) {
           ;; recalculation.  It installs x-alternatives-map on the frame's
           ;; terminal, including [M-backspace] -> M-DEL.
           (when (fboundp 'x-setup-function-keys)
-            (x-setup-function-keys neomacs--reused-gui-startup-frame)))
+            (x-setup-function-keys neomacs--reused-gui-startup-frame))
+          ;; The reused startup frame bypasses GNU's normal
+          ;; faces.el:x-create-frame-with-faces creation path.  Run the
+          ;; frame-local face finalization from that path so frame parameters
+          ;; such as foreground-color/background-color realize into the
+          ;; default face cache before redisplay.
+          (when (fboundp 'frame-set-background-mode)
+            (frame-set-background-mode neomacs--reused-gui-startup-frame t))
+          (when (fboundp 'face-set-after-frame-default)
+            (face-set-after-frame-default
+             neomacs--reused-gui-startup-frame
+             (frame-parameters neomacs--reused-gui-startup-frame))))
         "#,
     );
     sync_selected_gui_chrome_state(eval);
