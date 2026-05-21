@@ -4,7 +4,7 @@
 //! GNU src/character.c, src/fns.c, src/indent.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_char_width_ascii() {
@@ -53,9 +53,18 @@ fn oracle_move_to_column_sets_column() {
 }
 
 #[test]
-fn oracle_accessible_keymaps_returns_list() {
+fn oracle_accessible_keymaps_requires_keymap_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let (o, n) = eval_oracle_and_neovm(r#"(listp (accessible-keymaps))"#);
+    assert_err_kind(&o, &n, "wrong-number-of-arguments");
+}
+
+#[test]
+fn oracle_accessible_keymaps_returns_list_for_keymap() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let (o, n) = eval_oracle_and_neovm(
+        r#"(let ((m (make-sparse-keymap))) (define-key m [3] (make-sparse-keymap)) (listp (accessible-keymaps m)))"#,
+    );
     assert_ok_eq("t", &o, &n);
 }
 

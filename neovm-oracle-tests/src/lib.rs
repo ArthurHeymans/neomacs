@@ -1270,8 +1270,6 @@ mod merge_ordered_lists_semantics;
 #[path = "message-format-advanced.rs"]
 mod message_format_advanced;
 mod min;
-#[path = "missing-subrs-batch-semantics.rs"]
-#[path = "misc-core-strict-edge-semantics.rs"]
 #[path = "misc-core-strict-edge-semantics.rs"]
 mod misc_core_strict_edge_semantics;
 #[path = "misc-fill-strict-edge-semantics.rs"]
@@ -1342,7 +1340,6 @@ mod number_predicate_edge_semantics;
 mod number_predicates;
 #[path = "number-predicates-advanced.rs"]
 mod number_predicates_advanced;
-#[path = "number-sequence-advanced.rs"]
 #[path = "number-seq-concat-strict-edge-semantics.rs"]
 mod number_seq_concat_strict_edge_semantics;
 #[path = "number-sequence-advanced.rs"]
