@@ -1858,6 +1858,27 @@ fn key_binding_applies_command_remapping_unless_no_remap() {
 }
 
 #[test]
+fn key_binding_applies_menu_item_filter_prefix_keymap() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let ((g (make-sparse-keymap)))
+                 (use-global-map g)
+                 (define-key g [tool-bar]
+                   '(menu-item "tool bar" ignore
+                               :filter
+                               (lambda (_ignore)
+                                 (let ((m (make-sparse-keymap)))
+                                   (define-key m [open-file]
+                                     '(menu-item "Open" forward-char))
+                                   m))))
+                 (key-binding [tool-bar open-file]))"#
+        ),
+        "OK forward-char"
+    );
+}
+
+#[test]
 fn key_binding_unbound() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

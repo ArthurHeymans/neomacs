@@ -98,6 +98,17 @@ fn popup_menu_selection_reaches_keyboard_owner() {
 }
 
 #[test]
+fn tool_bar_click_reaches_keyboard_owner() {
+    let display_event = DisplayEvent::ToolBarClick { index: 3 };
+    let event = convert_display_event(&display_event);
+
+    match event {
+        Some(KbInputEvent::ToolBarClick { index: 3 }) => {}
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
 fn window_focus_preserves_frame_id_for_keyboard_owner() {
     let display_event = DisplayEvent::WindowFocus {
         focused: true,

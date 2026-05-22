@@ -484,6 +484,67 @@ pub(crate) fn builtin_image_mask_p(args: Vec<Value>) -> EvalResult {
     ))
 }
 
+pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_min_args("image-mask-p", &args, 1)?;
+    expect_max_args("image-mask-p", &args, 2)?;
+
+    if !is_image_spec(&args[0]) {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    }
+
+    if let Some(frame) = args.get(1) {
+        expect_frame_designator("image-mask-p", frame)?;
+    }
+
+    let frame_window_system = if let Some(frame_arg) = args.get(1).filter(|value| !value.is_nil()) {
+        let frame_id = match frame_arg.kind() {
+            ValueKind::Fixnum(id) => crate::window::FrameId(id as u64),
+            ValueKind::Veclike(VecLikeType::Frame) => {
+                crate::window::FrameId(frame_arg.as_frame_id().expect("checked frame"))
+            }
+            _ => unreachable!("expect_frame_designator checked frame argument"),
+        };
+        eval.frames
+            .get(frame_id)
+            .and_then(|frame| frame.effective_window_system())
+    } else {
+        eval.frames
+            .selected_frame()
+            .and_then(|frame| frame.effective_window_system())
+    };
+
+    if frame_window_system
+        .is_none_or(|window_system| !super::display::gui_window_system_active_value(window_system))
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    }
+
+    let Some(display_host) = eval.display_host.as_ref() else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    };
+    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    };
+
+    let _resolved = display_host
+        .request_image(request)
+        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+
+    Ok(Value::NIL)
+}
+
 /// (put-image IMAGE POINT &optional STRING AREA) -> nil
 ///
 /// Display IMAGE at POINT in the current buffer as an overlay.

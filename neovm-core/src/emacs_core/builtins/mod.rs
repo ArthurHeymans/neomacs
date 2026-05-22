@@ -8955,11 +8955,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(3),
         ),
     );
-    ctx.defsubr(
-        "image-mask-p",
-        |_ctx, args| super::image::builtin_image_mask_p(args),
-        1,
-        Some(2),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "image-mask-p",
+            super::image::builtin_image_mask_p_in_context,
+            1,
+            Some(2),
+        ),
     );
     ctx.defsubr(
         "image-flush",

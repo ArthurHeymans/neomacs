@@ -174,6 +174,27 @@ fn convert_lucid_event_list_modifier_aliases_match_gnu() {
     assert_eq!(event, Some(Value::fixnum(KEY_CHAR_META | 1)));
 }
 
+#[test]
+fn convert_lucid_event_list_mouse_modifiers_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        convert_lucid_event_list(&[
+            Value::symbol("down"),
+            Value::symbol("click"),
+            Value::symbol("mouse-1"),
+        ]),
+        Some(Value::symbol("down-mouse-1"))
+    );
+    assert_eq!(
+        convert_lucid_event_list(&[Value::symbol("click"), Value::symbol("mouse-1")]),
+        Some(Value::symbol("mouse-1"))
+    );
+    assert_eq!(
+        convert_lucid_event_list(&[Value::symbol("double"), Value::symbol("mouse-1")]),
+        Some(Value::symbol("double-mouse-1"))
+    );
+}
+
 // --- event_modifier_prefix ---
 
 #[test]

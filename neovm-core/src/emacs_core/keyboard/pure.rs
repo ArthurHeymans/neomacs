@@ -13,6 +13,12 @@ pub(crate) const KEY_CHAR_ALT: i64 = 0x0400000;
 pub(crate) const KEY_CHAR_MOD_MASK: i64 =
     KEY_CHAR_META | KEY_CHAR_CTRL | KEY_CHAR_SHIFT | KEY_CHAR_SUPER | KEY_CHAR_HYPER | KEY_CHAR_ALT;
 pub(crate) const KEY_CHAR_CODE_MASK: i64 = 0x3FFFFF;
+const EVENT_MOD_UP: i64 = 1 << 0;
+const EVENT_MOD_DOWN: i64 = 1 << 1;
+const EVENT_MOD_DRAG: i64 = 1 << 2;
+const EVENT_MOD_CLICK: i64 = 1 << 3;
+const EVENT_MOD_DOUBLE: i64 = 1 << 4;
+const EVENT_MOD_TRIPLE: i64 = 1 << 5;
 
 fn event_char_code(event: &Value) -> Option<i64> {
     match event.kind() {
@@ -336,6 +342,12 @@ pub(crate) fn event_modifier_bit(symbol: &str) -> Option<i64> {
         "s" | "super" => Some(KEY_CHAR_SUPER),
         "H" | "hyper" => Some(KEY_CHAR_HYPER),
         "A" | "alt" => Some(KEY_CHAR_ALT),
+        "up" => Some(EVENT_MOD_UP),
+        "down" => Some(EVENT_MOD_DOWN),
+        "drag" => Some(EVENT_MOD_DRAG),
+        "click" => Some(EVENT_MOD_CLICK),
+        "double" => Some(EVENT_MOD_DOUBLE),
+        "triple" => Some(EVENT_MOD_TRIPLE),
         _ => None,
     }
 }
@@ -432,8 +444,14 @@ pub(crate) fn convert_lucid_event_list(items: &[Value]) -> Option<Value> {
 
 pub(crate) fn event_modifier_prefix(bits: i64) -> String {
     let mut out = String::new();
+    if (bits & KEY_CHAR_ALT) != 0 {
+        out.push_str("A-");
+    }
     if (bits & KEY_CHAR_CTRL) != 0 {
         out.push_str("C-");
+    }
+    if (bits & KEY_CHAR_HYPER) != 0 {
+        out.push_str("H-");
     }
     if (bits & KEY_CHAR_META) != 0 {
         out.push_str("M-");
@@ -444,12 +462,22 @@ pub(crate) fn event_modifier_prefix(bits: i64) -> String {
     if (bits & KEY_CHAR_SUPER) != 0 {
         out.push_str("s-");
     }
-    if (bits & KEY_CHAR_HYPER) != 0 {
-        out.push_str("H-");
+    if (bits & EVENT_MOD_DOUBLE) != 0 {
+        out.push_str("double-");
     }
-    if (bits & KEY_CHAR_ALT) != 0 {
-        out.push_str("A-");
+    if (bits & EVENT_MOD_TRIPLE) != 0 {
+        out.push_str("triple-");
     }
+    if (bits & EVENT_MOD_UP) != 0 {
+        out.push_str("up-");
+    }
+    if (bits & EVENT_MOD_DOWN) != 0 {
+        out.push_str("down-");
+    }
+    if (bits & EVENT_MOD_DRAG) != 0 {
+        out.push_str("drag-");
+    }
+    // The `click' modifier is denoted by the absence of down/drag/etc.
     out
 }
 

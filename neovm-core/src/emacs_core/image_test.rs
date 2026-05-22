@@ -30,6 +30,19 @@ impl DisplayHost for RecordingImageDisplayHost {
             dimensions_known: true,
         }))
     }
+
+    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        self.requests
+            .lock()
+            .expect("image requests lock")
+            .push(request);
+        Ok(Some(ResolvedImage {
+            image_id: 9,
+            width: 0,
+            height: 0,
+            dimensions_known: false,
+        }))
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -333,6 +346,27 @@ fn image_mask_p_not_image() {
     crate::test_utils::init_test_tracing();
     let result = builtin_image_mask_p(vec![Value::string("not an image")]);
     assert!(result.is_err());
+}
+
+#[test]
+fn image_mask_p_resolves_image_and_returns_nil_on_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::clone(&requests),
+    }));
+    let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
+
+    let result = builtin_image_mask_p_in_context(&mut eval, vec![spec]).unwrap();
+
+    assert_eq!(result, Value::NIL);
+    assert_eq!(requests.lock().expect("image requests lock").len(), 1);
 }
 
 // -----------------------------------------------------------------------

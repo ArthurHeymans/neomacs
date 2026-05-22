@@ -3165,6 +3165,122 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
 }
 
 #[test]
+fn read_key_sequence_drops_unbound_menu_bar_down_mouse_before_bound_click() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    let fid = ev.frames.selected_frame().expect("selected frame").id;
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.menu_bar_height = 33;
+        frame.char_width = 12.0;
+    }
+
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.eval_str(
+        r#"(fset 'neomacs-menu-bar-click-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("menu-bar"), Value::symbol("mouse-1")],
+        Value::symbol("neomacs-menu-bar-click-command"),
+    )
+    .expect("define menu-bar mouse binding");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::MousePress {
+            button: crate::keyboard::MouseButton::Left,
+            x: 24.0,
+            y: 14.0,
+            modifiers: crate::keyboard::Modifiers::none(),
+            target_frame_id: fid.0,
+        },
+    );
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::MouseRelease {
+            button: crate::keyboard::MouseButton::Left,
+            x: 24.0,
+            y: 14.0,
+            target_frame_id: fid.0,
+        },
+    );
+
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("read menu-bar mouse sequence");
+    let position = crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list")[1];
+    let position_slots = crate::emacs_core::value::list_to_vec(&position).expect("mouse posn list");
+
+    assert_eq!(binding, Value::symbol("neomacs-menu-bar-click-command"));
+    assert_eq!(keys[0], Value::symbol("menu-bar"));
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list")[0],
+        Value::symbol("mouse-1")
+    );
+    assert_eq!(position_slots[0], Value::NIL);
+    assert_eq!(position_slots[1], Value::symbol("menu-bar"));
+    assert_eq!(
+        position_slots[2],
+        Value::cons(Value::fixnum(2), Value::fixnum(14))
+    );
+}
+
+#[test]
+fn read_key_sequence_dispatches_gui_tool_bar_click_by_item_key() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.obarray.set_symbol_value("tool-bar-map", tool_bar_map);
+    ev.eval_str(
+        r#"(fset 'neomacs-tool-bar-click-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup");
+    crate::emacs_core::keymap::list_keymap_define(
+        tool_bar_map,
+        Value::symbol("open-file"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Open File"),
+            Value::symbol("neomacs-tool-bar-click-command"),
+            Value::symbol(":image"),
+            Value::string("open.svg"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("tool-bar"), Value::symbol("open-file")],
+        Value::symbol("neomacs-tool-bar-click-command"),
+    )
+    .expect("define tool-bar binding");
+
+    ev.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(crate::keyboard::InputEvent::ToolBarClick { index: 0 });
+
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("read tool-bar click sequence");
+    let event = crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list");
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).expect("position list");
+
+    assert_eq!(binding, Value::symbol("neomacs-tool-bar-click-command"));
+    assert_eq!(keys[0], Value::symbol("tool-bar"));
+    assert_eq!(event[0], Value::symbol("open-file"));
+    assert_eq!(position[1], Value::symbol("tool-bar"));
+}
+
+#[test]
 fn read_key_sequence_drops_unbound_down_mouse_without_losing_keyboard_prefix() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

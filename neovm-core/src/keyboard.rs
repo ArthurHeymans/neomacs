@@ -10,7 +10,7 @@
 //! - Pre/post-command hooks
 //! - Prefix argument handling
 
-use crate::emacs_core::intern::resolve_sym;
+use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
@@ -426,6 +426,11 @@ impl ReadKeySequenceState {
         self.translated_events = events;
     }
 
+    pub fn replace_events(&mut self, events: Vec<Value>) {
+        self.raw_events = events.clone();
+        self.translated_events = events;
+    }
+
     pub fn raw_events(&self) -> &[Value] {
         &self.raw_events
     }
@@ -718,6 +723,9 @@ pub enum InputEvent {
     /// Popup menu selection.  The display layer reports the selected
     /// zero-based item index; -1 means the menu was cancelled.
     MenuSelection { index: i32 },
+    /// Tool-bar item click.  The display layer reports the zero-based
+    /// index in the current rendered tool-bar item vector.
+    ToolBarClick { index: i32 },
     /// Window resize.
     Resize {
         width: u32,
@@ -1054,6 +1062,10 @@ impl KBoard {
 
     pub fn rewrite_key_sequence_translation(&mut self, events: Vec<Value>) {
         self.current_key_sequence.replace_translated_events(events);
+    }
+
+    pub fn rewrite_key_sequence_events(&mut self, events: Vec<Value>) {
+        self.current_key_sequence.replace_events(events);
     }
 
     pub fn key_sequence_snapshot(&self) -> (Vec<Value>, Vec<Value>) {
@@ -1458,6 +1470,10 @@ impl KeyboardRuntime {
         self.kboard
             .current_key_sequence
             .replace_translated_events(events);
+    }
+
+    pub fn rewrite_key_sequence_events(&mut self, events: Vec<Value>) {
+        self.kboard.current_key_sequence.replace_events(events);
     }
 
     pub fn key_sequence_snapshot(&self) -> (Vec<Value>, Vec<Value>) {
@@ -3247,7 +3263,7 @@ impl crate::emacs_core::eval::Context {
                             );
                             self.command_loop
                                 .keyboard
-                                .rewrite_key_sequence_translation(retained_events);
+                                .rewrite_key_sequence_events(retained_events);
                             shift_translation = None;
                             continue;
                         }
@@ -3625,6 +3641,22 @@ impl crate::emacs_core::eval::Context {
                     Value::symbol("menu-selection"),
                     Value::fixnum(index as i64),
                 ]);
+                Ok(Some(event))
+            }
+            InputEvent::ToolBarClick { index } => {
+                let Some(key) = self.tool_bar_key_at_index(index) else {
+                    return Ok(None);
+                };
+                let frame = self
+                    .frames
+                    .selected_frame()
+                    .map(|frame| Value::make_frame(frame.id.0))
+                    .unwrap_or(Value::NIL);
+                let event = Value::list(vec![
+                    key,
+                    Value::list(vec![frame, Value::symbol("tool-bar")]),
+                ]);
+                self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
             InputEvent::MouseMove {
@@ -4133,7 +4165,11 @@ impl crate::emacs_core::eval::Context {
         let event_slots = crate::emacs_core::value::list_to_vec(event)?;
         let position = *event_slots.get(1)?;
         let position_slots = crate::emacs_core::value::list_to_vec(&position)?;
-        (position_slots.len() >= 4).then_some(position)
+        if position_slots.len() >= 4 || Self::event_position_area(&position).is_some() {
+            Some(position)
+        } else {
+            None
+        }
     }
 
     fn key_sequence_lookup_position(events: &[Value]) -> Option<Value> {
@@ -4426,6 +4462,59 @@ impl crate::emacs_core::eval::Context {
         frame.window_at(x, y)
     }
 
+    fn tool_bar_key_at_index(&self, index: i32) -> Option<Value> {
+        if index < 0 {
+            return None;
+        }
+        let raw_map = self.current_tool_bar_map();
+        let keymap = crate::emacs_core::keymap::maybe_keymap_in_obarray(self.obarray(), &raw_map)?;
+        let mut remaining = index as usize;
+        let mut found = None;
+        crate::emacs_core::keymap::list_keymap_for_each_binding(&keymap, |key, def| {
+            if found.is_some() {
+                return;
+            }
+            if !Self::is_rendered_tool_bar_item(&key, &def) {
+                return;
+            }
+            if remaining == 0 {
+                found = Some(key);
+            } else {
+                remaining -= 1;
+            }
+        });
+        found
+    }
+
+    fn current_tool_bar_map(&self) -> Value {
+        if let Some(buffer) = self.buffers.current_buffer()
+            && let Some(local) = buffer.buffer_local_value("tool-bar-map")
+        {
+            return local;
+        }
+        self.obarray()
+            .default_value_id(intern("tool-bar-map"))
+            .copied()
+            .unwrap_or(Value::NIL)
+    }
+
+    fn is_rendered_tool_bar_item(key: &Value, def: &Value) -> bool {
+        let key_name = key.as_symbol_name().unwrap_or_default();
+        if key_name.starts_with("separator") {
+            return true;
+        }
+        let def = if def.is_cons() && def.cons_cdr().is_nil() {
+            def.cons_car()
+        } else {
+            *def
+        };
+        if !def.is_cons() {
+            return def.as_symbol_name() == Some("menu-bar-separator");
+        }
+        let car = def.cons_car();
+        car.as_symbol_name() == Some("menu-item") || car.as_runtime_string_owned().is_some()
+    }
+
     fn make_mouse_position(x: f32, y: f32, target_frame_id: u64, eval: &Self) -> Value {
         let frame_id = if target_frame_id == 0 {
             match eval.frames.selected_frame() {
@@ -4464,10 +4553,11 @@ impl crate::emacs_core::eval::Context {
         let tab_bar_height = frame.tab_bar_height as i64;
 
         if menu_bar_height > 0 && frame_y < menu_bar_height {
+            let menu_bar_x = (x / frame.char_width.max(1.0)).floor() as i64;
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                window_or_frame: Value::make_frame(frame.id.0),
+                window_or_frame: Value::NIL,
                 area: Some("menu-bar"),
-                x: frame_x,
+                x: menu_bar_x,
                 y: frame_y,
                 metrics: MousePosnMetrics {
                     point: None,
@@ -4480,7 +4570,7 @@ impl crate::emacs_core::eval::Context {
         }
         if tool_bar_height > 0 && frame_y < menu_bar_height + tool_bar_height {
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                window_or_frame: Value::make_frame(frame.id.0),
+                window_or_frame: Value::NIL,
                 area: Some("tool-bar"),
                 x: frame_x,
                 y: frame_y - menu_bar_height,
@@ -4495,7 +4585,7 @@ impl crate::emacs_core::eval::Context {
         }
         if tab_bar_height > 0 && frame_y < menu_bar_height + tool_bar_height + tab_bar_height {
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                window_or_frame: Value::make_frame(frame.id.0),
+                window_or_frame: Value::NIL,
                 area: Some("tab-bar"),
                 x: frame_x,
                 y: frame_y - menu_bar_height - tool_bar_height,

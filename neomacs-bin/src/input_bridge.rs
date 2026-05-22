@@ -119,6 +119,7 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }
+        DisplayEvent::ToolBarClick { index } => Some(KbInputEvent::ToolBarClick { index: *index }),
         DisplayEvent::WindowResize {
             width,
             height,

@@ -594,6 +594,64 @@ fn get_keyelt(binding: Value) -> Value {
     }
 }
 
+fn nth_list_element(mut list: Value, mut index: usize) -> Option<Value> {
+    while list.is_cons() {
+        let car = list.cons_car();
+        if index == 0 {
+            return Some(car);
+        }
+        index -= 1;
+        list = list.cons_cdr();
+    }
+    None
+}
+
+fn menu_item_filter(tail: Value) -> Option<Value> {
+    let mut cursor = tail;
+    while cursor.is_cons() {
+        let key = cursor.cons_car();
+        let rest = cursor.cons_cdr();
+        if key.as_symbol_name() == Some(":filter") && rest.is_cons() {
+            return Some(rest.cons_car());
+        }
+        cursor = rest;
+    }
+    None
+}
+
+pub(crate) fn get_keyelt_runtime(eval: &mut Context, binding: Value, autoload: bool) -> EvalResult {
+    let mut object = binding;
+    loop {
+        if !object.is_cons() {
+            return Ok(object);
+        }
+
+        let pair_car = object.cons_car();
+        let pair_cdr = object.cons_cdr();
+        if pair_car.is_string() {
+            object = pair_cdr;
+            if object.is_cons() && object.cons_car().is_string() {
+                object = object.cons_cdr();
+            }
+            continue;
+        }
+
+        if pair_car.is_symbol_named("menu-item") {
+            if !pair_cdr.is_cons() {
+                return Ok(object);
+            }
+            let tail = pair_cdr.cons_cdr();
+            object = nth_list_element(pair_cdr, 1).unwrap_or(Value::NIL);
+            if autoload && let Some(filter) = menu_item_filter(tail) {
+                object = eval.apply(filter, vec![object])?;
+            }
+            continue;
+        }
+
+        return Ok(object);
+    }
+}
+
 /// Look up a single event in a keymap, following the parent chain.
 ///
 /// This mirrors GNU Emacs `access_keymap` with `noinherit=false, t_ok=false`.
@@ -622,6 +680,10 @@ pub fn list_keymap_lookup_one_t_ok(keymap: &Value, event: &Value) -> Value {
 /// rather than discarded by the pure keymap lookup layer.
 pub(crate) fn list_keymap_lookup_one_unresolved(keymap: &Value, event: &Value) -> Value {
     list_keymap_access_unresolved(keymap, event, false, false)
+}
+
+pub(crate) fn list_keymap_lookup_one_unresolved_t_ok(keymap: &Value, event: &Value) -> Value {
+    list_keymap_access_unresolved(keymap, event, false, true)
 }
 
 /// Look up a single event in a keymap without following the parent chain.
@@ -1044,6 +1106,79 @@ pub(crate) fn lookup_key_in_keymaps_in_obarray(
     }
 
     best
+}
+
+pub(crate) fn lookup_key_in_obarray_runtime(
+    ctx: &mut Context,
+    keymap: Value,
+    events: &[Value],
+    t_ok: bool,
+) -> EvalResult {
+    if events.is_empty() {
+        return Ok(keymap);
+    }
+
+    let mut current_map = keymap;
+    for (i, event) in events.iter().enumerate() {
+        let raw_binding = if t_ok {
+            list_keymap_lookup_one_unresolved_t_ok(&current_map, event)
+        } else {
+            list_keymap_lookup_one_unresolved(&current_map, event)
+        };
+        let is_last = i == events.len() - 1;
+        let binding = get_keyelt_runtime(ctx, raw_binding, true)?;
+
+        if is_last {
+            return Ok(binding);
+        }
+
+        if binding.is_nil() {
+            return Ok(Value::fixnum((i + 1) as i64));
+        }
+
+        if let Some(prefix_keymap) =
+            resolve_prefix_keymap_binding_in_obarray(&ctx.obarray, &binding)
+        {
+            current_map = prefix_keymap;
+            continue;
+        }
+
+        return Ok(Value::fixnum((i + 1) as i64));
+    }
+
+    Ok(Value::NIL)
+}
+
+pub(crate) fn lookup_key_in_keymaps_in_obarray_runtime(
+    ctx: &mut Context,
+    keymaps: &[Value],
+    events: &[Value],
+    t_ok: bool,
+) -> EvalResult {
+    if events.is_empty() {
+        return Ok(keymaps.first().copied().unwrap_or(Value::NIL));
+    }
+
+    let mut best = Value::NIL;
+    for keymap in keymaps {
+        let direct = lookup_key_in_obarray_runtime(ctx, *keymap, events, t_ok)?;
+        if !direct.is_nil() && !direct.is_fixnum() {
+            return Ok(direct);
+        }
+
+        if let Some(expanded) = expand_meta_prefix_char_events_in_obarray(&ctx.obarray, events) {
+            let expanded_result = lookup_key_in_obarray_runtime(ctx, *keymap, &expanded, t_ok)?;
+            if !expanded_result.is_nil() && !expanded_result.is_fixnum() {
+                return Ok(expanded_result);
+            }
+        }
+
+        if best.is_nil() {
+            best = direct;
+        }
+    }
+
+    Ok(best)
 }
 
 /// Define a binding in a keymap.
@@ -1998,7 +2133,7 @@ pub(crate) fn resolve_active_key_binding(
 ) -> Result<ActiveKeyBindingResolution, Flow> {
     let active_maps = current_active_maps_for_position(ctx, true, position)?;
     let lookup =
-        lookup_key_in_keymaps_in_obarray(&ctx.obarray, &active_maps, events, accept_default);
+        lookup_key_in_keymaps_in_obarray_runtime(ctx, &active_maps, events, accept_default)?;
     let binding = if !lookup.is_nil() && !lookup.is_fixnum() {
         key_binding_apply_remap_in_active_maps(&active_maps, lookup, no_remap)
     } else if events.len() == 1 && is_plain_printable_emacs_event(&events[0]) {
