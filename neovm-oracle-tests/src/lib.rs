@@ -2018,6 +2018,8 @@ mod divergence_buffer_management;
 mod divergence_buffer_manip_rect;
 #[path = "divergence-buffer-motion-search.rs"]
 mod divergence_buffer_motion_search;
+#[path = "divergence-bytecomp-deep.rs"]
+mod divergence_bytecomp_deep;
 #[path = "divergence-calendar-time-deep.rs"]
 mod divergence_calendar_time_deep;
 #[path = "divergence-chartab-charset-deep.rs"]
@@ -2036,6 +2038,8 @@ mod divergence_coding_process;
 mod divergence_combo_operations;
 #[path = "divergence-completion-ring-deep.rs"]
 mod divergence_completion_ring_deep;
+#[path = "divergence-custom-theme-deep.rs"]
+mod divergence_custom_theme_deep;
 #[path = "divergence-data-types-deep.rs"]
 mod divergence_data_types_deep;
 #[path = "divergence-debug-trace-ert.rs"]
