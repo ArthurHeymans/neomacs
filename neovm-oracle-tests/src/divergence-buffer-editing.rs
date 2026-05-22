@@ -3,8 +3,8 @@
 //! Tests for insert/delete point movement, marker behavior, narrowing
 //! interactions, and buffer state management.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_insert_before_markers_moves_non_insertion_type_marker() {

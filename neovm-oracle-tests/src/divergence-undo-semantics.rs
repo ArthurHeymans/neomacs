@@ -12,8 +12,8 @@
 //! also merges backward (existing BEG == new END), causing different undo
 //! granularity.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_marker_position_restored_after_delete_undo() {
