@@ -240,3 +240,79 @@ fn oracle_buffer_text_property_positions_are_one_based() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_text_property_search_positions_are_character_based_for_multibyte_objects() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/textprop.c stores and returns interval positions in
+    // character coordinates: string APIs use 0-based character indexes, while
+    // buffer APIs use 1-based buffer positions.  These cases catch accidental
+    // byte-offset exposure on multibyte text.
+    let form = r#"
+(let ((s (copy-sequence "aé🙂b")))
+  (put-text-property 1 3 'face 'bold s)
+  (list
+   (length s)
+   (string-bytes s)
+   (next-property-change 0 s)
+   (next-single-property-change 0 'face s)
+   (next-property-change 1 s)
+   (next-single-property-change 1 'face s)
+   (previous-property-change 4 s)
+   (previous-single-property-change 4 'face s)
+   (text-property-any 0 4 'face 'bold s)
+   (text-property-not-all 1 3 'face 'bold s)
+   (text-property-not-all 0 4 'face 'bold s)
+   (mapcar (lambda (i) (text-properties-at i s))
+           (number-sequence 0 4))
+   (with-temp-buffer
+     (insert "aé🙂b")
+     (put-text-property 2 4 'face 'bold)
+     (list
+      (point-min)
+      (point-max)
+      (buffer-size)
+      (next-property-change 1)
+      (next-single-property-change 1 'face)
+      (next-property-change 2)
+      (next-single-property-change 2 'face)
+      (previous-property-change 5)
+      (previous-single-property-change 5 'face)
+      (text-property-any 1 5 'face 'bold)
+      (text-property-not-all 2 4 'face 'bold)
+      (text-property-not-all 1 5 'face 'bold)
+      (mapcar (lambda (i) (text-properties-at i))
+              (number-sequence 1 5))))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_text_property_change_limits_accept_markers_and_return_character_positions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU's next/previous property-change functions coerce marker LIMIT
+    // arguments with CHECK_FIXNUM_COERCE_MARKER and still return character
+    // positions.  Marker start/end arguments are likewise buffer positions,
+    // not byte offsets.
+    let form = r#"
+(with-temp-buffer
+  (insert "αβγδε")
+  (put-text-property 2 5 'face 'bold)
+  (let ((start (copy-marker 1))
+        (middle (copy-marker 3))
+        (limit-front (copy-marker 4))
+        (limit-end (copy-marker 6)))
+    (list
+     (next-property-change start nil limit-front)
+     (next-single-property-change start 'face nil limit-front)
+     (next-property-change middle nil limit-end)
+     (next-single-property-change middle 'face nil limit-end)
+     (previous-property-change limit-end nil middle)
+     (previous-single-property-change limit-end 'face nil middle)
+     (text-property-any start limit-end 'face 'bold)
+     (text-property-not-all middle limit-front 'face 'bold))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
