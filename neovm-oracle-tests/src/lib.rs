@@ -2042,6 +2042,8 @@ mod divergence_eval_load_read;
 mod divergence_face_custom_theme;
 #[path = "divergence-file-ops-deep.rs"]
 mod divergence_file_ops_deep;
+#[path = "divergence-file-remote-tramp.rs"]
+mod divergence_file_remote_tramp;
 #[path = "divergence-fill-abbrev-comment.rs"]
 mod divergence_fill_abbrev_comment;
 #[path = "divergence-fontlock-jitlock-highlight.rs"]
@@ -2118,6 +2120,8 @@ mod divergence_sequence_collections;
 mod divergence_sort_type_predicates;
 #[path = "divergence-stress-combo.rs"]
 mod divergence_stress_combo;
+#[path = "divergence-stress-combo-2.rs"]
+mod divergence_stress_combo_2;
 #[path = "divergence-string-ops.rs"]
 mod divergence_string_ops;
 #[path = "divergence-symbol-reader-deep.rs"]
