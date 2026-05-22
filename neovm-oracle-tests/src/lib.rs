@@ -2030,6 +2030,8 @@ mod divergence_error_signaling_deep;
 mod divergence_eval_deep_edge;
 #[path = "divergence-eval-load-read.rs"]
 mod divergence_eval_load_read;
+#[path = "divergence-face-custom-theme.rs"]
+mod divergence_face_custom_theme;
 #[path = "divergence-file-ops-deep.rs"]
 mod divergence_file_ops_deep;
 #[path = "divergence-fill-abbrev-comment.rs"]
@@ -2082,6 +2084,8 @@ mod divergence_regex_deep;
 mod divergence_regex_string_search;
 #[path = "divergence-register-narrow-misc.rs"]
 mod divergence_register_narrow_misc;
+#[path = "divergence-search-charfold-occur.rs"]
+mod divergence_search_charfold_occur;
 #[path = "divergence-sequence-collections.rs"]
 mod divergence_sequence_collections;
 #[path = "divergence-sort-type-predicates.rs"]
