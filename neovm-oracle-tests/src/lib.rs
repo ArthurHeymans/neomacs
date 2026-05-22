@@ -2006,6 +2006,8 @@ mod divergence_buffer_editing;
 mod divergence_buffer_local_killring_fileio;
 #[path = "divergence-buffer-locals-hooks.rs"]
 mod divergence_buffer_locals_hooks;
+#[path = "divergence-buffer-management.rs"]
+mod divergence_buffer_management;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
 #[path = "divergence-casetable-category-deep.rs"]
@@ -2106,6 +2108,8 @@ mod divergence_timer_eventloop;
 mod divergence_undo_deep_2;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
+#[path = "divergence-weak-hash-lifecycle.rs"]
+mod divergence_weak_hash_lifecycle;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
 #[path = "divergence-window-redisplay.rs"]
