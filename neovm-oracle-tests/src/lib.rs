@@ -2012,6 +2012,8 @@ mod divergence_chartab_syntax_deep;
 mod divergence_cllib_seq_map;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
+#[path = "divergence-combo-operations.rs"]
+mod divergence_combo_operations;
 #[path = "divergence-debug-bytecomp-loadhist.rs"]
 mod divergence_debug_bytecomp_loadhist;
 #[path = "divergence-eval-deep-edge.rs"]
@@ -2022,6 +2024,8 @@ mod divergence_file_ops_deep;
 mod divergence_fill_abbrev_comment;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
+#[path = "divergence-gc-memory-modules.rs"]
+mod divergence_gc_memory_modules;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
 #[path = "divergence-image-widget-display.rs"]
