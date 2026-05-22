@@ -55,3 +55,28 @@ fn oracle_object_intervals_preserves_adjacent_equal_property_runs() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_object_intervals_set_text_properties_merges_replaced_runs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU's `set_text_properties_1` sets every interval in the target range,
+    // then merges each later changed interval left into the first changed
+    // interval.  The resulting raw interval shape is observable through
+    // `object-intervals`.
+    let form = r#"
+(let ((with-props (copy-sequence "abcdef"))
+      (without-props (copy-sequence "abcdef")))
+  (dolist (s (list with-props without-props))
+    (put-text-property 0 2 'face 'bold s)
+    (put-text-property 2 4 'face 'italic s)
+    (put-text-property 4 6 'face 'underline s))
+  (set-text-properties 1 5 '(category t) with-props)
+  (set-text-properties 1 5 nil without-props)
+  (list
+   (object-intervals with-props)
+   (object-intervals without-props)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}

@@ -575,6 +575,105 @@ fn adjacent_equal_but_not_eq_values_do_not_merge() {
     assert_eq!(table.next_property_change(5), Some(10));
 }
 
+#[test]
+fn set_properties_merges_replaced_intervals_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(2, 4, Value::symbol("face"), Value::symbol("italic"));
+    table.put_property(4, 6, Value::symbol("face"), Value::symbol("underline"));
+
+    table.set_properties(1, 5, vec![(Value::symbol("category"), Value::T)]);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 1, false), (1, 5, false), (5, 6, false)]
+    );
+    assert_eq!(table.next_interval_boundary(1), Some(5));
+    assert_eq!(
+        table.get_property(1, Value::symbol("category")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        table.get_property(4, Value::symbol("category")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        table.get_property(0, Value::symbol("face")),
+        Some(Value::symbol("bold"))
+    );
+    assert_eq!(
+        table.get_property(5, Value::symbol("face")),
+        Some(Value::symbol("underline"))
+    );
+}
+
+#[test]
+fn set_properties_nil_merges_replaced_intervals_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 2, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(2, 4, Value::symbol("face"), Value::symbol("italic"));
+    table.put_property(4, 6, Value::symbol("face"), Value::symbol("underline"));
+
+    table.set_properties(1, 5, Vec::new());
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 1, false), (1, 5, true), (5, 6, false)]
+    );
+    assert_eq!(table.next_interval_boundary(1), Some(5));
+    assert!(table.get_property(1, Value::symbol("face")).is_none());
+    assert!(table.get_property(4, Value::symbol("face")).is_none());
+    assert_eq!(
+        table.get_property(0, Value::symbol("face")),
+        Some(Value::symbol("bold"))
+    );
+    assert_eq!(
+        table.get_property(5, Value::symbol("face")),
+        Some(Value::symbol("underline"))
+    );
+}
+
+#[test]
+fn set_properties_merges_large_replaced_range_without_rebuilding_tree() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    for i in 0..10 {
+        table.put_property(i, i + 1, Value::symbol("slot"), Value::fixnum(i as i64));
+    }
+
+    table.set_properties(2, 8, vec![(Value::symbol("category"), Value::T)]);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![
+            (0, 1, false),
+            (1, 2, false),
+            (2, 8, false),
+            (8, 9, false),
+            (9, 10, false),
+        ]
+    );
+    assert_eq!(table.next_interval_boundary(2), Some(8));
+    assert_eq!(
+        table.get_property(2, Value::symbol("category")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        table.get_property(7, Value::symbol("category")),
+        Some(Value::T)
+    );
+    assert_eq!(
+        table.get_property(1, Value::symbol("slot")),
+        Some(Value::fixnum(1))
+    );
+    assert_eq!(
+        table.get_property(8, Value::symbol("slot")),
+        Some(Value::fixnum(8))
+    );
+}
+
 // -----------------------------------------------------------------------
 // Edge cases
 // -----------------------------------------------------------------------

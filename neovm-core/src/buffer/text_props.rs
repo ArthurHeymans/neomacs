@@ -378,12 +378,7 @@ impl IntervalTree {
     }
 
     fn from_runs(runs: Vec<IntervalRun>) -> Self {
-        let runs = Self::normalize_runs(runs, true);
-        Self::from_normalized_runs(runs)
-    }
-
-    fn from_runs_preserving_empty(runs: Vec<IntervalRun>) -> Self {
-        let runs = Self::normalize_runs(runs, false);
+        let runs = Self::normalize_runs(runs);
         Self::from_normalized_runs(runs)
     }
 
@@ -396,7 +391,7 @@ impl IntervalTree {
         tree
     }
 
-    fn normalize_runs(mut runs: Vec<IntervalRun>, drop_empty_tail: bool) -> Vec<IntervalRun> {
+    fn normalize_runs(mut runs: Vec<IntervalRun>) -> Vec<IntervalRun> {
         runs.retain(|run| run.start < run.end);
         runs.sort_by_key(|run| run.start);
 
@@ -416,13 +411,11 @@ impl IntervalTree {
             normalized.push(run);
         }
 
-        if drop_empty_tail {
-            while normalized.last().is_some_and(IntervalRun::is_empty_plist) {
-                normalized.pop();
-            }
-            if normalized.iter().all(IntervalRun::is_empty_plist) {
-                return Vec::new();
-            }
+        while normalized.last().is_some_and(IntervalRun::is_empty_plist) {
+            normalized.pop();
+        }
+        if normalized.iter().all(IntervalRun::is_empty_plist) {
+            return Vec::new();
         }
         normalized
     }
@@ -479,6 +472,457 @@ impl IntervalTree {
     fn node_len(&self, id: IntervalId) -> usize {
         let node = &self.nodes[id.0];
         node.total_length - self.subtree_len(node.left) - self.subtree_len(node.right)
+    }
+
+    fn push_node(&mut self, node: IntervalNode) -> IntervalId {
+        let id = IntervalId(self.nodes.len());
+        self.nodes.push(node);
+        id
+    }
+
+    fn is_left_child(&self, id: IntervalId) -> bool {
+        self.nodes[id.0]
+            .parent
+            .and_then(|parent| self.nodes[parent.0].left)
+            == Some(id)
+    }
+
+    fn leftmost_id(&self, mut id: IntervalId) -> IntervalId {
+        while let Some(left) = self.nodes[id.0].left {
+            id = left;
+        }
+        id
+    }
+
+    fn rightmost_id(&self, mut id: IntervalId) -> IntervalId {
+        while let Some(right) = self.nodes[id.0].right {
+            id = right;
+        }
+        id
+    }
+
+    fn next_id(&self, id: IntervalId) -> Option<IntervalId> {
+        if let Some(right) = self.nodes[id.0].right {
+            return Some(self.leftmost_id(right));
+        }
+
+        let mut child = id;
+        while let Some(parent) = self.nodes[child.0].parent {
+            if self.nodes[parent.0].left == Some(child) {
+                return Some(parent);
+            }
+            child = parent;
+        }
+        None
+    }
+
+    fn add_length_to_ancestors(&mut self, mut id: Option<IntervalId>, delta: isize) {
+        while let Some(current) = id {
+            let total = &mut self.nodes[current.0].total_length;
+            if delta >= 0 {
+                *total += delta as usize;
+            } else {
+                *total -= (-delta) as usize;
+            }
+            id = self.nodes[current.0].parent;
+        }
+    }
+
+    fn rotate_right(&mut self, a: IntervalId) -> IntervalId {
+        let b = self.nodes[a.0]
+            .left
+            .expect("rotate_right requires a left child");
+        let c = self.nodes[b.0].right;
+        let a_parent = self.nodes[a.0].parent;
+        let a_was_left = self.is_left_child(a);
+        let old_total = self.nodes[a.0].total_length;
+        let b_old_total = self.nodes[b.0].total_length;
+        let c_total = self.subtree_len(c);
+
+        if let Some(parent) = a_parent {
+            if a_was_left {
+                self.nodes[parent.0].left = Some(b);
+            } else {
+                self.nodes[parent.0].right = Some(b);
+            }
+        } else {
+            self.root = Some(b);
+        }
+        self.nodes[b.0].parent = a_parent;
+
+        self.nodes[b.0].right = Some(a);
+        self.nodes[a.0].parent = Some(b);
+
+        self.nodes[a.0].left = c;
+        if let Some(c) = c {
+            self.nodes[c.0].parent = Some(a);
+        }
+
+        self.nodes[a.0].total_length -= b_old_total - c_total;
+        self.nodes[b.0].total_length = old_total;
+        b
+    }
+
+    fn rotate_left(&mut self, a: IntervalId) -> IntervalId {
+        let b = self.nodes[a.0]
+            .right
+            .expect("rotate_left requires a right child");
+        let c = self.nodes[b.0].left;
+        let a_parent = self.nodes[a.0].parent;
+        let a_was_left = self.is_left_child(a);
+        let old_total = self.nodes[a.0].total_length;
+        let b_old_total = self.nodes[b.0].total_length;
+        let c_total = self.subtree_len(c);
+
+        if let Some(parent) = a_parent {
+            if a_was_left {
+                self.nodes[parent.0].left = Some(b);
+            } else {
+                self.nodes[parent.0].right = Some(b);
+            }
+        } else {
+            self.root = Some(b);
+        }
+        self.nodes[b.0].parent = a_parent;
+
+        self.nodes[b.0].left = Some(a);
+        self.nodes[a.0].parent = Some(b);
+
+        self.nodes[a.0].right = c;
+        if let Some(c) = c {
+            self.nodes[c.0].parent = Some(a);
+        }
+
+        self.nodes[a.0].total_length -= b_old_total - c_total;
+        self.nodes[b.0].total_length = old_total;
+        b
+    }
+
+    fn balance_an_interval(&mut self, mut id: IntervalId) -> IntervalId {
+        loop {
+            let left_len = self.subtree_len(self.nodes[id.0].left) as isize;
+            let right_len = self.subtree_len(self.nodes[id.0].right) as isize;
+            let old_diff = left_len - right_len;
+            if old_diff > 0 {
+                let left = self.nodes[id.0]
+                    .left
+                    .expect("positive left/right diff requires left child");
+                let new_diff = self.nodes[id.0].total_length as isize
+                    - self.nodes[left.0].total_length as isize
+                    + self.subtree_len(self.nodes[left.0].right) as isize
+                    - self.subtree_len(self.nodes[left.0].left) as isize;
+                if new_diff.abs() >= old_diff {
+                    break;
+                }
+                id = self.rotate_right(id);
+                if let Some(right) = self.nodes[id.0].right {
+                    self.balance_an_interval(right);
+                }
+            } else if old_diff < 0 {
+                let right = self.nodes[id.0]
+                    .right
+                    .expect("negative left/right diff requires right child");
+                let new_diff = self.nodes[id.0].total_length as isize
+                    - self.nodes[right.0].total_length as isize
+                    + self.subtree_len(self.nodes[right.0].left) as isize
+                    - self.subtree_len(self.nodes[right.0].right) as isize;
+                if new_diff.abs() >= -old_diff {
+                    break;
+                }
+                id = self.rotate_left(id);
+                if let Some(left) = self.nodes[id.0].left {
+                    self.balance_an_interval(left);
+                }
+            } else {
+                break;
+            }
+        }
+        id
+    }
+
+    fn balance_upwards(&mut self, mut id: Option<IntervalId>) {
+        while let Some(current) = id {
+            let balanced = self.balance_an_interval(current);
+            id = self.nodes[balanced.0].parent;
+            if id.is_none() {
+                self.root = Some(balanced);
+            }
+        }
+    }
+
+    fn append_default_interval(&mut self, start: usize, end: usize) {
+        if start >= end {
+            return;
+        }
+
+        if self.root.is_none() {
+            let root = self.push_node(IntervalNode::new(end - start, start, Value::NIL));
+            self.root = Some(root);
+            return;
+        }
+
+        let rightmost = self.rightmost_id(self.root.expect("root checked above"));
+        let id = self.push_node(IntervalNode::new(end - start, start, Value::NIL));
+        self.nodes[id.0].parent = Some(rightmost);
+        self.nodes[rightmost.0].right = Some(id);
+        self.add_length_to_ancestors(Some(rightmost), (end - start) as isize);
+        self.balance_upwards(Some(rightmost));
+    }
+
+    fn ensure_cover(&mut self, end: usize) {
+        let current_end = self.len();
+        if current_end < end {
+            self.append_default_interval(current_end, end);
+        }
+    }
+
+    fn split_at(&mut self, pos: usize) -> Option<IntervalId> {
+        if pos == 0 {
+            return self.find_id(0).map(|(_, id)| id);
+        }
+
+        let (start, id) = self.find_id(pos)?;
+        let len = self.node_len(id);
+        if pos == start {
+            return Some(id);
+        }
+        if pos >= start + len {
+            return self.next_id(id);
+        }
+
+        let offset = pos - start;
+        let new_len = len - offset;
+        let old_right = self.nodes[id.0].right;
+        let plist = plist_value_from_pairs(&plist_pairs(self.nodes[id.0].plist));
+        let mut new = IntervalNode::with_cached(
+            new_len,
+            pos,
+            self.nodes[id.0].front_sticky,
+            self.nodes[id.0].rear_sticky,
+            self.nodes[id.0].write_protect,
+            self.nodes[id.0].visible,
+            plist,
+        );
+        new.parent = Some(id);
+        new.right = old_right;
+        new.total_length += self.subtree_len(old_right);
+        let new_id = self.push_node(new);
+
+        if let Some(old_right) = old_right {
+            self.nodes[old_right.0].parent = Some(new_id);
+        }
+        self.nodes[id.0].right = Some(new_id);
+        self.balance_upwards(Some(id));
+        self.find_id(pos).map(|(_, id)| id)
+    }
+
+    fn intervals_overlapping_after_splits(
+        &mut self,
+        start: usize,
+        end: usize,
+    ) -> Vec<(usize, IntervalId)> {
+        if start >= end {
+            return Vec::new();
+        }
+
+        self.ensure_cover(end);
+        self.split_at(start);
+        self.split_at(end);
+
+        let mut result = Vec::new();
+        let mut cursor = start;
+        while cursor < end {
+            let Some((node_start, id)) = self.find_id(cursor) else {
+                break;
+            };
+            let node_len = self.node_len(id);
+            let node_end = node_start + node_len;
+            if node_end > start {
+                result.push((node_start, id));
+            }
+            if node_end <= cursor {
+                break;
+            }
+            cursor = node_end;
+        }
+        result
+    }
+
+    fn existing_intervals_overlapping_after_splits(
+        &mut self,
+        start: usize,
+        end: usize,
+    ) -> Vec<(usize, IntervalId)> {
+        if start >= end || self.root.is_none() {
+            return Vec::new();
+        }
+
+        self.split_at(start);
+        self.split_at(end);
+
+        let mut result = Vec::new();
+        let mut cursor = start;
+        if self.find_id(cursor).is_none() {
+            let Some(next) = self.first_start_after(cursor).filter(|next| *next < end) else {
+                return result;
+            };
+            cursor = next;
+        }
+
+        while cursor < end {
+            let Some((node_start, id)) = self.find_id(cursor) else {
+                break;
+            };
+            let node_len = self.node_len(id);
+            let node_end = node_start + node_len;
+            if node_end > start {
+                result.push((node_start, id));
+            }
+            if node_end <= cursor {
+                break;
+            }
+            cursor = node_end;
+        }
+        result
+    }
+
+    fn set_node_plist(&mut self, id: IntervalId, plist: Value) {
+        let node = &mut self.nodes[id.0];
+        node.plist = plist;
+        node.refresh_cache();
+    }
+
+    fn delete_node(&mut self, id: IntervalId) -> Option<IntervalId> {
+        let left = self.nodes[id.0].left;
+        let right = self.nodes[id.0].right;
+
+        match (left, right) {
+            (None, None) => None,
+            (Some(left), None) => Some(left),
+            (None, Some(right)) => Some(right),
+            (Some(migrate), Some(right)) => {
+                let migrate_len = self.nodes[migrate.0].total_length;
+                let mut cursor = right;
+                self.nodes[cursor.0].total_length += migrate_len;
+                while let Some(left) = self.nodes[cursor.0].left {
+                    cursor = left;
+                    self.nodes[cursor.0].total_length += migrate_len;
+                }
+                self.nodes[cursor.0].left = Some(migrate);
+                self.nodes[migrate.0].parent = Some(cursor);
+                Some(right)
+            }
+        }
+    }
+
+    fn delete_zero_length_interval(&mut self, id: IntervalId) {
+        debug_assert_eq!(self.node_len(id), 0);
+        let parent = self.nodes[id.0].parent;
+        let replacement = self.delete_node(id);
+
+        if let Some(parent) = parent {
+            if self.nodes[parent.0].left == Some(id) {
+                self.nodes[parent.0].left = replacement;
+            } else {
+                debug_assert_eq!(self.nodes[parent.0].right, Some(id));
+                self.nodes[parent.0].right = replacement;
+            }
+            if let Some(replacement) = replacement {
+                self.nodes[replacement.0].parent = Some(parent);
+            }
+        } else {
+            self.root = replacement;
+            if let Some(replacement) = replacement {
+                self.nodes[replacement.0].parent = None;
+            }
+        }
+
+        let node = &mut self.nodes[id.0];
+        node.left = None;
+        node.right = None;
+        node.parent = None;
+        node.total_length = 0;
+        node.plist = Value::NIL;
+        node.refresh_cache();
+    }
+
+    fn merge_interval_left(&mut self, id: IntervalId) -> Option<IntervalId> {
+        let absorb = self.node_len(id);
+        if absorb == 0 {
+            return None;
+        }
+
+        if let Some(left) = self.nodes[id.0].left {
+            let mut predecessor = left;
+            while let Some(right) = self.nodes[predecessor.0].right {
+                self.nodes[predecessor.0].total_length += absorb;
+                predecessor = right;
+            }
+            self.nodes[predecessor.0].total_length += absorb;
+            self.delete_zero_length_interval(id);
+            return Some(predecessor);
+        }
+
+        self.nodes[id.0].total_length -= absorb;
+        let mut predecessor = id;
+        while let Some(parent) = self.nodes[predecessor.0].parent {
+            if self.nodes[parent.0].right == Some(predecessor) {
+                self.delete_zero_length_interval(id);
+                return Some(parent);
+            }
+            predecessor = parent;
+            self.nodes[predecessor.0].total_length -= absorb;
+        }
+
+        None
+    }
+
+    fn remove_rightmost_interval(&mut self) -> Option<usize> {
+        let root = self.root?;
+        let id = self.rightmost_id(root);
+        let removed_len = self.node_len(id);
+        let left = self.nodes[id.0].left;
+        let parent = self.nodes[id.0].parent;
+
+        if let Some(parent) = parent {
+            debug_assert_eq!(self.nodes[parent.0].right, Some(id));
+            self.nodes[parent.0].right = left;
+            if let Some(left) = left {
+                self.nodes[left.0].parent = Some(parent);
+            }
+            self.add_length_to_ancestors(Some(parent), -(removed_len as isize));
+            self.balance_upwards(Some(parent));
+        } else {
+            self.root = left;
+            if let Some(left) = left {
+                self.nodes[left.0].parent = None;
+            }
+        }
+
+        Some(removed_len)
+    }
+
+    fn prune_trailing_empty_intervals(&mut self) {
+        loop {
+            let Some(root) = self.root else {
+                break;
+            };
+            let rightmost = self.rightmost_id(root);
+            if !self.nodes[rightmost.0].is_empty_plist() {
+                break;
+            }
+            self.remove_rightmost_interval();
+        }
+    }
+
+    fn live_plists(&self, id: Option<IntervalId>, f: &mut impl FnMut(Value)) {
+        let Some(id) = id else {
+            return;
+        };
+        let node = &self.nodes[id.0];
+        self.live_plists(node.left, f);
+        f(node.plist);
+        self.live_plists(node.right, f);
     }
 
     fn runs(&self) -> Vec<IntervalRun> {
@@ -765,10 +1209,6 @@ impl TextPropertyTable {
         self.intervals = IntervalTree::from_runs(runs);
     }
 
-    fn replace_runs_preserving_empty(&mut self, runs: Vec<IntervalRun>) {
-        self.intervals = IntervalTree::from_runs_preserving_empty(runs);
-    }
-
     fn split_runs_at(runs: &mut Vec<IntervalRun>, pos: usize) {
         if pos == 0 {
             return;
@@ -804,51 +1244,25 @@ impl TextPropertyTable {
         runs.push(run);
     }
 
-    // -- Split and merge helpers --------------------------------------------
-
-    /// Ensure no interval straddles `pos`. If one does, split it into two:
-    /// [start, pos) and [pos, original end).  Idempotent if already split.
-    fn split_at(&mut self, pos: usize) {
-        let mut runs = self.intervals.runs();
-        Self::split_runs_at(&mut runs, pos);
-        self.replace_runs(runs);
-    }
-
-    /// Rebuild the tree and drop trailing/all-empty nil intervals.
-    ///
-    /// GNU keeps interval boundaries even when adjacent plists are equal; for
-    /// example, two adjacent `put-text-property' calls can produce two equal
-    /// intervals, and `(next-property-change POS OBJ t)' must still expose the
-    /// raw boundary.  The tree keeps leading and interior nil-property
-    /// intervals because GNU interval positions are derived from subtree
-    /// lengths, so gaps before a later property are real intervals.
-    fn prune_empty_intervals_after_mutation(&mut self) {
-        let runs = self.intervals.runs();
-        self.replace_runs(runs);
-    }
-
     // -- Public API ----------------------------------------------------------
 
     pub fn put_property(&mut self, start: usize, end: usize, name: Value, value: Value) -> bool {
         if start >= end {
             return false;
         }
-        let mut runs = self.intervals.runs();
-        Self::ensure_runs_cover(&mut runs, end);
-        Self::split_runs_at(&mut runs, start);
-        Self::split_runs_at(&mut runs, end);
         let mut changed = false;
 
-        for run in &mut runs {
-            if run.start < end && run.end > start {
-                if plist_value_put_replace(&mut run.plist, name, value) {
-                    run.refresh_cache();
-                    changed = true;
-                }
+        let affected = self
+            .intervals
+            .intervals_overlapping_after_splits(start, end);
+        for (_, id) in affected {
+            if plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value) {
+                self.intervals.nodes[id.0].refresh_cache();
+                changed = true;
             }
         }
 
-        self.replace_runs(runs);
+        self.intervals.prune_trailing_empty_intervals();
         changed
     }
 
@@ -947,19 +1361,16 @@ impl TextPropertyTable {
         if start >= end {
             return false;
         }
-        let mut runs = self.intervals.runs();
-        Self::split_runs_at(&mut runs, start);
-        Self::split_runs_at(&mut runs, end);
         let mut changed = false;
-        for run in &mut runs {
-            if run.start < end && run.end > start && plist_value_remove(&mut run.plist, name) {
-                run.refresh_cache();
+
+        let affected = self
+            .intervals
+            .existing_intervals_overlapping_after_splits(start, end);
+        for (_, id) in affected {
+            if plist_value_remove(&mut self.intervals.nodes[id.0].plist, name) {
+                self.intervals.nodes[id.0].refresh_cache();
                 changed = true;
             }
-        }
-
-        if changed {
-            self.replace_runs_preserving_empty(runs);
         }
         changed
     }
@@ -968,16 +1379,14 @@ impl TextPropertyTable {
         if start >= end {
             return;
         }
-        let mut runs = self.intervals.runs();
-        Self::split_runs_at(&mut runs, start);
-        Self::split_runs_at(&mut runs, end);
-        for run in &mut runs {
-            if run.start < end && run.end > start {
-                run.plist = Value::NIL;
-                run.refresh_cache();
-            }
+
+        let affected = self
+            .intervals
+            .existing_intervals_overlapping_after_splits(start, end);
+        for (_, id) in affected {
+            self.intervals.set_node_plist(id, Value::NIL);
         }
-        self.replace_runs(runs);
+        self.intervals.prune_trailing_empty_intervals();
     }
 
     pub fn set_properties(&mut self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
@@ -987,16 +1396,36 @@ impl TextPropertyTable {
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
-        let mut runs = self.intervals.runs();
-        Self::ensure_runs_cover(&mut runs, end);
-        Self::split_runs_at(&mut runs, start);
-        Self::split_runs_at(&mut runs, end);
-        runs.retain(|run| !(run.start < end && run.end > start));
-        runs.push(IntervalRun::new(start, end, plist_value_from_pairs(&plist)));
+
+        self.intervals.ensure_cover(end);
+        self.intervals.split_at(start);
+        self.intervals.split_at(end);
+
+        let mut cursor = start;
+        let mut first = true;
+        while cursor < end {
+            let Some((node_start, id)) = self.intervals.find_id(cursor) else {
+                break;
+            };
+            let node_len = self.intervals.node_len(id);
+            let node_end = node_start + node_len;
+            self.intervals
+                .set_node_plist(id, plist_value_from_pairs(&plist));
+            if first {
+                first = false;
+            } else {
+                self.intervals.merge_interval_left(id);
+            }
+            if node_end <= cursor {
+                break;
+            }
+            cursor = node_end;
+        }
+
         if plist.is_empty() {
-            self.replace_runs_preserving_empty(runs);
+            return;
         } else {
-            self.replace_runs(runs);
+            self.intervals.prune_trailing_empty_intervals();
         }
     }
 
@@ -1432,9 +1861,7 @@ impl TextPropertyTable {
     }
 
     pub(crate) fn for_each_root(&self, mut f: impl FnMut(Value)) {
-        for node in &self.intervals.nodes {
-            f(node.plist);
-        }
+        self.intervals.live_plists(self.intervals.root, &mut f);
     }
 }
 
