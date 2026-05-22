@@ -2100,6 +2100,10 @@ mod divergence_narrowing_multibyte;
 mod divergence_net_thread_json_xml;
 #[path = "divergence-net-xml-dom-mail.rs"]
 mod divergence_net_xml_dom_mail;
+#[path = "divergence-network-mail-web.rs"]
+mod divergence_network_mail_web;
+#[path = "divergence-obarray-symbol-deep.rs"]
+mod divergence_obarray_symbol_deep;
 #[path = "divergence-overlay-deep.rs"]
 mod divergence_overlay_deep;
 #[path = "divergence-package-dired-elp.rs"]
