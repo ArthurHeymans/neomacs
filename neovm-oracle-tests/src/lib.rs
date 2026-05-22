@@ -2024,6 +2024,8 @@ mod divergence_chartab_syntax_deep;
 mod divergence_cllib_deep;
 #[path = "divergence-cllib-seq-map.rs"]
 mod divergence_cllib_seq_map;
+#[path = "divergence-coding-charset-deep.rs"]
+mod divergence_coding_charset_deep;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
@@ -2058,6 +2060,8 @@ mod divergence_fontlock_jitlock_highlight;
 mod divergence_format_read_integers;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
+#[path = "divergence-frame-display-info.rs"]
+mod divergence_frame_display_info;
 #[path = "divergence-frame-font-display.rs"]
 mod divergence_frame_font_display;
 #[path = "divergence-gc-memory-modules.rs"]
