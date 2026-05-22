@@ -2042,6 +2042,8 @@ mod divergence_minibuf_completion_ring;
 mod divergence_multibyte_bidi_deep;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
+#[path = "divergence-net-thread-json-xml.rs"]
+mod divergence_net_thread_json_xml;
 #[path = "divergence-overlay-deep.rs"]
 mod divergence_overlay_deep;
 #[path = "divergence-package-dired-elp.rs"]
@@ -2060,6 +2062,8 @@ mod divergence_regex_string_search;
 mod divergence_register_narrow_misc;
 #[path = "divergence-sequence-collections.rs"]
 mod divergence_sequence_collections;
+#[path = "divergence-stress-combo.rs"]
+mod divergence_stress_combo;
 #[path = "divergence-string-ops.rs"]
 mod divergence_string_ops;
 #[path = "divergence-symbol-reader-deep.rs"]
