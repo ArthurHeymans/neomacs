@@ -2060,6 +2060,8 @@ mod divergence_frame_font_display;
 mod divergence_gc_memory_modules;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
+#[path = "divergence-help-apropos-completion.rs"]
+mod divergence_help_apropos_completion;
 #[path = "divergence-image-operations.rs"]
 mod divergence_image_operations;
 #[path = "divergence-image-widget-display.rs"]
@@ -2082,6 +2084,8 @@ mod divergence_marker_undo_deep;
 mod divergence_minibuf_completion_ring;
 #[path = "divergence-misc-builtins.rs"]
 mod divergence_misc_builtins;
+#[path = "divergence-misc-remaining.rs"]
+mod divergence_misc_remaining;
 #[path = "divergence-mode-line-misc.rs"]
 mod divergence_mode_line_misc;
 #[path = "divergence-multibyte-bidi-deep.rs"]
