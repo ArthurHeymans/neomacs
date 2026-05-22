@@ -2022,6 +2022,8 @@ mod divergence_file_ops_deep;
 mod divergence_format_string_deep;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
+#[path = "divergence-image-widget-display.rs"]
+mod divergence_image_widget_display;
 #[path = "divergence-introspection-version.rs"]
 mod divergence_introspection_version;
 #[path = "divergence-keymap-input-deep.rs"]
@@ -2042,6 +2044,8 @@ mod divergence_multibyte_bidi_deep;
 mod divergence_narrowing_multibyte;
 #[path = "divergence-overlay-deep.rs"]
 mod divergence_overlay_deep;
+#[path = "divergence-package-dired-elp.rs"]
+mod divergence_package_dired_elp;
 #[path = "divergence-print-format-charset.rs"]
 mod divergence_print_format_charset;
 #[path = "divergence-quit-error-hierarchy.rs"]
@@ -2066,6 +2070,8 @@ mod divergence_textprop_deep;
 mod divergence_textprop_overlay;
 #[path = "divergence-timer-eventloop.rs"]
 mod divergence_timer_eventloop;
+#[path = "divergence-undo-deep-2.rs"]
+mod divergence_undo_deep_2;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
 #[path = "divergence-window-frame-display.rs"]
