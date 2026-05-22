@@ -2076,6 +2076,8 @@ mod divergence_image_operations;
 mod divergence_image_widget_display;
 #[path = "divergence-introspection-version.rs"]
 mod divergence_introspection_version;
+#[path = "divergence-keyboard-input-methods.rs"]
+mod divergence_keyboard_input_methods;
 #[path = "divergence-keymap-input-deep.rs"]
 mod divergence_keymap_input_deep;
 #[path = "divergence-keymap-syntax-category.rs"]
@@ -2084,6 +2086,8 @@ mod divergence_keymap_syntax_category;
 mod divergence_kmacro_persistence;
 #[path = "divergence-lambda-apply-dispatch.rs"]
 mod divergence_lambda_apply_dispatch;
+#[path = "divergence-load-native-comp.rs"]
+mod divergence_load_native_comp;
 #[path = "divergence-macro-expansion-stress.rs"]
 mod divergence_macro_expansion_stress;
 #[path = "divergence-macro-pcase-cllib.rs"]
