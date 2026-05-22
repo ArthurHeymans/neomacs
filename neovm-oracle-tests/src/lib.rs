@@ -2014,6 +2014,8 @@ mod divergence_buffer_management;
 mod divergence_buffer_manip_rect;
 #[path = "divergence-buffer-motion-search.rs"]
 mod divergence_buffer_motion_search;
+#[path = "divergence-calendar-time-deep.rs"]
+mod divergence_calendar_time_deep;
 #[path = "divergence-chartab-charset-deep.rs"]
 mod divergence_chartab_charset_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
@@ -2156,6 +2158,8 @@ mod divergence_subr_bytecode_deep;
 mod divergence_symbol_reader_deep;
 #[path = "divergence-textprop-deep.rs"]
 mod divergence_textprop_deep;
+#[path = "divergence-textprop-manipulation.rs"]
+mod divergence_textprop_manipulation;
 #[path = "divergence-textprop-overlay.rs"]
 mod divergence_textprop_overlay;
 #[path = "divergence-textprop-sticky-deep.rs"]
