@@ -2397,6 +2397,10 @@ impl<'a> Vm<'a> {
                                     *k = HashKey::Ptr(new_ptr);
                                 }
                             }
+                            if let Some(slot) = ht.entry_slot_by_key.remove(&HashKey::Ptr(old_ptr))
+                            {
+                                ht.entry_slot_by_key.insert(HashKey::Ptr(new_ptr), slot);
+                            }
                         }
                     }
                     for item in ht.data.values_mut() {

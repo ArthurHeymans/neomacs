@@ -516,6 +516,10 @@ impl IntervalTree {
         None
     }
 
+    fn interval_end(&self, start: usize, id: IntervalId) -> usize {
+        start + self.node_len(id)
+    }
+
     fn add_length_to_ancestors(&mut self, mut id: Option<IntervalId>, delta: isize) {
         while let Some(current) = id {
             let total = &mut self.nodes[current.0].total_length;
@@ -753,23 +757,7 @@ impl IntervalTree {
         self.split_at(start);
         self.split_at(end);
 
-        let mut result = Vec::new();
-        let mut cursor = start;
-        while cursor < end {
-            let Some((node_start, id)) = self.find_id(cursor) else {
-                break;
-            };
-            let node_len = self.node_len(id);
-            let node_end = node_start + node_len;
-            if node_end > start {
-                result.push((node_start, id));
-            }
-            if node_end <= cursor {
-                break;
-            }
-            cursor = node_end;
-        }
-        result
+        self.ids_overlapping(start, end)
     }
 
     fn existing_intervals_overlapping_after_splits(
@@ -784,30 +772,7 @@ impl IntervalTree {
         self.split_at(start);
         self.split_at(end);
 
-        let mut result = Vec::new();
-        let mut cursor = start;
-        if self.find_id(cursor).is_none() {
-            let Some(next) = self.first_start_after(cursor).filter(|next| *next < end) else {
-                return result;
-            };
-            cursor = next;
-        }
-
-        while cursor < end {
-            let Some((node_start, id)) = self.find_id(cursor) else {
-                break;
-            };
-            let node_len = self.node_len(id);
-            let node_end = node_start + node_len;
-            if node_end > start {
-                result.push((node_start, id));
-            }
-            if node_end <= cursor {
-                break;
-            }
-            cursor = node_end;
-        }
-        result
+        self.ids_overlapping(start, end)
     }
 
     fn set_node_plist(&mut self, id: IntervalId, plist: Value) {
@@ -1068,18 +1033,54 @@ impl IntervalTree {
         }
     }
 
-    fn first_start_after(&self, current: usize) -> Option<usize> {
+    fn first_id_after(&self, current: usize) -> Option<(usize, IntervalId)> {
         let mut best = None;
-        self.find_first_start_after(self.root, 0, current, &mut best);
+        self.find_first_id_after(self.root, 0, current, &mut best);
         best
     }
 
-    fn find_first_start_after(
+    fn first_start_after(&self, current: usize) -> Option<usize> {
+        self.first_id_after(current).map(|(start, _)| start)
+    }
+
+    fn first_id_overlapping(&self, start: usize, end: usize) -> Option<(usize, IntervalId)> {
+        if start >= end {
+            return None;
+        }
+        if let Some((interval_start, id)) = self.find_id(start)
+            && self.interval_end(interval_start, id) > start
+        {
+            return Some((interval_start, id));
+        }
+        self.first_id_after(start)
+            .filter(|(next_start, _)| *next_start < end)
+    }
+
+    fn ids_overlapping(&self, start: usize, end: usize) -> Vec<(usize, IntervalId)> {
+        let mut result = Vec::new();
+        let Some((mut node_start, mut id)) = self.first_id_overlapping(start, end) else {
+            return result;
+        };
+        while node_start < end {
+            let node_end = self.interval_end(node_start, id);
+            if node_end > start {
+                result.push((node_start, id));
+            }
+            let Some(next_id) = self.next_id(id) else {
+                break;
+            };
+            node_start = node_end;
+            id = next_id;
+        }
+        result
+    }
+
+    fn find_first_id_after(
         &self,
         id: Option<IntervalId>,
         base: usize,
         current: usize,
-        best: &mut Option<usize>,
+        best: &mut Option<(usize, IntervalId)>,
     ) {
         let Some(id) = id else {
             return;
@@ -1089,10 +1090,13 @@ impl IntervalTree {
         let node_start = base + left_len;
         let node_len = self.node_len(id);
         if node_start > current {
-            *best = Some(best.map_or(node_start, |old| old.min(node_start)));
-            self.find_first_start_after(node.left, base, current, best);
+            let replace = best.is_none_or(|(old_start, _)| node_start < old_start);
+            if replace {
+                *best = Some((node_start, id));
+            }
+            self.find_first_id_after(node.left, base, current, best);
         } else {
-            self.find_first_start_after(node.right, node_start + node_len, current, best);
+            self.find_first_id_after(node.right, node_start + node_len, current, best);
         }
     }
 }
@@ -1179,50 +1183,33 @@ impl TextPropertyTable {
     /// with `next_interval`; they don't scan from the beginning of the object.
     /// Keep that traversal shape centralized so callers follow GNU's
     /// interval-access path instead of depending on the tree representation.
-    fn first_interval_start_overlapping(&self, start: usize, end: usize) -> Option<usize> {
-        if start >= end {
-            return None;
-        }
-        if let Some((interval_start, node)) = self.find_interval(start)
-            && interval_start + self.interval_node_len_at(interval_start, node) > start
-        {
-            return Some(interval_start);
-        }
-        self.intervals
-            .first_start_after(start)
-            .filter(|next| *next < end)
-    }
-
-    fn next_interval_start_after(&self, current: usize, end: usize) -> Option<usize> {
-        self.intervals
-            .first_start_after(current)
-            .filter(|next| *next < end)
+    fn first_interval_overlapping(&self, start: usize, end: usize) -> Option<(usize, IntervalId)> {
+        self.intervals.first_id_overlapping(start, end)
     }
 
     fn for_each_interval_overlapping(
         &self,
         start: usize,
         end: usize,
-        mut f: impl FnMut(usize, &IntervalNode),
+        mut f: impl FnMut(usize, usize, &IntervalNode),
     ) {
-        let Some(mut key) = self.first_interval_start_overlapping(start, end) else {
+        let Some((mut node_start, mut id)) = self.first_interval_overlapping(start, end) else {
             return;
         };
         loop {
-            if key >= end {
+            if node_start >= end {
                 break;
             }
-            let Some((node_start, node)) = self.find_interval(key) else {
-                break;
-            };
-            let node_end = node_start + self.interval_node_len_at(node_start, node);
+            let node_end = self.intervals.interval_end(node_start, id);
             if node_end > start {
-                f(node_start, node);
+                let node = &self.intervals.nodes[id.0];
+                f(node_start, node_end, node);
             }
-            let Some(next_key) = self.next_interval_start_after(key, end) else {
+            let Some(next_id) = self.intervals.next_id(id) else {
                 break;
             };
-            key = next_key;
+            node_start = node_end;
+            id = next_id;
         }
     }
 
@@ -1232,24 +1219,23 @@ impl TextPropertyTable {
         end: usize,
         mut predicate: impl FnMut(usize, &IntervalNode) -> bool,
     ) -> bool {
-        let Some(mut key) = self.first_interval_start_overlapping(start, end) else {
+        let Some((mut node_start, mut id)) = self.first_interval_overlapping(start, end) else {
             return false;
         };
         loop {
-            if key >= end {
+            if node_start >= end {
                 return false;
             }
-            let Some((node_start, node)) = self.find_interval(key) else {
-                return false;
-            };
-            let node_end = node_start + self.interval_node_len_at(node_start, node);
+            let node_end = self.intervals.interval_end(node_start, id);
+            let node = &self.intervals.nodes[id.0];
             if node_end > start && predicate(node_start, node) {
                 return true;
             }
-            let Some(next_key) = self.next_interval_start_after(key, end) else {
+            let Some(next_id) = self.intervals.next_id(id) else {
                 return false;
             };
-            key = next_key;
+            node_start = node_end;
+            id = next_id;
         }
     }
 
@@ -1257,48 +1243,27 @@ impl TextPropertyTable {
         &self,
         start: usize,
         end: usize,
-        mut f: impl FnMut(usize, &IntervalNode) -> Result<(), E>,
+        mut f: impl FnMut(usize, usize, &IntervalNode) -> Result<(), E>,
     ) -> Result<(), E> {
-        let Some(mut key) = self.first_interval_start_overlapping(start, end) else {
+        let Some((mut node_start, mut id)) = self.first_interval_overlapping(start, end) else {
             return Ok(());
         };
         loop {
-            if key >= end {
+            if node_start >= end {
                 break;
             }
-            let Some((node_start, node)) = self.find_interval(key) else {
-                break;
-            };
-            let node_end = node_start + self.interval_node_len_at(node_start, node);
+            let node_end = self.intervals.interval_end(node_start, id);
             if node_end > start {
-                f(node_start, node)?;
+                let node = &self.intervals.nodes[id.0];
+                f(node_start, node_end, node)?;
             }
-            let Some(next_key) = self.next_interval_start_after(key, end) else {
+            let Some(next_id) = self.intervals.next_id(id) else {
                 break;
             };
-            key = next_key;
+            node_start = node_end;
+            id = next_id;
         }
         Ok(())
-    }
-
-    fn interval_node_len_at(&self, start: usize, node: &IntervalNode) -> usize {
-        self.intervals
-            .find_id(start)
-            .and_then(|(found_start, id)| {
-                if found_start == start && std::ptr::eq(node, &self.intervals.nodes[id.0]) {
-                    Some(self.intervals.node_len(id))
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| {
-                self.intervals
-                    .runs()
-                    .into_iter()
-                    .find(|run| run.start == start)
-                    .map(|run| run.len())
-                    .unwrap_or(0)
-            })
     }
 
     fn from_interval_runs(runs: Vec<IntervalRun>) -> Self {
@@ -1385,10 +1350,11 @@ impl TextPropertyTable {
     }
 
     pub fn get_properties(&self, pos: usize) -> HashMap<Value, Value> {
-        let Some((start, node)) = self.find_interval(pos) else {
+        let Some((start, id)) = self.intervals.find_id(pos) else {
             return HashMap::new();
         };
-        let end = start + self.interval_node_len_at(start, node);
+        let node = &self.intervals.nodes[id.0];
+        let end = self.intervals.interval_end(start, id);
         PropertyInterval::from_plist(start, end, &plist_pairs(node.plist)).properties
     }
 
@@ -1416,11 +1382,12 @@ impl TextPropertyTable {
             return true;
         }
 
+        let Some((mut interval_start, mut id)) = self.intervals.find_id(start) else {
+            return false;
+        };
         let mut cursor = start;
         while cursor < end {
-            let Some((interval_start, node)) = self.find_interval(cursor) else {
-                return false;
-            };
+            let node = &self.intervals.nodes[id.0];
             for (name, value) in properties {
                 let Some(existing) = plist_value_get(node.plist, *name) else {
                     return false;
@@ -1429,11 +1396,18 @@ impl TextPropertyTable {
                     return false;
                 }
             }
-            let node_end = interval_start + self.interval_node_len_at(interval_start, node);
+            let node_end = self.intervals.interval_end(interval_start, id);
             if node_end <= cursor {
                 return false;
             }
             cursor = node_end.min(end);
+            if cursor < end {
+                let Some(next_id) = self.intervals.next_id(id) else {
+                    return false;
+                };
+                interval_start = node_end;
+                id = next_id;
+            }
         }
 
         true
@@ -1673,19 +1647,21 @@ impl TextPropertyTable {
         if start >= end {
             return None;
         }
-        let mut key = self.first_interval_start_overlapping(start, end)?;
+        let (mut key, mut id) = self.first_interval_overlapping(start, end)?;
         loop {
             if key >= end {
                 return None;
             }
-            let (_, node) = self.find_interval(key)?;
+            let node = &self.intervals.nodes[id.0];
             if plist_value_get(node.plist, name).is_some_and(|found| eq_value(&found, &value)) {
                 return Some(key.max(start));
             }
-            let Some(next_key) = self.next_interval_start_after(key, end) else {
+            let next_key = self.intervals.interval_end(key, id);
+            let Some(next_id) = self.intervals.next_id(id) else {
                 return None;
             };
             key = next_key;
+            id = next_id;
         }
     }
 
@@ -1698,9 +1674,8 @@ impl TextPropertyTable {
         if start >= end {
             return Ok(());
         }
-        self.try_for_each_interval_overlapping(start, end, |interval_start, node| {
+        self.try_for_each_interval_overlapping(start, end, |interval_start, interval_end, node| {
             let pairs = plist_pairs(node.plist);
-            let interval_end = interval_start + self.interval_node_len_at(interval_start, node);
             f(interval_start, interval_end, &pairs)
         })
     }
@@ -1765,9 +1740,8 @@ impl TextPropertyTable {
         }
 
         let mut runs: Vec<(usize, usize, Vec<(Value, Value)>)> = Vec::new();
-        self.for_each_interval_overlapping(start, end, |interval_start, node| {
+        self.for_each_interval_overlapping(start, end, |interval_start, node_end, node| {
             let new_start = interval_start.max(start) - start;
-            let node_end = interval_start + self.interval_node_len_at(interval_start, node);
             let new_end = node_end.min(end) - start;
             if new_start < new_end {
                 runs.push((new_start, new_end, plist_pairs(node.plist)));
@@ -1783,9 +1757,8 @@ impl TextPropertyTable {
         }
 
         let mut table = TextPropertyTable::new();
-        self.for_each_interval_overlapping(start, end, |interval_start, node| {
+        self.for_each_interval_overlapping(start, end, |interval_start, node_end, node| {
             let new_start = interval_start.max(start) - start;
-            let node_end = interval_start + self.interval_node_len_at(interval_start, node);
             let new_end = node_end.min(end) - start;
             if new_start >= new_end {
                 return;

@@ -1974,7 +1974,7 @@ fn completion_candidates_from_custom_obarray(collection: Value) -> Vec<Completio
 fn completion_candidates_from_hash_table(collection: Value) -> Vec<CompletionCandidate> {
     let table = collection.as_hash_table().unwrap().clone();
     let mut candidates = Vec::new();
-    for key in &table.insertion_order {
+    for key in table.live_hash_keys_in_slot_order() {
         let Some(value) = table.data.get(key).copied() else {
             continue;
         };

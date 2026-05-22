@@ -2344,8 +2344,8 @@ pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> 
             .map(|(k, v)| (dump_hash_key(encoder, k), encoder.dump_value(v)))
             .collect(),
         insertion_order: ht
-            .insertion_order
-            .iter()
+            .live_hash_keys_in_slot_order()
+            .into_iter()
             .map(|key| dump_hash_key(encoder, key))
             .collect(),
     }
@@ -4081,6 +4081,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         key_snapshots,
         insertion_order,
         entry_slots: Vec::new(),
+        entry_slot_by_key: FxHashMap::default(),
         free_slots: Vec::new(),
     };
     table.rebuild_iterable_hash_keys_from_data();

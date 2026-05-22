@@ -520,7 +520,7 @@ fn internal_hash_table_nonempty_buckets(table: &LispHashTable) -> Vec<Vec<(Value
     let index_bits = bucket_count.trailing_zeros();
     let test = table.test.clone();
     let mut buckets: Vec<Vec<(Value, i64)>> = vec![Vec::new(); bucket_count];
-    for key in &table.insertion_order {
+    for key in table.live_hash_keys_in_slot_order() {
         if table.data.contains_key(key) {
             let hash = internal_hash_table_diagnostic_hash(key, test.clone());
             let index = knuth_hash_index(hash, index_bits);
@@ -653,8 +653,8 @@ pub(crate) fn builtin_hash_table_keys(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::HashTable) => {
             let table = args[0].as_hash_table().unwrap().clone();
             let keys: Vec<Value> = table
-                .insertion_order
-                .iter()
+                .live_hash_keys_in_slot_order()
+                .into_iter()
                 .filter(|k| table.data.contains_key(k))
                 .map(|key| hash_key_to_visible_value(&table, key))
                 .collect();
@@ -675,8 +675,8 @@ pub(crate) fn builtin_hash_table_values(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::HashTable) => {
             let table = args[0].as_hash_table().unwrap().clone();
             let values: Vec<Value> = table
-                .insertion_order
-                .iter()
+                .live_hash_keys_in_slot_order()
+                .into_iter()
                 .filter_map(|k| table.data.get(k).cloned())
                 .collect();
             Ok(Value::list(values))

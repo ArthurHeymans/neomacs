@@ -168,7 +168,8 @@ fn intern_category_set(table: Value, category_set: Value) -> EvalResult {
     let _ = hash.with_hash_table_mut(|hash_table| {
         hash_table.data.insert(key.clone(), Value::NIL);
         hash_table.key_snapshots.insert(key.clone(), category_set);
-        hash_table.insertion_order.push(key);
+        hash_table.insertion_order.push(key.clone());
+        hash_table.note_hash_key_inserted(key);
     });
     Ok(category_set)
 }
@@ -211,7 +212,8 @@ fn intern_category_set_bits(table: Value, bits: u128) -> EvalResult {
     let _ = hash.with_hash_table_mut(|hash_table| {
         hash_table.data.insert(key.clone(), Value::NIL);
         hash_table.key_snapshots.insert(key.clone(), category_set);
-        hash_table.insertion_order.push(key);
+        hash_table.insertion_order.push(key.clone());
+        hash_table.note_hash_key_inserted(key);
     });
     Ok(category_set)
 }

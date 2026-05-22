@@ -973,6 +973,9 @@ impl TaggedHeap {
             .saturating_add(Self::hash_map_storage_bytes(&obj.table.data))
             .saturating_add(Self::hash_map_storage_bytes(&obj.table.key_snapshots))
             .saturating_add(Self::vector_storage_bytes(&obj.table.insertion_order))
+            .saturating_add(Self::vector_storage_bytes(&obj.table.entry_slots))
+            .saturating_add(Self::hash_map_storage_bytes(&obj.table.entry_slot_by_key))
+            .saturating_add(Self::vector_storage_bytes(&obj.table.free_slots))
     }
 
     fn lambda_object_bytes(obj: &LambdaObj) -> usize {

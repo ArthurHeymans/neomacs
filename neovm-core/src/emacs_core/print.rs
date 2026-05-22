@@ -313,8 +313,7 @@ fn remove_print_number_table_t_entries(table_value: Value) {
         table.data.retain(|_, value| *value != Value::T);
         let data = &table.data;
         table.key_snapshots.retain(|key, _| data.contains_key(key));
-        table.insertion_order.retain(|key| data.contains_key(key));
-        table.rebuild_hash_slots_from_insertion_order();
+        table.rebuild_iterable_hash_keys_from_data();
     });
 }
 
@@ -420,7 +419,7 @@ fn print_preprocess(value: &Value, state: &mut PrintCircleState, options: PrintO
             }
             ValueKind::Veclike(VecLikeType::HashTable) => {
                 let table = obj.as_hash_table().unwrap().clone();
-                for key_hk in table.insertion_order.iter().rev() {
+                for key_hk in table.live_hash_keys_in_slot_order().into_iter().rev() {
                     if let Some(val) = table.data.get(key_hk) {
                         stack.push(*val);
                         let key_val = super::hashtab::hash_key_to_visible_value(&table, key_hk);
@@ -497,7 +496,7 @@ fn print_preprocess_external(value: &Value, table_value: Value, options: PrintOp
             }
             ValueKind::Veclike(VecLikeType::HashTable) => {
                 let table = obj.as_hash_table().unwrap().clone();
-                for key_hk in table.insertion_order.iter().rev() {
+                for key_hk in table.live_hash_keys_in_slot_order().into_iter().rev() {
                     if let Some(val) = table.data.get(key_hk) {
                         stack.push(*val);
                         let key_val = super::hashtab::hash_key_to_visible_value(&table, key_hk);
@@ -1281,7 +1280,7 @@ fn write_hash_table_stateful(value: &Value, out: &mut String, state: &mut PrintS
         out.push_str(" data (");
         let mut first = true;
         let mut count: i64 = 0;
-        for key in &table.insertion_order {
+        for key in table.live_hash_keys_in_slot_order() {
             if let Some(val) = table.data.get(key) {
                 if let Some(length) = state.options.print_length {
                     if count >= length {
@@ -2618,7 +2617,7 @@ fn format_hash_table(value: &Value, options: PrintOptions) -> String {
     if !table.data.is_empty() {
         out.push_str(" data (");
         let mut first = true;
-        for key in &table.insertion_order {
+        for key in table.live_hash_keys_in_slot_order() {
             if let Some(val) = table.data.get(key) {
                 if !first {
                     out.push(' ');
@@ -2657,7 +2656,7 @@ fn append_hash_table_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptio
     if !table.data.is_empty() {
         out.extend_from_slice(b" data (");
         let mut first = true;
-        for key in &table.insertion_order {
+        for key in table.live_hash_keys_in_slot_order() {
             if let Some(val) = table.data.get(key) {
                 if !first {
                     out.push(b' ');

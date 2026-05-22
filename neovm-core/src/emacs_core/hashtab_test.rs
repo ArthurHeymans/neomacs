@@ -1,6 +1,7 @@
 use super::*;
 use crate::emacs_core::builtins::{
     builtin_gethash, builtin_hash_table_count, builtin_make_hash_table, builtin_puthash,
+    builtin_remhash,
 };
 use crate::emacs_core::intern::{intern, intern_uninterned, lookup_interned};
 
@@ -112,6 +113,38 @@ fn gethash_large_table_lookup_does_not_copy_table() {
     assert!(
         elapsed < std::time::Duration::from_secs(5),
         "gethash on a large table should borrow the table, not copy it; elapsed={elapsed:?}"
+    );
+}
+
+#[test]
+fn remhash_unlinks_entry_slot_without_compacting_table_order() {
+    crate::test_utils::init_test_tracing();
+    let table = Value::hash_table(HashTableTest::Eq);
+
+    for i in 0..16 {
+        builtin_puthash(vec![Value::fixnum(i), Value::fixnum(i * 10), table]).unwrap();
+    }
+    builtin_remhash(vec![Value::fixnum(5), table]).unwrap();
+
+    let removed_key = {
+        let raw = table.as_hash_table().unwrap();
+        Value::fixnum(5).to_hash_key(&raw.test)
+    };
+    let raw = table.as_hash_table().unwrap();
+    assert_eq!(raw.data.len(), 15);
+    assert!(!raw.entry_slot_by_key.contains_key(&removed_key));
+    assert_eq!(raw.entry_slots.iter().flatten().count(), 15);
+    assert_eq!(raw.free_slots.len(), 1);
+
+    builtin_puthash(vec![Value::fixnum(5), Value::fixnum(50), table]).unwrap();
+
+    let raw = table.as_hash_table().unwrap();
+    assert_eq!(raw.data.len(), 16);
+    assert_eq!(raw.entry_slots.iter().flatten().count(), 16);
+    assert_eq!(raw.live_hash_keys_in_slot_order().len(), 16);
+    assert_eq!(
+        builtin_gethash(vec![Value::fixnum(5), table]).unwrap(),
+        Value::fixnum(50)
     );
 }
 

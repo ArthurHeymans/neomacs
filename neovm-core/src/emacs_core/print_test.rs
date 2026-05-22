@@ -1,6 +1,7 @@
 use super::super::intern::{intern, intern_uninterned, intern_uninterned_lisp_string};
 use super::super::marker::make_marker_value;
 use super::*;
+use crate::emacs_core::builtins::{builtin_puthash, builtin_remhash};
 use crate::emacs_core::value::{
     HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, next_float_id,
 };
@@ -241,6 +242,22 @@ fn print_hash_table_object_uses_readable_hash_s_shape() {
     // GNU Emacs prints "test equal" for non-default test (default is eql).
     assert_eq!(print_value(&table), "#s(hash-table test equal)");
     assert_eq!(print_value_bytes(&table), b"#s(hash-table test equal)");
+}
+
+#[test]
+fn print_hash_table_uses_live_slots_after_remhash_reinsert() {
+    crate::test_utils::init_test_tracing();
+    let table = Value::hash_table(HashTableTest::Eq);
+
+    builtin_puthash(vec![Value::fixnum(1), Value::fixnum(10), table]).unwrap();
+    builtin_puthash(vec![Value::fixnum(2), Value::fixnum(20), table]).unwrap();
+    builtin_remhash(vec![Value::fixnum(1), table]).unwrap();
+    builtin_puthash(vec![Value::fixnum(1), Value::fixnum(10), table]).unwrap();
+
+    let rendered = print_value(&table);
+    assert_eq!(rendered.matches("1 10").count(), 1);
+    assert_eq!(rendered.matches("2 20").count(), 1);
+    assert_eq!(print_value_bytes(&table), rendered.as_bytes());
 }
 
 #[test]

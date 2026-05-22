@@ -435,6 +435,10 @@ fn maybe_resize_hash_table_for_insert(table: &mut LispHashTable, inserting_new_k
             let additional = new_size - table.entry_slots.capacity();
             table.entry_slots.reserve(additional);
         }
+        if new_size > table.entry_slot_by_key.capacity() {
+            let additional = new_size - table.entry_slot_by_key.capacity();
+            table.entry_slot_by_key.reserve(additional);
+        }
     }
 }
 
@@ -670,7 +674,7 @@ fn builtin_gethash_user_defined(
     };
     let ht = ht_ref.clone();
     let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
-    for key in &ht.insertion_order {
+    for key in ht.live_hash_keys_in_slot_order() {
         if !ht.data.contains_key(key) {
             continue;
         }
@@ -746,7 +750,7 @@ fn builtin_puthash_user_defined(
     let ht_snapshot = ht_ref.clone();
     let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
     let mut existing_key = None;
-    for key in &ht_snapshot.insertion_order {
+    for key in ht_snapshot.live_hash_keys_in_slot_order() {
         if !ht_snapshot.data.contains_key(key) {
             continue;
         }
@@ -840,7 +844,6 @@ fn builtin_remhash_values(
             let _ = table.with_hash_table_mut(|ht| {
                 if ht.data.remove(&key).is_some() {
                     ht.key_snapshots.remove(&key);
-                    ht.insertion_order.retain(|k| k != &key);
                     ht.note_hash_key_removed(&key);
                 }
             });

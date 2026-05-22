@@ -567,6 +567,7 @@ pub struct LispHashTable {
     pub key_snapshots: FxHashMap<HashKey, Value>,
     pub insertion_order: Vec<HashKey>,
     pub entry_slots: Vec<Option<HashKey>>,
+    pub entry_slot_by_key: FxHashMap<HashKey, usize>,
     pub free_slots: Vec<usize>,
 }
 
@@ -782,6 +783,7 @@ impl LispHashTable {
             key_snapshots: FxHashMap::default(),
             insertion_order: Vec::new(),
             entry_slots: Vec::new(),
+            entry_slot_by_key: FxHashMap::default(),
             free_slots: Vec::new(),
         }
     }
@@ -810,30 +812,36 @@ impl LispHashTable {
             ),
             insertion_order: Vec::with_capacity(size.max(0) as usize),
             entry_slots: Vec::with_capacity(size.max(0) as usize),
+            entry_slot_by_key: FxHashMap::with_capacity_and_hasher(
+                size.max(0) as usize,
+                Default::default(),
+            ),
             free_slots: Vec::new(),
         }
     }
 
     pub fn note_hash_key_inserted(&mut self, key: HashKey) {
+        if self.entry_slot_by_key.contains_key(&key) {
+            return;
+        }
         if let Some(slot) = self.free_slots.pop()
             && slot < self.entry_slots.len()
         {
             debug_assert!(self.entry_slots[slot].is_none());
-            self.entry_slots[slot] = Some(key);
+            self.entry_slots[slot] = Some(key.clone());
+            self.entry_slot_by_key.insert(key, slot);
             return;
         }
-        self.entry_slots.push(Some(key));
+        let slot = self.entry_slots.len();
+        self.entry_slots.push(Some(key.clone()));
+        self.entry_slot_by_key.insert(key, slot);
     }
 
     pub fn ensure_hash_key_iterable(&mut self, key: &HashKey) {
         if !self.insertion_order.iter().any(|existing| existing == key) {
             self.insertion_order.push(key.clone());
         }
-        if !self
-            .entry_slots
-            .iter()
-            .any(|slot| slot.as_ref() == Some(key))
-        {
+        if !self.entry_slot_by_key.contains_key(key) {
             self.note_hash_key_inserted(key.clone());
         }
     }
@@ -866,11 +874,21 @@ impl LispHashTable {
         self.entry_slots.reserve(insertion_order.len());
         self.entry_slots
             .extend(insertion_order.iter().cloned().map(Some));
+        self.entry_slot_by_key.clear();
+        self.entry_slot_by_key.reserve(insertion_order.len());
+        for (slot, key) in insertion_order.iter().cloned().enumerate() {
+            self.entry_slot_by_key.insert(key, slot);
+        }
         self.free_slots.clear();
         self.insertion_order = insertion_order;
     }
 
     pub fn note_hash_key_removed(&mut self, key: &HashKey) {
+        if let Some(slot) = self.entry_slot_by_key.remove(key) {
+            self.entry_slots[slot] = None;
+            self.free_slots.push(slot);
+            return;
+        }
         if let Some(slot) = self
             .entry_slots
             .iter()
@@ -883,17 +901,60 @@ impl LispHashTable {
 
     pub fn clear_hash_slots(&mut self) {
         self.entry_slots.clear();
+        self.entry_slot_by_key.clear();
         self.free_slots.clear();
     }
 
     pub fn rebuild_hash_slots_from_insertion_order(&mut self) {
         self.entry_slots.clear();
+        self.entry_slot_by_key.clear();
         self.free_slots.clear();
         for key in &self.insertion_order {
             if self.data.contains_key(key) {
+                let slot = self.entry_slots.len();
                 self.entry_slots.push(Some(key.clone()));
+                self.entry_slot_by_key.insert(key.clone(), slot);
             }
         }
+    }
+
+    pub fn live_hash_keys_in_slot_order(&self) -> Vec<&HashKey> {
+        let mut keys = Vec::with_capacity(self.data.len());
+        let slots_cover_data = self.entry_slot_by_key.len() == self.data.len();
+        if slots_cover_data {
+            for slot in &self.entry_slots {
+                if let Some(key) = slot.as_ref()
+                    && self.data.contains_key(key)
+                {
+                    keys.push(key);
+                }
+            }
+            if keys.len() == self.data.len() {
+                return keys;
+            }
+            keys.clear();
+        }
+
+        let mut seen = FxHashSet::with_capacity_and_hasher(self.data.len(), Default::default());
+        for slot in &self.entry_slots {
+            if let Some(key) = slot.as_ref()
+                && self.data.contains_key(key)
+                && seen.insert(key.clone())
+            {
+                keys.push(key);
+            }
+        }
+        for key in &self.insertion_order {
+            if self.data.contains_key(key) && seen.insert(key.clone()) {
+                keys.push(key);
+            }
+        }
+        for key in self.data.keys() {
+            if seen.insert(key.clone()) {
+                keys.push(key);
+            }
+        }
+        keys
     }
 }
 
