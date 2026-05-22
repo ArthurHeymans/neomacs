@@ -2006,8 +2006,12 @@ mod divergence_buffer_local_killring_fileio;
 mod divergence_buffer_manip_rect;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
+#[path = "divergence-cllib-seq-map.rs"]
+mod divergence_cllib_seq_map;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
+#[path = "divergence-debug-bytecomp-loadhist.rs"]
+mod divergence_debug_bytecomp_loadhist;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
 #[path = "divergence-hash-struct-records.rs"]
@@ -2016,6 +2020,8 @@ mod divergence_hash_struct_records;
 mod divergence_introspection_version;
 #[path = "divergence-keymap-syntax-category.rs"]
 mod divergence_keymap_syntax_category;
+#[path = "divergence-lambda-apply-dispatch.rs"]
+mod divergence_lambda_apply_dispatch;
 #[path = "divergence-macro-pcase-cllib.rs"]
 mod divergence_macro_pcase_cllib;
 #[path = "divergence-marker-undo-deep.rs"]
