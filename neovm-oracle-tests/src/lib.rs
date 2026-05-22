@@ -2012,6 +2012,8 @@ mod divergence_buffer_locals_hooks;
 mod divergence_buffer_management;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
+#[path = "divergence-buffer-motion-search.rs"]
+mod divergence_buffer_motion_search;
 #[path = "divergence-chartab-charset-deep.rs"]
 mod divergence_chartab_charset_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
@@ -2092,6 +2094,8 @@ mod divergence_net_xml_dom_mail;
 mod divergence_overlay_deep;
 #[path = "divergence-package-dired-elp.rs"]
 mod divergence_package_dired_elp;
+#[path = "divergence-pcase-deep.rs"]
+mod divergence_pcase_deep;
 #[path = "divergence-print-circle-read.rs"]
 mod divergence_print_circle_read;
 #[path = "divergence-print-format-charset.rs"]
