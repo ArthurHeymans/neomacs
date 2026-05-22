@@ -950,7 +950,19 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
         );
     }
 
-    if !front_sticky.is_empty() {
+    let category_front_sticky_t = merged_props
+        .iter()
+        .find_map(|(name, value)| {
+            (*name == Value::symbol("category"))
+                .then(|| value.as_symbol_id())
+                .flatten()
+        })
+        .and_then(|category| {
+            obarray.get_property_id(category, crate::emacs_core::intern::intern("front-sticky"))
+        })
+        .is_some_and(|value| value == Value::T);
+
+    if !front_sticky.is_empty() && !category_front_sticky_t {
         merged_props.insert(
             0,
             (Value::symbol("front-sticky"), Value::list(front_sticky)),

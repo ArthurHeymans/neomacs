@@ -316,3 +316,69 @@ fn oracle_text_property_change_limits_accept_markers_and_return_character_positi
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_insert_and_inherit_sticky_property_merge_matrix_matches_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/intervals.c:merge_properties_sticky documents the 16
+    // combinations of left/right front/rear stickiness and merges properties
+    // property-by-property.  Use the same matrix names as GNU's comment and
+    // insert multibyte text at the boundary so interval positions and sticky
+    // inheritance are both covered.
+    let form = r#"
+(let ((text-property-default-nonsticky nil))
+  (with-temp-buffer
+    (insert "LR")
+    (set-text-properties
+     1 2
+     '(front-sticky (p8 p9 pa pb pc pd pe pf)
+       rear-nonsticky (p4 p5 p6 p7 p8 p9 pa pb)
+       p0 L p1 L p2 L p3 L p4 L p5 L p6 L p7 L
+       p8 L p9 L pa L pb L pc L pd L pe L pf L))
+    (set-text-properties
+     2 3
+     '(front-sticky (p2 p3 p6 p7 pa pb pe pf)
+       rear-nonsticky (p1 p2 p5 p6 p9 pa pd pe)
+       p0 R p1 R p2 R p3 R p4 R p5 R p6 R p7 R
+       p8 R p9 R pa R pb R pc R pd R pe R pf R))
+    (goto-char 2)
+    (insert-and-inherit "λ")
+    (list (buffer-string)
+          (text-properties-at 2)
+          (object-intervals (current-buffer)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_insert_and_inherit_category_front_sticky_suppresses_explicit_marker() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU Emacs src/intervals.c:merge_properties_sticky omits an explicit
+    // front-sticky property in the merged plist when the inherited category
+    // symbol itself has front-sticky=t.  The observable property values still
+    // match, but object-intervals exposes the exact GNU interval plist shape.
+    let form = r#"
+(let ((text-property-default-nonsticky nil))
+  (put 'oracle-sticky-category 'front-sticky t)
+  (unwind-protect
+      (with-temp-buffer
+        (insert "LR")
+        (set-text-properties 1 2 '(left L))
+        (set-text-properties
+         2 3
+         '(category oracle-sticky-category
+           front-sticky (category p)
+           p R))
+        (goto-char 2)
+        (insert-and-inherit "λ")
+        (list (buffer-string)
+              (text-properties-at 2)
+              (object-intervals (current-buffer))))
+    (put 'oracle-sticky-category 'front-sticky nil)))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
