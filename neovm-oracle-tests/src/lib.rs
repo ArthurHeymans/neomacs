@@ -1996,9 +1996,19 @@ mod zlib_decompress_region_semantics;
 
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
+#[path = "divergence-closure-lexical-eval.rs"]
+mod divergence_closure_lexical_eval;
 #[path = "divergence-error-hierarchy.rs"]
 mod divergence_error_hierarchy;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
+#[path = "divergence-reader-printer.rs"]
+mod divergence_reader_printer;
+#[path = "divergence-regex-string-search.rs"]
+mod divergence_regex_string_search;
+#[path = "divergence-sequence-collections.rs"]
+mod divergence_sequence_collections;
+#[path = "divergence-textprop-overlay.rs"]
+mod divergence_textprop_overlay;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
