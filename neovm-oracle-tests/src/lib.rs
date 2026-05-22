@@ -2052,6 +2052,8 @@ mod divergence_face_custom_theme;
 mod divergence_file_ops_deep;
 #[path = "divergence-file-remote-tramp.rs"]
 mod divergence_file_remote_tramp;
+#[path = "divergence-file-variables-deep.rs"]
+mod divergence_file_variables_deep;
 #[path = "divergence-fill-abbrev-comment.rs"]
 mod divergence_fill_abbrev_comment;
 #[path = "divergence-fontlock-jitlock-highlight.rs"]
@@ -2122,6 +2124,8 @@ mod divergence_overlay_deep;
 mod divergence_package_dired_elp;
 #[path = "divergence-pcase-deep.rs"]
 mod divergence_pcase_deep;
+#[path = "divergence-predicates-deep.rs"]
+mod divergence_predicates_deep;
 #[path = "divergence-print-circle-read.rs"]
 mod divergence_print_circle_read;
 #[path = "divergence-print-format-charset.rs"]
