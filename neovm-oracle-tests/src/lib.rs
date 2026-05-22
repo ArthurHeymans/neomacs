@@ -2126,6 +2126,8 @@ mod divergence_print_format_charset;
 mod divergence_process_shell;
 #[path = "divergence-process-shell-deep.rs"]
 mod divergence_process_shell_deep;
+#[path = "divergence-profiling-memory.rs"]
+mod divergence_profiling_memory;
 #[path = "divergence-project-xref-vcs.rs"]
 mod divergence_project_xref_vcs;
 #[path = "divergence-quit-error-hierarchy.rs"]
@@ -2138,6 +2140,8 @@ mod divergence_reader_printer;
 mod divergence_regex_deep;
 #[path = "divergence-regex-string-search.rs"]
 mod divergence_regex_string_search;
+#[path = "divergence-region-mark-edit.rs"]
+mod divergence_region_mark_edit;
 #[path = "divergence-register-narrow-misc.rs"]
 mod divergence_register_narrow_misc;
 #[path = "divergence-rx-pcase-pattern.rs"]
