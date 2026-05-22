@@ -2050,6 +2050,8 @@ mod divergence_file_remote_tramp;
 mod divergence_fill_abbrev_comment;
 #[path = "divergence-fontlock-jitlock-highlight.rs"]
 mod divergence_fontlock_jitlock_highlight;
+#[path = "divergence-format-read-integers.rs"]
+mod divergence_format_read_integers;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
 #[path = "divergence-frame-font-display.rs"]
@@ -2128,6 +2130,8 @@ mod divergence_stress_combo;
 mod divergence_stress_combo_2;
 #[path = "divergence-string-ops.rs"]
 mod divergence_string_ops;
+#[path = "divergence-subr-bytecode-deep.rs"]
+mod divergence_subr_bytecode_deep;
 #[path = "divergence-symbol-reader-deep.rs"]
 mod divergence_symbol_reader_deep;
 #[path = "divergence-textprop-deep.rs"]
