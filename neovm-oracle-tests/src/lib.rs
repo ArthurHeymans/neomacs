@@ -2158,6 +2158,8 @@ mod divergence_string_ops;
 mod divergence_subr_bytecode_deep;
 #[path = "divergence-symbol-reader-deep.rs"]
 mod divergence_symbol_reader_deep;
+#[path = "divergence-terminal-eshell.rs"]
+mod divergence_terminal_eshell;
 #[path = "divergence-textprop-deep.rs"]
 mod divergence_textprop_deep;
 #[path = "divergence-textprop-manipulation.rs"]
@@ -2184,5 +2186,7 @@ mod divergence_unicode_normalization;
 mod divergence_weak_hash_lifecycle;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
+#[path = "divergence-window-geometry.rs"]
+mod divergence_window_geometry;
 #[path = "divergence-window-redisplay.rs"]
 mod divergence_window_redisplay;
