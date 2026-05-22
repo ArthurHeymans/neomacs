@@ -2002,6 +2002,8 @@ mod divergence_arithmetic_float;
 mod divergence_buffer_editing;
 #[path = "divergence-closure-lexical-eval.rs"]
 mod divergence_closure_lexical_eval;
+#[path = "divergence-defvar-load-autoload.rs"]
+mod divergence_defvar_load_autoload;
 #[path = "divergence-error-hierarchy.rs"]
 mod divergence_error_hierarchy;
 #[path = "divergence-eval-apply-deep.rs"]
@@ -2014,6 +2016,8 @@ mod divergence_macro_pcase_cllib;
 mod divergence_marker_undo_deep;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
+#[path = "divergence-print-format-charset.rs"]
+mod divergence_print_format_charset;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-reader-printer.rs"]
