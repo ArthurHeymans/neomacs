@@ -2006,6 +2006,8 @@ mod divergence_buffer_local_killring_fileio;
 mod divergence_buffer_locals_hooks;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
+#[path = "divergence-casetable-category-deep.rs"]
+mod divergence_casetable_category_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
 #[path = "divergence-cllib-seq-map.rs"]
@@ -2018,6 +2020,8 @@ mod divergence_combo_operations;
 mod divergence_debug_bytecomp_loadhist;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
+#[path = "divergence-eval-load-read.rs"]
+mod divergence_eval_load_read;
 #[path = "divergence-file-ops-deep.rs"]
 mod divergence_file_ops_deep;
 #[path = "divergence-fill-abbrev-comment.rs"]
