@@ -2128,6 +2128,8 @@ mod divergence_sort_type_predicates;
 mod divergence_stress_combo;
 #[path = "divergence-stress-combo-2.rs"]
 mod divergence_stress_combo_2;
+#[path = "divergence-stress-large-deep.rs"]
+mod divergence_stress_large_deep;
 #[path = "divergence-string-ops.rs"]
 mod divergence_string_ops;
 #[path = "divergence-subr-bytecode-deep.rs"]
@@ -2140,6 +2142,8 @@ mod divergence_textprop_deep;
 mod divergence_textprop_overlay;
 #[path = "divergence-textprop-sticky-deep.rs"]
 mod divergence_textprop_sticky_deep;
+#[path = "divergence-time-process-final.rs"]
+mod divergence_time_process_final;
 #[path = "divergence-timer-eventloop.rs"]
 mod divergence_timer_eventloop;
 #[path = "divergence-undo-deep-2.rs"]
