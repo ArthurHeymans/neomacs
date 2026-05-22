@@ -2026,6 +2026,8 @@ mod divergence_coding_process;
 mod divergence_combo_operations;
 #[path = "divergence-debug-trace-ert.rs"]
 mod divergence_debug_trace_ert;
+#[path = "divergence-devtools-stubs.rs"]
+mod divergence_devtools_stubs;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
 #[path = "divergence-eieio-oop.rs"]
@@ -2042,6 +2044,8 @@ mod divergence_face_custom_theme;
 mod divergence_file_ops_deep;
 #[path = "divergence-fill-abbrev-comment.rs"]
 mod divergence_fill_abbrev_comment;
+#[path = "divergence-fontlock-jitlock-highlight.rs"]
+mod divergence_fontlock_jitlock_highlight;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
 #[path = "divergence-frame-font-display.rs"]
