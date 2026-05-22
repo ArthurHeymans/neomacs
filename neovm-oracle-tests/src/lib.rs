@@ -2016,12 +2016,16 @@ mod divergence_coding_process;
 mod divergence_debug_bytecomp_loadhist;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
+#[path = "divergence-file-ops-deep.rs"]
+mod divergence_file_ops_deep;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
 #[path = "divergence-introspection-version.rs"]
 mod divergence_introspection_version;
+#[path = "divergence-keymap-input-deep.rs"]
+mod divergence_keymap_input_deep;
 #[path = "divergence-keymap-syntax-category.rs"]
 mod divergence_keymap_syntax_category;
 #[path = "divergence-lambda-apply-dispatch.rs"]
@@ -2032,6 +2036,8 @@ mod divergence_macro_pcase_cllib;
 mod divergence_marker_undo_deep;
 #[path = "divergence-minibuf-completion-ring.rs"]
 mod divergence_minibuf_completion_ring;
+#[path = "divergence-multibyte-bidi-deep.rs"]
+mod divergence_multibyte_bidi_deep;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
 #[path = "divergence-overlay-deep.rs"]
