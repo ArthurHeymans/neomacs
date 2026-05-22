@@ -103,3 +103,33 @@ fn oracle_object_intervals_after_insert_and_delete() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_object_intervals_multibyte_positions_and_edit_shape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU src/fns.c:collect_interval exposes `interval->position` and
+    // `position + LENGTH(interval)`, which are character positions.  This
+    // covers multibyte strings and buffer edits where byte and character
+    // offsets differ.
+    let form = r#"
+(let ((s (copy-sequence "aé🙂b")))
+  (put-text-property 1 3 'face 'bold s)
+  (list
+   (length s)
+   (string-bytes s)
+   (object-intervals s)
+   (with-temp-buffer
+     (insert "aé🙂b")
+     (put-text-property 2 4 'face 'bold)
+     (goto-char 3)
+     (insert "λ")
+     (let ((after-insert (object-intervals (current-buffer))))
+       (delete-region 3 4)
+       (list
+        (buffer-string)
+        after-insert
+        (object-intervals (current-buffer)))))))"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
