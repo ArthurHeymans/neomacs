@@ -2048,6 +2048,8 @@ mod divergence_debug_trace_ert;
 mod divergence_devtools_stubs;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
+#[path = "divergence-eieio-method-deep.rs"]
+mod divergence_eieio_method_deep;
 #[path = "divergence-eieio-oop.rs"]
 mod divergence_eieio_oop;
 #[path = "divergence-error-signaling-deep.rs"]
@@ -2204,6 +2206,8 @@ mod divergence_timer_eventloop;
 mod divergence_treesit_deep;
 #[path = "divergence-ui-interaction.rs"]
 mod divergence_ui_interaction;
+#[path = "divergence-undo-buffer-deep.rs"]
+mod divergence_undo_buffer_deep;
 #[path = "divergence-undo-deep-2.rs"]
 mod divergence_undo_deep_2;
 #[path = "divergence-undo-semantics.rs"]
