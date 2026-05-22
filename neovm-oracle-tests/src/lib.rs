@@ -2116,6 +2116,8 @@ mod divergence_print_circle_read;
 mod divergence_print_format_charset;
 #[path = "divergence-process-shell.rs"]
 mod divergence_process_shell;
+#[path = "divergence-project-xref-vcs.rs"]
+mod divergence_project_xref_vcs;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-read-symbol-obarray.rs"]
@@ -2158,6 +2160,8 @@ mod divergence_textprop_sticky_deep;
 mod divergence_time_process_final;
 #[path = "divergence-timer-eventloop.rs"]
 mod divergence_timer_eventloop;
+#[path = "divergence-ui-interaction.rs"]
+mod divergence_ui_interaction;
 #[path = "divergence-undo-deep-2.rs"]
 mod divergence_undo_deep_2;
 #[path = "divergence-undo-semantics.rs"]
