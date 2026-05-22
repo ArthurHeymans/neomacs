@@ -1994,6 +1994,8 @@ mod yank_properties_semantics;
 #[path = "zlib-decompress-region-semantics.rs"]
 mod zlib_decompress_region_semantics;
 
+#[path = "divergence-advice-deep.rs"]
+mod divergence_advice_deep;
 #[path = "divergence-advice-hooks-locals.rs"]
 mod divergence_advice_hooks_locals;
 #[path = "divergence-arithmetic-float.rs"]
@@ -2062,6 +2064,8 @@ mod divergence_overlay_deep;
 mod divergence_package_dired_elp;
 #[path = "divergence-print-format-charset.rs"]
 mod divergence_print_format_charset;
+#[path = "divergence-process-shell.rs"]
+mod divergence_process_shell;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-reader-printer.rs"]
