@@ -2116,6 +2116,8 @@ mod divergence_print_circle_read;
 mod divergence_print_format_charset;
 #[path = "divergence-process-shell.rs"]
 mod divergence_process_shell;
+#[path = "divergence-process-shell-deep.rs"]
+mod divergence_process_shell_deep;
 #[path = "divergence-project-xref-vcs.rs"]
 mod divergence_project_xref_vcs;
 #[path = "divergence-quit-error-hierarchy.rs"]
@@ -2130,6 +2132,8 @@ mod divergence_regex_deep;
 mod divergence_regex_string_search;
 #[path = "divergence-register-narrow-misc.rs"]
 mod divergence_register_narrow_misc;
+#[path = "divergence-rx-pcase-pattern.rs"]
+mod divergence_rx_pcase_pattern;
 #[path = "divergence-rx-regex-builder.rs"]
 mod divergence_rx_regex_builder;
 #[path = "divergence-search-charfold-occur.rs"]
