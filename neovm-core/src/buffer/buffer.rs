@@ -2806,8 +2806,8 @@ pub struct BufferManager {
 
 #[derive(Clone)]
 struct TextPropertyUndoRun {
-    start: usize,
-    end: usize,
+    char_start: usize,
+    char_end: usize,
     plist: Vec<(Value, Value)>,
 }
 
@@ -2836,8 +2836,8 @@ fn buffer_text_property_undo_runs(
     let interval_runs = buf.text.text_props_object_interval_runs(buf.total_chars());
     if interval_runs.is_empty() {
         return vec![TextPropertyUndoRun {
-            start,
-            end,
+            char_start,
+            char_end,
             plist: Vec::new(),
         }];
     }
@@ -2850,8 +2850,8 @@ fn buffer_text_property_undo_runs(
             continue;
         }
         runs.push(TextPropertyUndoRun {
-            start: buf.char_to_byte_clamped(clipped_start),
-            end: buf.char_to_byte_clamped(clipped_end),
+            char_start: clipped_start,
+            char_end: clipped_end,
             plist,
         });
     }
@@ -2884,8 +2884,8 @@ fn record_buffer_text_property_undo_entries(
         return;
     }
     record_text_property_first_change(buf, &mut ul);
-    for (name, old_value, start, end) in entries {
-        undo::undo_list_record_property_change(&mut ul, name, old_value, start, end);
+    for (name, old_value, char_start, char_end) in entries {
+        undo::undo_list_record_property_change(&mut ul, name, old_value, char_start, char_end);
     }
     buf.set_undo_list(ul);
 }
@@ -3708,7 +3708,12 @@ impl BufferManager {
                 if old_value.is_some_and(|old_value| eq_value(&old_value, &value)) {
                     None
                 } else {
-                    Some((name, old_value.unwrap_or(Value::NIL), run.start, run.end))
+                    Some((
+                        name,
+                        old_value.unwrap_or(Value::NIL),
+                        run.char_start,
+                        run.char_end,
+                    ))
                 }
             })
             .collect();
@@ -3767,7 +3772,7 @@ impl BufferManager {
             .into_iter()
             .filter_map(|run| {
                 plist_get_eq(&run.plist, name)
-                    .map(|old_value| (name, old_value, run.start, run.end))
+                    .map(|old_value| (name, old_value, run.char_start, run.char_end))
             })
             .collect();
         record_buffer_text_property_undo_entries(buf, entries);
@@ -3799,7 +3804,7 @@ impl BufferManager {
         if !plist.is_empty() {
             for run in buffer_text_property_undo_runs(buf, start, end) {
                 for (new_name, _) in &plist {
-                    entries.push((*new_name, Value::NIL, run.start, run.end));
+                    entries.push((*new_name, Value::NIL, run.char_start, run.char_end));
                 }
             }
         }

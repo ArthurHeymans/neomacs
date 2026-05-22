@@ -160,7 +160,7 @@ pub fn undo_list_record_point(undo_list: &mut Value, pt: usize) {
 ///
 /// `prop` is the property name (symbol), `val` is the OLD value before
 /// the change (so that undoing restores it), `beg` and `end` are
-/// 0-indexed byte positions; they are stored as 1-indexed integers.
+/// 0-indexed character positions; they are stored as 1-indexed integers.
 pub fn undo_list_record_property_change(
     undo_list: &mut Value,
     prop: Value,

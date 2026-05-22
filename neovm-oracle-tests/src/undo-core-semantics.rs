@@ -97,6 +97,38 @@ fn oracle_primitive_undo_property_records_preserve_nil_values() {
 }
 
 #[test]
+fn oracle_text_property_undo_records_use_character_positions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "aβc")
+  (setq buffer-undo-list nil)
+  (put-text-property 2 3 'face 'bold)
+  buffer-undo-list)
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
+fn oracle_primitive_undo_property_records_use_character_positions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(with-temp-buffer
+  (insert "aβc")
+  (put-text-property 2 3 'face 'bold)
+  (let ((buffer-undo-list nil))
+    (list
+     (primitive-undo 1 '((nil face nil 2 . 3) nil))
+     (mapcar (lambda (pos) (text-properties-at pos)) '(1 2 3)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
+
+#[test]
 fn oracle_undo_restores_heterogeneous_text_property_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

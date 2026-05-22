@@ -279,10 +279,10 @@ fn primitive_undo_inner(
                                 if let (Some(b), Some(e)) =
                                     (beg_val.as_fixnum(), end_val.as_fixnum())
                                 {
-                                    let byte_beg = (b - 1).max(0) as usize;
-                                    let byte_end = (e - 1).max(0) as usize;
                                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                                        if byte_beg < buf.begv_byte || byte_end > buf.zv_byte {
+                                        let point_min = buf.point_min_char() as i64 + 1;
+                                        let point_max = buf.point_max_char() as i64 + 1;
+                                        if b < point_min || e > point_max {
                                             return Err(signal(
                                                 "error",
                                                 vec![Value::string(
@@ -290,10 +290,20 @@ fn primitive_undo_inner(
                                                 )],
                                             ));
                                         }
+                                        let byte_beg = if b > 0 {
+                                            buf.char_to_byte_clamped((b - 1) as usize)
+                                        } else {
+                                            buf.point_min_byte()
+                                        };
+                                        let byte_end = if e > 0 {
+                                            buf.char_to_byte_clamped((e - 1) as usize)
+                                        } else {
+                                            buf.point_min_byte()
+                                        };
+                                        let _ = ctx.buffers.put_buffer_text_property(
+                                            buf_id, byte_beg, byte_end, prop, val,
+                                        );
                                     }
-                                    let _ = ctx.buffers.put_buffer_text_property(
-                                        buf_id, byte_beg, byte_end, prop, val,
-                                    );
                                 }
                             }
                         }
