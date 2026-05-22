@@ -2000,6 +2000,8 @@ mod divergence_advice_deep;
 mod divergence_advice_hooks_locals;
 #[path = "divergence-arithmetic-float.rs"]
 mod divergence_arithmetic_float;
+#[path = "divergence-bignum-fixnum-deep.rs"]
+mod divergence_bignum_fixnum_deep;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
 #[path = "divergence-buffer-local-killring-fileio.rs"]
@@ -2010,8 +2012,6 @@ mod divergence_buffer_locals_hooks;
 mod divergence_buffer_management;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
-#[path = "divergence-casetable-category-deep.rs"]
-mod divergence_casetable_category_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
 #[path = "divergence-cllib-seq-map.rs"]
@@ -2020,8 +2020,8 @@ mod divergence_cllib_seq_map;
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
-#[path = "divergence-debug-bytecomp-loadhist.rs"]
-mod divergence_debug_bytecomp_loadhist;
+#[path = "divergence-debug-trace-ert.rs"]
+mod divergence_debug_trace_ert;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
 #[path = "divergence-eieio-oop.rs"]
