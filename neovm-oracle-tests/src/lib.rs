@@ -2054,6 +2054,8 @@ mod divergence_keymap_input_deep;
 mod divergence_keymap_syntax_category;
 #[path = "divergence-lambda-apply-dispatch.rs"]
 mod divergence_lambda_apply_dispatch;
+#[path = "divergence-macro-expansion-stress.rs"]
+mod divergence_macro_expansion_stress;
 #[path = "divergence-macro-pcase-cllib.rs"]
 mod divergence_macro_pcase_cllib;
 #[path = "divergence-marker-undo-deep.rs"]
@@ -2086,6 +2088,8 @@ mod divergence_regex_deep;
 mod divergence_regex_string_search;
 #[path = "divergence-register-narrow-misc.rs"]
 mod divergence_register_narrow_misc;
+#[path = "divergence-rx-regex-builder.rs"]
+mod divergence_rx_regex_builder;
 #[path = "divergence-search-charfold-occur.rs"]
 mod divergence_search_charfold_occur;
 #[path = "divergence-sequence-collections.rs"]
