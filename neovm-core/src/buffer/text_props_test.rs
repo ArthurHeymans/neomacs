@@ -417,6 +417,38 @@ fn adjust_insert_zero_length() {
     assert!(table.get_property(10, Value::symbol("face")).is_none());
 }
 
+#[test]
+fn adjust_insert_preserves_raw_boundaries_without_rebuilding_tree() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    for i in 0..4 {
+        table.put_property(i, i + 1, Value::symbol("slot"), Value::fixnum(i as i64));
+    }
+
+    table.adjust_for_insert(2, 2);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![
+            (0, 1, false),
+            (1, 2, false),
+            (2, 4, true),
+            (4, 5, false),
+            (5, 6, false),
+        ]
+    );
+    assert_eq!(
+        table.get_property(1, Value::symbol("slot")),
+        Some(Value::fixnum(1))
+    );
+    assert!(table.get_property(2, Value::symbol("slot")).is_none());
+    assert!(table.get_property(3, Value::symbol("slot")).is_none());
+    assert_eq!(
+        table.get_property(4, Value::symbol("slot")),
+        Some(Value::fixnum(2))
+    );
+}
+
 // -----------------------------------------------------------------------
 // adjust_for_delete
 // -----------------------------------------------------------------------
@@ -518,6 +550,34 @@ fn adjust_delete_empty_range() {
     // No change
     assert!(table.get_property(5, Value::symbol("face")).is_some());
     assert!(table.get_property(9, Value::symbol("face")).is_some());
+}
+
+#[test]
+fn adjust_delete_removes_multiple_nodes_without_rebuilding_tree() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    for i in 0..6 {
+        table.put_property(i, i + 1, Value::symbol("slot"), Value::fixnum(i as i64));
+    }
+
+    table.adjust_for_delete(2, 5);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 1, false), (1, 2, false), (2, 3, false)]
+    );
+    assert_eq!(
+        table.get_property(0, Value::symbol("slot")),
+        Some(Value::fixnum(0))
+    );
+    assert_eq!(
+        table.get_property(1, Value::symbol("slot")),
+        Some(Value::fixnum(1))
+    );
+    assert_eq!(
+        table.get_property(2, Value::symbol("slot")),
+        Some(Value::fixnum(5))
+    );
 }
 
 // -----------------------------------------------------------------------

@@ -676,6 +676,30 @@ impl IntervalTree {
         }
     }
 
+    fn insert_default_at(&mut self, pos: usize, len: usize) {
+        if len == 0 || self.root.is_none() || pos >= self.len() {
+            return;
+        }
+
+        let Some(target) = self.split_at(pos) else {
+            return;
+        };
+
+        let id = self.push_node(IntervalNode::new(len, pos, Value::NIL));
+        let parent = if let Some(left) = self.nodes[target.0].left {
+            let predecessor = self.rightmost_id(left);
+            self.nodes[predecessor.0].right = Some(id);
+            Some(predecessor)
+        } else {
+            self.nodes[target.0].left = Some(id);
+            Some(target)
+        };
+
+        self.nodes[id.0].parent = parent;
+        self.add_length_to_ancestors(parent, len as isize);
+        self.balance_upwards(parent);
+    }
+
     fn split_at(&mut self, pos: usize) -> Option<IntervalId> {
         if pos == 0 {
             return self.find_id(0).map(|(_, id)| id);
@@ -844,6 +868,84 @@ impl IntervalTree {
         node.total_length = 0;
         node.plist = Value::NIL;
         node.refresh_cache();
+    }
+
+    fn interval_deletion_adjustment(
+        &mut self,
+        id: IntervalId,
+        from: usize,
+        amount: usize,
+    ) -> usize {
+        if amount == 0 {
+            return 0;
+        }
+
+        let left_len = self.subtree_len(self.nodes[id.0].left);
+        if from < left_len {
+            let left = self.nodes[id.0]
+                .left
+                .expect("left branch length requires a left child");
+            let subtract = self.interval_deletion_adjustment(left, from, amount);
+            self.nodes[id.0].total_length -= subtract;
+            return subtract;
+        }
+
+        let total_len = self.nodes[id.0].total_length;
+        let right_len = self.subtree_len(self.nodes[id.0].right);
+        let right_start = total_len - right_len;
+        if from >= right_start {
+            let right = self.nodes[id.0]
+                .right
+                .expect("right branch length requires a right child");
+            let subtract = self.interval_deletion_adjustment(right, from - right_start, amount);
+            self.nodes[id.0].total_length -= subtract;
+            return subtract;
+        }
+
+        let mut subtract = right_start - from;
+        if amount < subtract {
+            subtract = amount;
+        }
+
+        self.nodes[id.0].total_length -= subtract;
+        if self.node_len(id) == 0 {
+            self.delete_zero_length_interval(id);
+        }
+        subtract
+    }
+
+    fn delete_range(&mut self, start: usize, end: usize) {
+        if start >= end || self.root.is_none() {
+            return;
+        }
+
+        let tree_len = self.len();
+        if start >= tree_len {
+            return;
+        }
+
+        let mut left_to_delete = end.min(tree_len) - start;
+        if left_to_delete == tree_len {
+            self.root = None;
+            return;
+        }
+
+        while left_to_delete > 0 {
+            let Some(root) = self.root else {
+                return;
+            };
+            if left_to_delete == self.nodes[root.0].total_length {
+                self.root = None;
+                return;
+            }
+            let deleted = self.interval_deletion_adjustment(root, start, left_to_delete);
+            if deleted == 0 {
+                break;
+            }
+            left_to_delete -= deleted;
+        }
+
+        self.prune_trailing_empty_intervals();
     }
 
     fn merge_interval_left(&mut self, id: IntervalId) -> Option<IntervalId> {
@@ -1500,22 +1602,7 @@ impl TextPropertyTable {
             return;
         }
 
-        let mut runs = self.intervals.runs();
-        if pos > runs.last().map(|run| run.end).unwrap_or(0) {
-            return;
-        }
-        Self::split_runs_at(&mut runs, pos);
-        let insert_at = runs
-            .iter()
-            .position(|run| run.start >= pos)
-            .unwrap_or(runs.len());
-        for run in runs.iter_mut().skip(insert_at) {
-            run.start += len;
-            run.end += len;
-        }
-        runs.insert(insert_at, IntervalRun::default(pos, pos + len));
-
-        self.replace_runs(runs);
+        self.intervals.insert_default_at(pos, len);
     }
 
     pub fn adjust_for_delete(&mut self, start: usize, end: usize) {
@@ -1523,36 +1610,7 @@ impl TextPropertyTable {
             return;
         }
 
-        let len = end - start;
-        let old_runs = self.intervals.runs();
-        let mut adjusted = Vec::new();
-
-        for mut run in old_runs {
-            let old_start = run.start;
-            let old_end = run.end;
-
-            let (new_start, new_end) = if old_end <= start {
-                (old_start, old_end)
-            } else if old_start >= end {
-                (old_start - len, old_end - len)
-            } else if old_start < start && old_end > end {
-                (old_start, old_end - len)
-            } else if old_start < start {
-                (old_start, start)
-            } else if old_end > end {
-                (start, old_end - len)
-            } else {
-                continue;
-            };
-
-            if new_start < new_end {
-                run.start = new_start;
-                run.end = new_end;
-                adjusted.push(run);
-            }
-        }
-
-        self.replace_runs(adjusted);
+        self.intervals.delete_range(start, end);
     }
 
     pub fn intervals_snapshot(&self) -> Vec<PropertyInterval> {

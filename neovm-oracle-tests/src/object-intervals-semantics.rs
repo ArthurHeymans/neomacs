@@ -80,3 +80,26 @@ fn oracle_object_intervals_set_text_properties_merges_replaced_runs() {
 
     assert_oracle_parity_with_bootstrap(form);
 }
+
+#[test]
+fn oracle_object_intervals_after_insert_and_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Raw interval shape after buffer edits is maintained by GNU's
+    // `offset_intervals`: plain insertion creates an unpropertied run, while
+    // deletion shrinks/removes interval nodes and shifts later nodes left.
+    let form = r#"
+(with-temp-buffer
+  (insert "abcdef")
+  (dotimes (i 6)
+    (put-text-property (1+ i) (+ i 2) 'slot i))
+  (goto-char 3)
+  (insert "XX")
+  (let ((after-insert (object-intervals (current-buffer))))
+    (delete-region 3 6)
+    (list after-insert
+          (object-intervals (current-buffer)))))
+"#;
+
+    assert_oracle_parity_with_bootstrap(form);
+}
