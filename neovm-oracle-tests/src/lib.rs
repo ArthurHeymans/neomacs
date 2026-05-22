@@ -2014,6 +2014,8 @@ mod divergence_buffer_management;
 mod divergence_buffer_manip_rect;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
+#[path = "divergence-cllib-deep.rs"]
+mod divergence_cllib_deep;
 #[path = "divergence-cllib-seq-map.rs"]
 mod divergence_cllib_seq_map;
 #[path = "divergence-coding-process.rs"]
@@ -2044,6 +2046,8 @@ mod divergence_format_string_deep;
 mod divergence_gc_memory_modules;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
+#[path = "divergence-image-operations.rs"]
+mod divergence_image_operations;
 #[path = "divergence-image-widget-display.rs"]
 mod divergence_image_widget_display;
 #[path = "divergence-introspection-version.rs"]
@@ -2110,6 +2114,8 @@ mod divergence_symbol_reader_deep;
 mod divergence_textprop_deep;
 #[path = "divergence-textprop-overlay.rs"]
 mod divergence_textprop_overlay;
+#[path = "divergence-textprop-sticky-deep.rs"]
+mod divergence_textprop_sticky_deep;
 #[path = "divergence-timer-eventloop.rs"]
 mod divergence_timer_eventloop;
 #[path = "divergence-undo-deep-2.rs"]
