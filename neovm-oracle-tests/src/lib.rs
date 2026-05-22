@@ -2002,6 +2002,8 @@ mod divergence_arithmetic_float;
 mod divergence_buffer_editing;
 #[path = "divergence-buffer-local-killring-fileio.rs"]
 mod divergence_buffer_local_killring_fileio;
+#[path = "divergence-buffer-locals-hooks.rs"]
+mod divergence_buffer_locals_hooks;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
 #[path = "divergence-chartab-syntax-deep.rs"]
@@ -2014,6 +2016,8 @@ mod divergence_coding_process;
 mod divergence_debug_bytecomp_loadhist;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
+#[path = "divergence-format-string-deep.rs"]
+mod divergence_format_string_deep;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
 #[path = "divergence-introspection-version.rs"]
@@ -2030,6 +2034,8 @@ mod divergence_marker_undo_deep;
 mod divergence_minibuf_completion_ring;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
+#[path = "divergence-overlay-deep.rs"]
+mod divergence_overlay_deep;
 #[path = "divergence-print-format-charset.rs"]
 mod divergence_print_format_charset;
 #[path = "divergence-quit-error-hierarchy.rs"]
