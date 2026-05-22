@@ -2026,6 +2026,8 @@ mod divergence_cllib_seq_map;
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-data-types-deep.rs"]
+mod divergence_data_types_deep;
 #[path = "divergence-debug-trace-ert.rs"]
 mod divergence_debug_trace_ert;
 #[path = "divergence-devtools-stubs.rs"]
@@ -2072,6 +2074,8 @@ mod divergence_introspection_version;
 mod divergence_keymap_input_deep;
 #[path = "divergence-keymap-syntax-category.rs"]
 mod divergence_keymap_syntax_category;
+#[path = "divergence-kmacro-persistence.rs"]
+mod divergence_kmacro_persistence;
 #[path = "divergence-lambda-apply-dispatch.rs"]
 mod divergence_lambda_apply_dispatch;
 #[path = "divergence-macro-expansion-stress.rs"]
