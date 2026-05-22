@@ -2000,6 +2000,8 @@ mod divergence_advice_hooks_locals;
 mod divergence_arithmetic_float;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
+#[path = "divergence-buffer-local-killring-fileio.rs"]
+mod divergence_buffer_local_killring_fileio;
 #[path = "divergence-closure-lexical-eval.rs"]
 mod divergence_closure_lexical_eval;
 #[path = "divergence-defvar-load-autoload.rs"]
@@ -2008,6 +2010,8 @@ mod divergence_defvar_load_autoload;
 mod divergence_error_hierarchy;
 #[path = "divergence-eval-apply-deep.rs"]
 mod divergence_eval_apply_deep;
+#[path = "divergence-hash-struct-records.rs"]
+mod divergence_hash_struct_records;
 #[path = "divergence-keymap-syntax-category.rs"]
 mod divergence_keymap_syntax_category;
 #[path = "divergence-macro-pcase-cllib.rs"]
@@ -2026,6 +2030,8 @@ mod divergence_reader_printer;
 mod divergence_regex_string_search;
 #[path = "divergence-sequence-collections.rs"]
 mod divergence_sequence_collections;
+#[path = "divergence-string-ops.rs"]
+mod divergence_string_ops;
 #[path = "divergence-textprop-overlay.rs"]
 mod divergence_textprop_overlay;
 #[path = "divergence-undo-semantics.rs"]
