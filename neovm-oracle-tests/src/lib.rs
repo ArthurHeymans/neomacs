@@ -2004,6 +2004,10 @@ mod divergence_buffer_editing;
 mod divergence_buffer_local_killring_fileio;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
+#[path = "divergence-coding-process.rs"]
+mod divergence_coding_process;
+#[path = "divergence-eval-deep-edge.rs"]
+mod divergence_eval_deep_edge;
 #[path = "divergence-hash-struct-records.rs"]
 mod divergence_hash_struct_records;
 #[path = "divergence-introspection-version.rs"]
@@ -2034,3 +2038,5 @@ mod divergence_textprop_deep;
 mod divergence_textprop_overlay;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
+#[path = "divergence-window-frame-display.rs"]
+mod divergence_window_frame_display;
