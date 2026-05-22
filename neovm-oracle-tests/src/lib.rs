@@ -2018,6 +2018,8 @@ mod divergence_keymap_syntax_category;
 mod divergence_macro_pcase_cllib;
 #[path = "divergence-marker-undo-deep.rs"]
 mod divergence_marker_undo_deep;
+#[path = "divergence-minibuf-completion-ring.rs"]
+mod divergence_minibuf_completion_ring;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
 #[path = "divergence-print-format-charset.rs"]
@@ -2026,6 +2028,8 @@ mod divergence_print_format_charset;
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-reader-printer.rs"]
 mod divergence_reader_printer;
+#[path = "divergence-regex-deep.rs"]
+mod divergence_regex_deep;
 #[path = "divergence-regex-string-search.rs"]
 mod divergence_regex_string_search;
 #[path = "divergence-sequence-collections.rs"]
@@ -2036,6 +2040,8 @@ mod divergence_string_ops;
 mod divergence_textprop_deep;
 #[path = "divergence-textprop-overlay.rs"]
 mod divergence_textprop_overlay;
+#[path = "divergence-timer-eventloop.rs"]
+mod divergence_timer_eventloop;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
 #[path = "divergence-window-frame-display.rs"]
