@@ -2096,6 +2096,8 @@ mod divergence_misc_remaining;
 mod divergence_mode_line_misc;
 #[path = "divergence-multibyte-bidi-deep.rs"]
 mod divergence_multibyte_bidi_deep;
+#[path = "divergence-narrowing-edge.rs"]
+mod divergence_narrowing_edge;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
 #[path = "divergence-net-thread-json-xml.rs"]
@@ -2168,6 +2170,8 @@ mod divergence_textprop_sticky_deep;
 mod divergence_time_process_final;
 #[path = "divergence-timer-eventloop.rs"]
 mod divergence_timer_eventloop;
+#[path = "divergence-treesit-deep.rs"]
+mod divergence_treesit_deep;
 #[path = "divergence-ui-interaction.rs"]
 mod divergence_ui_interaction;
 #[path = "divergence-undo-deep-2.rs"]
