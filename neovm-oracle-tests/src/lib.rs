@@ -2012,6 +2012,8 @@ mod divergence_buffer_locals_hooks;
 mod divergence_buffer_management;
 #[path = "divergence-buffer-manip-rect.rs"]
 mod divergence_buffer_manip_rect;
+#[path = "divergence-chartab-charset-deep.rs"]
+mod divergence_chartab_charset_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
 mod divergence_chartab_syntax_deep;
 #[path = "divergence-cllib-deep.rs"]
@@ -2068,6 +2070,8 @@ mod divergence_macro_pcase_cllib;
 mod divergence_marker_undo_deep;
 #[path = "divergence-minibuf-completion-ring.rs"]
 mod divergence_minibuf_completion_ring;
+#[path = "divergence-misc-builtins.rs"]
+mod divergence_misc_builtins;
 #[path = "divergence-mode-line-misc.rs"]
 mod divergence_mode_line_misc;
 #[path = "divergence-multibyte-bidi-deep.rs"]
