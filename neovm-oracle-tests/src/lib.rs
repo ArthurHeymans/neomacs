@@ -1996,6 +1996,8 @@ mod zlib_decompress_region_semantics;
 
 #[path = "divergence-advice-deep.rs"]
 mod divergence_advice_deep;
+#[path = "divergence-advice-hooks-deep.rs"]
+mod divergence_advice_hooks_deep;
 #[path = "divergence-advice-hooks-locals.rs"]
 mod divergence_advice_hooks_locals;
 #[path = "divergence-arithmetic-float.rs"]
@@ -2174,6 +2176,8 @@ mod divergence_string_ops;
 mod divergence_subr_bytecode_deep;
 #[path = "divergence-symbol-reader-deep.rs"]
 mod divergence_symbol_reader_deep;
+#[path = "divergence-syntax-parse-deep.rs"]
+mod divergence_syntax_parse_deep;
 #[path = "divergence-terminal-eshell.rs"]
 mod divergence_terminal_eshell;
 #[path = "divergence-textprop-deep.rs"]
