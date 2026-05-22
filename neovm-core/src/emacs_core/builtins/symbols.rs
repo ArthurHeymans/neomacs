@@ -2208,14 +2208,99 @@ pub(crate) fn builtin_old_selected_frame(
     super::window_cmds::builtin_selected_frame(eval, Vec::new())
 }
 
-pub(crate) fn builtin_menu_bar_menu_at_x_y(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_menu_bar_menu_at_x_y(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_range_args("menu-bar-menu-at-x-y", &args, 2, 3)?;
+    let x = args[0].as_fixnum().unwrap_or(0);
+    let mut hpos = 0i64;
+    for (key, label) in menu_bar_top_level_items(eval) {
+        let width = label.chars().count() as i64 + 1;
+        if x >= hpos && x < hpos + width {
+            return Ok(key);
+        }
+        hpos += width;
+    }
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_menu_or_popup_active_p(args: Vec<Value>) -> EvalResult {
     expect_args("menu-or-popup-active-p", &args, 0)?;
     Ok(Value::NIL)
+}
+
+pub(crate) fn menu_bar_top_level_items(eval: &super::eval::Context) -> Vec<(Value, String)> {
+    let mut items = Vec::new();
+    if let Some(global_map) = eval.obarray().symbol_value("global-map").copied() {
+        collect_menu_bar_items_from_map(eval, global_map, &mut items);
+    }
+    let local_map = eval.buffer_manager().current_local_map();
+    if !local_map.is_nil() {
+        collect_menu_bar_items_from_map(eval, local_map, &mut items);
+    }
+    move_menu_bar_final_items(eval, &mut items);
+    items
+}
+
+fn move_menu_bar_final_items(eval: &super::eval::Context, items: &mut Vec<(Value, String)>) {
+    let Some(mut final_items) = eval.obarray().symbol_value("menu-bar-final-items").copied() else {
+        return;
+    };
+    while final_items.is_cons() {
+        let key = final_items.cons_car();
+        if let Some(index) = items
+            .iter()
+            .position(|(item_key, _)| item_key.bits() == key.bits())
+        {
+            let item = items.remove(index);
+            items.push(item);
+        }
+        final_items = final_items.cons_cdr();
+    }
+}
+
+fn collect_menu_bar_items_from_map(
+    eval: &super::eval::Context,
+    keymap: Value,
+    items: &mut Vec<(Value, String)>,
+) {
+    let menu_bar = Value::symbol("menu-bar");
+    let raw = crate::emacs_core::keymap::list_keymap_lookup_one(&keymap, &menu_bar);
+    let menu_map = if crate::emacs_core::keymap::is_list_keymap(&raw) {
+        raw
+    } else if let Some(name) = raw.as_symbol_name() {
+        eval.obarray()
+            .symbol_value(name)
+            .copied()
+            .filter(|value| crate::emacs_core::keymap::is_list_keymap(value))
+            .unwrap_or(Value::NIL)
+    } else {
+        Value::NIL
+    };
+    if menu_map.is_nil() {
+        return;
+    }
+    crate::emacs_core::keymap::list_keymap_for_each_binding(&menu_map, |key, def| {
+        if items.iter().any(|(seen, _)| seen.bits() == key.bits()) {
+            return;
+        }
+        if let Some(label) = menu_bar_label(def) {
+            items.push((key, label));
+        }
+    });
+}
+
+fn menu_bar_label(def: Value) -> Option<String> {
+    if !def.is_cons() {
+        return None;
+    }
+    let car = def.cons_car();
+    let cdr = def.cons_cdr();
+    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+        return cdr.cons_car().as_runtime_string_owned();
+    }
+    car.as_runtime_string_owned()
 }
 
 fn selected_frame_value(eval: &mut super::eval::Context) -> Value {

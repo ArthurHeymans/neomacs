@@ -485,13 +485,29 @@ background transparent while keeping text fully opaque."
     (set-frame-parameter f 'alpha-background opacity)))
 
 ;; Menu bar keyboard access (F10)
-(defun neomacs-menu-bar-open (&optional _frame)
-  "Open the menu bar.
-_FRAME is ignored; the menu opens on the selected frame.
-Uses `tmm-menubar' until the native GUI popup menu system is connected."
+(defun neomacs-menu-bar-open (&optional frame initial-x)
+  "Open the Neomacs menu bar.
+This follows the X/PGTK backend shape: when the frame has a menu bar,
+the backend menu accelerator is used if present; otherwise fall back to
+`popup-menu' so Lisp still drives command lookup and execution."
   (interactive "i")
-  (require 'tmm)
-  (tmm-menubar))
+  (cond
+   ((and (not (zerop (or (frame-parameter frame 'menu-bar-lines) 0)))
+         (fboundp 'accelerate-menu))
+    (accelerate-menu frame))
+   (t
+    (force-mode-line-update)
+    (redisplay)
+    (let* ((x (max (or initial-x 0) tty-menu--initial-menu-x))
+           (menu (menu-bar-menu-at-x-y x 0 frame)))
+      (popup-menu (or
+                   (lookup-key-ignore-too-long
+                    global-map (vector 'menu-bar menu))
+                   (lookup-key-ignore-too-long
+                    (current-local-map) (vector 'menu-bar menu))
+                   (cdar (minor-mode-key-binding (vector 'menu-bar menu)))
+                   (mouse-menu-bar-map))
+                  (posn-at-x-y x 0 frame t) nil t)))))
 
 ;; Window snapping
 (defun neomacs--workarea ()

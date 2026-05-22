@@ -87,6 +87,17 @@ fn mouse_button_preserves_target_frame_for_keyboard_owner() {
 }
 
 #[test]
+fn popup_menu_selection_reaches_keyboard_owner() {
+    let display_event = DisplayEvent::MenuSelection { index: 2 };
+    let event = convert_display_event(&display_event);
+
+    match event {
+        Some(KbInputEvent::MenuSelection { index: 2 }) => {}
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
 fn window_focus_preserves_frame_id_for_keyboard_owner() {
     let display_event = DisplayEvent::WindowFocus {
         focused: true,

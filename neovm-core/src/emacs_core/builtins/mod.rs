@@ -5510,7 +5510,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "menu-bar-menu-at-x-y",
-        |_ctx, args| builtin_menu_bar_menu_at_x_y(args),
+        |ctx, args| builtin_menu_bar_menu_at_x_y(ctx, args),
         2,
         Some(3),
     );
@@ -8835,7 +8835,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "x-popup-menu",
-        |_ctx, args| super::display::builtin_x_popup_menu(args),
+        |ctx, args| super::display::builtin_x_popup_menu(ctx, args),
         2,
         Some(2),
     );

@@ -683,6 +683,7 @@ fn lookup_in_keymap_level_impl(
     let mut cursor = keymap_binding_spine(keymap)?;
     let mut entries = 0;
     let mut t_binding: Option<Value> = None;
+    let mut prefix_binding: Option<Value> = None;
     let mut nil_binding_found = false;
     while cursor.is_cons() {
         if is_list_keymap(&cursor) {
@@ -716,6 +717,9 @@ fn lookup_in_keymap_level_impl(
                             let val = maybe_resolve_keyelt(val, resolve_keyelt);
                             if val.is_nil() {
                                 nil_binding_found = true;
+                            } else if is_list_keymap(&val) {
+                                prefix_binding =
+                                    Some(accumulate_prefix_keymap(prefix_binding, val));
                             } else {
                                 return Some(val);
                             }
@@ -740,6 +744,8 @@ fn lookup_in_keymap_level_impl(
                         let val = maybe_resolve_keyelt(val, resolve_keyelt);
                         if val.is_nil() {
                             nil_binding_found = true;
+                        } else if is_list_keymap(&val) {
+                            prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, val));
                         } else {
                             return Some(val);
                         }
@@ -761,6 +767,8 @@ fn lookup_in_keymap_level_impl(
             {
                 if found.is_nil() {
                     nil_binding_found = true;
+                } else if is_list_keymap(&found) {
+                    prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, found));
                 } else {
                     return Some(found);
                 }
@@ -777,6 +785,8 @@ fn lookup_in_keymap_level_impl(
                 let val = maybe_resolve_keyelt(binding_cdr, resolve_keyelt);
                 if val.is_nil() {
                     nil_binding_found = true;
+                } else if is_list_keymap(&val) {
+                    prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, val));
                 } else {
                     return Some(val);
                 }
@@ -794,7 +804,9 @@ fn lookup_in_keymap_level_impl(
 
     // If no specific binding found but we have a t default binding, use it.
     // Matches GNU keymap.c:486-487.
-    if nil_binding_found {
+    if let Some(binding) = prefix_binding {
+        Some(binding)
+    } else if nil_binding_found {
         Some(Value::NIL)
     } else {
         t_binding
@@ -872,7 +884,7 @@ fn list_keymap_access_impl(
                         let parent_binding =
                             list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt);
                         if is_list_keymap(&parent_binding) {
-                            return compose_keymaps(&binding, &parent_binding);
+                            return compose_prefix_keymaps(&binding, &parent_binding);
                         }
                     }
                 }
@@ -894,40 +906,17 @@ fn list_keymap_access_impl(
     }
 }
 
-/// Create a composed keymap: a shallow copy of `child` with `parent` set
-/// as its parent keymap. This does NOT mutate either input keymap.
-///
-/// Result: `(keymap <child entries>... . parent)`
-fn compose_keymaps(child: &Value, parent: &Value) -> Value {
-    if !child.is_cons() {
-        return *parent;
-    };
-    let pair_car = child.cons_car();
-    let pair_cdr = child.cons_cdr();
-    if pair_car.as_symbol_name() != Some("keymap") {
-        return *parent;
+fn accumulate_prefix_keymap(existing: Option<Value>, next: Value) -> Value {
+    match existing {
+        Some(current) => compose_prefix_keymaps(&current, &next),
+        None => next,
     }
+}
 
-    // Collect child's own entries (excluding its existing parent)
-    let mut elements = vec![Value::symbol("keymap")];
-    let mut cursor = pair_cdr;
-    while cursor.is_cons() {
-        if is_list_keymap(&cursor) {
-            // Don't include child's existing parent; we'll set a new one
-            break;
-        }
-        let entry_car = cursor.cons_car();
-        let entry_cdr = cursor.cons_cdr();
-        elements.push(entry_car);
-        cursor = entry_cdr;
-    }
-
-    // Build: (keymap entries... . parent)
-    let mut result = *parent;
-    for elem in elements.into_iter().rev() {
-        result = Value::cons(elem, result);
-    }
-    result
+/// Compose prefix keymaps with earlier maps taking precedence, matching GNU
+/// `access_keymap_1`'s temporary `(keymap MAP1 MAP2 ...)` prefix chains.
+fn compose_prefix_keymaps(first: &Value, second: &Value) -> Value {
+    Value::list(vec![Value::symbol("keymap"), *first, *second])
 }
 
 /// Check if two event values match for keymap lookup purposes.
@@ -2638,6 +2627,10 @@ fn list_keymap_lookup_seq_impl(keymap: &Value, events: &[Value], resolve_keyelt:
         return *keymap;
     }
 
+    if let Some(binding) = list_keymap_lookup_composed_seq(keymap, events, resolve_keyelt) {
+        return binding;
+    }
+
     let mut current_map = *keymap;
     for (i, event) in events.iter().enumerate() {
         let binding = if resolve_keyelt {
@@ -2670,6 +2663,60 @@ fn list_keymap_lookup_seq_impl(keymap: &Value, events: &[Value], resolve_keyelt:
         }
     }
     Value::NIL
+}
+
+fn list_keymap_lookup_composed_seq(
+    keymap: &Value,
+    events: &[Value],
+    resolve_keyelt: bool,
+) -> Option<Value> {
+    let mut cursor = keymap_binding_spine(keymap)?;
+    let mut saw_embedded_keymap = false;
+    let mut parent = Value::NIL;
+
+    while cursor.is_cons() {
+        if is_list_keymap(&cursor) {
+            parent = cursor;
+            break;
+        }
+
+        let entry_car = cursor.cons_car();
+        let entry_cdr = cursor.cons_cdr();
+        if is_list_keymap(&entry_car) {
+            saw_embedded_keymap = true;
+            let binding = list_keymap_lookup_seq_impl(&entry_car, events, resolve_keyelt);
+            if !binding.is_nil() && !binding.is_fixnum() {
+                return Some(binding);
+            }
+        } else if saw_embedded_keymap {
+            break;
+        } else {
+            return None;
+        }
+
+        if is_list_keymap(&entry_cdr) {
+            parent = entry_cdr;
+            break;
+        }
+        cursor = entry_cdr;
+    }
+
+    if !saw_embedded_keymap {
+        if !parent.is_nil() {
+            let binding = list_keymap_lookup_seq_impl(&parent, events, resolve_keyelt);
+            if !binding.is_nil() && !binding.is_fixnum() {
+                return Some(binding);
+            }
+        }
+        return None;
+    }
+    if !parent.is_nil() {
+        let binding = list_keymap_lookup_seq_impl(&parent, events, resolve_keyelt);
+        if !binding.is_nil() && !binding.is_fixnum() {
+            return Some(binding);
+        }
+    }
+    None
 }
 
 pub(crate) fn lookup_keymap_with_partial(keymap: &Value, emacs_events: &[Value]) -> Value {

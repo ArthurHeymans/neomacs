@@ -3,7 +3,7 @@ use crate::emacs_core::dispnew::pure::{
     builtin_internal_show_cursor, builtin_internal_show_cursor_p, builtin_open_termscript,
     builtin_redraw_frame, builtin_send_string_to_terminal, reset_dispnew_thread_locals,
 };
-use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
+use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::terminal::pure::{
     builtin_controlling_tty_p, builtin_frame_terminal, builtin_resume_tty,
@@ -15,6 +15,11 @@ use crate::emacs_core::terminal::pure::{
 use crate::emacs_core::value::ValueKind;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+fn builtin_x_popup_menu(args: Vec<Value>) -> EvalResult {
+    super::builtin_x_popup_menu_batch(args)
+}
 
 struct ImageCapableDisplayHost;
 
@@ -24,6 +29,32 @@ impl DisplayHost for ImageCapableDisplayHost {
     }
 
     fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default)]
+struct RecordingPopupHost {
+    shown: Arc<Mutex<Vec<PopupMenuRequest>>>,
+    hidden: Arc<Mutex<usize>>,
+}
+
+impl DisplayHost for RecordingPopupHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
+        self.shown.lock().unwrap().push(menu);
+        Ok(())
+    }
+
+    fn hide_popup_menu(&mut self) -> Result<(), String> {
+        *self.hidden.lock().unwrap() += 1;
         Ok(())
     }
 }
@@ -3275,4 +3306,181 @@ fn display_supports_face_attributes_p_arity_and_nil_result() {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments, got {other:?}"),
     }
+}
+
+#[test]
+fn x_popup_menu_interactive_keymap_returns_selected_event() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    let hidden = Arc::clone(&host.hidden);
+    eval.set_display_host(Box::new(host));
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("open"),
+        Value::cons(Value::string("Open"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 0 })
+        .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .unwrap();
+
+    let events = crate::emacs_core::value::list_to_vec(&result).expect("event list");
+    assert_eq!(events, vec![Value::symbol("open")]);
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].entries.len(), 1);
+    assert_eq!(shown[0].entries[0].label, "Open");
+    assert_eq!(*hidden.lock().unwrap(), 1);
+}
+
+#[test]
+fn x_popup_menu_interactive_keyboard_select_roots_selected_event() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
+
+    let tty_menu_navigation_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        tty_menu_navigation_map,
+        Value::symbol("down"),
+        Value::symbol("tty-menu-next-item"),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        tty_menu_navigation_map,
+        Value::fixnum(13),
+        Value::symbol("tty-menu-select"),
+    );
+    eval.set_variable("tty-menu-navigation-map", tty_menu_navigation_map);
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("second"),
+        Value::cons(Value::string("Second"), Value::T),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("first"),
+        Value::cons(Value::string("First"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Down),
+        emacs_frame_id: 0,
+    })
+    .unwrap();
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Return),
+        emacs_frame_id: 0,
+    })
+    .unwrap();
+
+    let result = super::builtin_x_popup_menu(
+        &mut eval,
+        vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+    )
+    .unwrap();
+
+    let events = crate::emacs_core::value::list_to_vec(&result).expect("event list");
+    assert_eq!(events, vec![Value::symbol("second")]);
+}
+
+#[test]
+fn x_popup_menu_interactive_cancel_returns_nil() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
+
+    let menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu,
+        Value::symbol("open"),
+        Value::cons(Value::string("Open"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: -1 })
+        .unwrap();
+
+    assert!(
+        super::builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::NIL, Value::NIL]), menu],
+        )
+        .unwrap()
+        .is_nil()
+    );
+}
+
+#[test]
+fn x_popup_menu_interactive_menu_bar_right_returns_next_menu_position() {
+    let mut eval = crate::emacs_core::Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    eval.set_display_host(Box::new(RecordingPopupHost::default()));
+
+    let menu_bar = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let file_menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let help_menu = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        menu_bar,
+        Value::symbol("help-menu"),
+        Value::cons(Value::string("Help"), help_menu),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        menu_bar,
+        Value::symbol("file"),
+        Value::cons(Value::string("File"), file_menu),
+    );
+    crate::emacs_core::keymap::list_keymap_define(global_map, Value::symbol("menu-bar"), menu_bar);
+    eval.set_variable("global-map", global_map);
+    eval.set_variable(
+        "menu-bar-final-items",
+        Value::list(vec![Value::symbol("help-menu")]),
+    );
+    let tty_menu_navigation_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    crate::emacs_core::keymap::list_keymap_define(
+        tty_menu_navigation_map,
+        Value::symbol("right"),
+        Value::symbol("tty-menu-next-menu"),
+    );
+    eval.set_variable("tty-menu-navigation-map", tty_menu_navigation_map);
+
+    crate::emacs_core::keymap::list_keymap_define(
+        file_menu,
+        Value::symbol("open"),
+        Value::cons(Value::string("Open"), Value::T),
+    );
+    tx.send(crate::keyboard::InputEvent::KeyPress {
+        key: crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Right),
+        emacs_frame_id: 0,
+    })
+    .unwrap();
+
+    let position = Value::list(vec![
+        Value::symbol("file"),
+        Value::list(vec![
+            Value::NIL,
+            Value::list(vec![Value::symbol("menu-bar")]),
+            Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+            Value::fixnum(0),
+        ]),
+    ]);
+    let result = super::builtin_x_popup_menu(&mut eval, vec![position, file_menu]).unwrap();
+
+    assert!(
+        result.is_cons(),
+        "right from File should return menu-bar coordinates"
+    );
+    assert_eq!(result.cons_car(), Value::fixnum(5));
+    assert_eq!(result.cons_cdr(), Value::fixnum(0));
 }

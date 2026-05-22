@@ -715,6 +715,9 @@ pub enum InputEvent {
         modifiers: Modifiers,
         target_frame_id: u64,
     },
+    /// Popup menu selection.  The display layer reports the selected
+    /// zero-based item index; -1 means the menu was cancelled.
+    MenuSelection { index: i32 },
     /// Window resize.
     Resize {
         width: u32,
@@ -3615,6 +3618,13 @@ impl crate::emacs_core::eval::Context {
                 let position = Self::make_mouse_position(x, y, target_frame_id, self);
                 let event = Value::list(vec![Value::symbol(&sym), position]);
                 self.command_loop.store_kbd_macro_event(event);
+                Ok(Some(event))
+            }
+            InputEvent::MenuSelection { index } => {
+                let event = Value::list(vec![
+                    Value::symbol("menu-selection"),
+                    Value::fixnum(index as i64),
+                ]);
                 Ok(Some(event))
             }
             InputEvent::MouseMove {

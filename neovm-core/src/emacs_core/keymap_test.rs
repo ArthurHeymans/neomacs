@@ -618,3 +618,273 @@ fn list_keymap_event_conversion_roundtrip() {
     let roundtrip = emacs_event_to_key_event(&emacs_event).unwrap();
     assert_eq!(key, roundtrip);
 }
+
+#[test]
+fn list_keymap_lookup_seq_searches_composed_keymap_members_by_full_sequence() {
+    crate::test_utils::init_test_tracing();
+    let child = make_sparse_list_keymap();
+    let events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &events, Value::vector(vec![Value::symbol("right")])).unwrap();
+
+    let composed = Value::list(vec![Value::symbol("keymap"), child]);
+    let binding = list_keymap_lookup_seq(&composed, &events);
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn lookup_key_in_obarray_searches_composed_keymap_members_by_full_sequence() {
+    crate::test_utils::init_test_tracing();
+    let obarray = crate::emacs_core::symbol::Obarray::new();
+    let child = make_sparse_list_keymap();
+    let events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &events, Value::vector(vec![Value::symbol("right")])).unwrap();
+
+    let composed = Value::list(vec![Value::symbol("keymap"), child]);
+    let binding = lookup_key_in_obarray(&obarray, &composed, &events, false);
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn lookup_key_in_obarray_searches_parent_composed_keymap_by_full_sequence() {
+    crate::test_utils::init_test_tracing();
+    let obarray = crate::emacs_core::symbol::Obarray::new();
+    let child = make_sparse_list_keymap();
+    let events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &events, Value::vector(vec![Value::symbol("right")])).unwrap();
+
+    let composed_parent = Value::list(vec![Value::symbol("keymap"), child]);
+    let map = Value::cons(Value::symbol("keymap"), composed_parent);
+    let binding = lookup_key_in_obarray(&obarray, &map, &events, false);
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn lookup_key_in_obarray_composes_child_and_parent_prefix_maps() {
+    crate::test_utils::init_test_tracing();
+    let obarray = crate::emacs_core::symbol::Obarray::new();
+    let child = make_sparse_list_keymap();
+    let parent_member = make_sparse_list_keymap();
+    let child_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('A' as i64),
+    ];
+    let parent_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &child_events, Value::symbol("child-up")).unwrap();
+    list_keymap_define_seq(
+        parent_member,
+        &parent_events,
+        Value::vector(vec![Value::symbol("right")]),
+    )
+    .unwrap();
+
+    let composed_parent = Value::list(vec![Value::symbol("keymap"), parent_member]);
+    list_keymap_set_parent(child, composed_parent);
+    let binding = lookup_key_in_obarray(&obarray, &child, &parent_events, false);
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn composed_prefix_map_keeps_parent_prefix_at_next_level() {
+    crate::test_utils::init_test_tracing();
+    let child = make_sparse_list_keymap();
+    let parent_member = make_sparse_list_keymap();
+    let child_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('A' as i64),
+    ];
+    let parent_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &child_events, Value::symbol("child-up")).unwrap();
+    list_keymap_define_seq(
+        parent_member,
+        &parent_events,
+        Value::vector(vec![Value::symbol("right")]),
+    )
+    .unwrap();
+
+    let composed_parent = Value::list(vec![Value::symbol("keymap"), parent_member]);
+    list_keymap_set_parent(child, composed_parent);
+    let esc_prefix = list_keymap_lookup_one(&child, &Value::fixnum(27));
+    let bracket_prefix = list_keymap_lookup_one(&esc_prefix, &Value::fixnum('[' as i64));
+    let binding = list_keymap_lookup_one(&bracket_prefix, &Value::fixnum('C' as i64));
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn composed_keymap_accumulates_prefix_maps_from_multiple_members() {
+    crate::test_utils::init_test_tracing();
+    let first_member = make_sparse_list_keymap();
+    let second_member = make_sparse_list_keymap();
+    let first_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('A' as i64),
+    ];
+    let second_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(first_member, &first_events, Value::symbol("first-up")).unwrap();
+    list_keymap_define_seq(
+        second_member,
+        &second_events,
+        Value::vector(vec![Value::symbol("right")]),
+    )
+    .unwrap();
+
+    let composed = Value::list(vec![Value::symbol("keymap"), first_member, second_member]);
+    let esc_prefix = list_keymap_lookup_one(&composed, &Value::fixnum(27));
+    let bracket_prefix = list_keymap_lookup_one(&esc_prefix, &Value::fixnum('[' as i64));
+    let binding = list_keymap_lookup_one(&bracket_prefix, &Value::fixnum('C' as i64));
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn lookup_key_in_obarray_composes_child_prefix_with_multi_member_parent() {
+    crate::test_utils::init_test_tracing();
+    let obarray = crate::emacs_core::symbol::Obarray::new();
+    let child = make_sparse_list_keymap();
+    let first_parent = make_sparse_list_keymap();
+    let second_parent = make_sparse_list_keymap();
+    let child_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('A' as i64),
+    ];
+    let parent_events = [
+        Value::fixnum(27),
+        Value::fixnum('[' as i64),
+        Value::fixnum('C' as i64),
+    ];
+    list_keymap_define_seq(child, &child_events, Value::symbol("child-up")).unwrap();
+    list_keymap_define_seq(first_parent, &child_events, Value::symbol("parent-up")).unwrap();
+    list_keymap_define_seq(
+        second_parent,
+        &parent_events,
+        Value::vector(vec![Value::symbol("right")]),
+    )
+    .unwrap();
+
+    let composed_parent = Value::list(vec![Value::symbol("keymap"), first_parent, second_parent]);
+    list_keymap_set_parent(child, composed_parent);
+    let binding = lookup_key_in_obarray(&obarray, &child, &parent_events, false);
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn composed_prefix_map_searches_spliced_parent_tail() {
+    crate::test_utils::init_test_tracing();
+    let first_member = make_sparse_list_keymap();
+    let parent_member = make_sparse_list_keymap();
+    list_keymap_define(
+        first_member,
+        Value::fixnum('A' as i64),
+        Value::symbol("first-up"),
+    );
+    list_keymap_define(
+        parent_member,
+        Value::fixnum('C' as i64),
+        Value::vector(vec![Value::symbol("right")]),
+    );
+
+    let parent = Value::list(vec![Value::symbol("keymap"), parent_member]);
+    let composed = Value::cons(
+        Value::symbol("keymap"),
+        Value::cons(first_member, parent.cons_cdr()),
+    );
+    let binding = list_keymap_lookup_one(&composed, &Value::fixnum('C' as i64));
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}
+
+#[test]
+fn composed_keymap_nil_member_does_not_shadow_later_member() {
+    crate::test_utils::init_test_tracing();
+    let first_member = make_sparse_list_keymap();
+    let second_member = make_sparse_list_keymap();
+    list_keymap_define(first_member, Value::fixnum('C' as i64), Value::NIL);
+    list_keymap_define(
+        second_member,
+        Value::fixnum('C' as i64),
+        Value::vector(vec![Value::symbol("right")]),
+    );
+
+    let composed = Value::list(vec![Value::symbol("keymap"), first_member, second_member]);
+    let binding = list_keymap_lookup_one(&composed, &Value::fixnum('C' as i64));
+
+    assert_eq!(
+        binding
+            .as_vector_data()
+            .map(|items| items[0].as_symbol_name()),
+        Some(Some("right"))
+    );
+}

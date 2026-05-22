@@ -82,6 +82,25 @@ const FKEY_TABLE: &[(&str, &str)] = &[
     ("!3", "S-undo"),
 ];
 
+const XTERM_COMPAT_TERMS: &[&str] = &["xterm", "screen", "tmux", "st", "konsole"];
+
+const XTERM_FALLBACK_KEYS: &[(&[u8], &str)] = &[
+    (b"\x1b[A", "up"),
+    (b"\x1b[B", "down"),
+    (b"\x1b[C", "right"),
+    (b"\x1b[D", "left"),
+    (b"\x1b[2~", "insert"),
+    (b"\x1b[3~", "delete"),
+    (b"\x1b[5~", "prior"),
+    (b"\x1b[6~", "next"),
+    (b"\x1b[15~", "f5"),
+    (b"\x1b[17~", "f6"),
+    (b"\x1b[18~", "f7"),
+    (b"\x1b[19~", "f8"),
+    (b"\x1b[20~", "f9"),
+    (b"\x1b[21~", "f10"),
+];
+
 struct TermcapDatabase {
     _termcap_buffer: Vec<c_char>,
     _string_area: Vec<c_char>,
@@ -172,6 +191,24 @@ pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
     conditional_reassign(eval, input_decode_map, &mut db, "%8", "kP", "prior");
     conditional_reassign(eval, input_decode_map, &mut db, "kD", "kI", "insert");
     conditional_reassign(eval, input_decode_map, &mut db, "@7", "kH", "end");
+
+    if xterm_compatible_term(&term) {
+        seed_xterm_fallback_keys(eval, input_decode_map);
+    }
+}
+
+fn xterm_compatible_term(term: &str) -> bool {
+    XTERM_COMPAT_TERMS
+        .iter()
+        .any(|prefix| term == *prefix || term.starts_with(&format!("{prefix}-")))
+}
+
+fn seed_xterm_fallback_keys(eval: &mut Context, input_decode_map: Value) {
+    for (sequence, name) in XTERM_FALLBACK_KEYS {
+        if !define_terminal_key(eval, input_decode_map, sequence, name) {
+            return;
+        }
+    }
 }
 
 fn define_terminal_key(eval: &mut Context, keymap: Value, sequence: &[u8], name: &str) -> bool {
@@ -219,7 +256,7 @@ fn numbered_function_key_capability(number: u8) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::numbered_function_key_capability;
+    use super::{numbered_function_key_capability, xterm_compatible_term};
 
     #[test]
     fn numbered_function_key_capabilities_match_gnu_ranges() {
@@ -231,5 +268,16 @@ mod tests {
         assert_eq!(numbered_function_key_capability(46).as_deref(), Some("Fa"));
         assert_eq!(numbered_function_key_capability(63).as_deref(), Some("Fr"));
         assert_eq!(numbered_function_key_capability(64), None);
+    }
+
+    #[test]
+    fn xterm_compatible_terms_match_gnu_terminal_aliases() {
+        assert!(xterm_compatible_term("xterm"));
+        assert!(xterm_compatible_term("xterm-256color"));
+        assert!(xterm_compatible_term("screen-256color"));
+        assert!(xterm_compatible_term("tmux-256color"));
+        assert!(xterm_compatible_term("st-256color"));
+        assert!(xterm_compatible_term("konsole-256color"));
+        assert!(!xterm_compatible_term("vt100"));
     }
 }

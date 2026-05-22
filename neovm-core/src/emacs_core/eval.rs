@@ -1318,6 +1318,15 @@ pub trait DisplayHost {
     fn remove_gui_child_frame(&mut self, _frame_id: crate::window::FrameId) -> Result<(), String> {
         Ok(())
     }
+    fn show_popup_menu(&mut self, _menu: PopupMenuRequest) -> Result<(), String> {
+        Ok(())
+    }
+    fn popup_menu_visible_rows(&self, _x: f32, _y: f32, _entry_count: usize) -> Option<usize> {
+        None
+    }
+    fn hide_popup_menu(&mut self) -> Result<(), String> {
+        Ok(())
+    }
     fn current_primary_window_size(&self) -> Option<GuiFrameHostSize> {
         None
     }
@@ -1377,6 +1386,25 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PopupMenuEntry {
+    pub label: String,
+    pub shortcut: String,
+    pub enabled: bool,
+    pub separator: bool,
+    pub submenu: bool,
+    pub depth: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PopupMenuRequest {
+    pub x: f32,
+    pub y: f32,
+    pub title: Option<String>,
+    pub entries: Vec<PopupMenuEntry>,
+    pub selected: usize,
 }
 
 /// The Elisp evaluator.

@@ -10,6 +10,8 @@ use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::FrameId;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::StartupOptions;
 use super::tty_init;
@@ -130,7 +132,16 @@ pub fn provide_lisp_feature(evaluator: &mut Context, feature: &str) {
 /// 3. Disables cosmic-text metrics (TTY uses 1×1 char cells).
 /// 4. Sets `evaluator.redisplay_fn` to the layout-tree → rasterize → render
 ///    pipeline.
+#[cfg(test)]
 pub fn install_tty_redisplay_callback(evaluator: &mut Context, startup: &StartupOptions) {
+    install_tty_redisplay_callback_with_popup_redraw(evaluator, startup, None);
+}
+
+pub fn install_tty_redisplay_callback_with_popup_redraw(
+    evaluator: &mut Context,
+    startup: &StartupOptions,
+    force_full_redraw: Option<Arc<AtomicBool>>,
+) {
     if !tty_init::should_enable_live_tty_io(startup) {
         return;
     }
@@ -155,6 +166,12 @@ pub fn install_tty_redisplay_callback(evaluator: &mut Context, startup: &Startup
             if tty_rif.width() != cols || tty_rif.height() != rows {
                 tty_rif.resize(cols, rows);
             }
+        }
+        if force_full_redraw
+            .as_ref()
+            .is_some_and(|force| force.swap(false, Ordering::AcqRel))
+        {
+            tty_rif.force_redraw();
         }
         if let Some((root, children)) = run_tty_layout_tree(eval) {
             run_tty_rif_redisplay(&mut tty_rif, &root, &children);

@@ -275,16 +275,9 @@ impl RenderApp {
                 self.menu_bar_height
             );
             if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
-                if self.menu_bar_active == Some(idx) {
-                    self.menu_bar_active = None;
-                } else {
-                    self.menu_bar_active = Some(idx);
-                    self.comms
-                        .send_input(InputEvent::MenuBarClick { index: idx as i32 });
-                }
+                self.menu_bar_active = Some(idx);
                 self.frame_dirty = true;
             }
-            return;
         }
 
         // Tab bar click (between menu bar and toolbar)

@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -57,7 +57,9 @@ use neovm_core::emacs_core::terminal::pure::{
     TerminalRuntimeConfig, configure_terminal_runtime, ensure_terminal_runtime_owner,
     reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
-use neovm_core::emacs_core::{Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest};
+use neovm_core::emacs_core::{
+    Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest, PopupMenuRequest,
+};
 use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameId, Window};
@@ -993,6 +995,36 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             },
             "failed to remove GUI child frame",
         )
+    }
+
+    fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
+        let items = menu
+            .entries
+            .into_iter()
+            .map(|entry| neomacs_display_protocol::ui_types::PopupMenuItem {
+                label: entry.label,
+                shortcut: entry.shortcut,
+                enabled: entry.enabled,
+                separator: entry.separator,
+                submenu: entry.submenu,
+                depth: entry.depth,
+            })
+            .collect();
+        self.send_render_command(
+            RenderCommand::ShowPopupMenu {
+                x: menu.x,
+                y: menu.y,
+                items,
+                title: menu.title,
+                fg: None,
+                bg: None,
+            },
+            "failed to show popup menu",
+        )
+    }
+
+    fn hide_popup_menu(&mut self) -> Result<(), String> {
+        self.send_render_command(RenderCommand::HidePopupMenu, "failed to hide popup menu")
     }
 
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
@@ -2176,10 +2208,14 @@ pub fn run(mode: RuntimeMode) {
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
+    let tty_popup_force_full_redraw = Arc::new(AtomicBool::new(false));
     if tty_init::should_enable_live_tty_io(&startup) {
         set_terminal_host(Box::new(tty_frontend::TtyTerminalHost {
             cmd_tx: emacs_comms.cmd_tx.clone(),
         }));
+        evaluator.set_display_host(Box::new(tty_frontend::TtyPopupDisplayHost::new(
+            tty_popup_force_full_redraw.clone(),
+        )));
     }
 
     // 5. Spawn the frontend loop matching the requested startup mode.
@@ -2247,7 +2283,11 @@ pub fn run(mode: RuntimeMode) {
     }
 
     // 8. Set up redisplay callback (layout engine + TTY RIF render).
-    tty_layout::install_tty_redisplay_callback(&mut evaluator, &startup);
+    tty_layout::install_tty_redisplay_callback_with_popup_redraw(
+        &mut evaluator,
+        &startup,
+        Some(tty_popup_force_full_redraw),
+    );
 
     // Add undo boundary after startup so initial content isn't undoable
     if let Some(buf) = evaluator.buffer_manager_mut().current_buffer_mut() {

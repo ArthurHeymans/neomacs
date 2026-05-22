@@ -11,6 +11,7 @@ use super::terminal::pure::{
     terminal_runtime_color_cells, terminal_runtime_supports_color,
 };
 use super::value::*;
+use super::{Context, PopupMenuEntry, PopupMenuRequest};
 use crate::window::{FrameId, WindowId};
 
 /// Clear cached thread-local display values (must be called when heap changes).
@@ -1099,8 +1100,280 @@ pub(crate) fn builtin_x_popup_dialog(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-/// (x-popup-menu POSITION MENU) -> nil/error in batch context.
-pub(crate) fn builtin_x_popup_menu(args: Vec<Value>) -> EvalResult {
+fn popup_menu_string(value: Value) -> Option<String> {
+    value.as_runtime_string_owned()
+}
+
+fn popup_menu_key_event(key: Value) -> Value {
+    Value::list(vec![key])
+}
+
+fn popup_menu_item_from_binding(key: Value, def: Value) -> Option<(PopupMenuEntry, Value)> {
+    if !def.is_cons() {
+        return None;
+    }
+
+    let car = def.cons_car();
+    let cdr = def.cons_cdr();
+
+    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+        let label = popup_menu_string(cdr.cons_car())?;
+        let tail = cdr.cons_cdr();
+        let command = if tail.is_cons() {
+            tail.cons_car()
+        } else {
+            Value::NIL
+        };
+        return Some((
+            PopupMenuEntry {
+                label,
+                shortcut: String::new(),
+                enabled: !command.is_nil(),
+                separator: false,
+                submenu: super::keymap::is_list_keymap(&command),
+                depth: 0,
+            },
+            popup_menu_key_event(key),
+        ));
+    }
+
+    let label = popup_menu_string(car)?;
+    Some((
+        PopupMenuEntry {
+            label,
+            shortcut: String::new(),
+            enabled: !cdr.is_nil(),
+            separator: false,
+            submenu: super::keymap::is_list_keymap(&cdr),
+            depth: 0,
+        },
+        popup_menu_key_event(key),
+    ))
+}
+
+fn popup_menu_from_keymap(menu: Value) -> Option<(Vec<PopupMenuEntry>, Vec<Value>)> {
+    if !super::keymap::is_list_keymap(&menu) {
+        return None;
+    }
+    let mut entries = Vec::new();
+    let mut events = Vec::new();
+    super::keymap::list_keymap_for_each_binding(&menu, |key, def| {
+        if let Some((entry, event)) = popup_menu_item_from_binding(key, def) {
+            entries.push(entry);
+            events.push(event);
+        }
+    });
+    Some((entries, events))
+}
+
+fn popup_menu_position_xy(position: Value) -> (f32, f32) {
+    let Some(items) = list_to_vec(&position) else {
+        return (0.0, 0.0);
+    };
+    if let Some(first) = items.first()
+        && let Some(xy) = list_to_vec(first)
+        && xy.len() >= 2
+    {
+        return (
+            xy[0].as_fixnum().unwrap_or(0) as f32,
+            xy[1].as_fixnum().unwrap_or(0) as f32,
+        );
+    }
+    if let Some(second) = items.get(1)
+        && let Some(posn) = list_to_vec(second)
+        && posn.len() >= 3
+        && let Some(xy) = list_to_vec(&posn[2])
+        && xy.len() >= 2
+    {
+        return (
+            xy[0].as_fixnum().unwrap_or(0) as f32,
+            xy[1].as_fixnum().unwrap_or(0) as f32,
+        );
+    }
+    (0.0, 0.0)
+}
+
+fn menu_bar_navigation_position(
+    ctx: &Context,
+    position: Value,
+    direction: MenuBarNavigationDirection,
+) -> Option<Value> {
+    let items = list_to_vec(&position)?;
+    let current_key = *items.first()?;
+    let menu_bar_items = super::builtins::symbols::menu_bar_top_level_items(ctx);
+    let current_index = menu_bar_items
+        .iter()
+        .position(|(key, _)| key.bits() == current_key.bits())?;
+
+    let next_index = match direction {
+        MenuBarNavigationDirection::Left => current_index.saturating_sub(1),
+        MenuBarNavigationDirection::Right => (current_index + 1).min(menu_bar_items.len() - 1),
+    };
+    if next_index == current_index {
+        return None;
+    }
+
+    let x = menu_bar_items
+        .iter()
+        .take(next_index)
+        .map(|(_, label)| label.chars().count() as i64 + 1)
+        .sum::<i64>();
+    Some(Value::cons(Value::fixnum(x), Value::fixnum(0)))
+}
+
+enum MenuBarNavigationDirection {
+    Left,
+    Right,
+}
+
+fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
+    let Some((entries, events)) = popup_menu_from_keymap(menu) else {
+        return Ok(Value::NIL);
+    };
+    if entries.is_empty() {
+        return Ok(Value::NIL);
+    }
+    if ctx.input_rx.is_none() {
+        return Ok(Value::NIL);
+    }
+    if ctx.display_host.is_none() {
+        return Ok(Value::NIL);
+    }
+
+    let (x, y) = popup_menu_position_xy(position);
+    let visible_rows = ctx
+        .display_host
+        .as_ref()
+        .and_then(|host| host.popup_menu_visible_rows(x, y, entries.len()))
+        .unwrap_or(entries.len())
+        .min(entries.len());
+    if visible_rows == 0 {
+        return Ok(Value::NIL);
+    }
+    let mut selected = 0;
+
+    let specpdl_count = ctx.specpdl.len();
+    for event in &events {
+        ctx.push_specpdl_root(*event);
+    }
+    let tty_navigation_map = ctx
+        .eval_symbol("tty-menu-navigation-map")
+        .unwrap_or(Value::NIL);
+    ctx.specbind(intern("overriding-terminal-local-map"), tty_navigation_map);
+    ctx.specbind(intern("track-mouse"), Value::T);
+
+    let result = x_popup_menu_interactive_loop(
+        ctx,
+        position,
+        &entries,
+        &events,
+        visible_rows,
+        x,
+        y,
+        &mut selected,
+    );
+
+    let result_root_scope = ctx.save_vm_roots();
+    ctx.push_eval_result_roots(&result);
+    let _ = ctx.display_host.as_mut().map(|host| host.hide_popup_menu());
+    ctx.redisplay_with_force(true);
+    ctx.restore_vm_roots(result_root_scope);
+    ctx.unbind_to_with_result(specpdl_count, result)
+}
+
+fn x_popup_menu_interactive_loop(
+    ctx: &mut Context,
+    position: Value,
+    entries: &[PopupMenuEntry],
+    events: &[Value],
+    visible_rows: usize,
+    x: f32,
+    y: f32,
+    selected: &mut usize,
+) -> EvalResult {
+    show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+
+    loop {
+        let (keys, binding) = ctx.read_key_sequence()?;
+        if let Some(index) = popup_menu_selection_index(&keys) {
+            if index < 0 {
+                return Ok(Value::NIL);
+            }
+            return Ok(events.get(index as usize).copied().unwrap_or(Value::NIL));
+        }
+
+        match binding.as_symbol_name() {
+            Some("tty-menu-next-item") => {
+                *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
+                show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+            }
+            Some("tty-menu-prev-item") => {
+                *selected = (*selected).saturating_sub(1);
+                show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+            }
+            Some("tty-menu-next-menu") => {
+                if let Some(new_position) =
+                    menu_bar_navigation_position(ctx, position, MenuBarNavigationDirection::Right)
+                {
+                    return Ok(new_position);
+                }
+            }
+            Some("tty-menu-prev-menu") => {
+                if let Some(new_position) =
+                    menu_bar_navigation_position(ctx, position, MenuBarNavigationDirection::Left)
+                {
+                    return Ok(new_position);
+                }
+            }
+            Some("tty-menu-select") => {
+                if popup_menu_entry_selectable(entries, *selected) {
+                    return Ok(events.get(*selected).copied().unwrap_or(Value::NIL));
+                }
+            }
+            Some("tty-menu-exit") | Some("keyboard-quit") | Some("keyboard-escape-quit") => {
+                return Ok(Value::NIL);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn show_popup_menu_selection(
+    ctx: &mut Context,
+    x: f32,
+    y: f32,
+    entries: &[PopupMenuEntry],
+    selected: usize,
+) -> Result<(), Flow> {
+    let Some(host) = ctx.display_host.as_mut() else {
+        return Ok(());
+    };
+    host.show_popup_menu(PopupMenuRequest {
+        x,
+        y,
+        title: None,
+        entries: entries.to_vec(),
+        selected,
+    })
+    .map_err(|err| signal("error", vec![Value::string(err)]))
+}
+
+fn popup_menu_entry_selectable(entries: &[PopupMenuEntry], index: usize) -> bool {
+    entries
+        .get(index)
+        .is_some_and(|entry| entry.enabled && !entry.separator)
+}
+
+fn popup_menu_selection_index(keys: &[Value]) -> Option<i32> {
+    let event = keys.first()?;
+    let parts = list_to_vec(event)?;
+    if parts.len() != 2 || parts[0].as_symbol_name() != Some("menu-selection") {
+        return None;
+    }
+    Some(parts[1].as_fixnum()? as i32)
+}
+
+pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
     expect_args("x-popup-menu", &args, 2)?;
     let position = &args[0];
     let menu = &args[1];
@@ -1224,6 +1497,20 @@ pub(crate) fn builtin_x_popup_menu(args: Vec<Value>) -> EvalResult {
     }
 
     Ok(Value::NIL)
+}
+
+/// (x-popup-menu POSITION MENU) -> selected event, nil, or GNU-compatible error.
+pub(crate) fn builtin_x_popup_menu(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_args("x-popup-menu", &args, 2)?;
+    let position = args[0];
+    let menu = args[1];
+
+    if ctx.display_host.is_some() && ctx.input_rx.is_some() && super::keymap::is_list_keymap(&menu)
+    {
+        return x_popup_menu_interactive(ctx, position, menu);
+    }
+
+    builtin_x_popup_menu_batch(args)
 }
 
 /// (x-synchronize DISPLAY &optional NO-OP) -> error in batch/no-X context.

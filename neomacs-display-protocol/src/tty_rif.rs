@@ -195,6 +195,8 @@ pub struct TtyRif {
     default_bg: Option<(u8, u8, u8)>,
     /// Default foreground color (r, g, b).
     default_fg: Option<(u8, u8, u8)>,
+    /// Force the next render to repaint every terminal cell.
+    force_full_render: bool,
 }
 
 fn terminal_cursor_cell(x: f32, y: f32, char_width: f32, char_height: f32) -> (u16, u16) {
@@ -224,6 +226,7 @@ impl TtyRif {
             faces: HashMap::new(),
             default_bg: None,
             default_fg: None,
+            force_full_render: true,
         }
     }
 
@@ -231,6 +234,15 @@ impl TtyRif {
     pub fn resize(&mut self, width: usize, height: usize) {
         self.current = TtyGrid::new(width, height);
         self.desired = TtyGrid::new(width, height);
+        self.force_full_render = true;
+    }
+
+    /// Force the next [`diff_and_render`](Self::diff_and_render) call to emit
+    /// every cell.  This matches GNU TTY menus' saved-matrix restore path:
+    /// transient terminal writes outside the normal redisplay grid must be
+    /// overwritten even when the logical desired grid did not change.
+    pub fn force_redraw(&mut self) {
+        self.force_full_render = true;
     }
 
     /// Set the face table for resolving face_ids.
@@ -586,19 +598,26 @@ impl TtyRif {
             let desired_row = &self.desired.cells[row_start..row_start + self.desired.width];
             let current_row = &self.current.cells[row_start..row_start + self.desired.width];
 
-            let Some(first_changed) = desired_row
-                .iter()
-                .zip(current_row.iter())
-                .position(|(desired, current)| !desired.padding && desired != current)
-            else {
+            let Some(first_changed) = (if self.force_full_render {
+                Some(0)
+            } else {
+                desired_row
+                    .iter()
+                    .zip(current_row.iter())
+                    .position(|(desired, current)| !desired.padding && desired != current)
+            }) else {
                 continue;
             };
 
-            let mut last_changed = desired_row
-                .iter()
-                .zip(current_row.iter())
-                .rposition(|(desired, current)| !desired.padding && desired != current)
-                .expect("row with first changed cell must also have a last changed cell");
+            let mut last_changed = if self.force_full_render {
+                desired_row.len().saturating_sub(1)
+            } else {
+                desired_row
+                    .iter()
+                    .zip(current_row.iter())
+                    .rposition(|(desired, current)| !desired.padding && desired != current)
+                    .expect("row with first changed cell must also have a last changed cell")
+            };
 
             // GNU term.c writes contiguous glyph runs with a single cursor
             // position update, then lets the terminal advance naturally.
@@ -651,6 +670,7 @@ impl TtyRif {
 
         // Swap: current now reflects what is on screen.
         std::mem::swap(&mut self.current, &mut self.desired);
+        self.force_full_render = false;
     }
 
     /// Take the buffered output bytes. The caller writes these to stdout.

@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
@@ -6,6 +7,7 @@ use std::time::Duration;
 
 use crossbeam_channel::{select, unbounded};
 use neomacs_display_runtime::thread_comm::{InputEvent, RenderCommand, RenderComms};
+use neovm_core::emacs_core::{DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 
 const RESIZE_POLL_INTERVAL_MS: u64 = 100;
 
@@ -438,6 +440,63 @@ impl TtyInputReader {
 /// send commands to the render thread.
 pub struct TtyTerminalHost {
     pub cmd_tx: crossbeam_channel::Sender<RenderCommand>,
+}
+
+pub struct TtyPopupDisplayHost {
+    force_full_redraw: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl TtyPopupDisplayHost {
+    pub fn new(force_full_redraw: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+        Self { force_full_redraw }
+    }
+}
+
+impl DisplayHost for TtyPopupDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
+        let mut stdout = io::stdout();
+        let row = menu.y.max(0.0) as usize + 2;
+        let col = menu.x.max(0.0) as usize + 1;
+        let visible_rows = self
+            .popup_menu_visible_rows(menu.x, menu.y, menu.entries.len())
+            .unwrap_or(menu.entries.len());
+        for (idx, entry) in menu.entries.iter().take(visible_rows).enumerate() {
+            let marker = if idx == menu.selected { ">" } else { " " };
+            write!(
+                stdout,
+                "\x1b[{};{}H\x1b[7m{} {}\x1b[0m",
+                row + idx,
+                col,
+                marker,
+                entry.label
+            )
+            .map_err(|err| format!("failed to render TTY popup menu: {err}"))?;
+        }
+        stdout
+            .flush()
+            .map_err(|err| format!("failed to flush TTY popup menu: {err}"))
+    }
+
+    fn popup_menu_visible_rows(&self, _x: f32, y: f32, entry_count: usize) -> Option<usize> {
+        let (_, rows) = super::tty_init::query_terminal_size_cells()?;
+        let first_popup_row = y.max(0.0) as usize + 2;
+        let visible = (rows as usize).saturating_sub(first_popup_row);
+        Some(visible.min(entry_count))
+    }
+
+    fn hide_popup_menu(&mut self) -> Result<(), String> {
+        self.force_full_redraw
+            .store(true, std::sync::atomic::Ordering::Release);
+        Ok(())
+    }
 }
 
 impl neovm_core::emacs_core::terminal::pure::TerminalHost for TtyTerminalHost {

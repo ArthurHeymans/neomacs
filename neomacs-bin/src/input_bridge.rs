@@ -116,6 +116,9 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             modifiers: keyboard::render_modifiers_to_modifiers(*modifiers),
             target_frame_id: *target_frame_id,
         }),
+        DisplayEvent::MenuSelection { index } => {
+            Some(KbInputEvent::MenuSelection { index: *index })
+        }
         DisplayEvent::WindowResize {
             width,
             height,

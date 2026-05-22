@@ -386,6 +386,11 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
         "C-M-/" | "C-M-_" => return vec![0x1b, 0x1f],
         "DEL" => return vec![0x7f],
         "BS" => return vec![0x08],
+        "F10" | "f10" => return vec![0x1b, b'[', b'2', b'1', b'~'],
+        "UP" | "<up>" => return vec![0x1b, b'[', b'A'],
+        "DOWN" | "<down>" => return vec![0x1b, b'[', b'B'],
+        "RIGHT" | "<right>" => return vec![0x1b, b'[', b'C'],
+        "LEFT" | "<left>" => return vec![0x1b, b'[', b'D'],
         _ => {}
     }
 
@@ -457,6 +462,20 @@ mod tests {
         assert_eq!(emacs_key("C-_"), vec![0x1f]);
         assert_eq!(emacs_key("C-M-/"), vec![0x1b, 0x1f]);
         assert_eq!(emacs_key("C-M-_"), vec![0x1b, 0x1f]);
+    }
+
+    #[test]
+    fn emacs_key_maps_f10_to_screen_terminfo_sequence() {
+        assert_eq!(emacs_key("F10"), b"\x1b[21~".to_vec());
+        assert_eq!(emacs_key("f10"), b"\x1b[21~".to_vec());
+    }
+
+    #[test]
+    fn emacs_key_maps_arrow_keys_to_cursor_sequences() {
+        assert_eq!(emacs_key("UP"), b"\x1b[A".to_vec());
+        assert_eq!(emacs_key("DOWN"), b"\x1b[B".to_vec());
+        assert_eq!(emacs_key("RIGHT"), b"\x1b[C".to_vec());
+        assert_eq!(emacs_key("LEFT"), b"\x1b[D".to_vec());
     }
 
     #[test]
