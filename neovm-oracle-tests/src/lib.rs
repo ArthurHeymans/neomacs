@@ -1996,16 +1996,22 @@ mod zlib_decompress_region_semantics;
 
 #[path = "divergence-advice-hooks-locals.rs"]
 mod divergence_advice_hooks_locals;
+#[path = "divergence-arithmetic-float.rs"]
+mod divergence_arithmetic_float;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
 #[path = "divergence-closure-lexical-eval.rs"]
 mod divergence_closure_lexical_eval;
 #[path = "divergence-error-hierarchy.rs"]
 mod divergence_error_hierarchy;
+#[path = "divergence-eval-apply-deep.rs"]
+mod divergence_eval_apply_deep;
 #[path = "divergence-keymap-syntax-category.rs"]
 mod divergence_keymap_syntax_category;
 #[path = "divergence-macro-pcase-cllib.rs"]
 mod divergence_macro_pcase_cllib;
+#[path = "divergence-marker-undo-deep.rs"]
+mod divergence_marker_undo_deep;
 #[path = "divergence-narrowing-multibyte.rs"]
 mod divergence_narrowing_multibyte;
 #[path = "divergence-quit-error-hierarchy.rs"]
