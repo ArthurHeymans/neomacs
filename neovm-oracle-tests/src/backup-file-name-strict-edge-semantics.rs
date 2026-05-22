@@ -14,6 +14,7 @@ fn oracle_backup_file_name_default_and_directory_alist_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"
+(require 'cl-lib)
 (let* ((root (make-temp-file "neomacs-oracle-backup-name-" t))
        (sub (expand-file-name "sub" root))
        (plain (expand-file-name "plain.txt" sub))
@@ -54,10 +55,11 @@ fn oracle_backup_file_name_default_and_directory_alist_edges() {
            (let* ((backup-directory-alist `(("bang" . ,absolute-backups)))
                   (make-backup-file-name-function nil)
                   (name (make-backup-file-name bang))
+                  (relative-name (rel name))
                   (encoded (file-name-nondirectory name))
                   (root-encoded (subst-char-in-string
                                  ?/ ?! (string-replace "!" "!!" root))))
-             (list (rel name)
+             (list (string-replace root-encoded "<root>" relative-name)
                    (file-directory-p absolute-backups)
                    (string-prefix-p root-encoded encoded)
                    (string-suffix-p "!sub!bang!!file.txt~" encoded)))
