@@ -2018,6 +2018,8 @@ mod divergence_debug_bytecomp_loadhist;
 mod divergence_eval_deep_edge;
 #[path = "divergence-file-ops-deep.rs"]
 mod divergence_file_ops_deep;
+#[path = "divergence-fill-abbrev-comment.rs"]
+mod divergence_fill_abbrev_comment;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
 #[path = "divergence-hash-struct-records.rs"]
@@ -2038,6 +2040,8 @@ mod divergence_macro_pcase_cllib;
 mod divergence_marker_undo_deep;
 #[path = "divergence-minibuf-completion-ring.rs"]
 mod divergence_minibuf_completion_ring;
+#[path = "divergence-mode-line-misc.rs"]
+mod divergence_mode_line_misc;
 #[path = "divergence-multibyte-bidi-deep.rs"]
 mod divergence_multibyte_bidi_deep;
 #[path = "divergence-narrowing-multibyte.rs"]
@@ -2062,6 +2066,8 @@ mod divergence_regex_string_search;
 mod divergence_register_narrow_misc;
 #[path = "divergence-sequence-collections.rs"]
 mod divergence_sequence_collections;
+#[path = "divergence-sort-type-predicates.rs"]
+mod divergence_sort_type_predicates;
 #[path = "divergence-stress-combo.rs"]
 mod divergence_stress_combo;
 #[path = "divergence-string-ops.rs"]
