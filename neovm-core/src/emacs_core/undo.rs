@@ -109,7 +109,7 @@ pub(crate) fn builtin_undo_boundary(
 /// - `(BEG . END)` both ints: delete the region (undo an insertion)
 /// - `(TEXT . POS)` string+int: insert TEXT at |POS| (undo a deletion)
 /// - `(t . MODTIME)`: restore buffer-modified state
-/// - `(nil PROP VAL BEG . END)`: restore text property (TODO: partial)
+/// - `(nil PROP VAL BEG . END)`: restore text property
 /// - `(MARKER . OFFSET)`: adjust marker (skipped)
 /// - `(apply FUN . ARGS)`: call FUN with ARGS
 pub(crate) fn builtin_primitive_undo(
@@ -291,15 +291,9 @@ fn primitive_undo_inner(
                                             ));
                                         }
                                     }
-                                    if val.is_nil() {
-                                        let _ = ctx.buffers.remove_buffer_text_property(
-                                            buf_id, byte_beg, byte_end, prop,
-                                        );
-                                    } else {
-                                        let _ = ctx.buffers.put_buffer_text_property(
-                                            buf_id, byte_beg, byte_end, prop, val,
-                                        );
-                                    }
+                                    let _ = ctx.buffers.put_buffer_text_property(
+                                        buf_id, byte_beg, byte_end, prop, val,
+                                    );
                                 }
                             }
                         }

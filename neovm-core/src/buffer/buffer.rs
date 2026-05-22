@@ -22,7 +22,7 @@ use super::shared::SharedUndoState;
 use super::text_props::TextPropertyTable;
 use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
-use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind};
+use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::tagged::gc::with_tagged_heap;
 use crate::window::WindowId;
@@ -2804,6 +2804,92 @@ pub struct BufferManager {
     pub buffer_defaults: [crate::emacs_core::value::Value; BUFFER_SLOT_COUNT],
 }
 
+#[derive(Clone)]
+struct TextPropertyUndoRun {
+    start: usize,
+    end: usize,
+    plist: Vec<(Value, Value)>,
+}
+
+fn plist_get_eq(plist: &[(Value, Value)], name: Value) -> Option<Value> {
+    plist
+        .iter()
+        .find(|(prop, _)| eq_value(prop, &name))
+        .map(|(_, value)| *value)
+}
+
+fn buffer_text_property_undo_runs(
+    buf: &Buffer,
+    start: usize,
+    end: usize,
+) -> Vec<TextPropertyUndoRun> {
+    if start >= end {
+        return Vec::new();
+    }
+
+    let char_start = buf.text.buf_bytepos_to_charpos(start);
+    let char_end = buf.text.buf_bytepos_to_charpos(end);
+    if char_start >= char_end {
+        return Vec::new();
+    }
+
+    let interval_runs = buf.text.text_props_object_interval_runs(buf.total_chars());
+    if interval_runs.is_empty() {
+        return vec![TextPropertyUndoRun {
+            start,
+            end,
+            plist: Vec::new(),
+        }];
+    }
+
+    let mut runs = Vec::new();
+    for (interval_start, interval_end, plist) in interval_runs {
+        let clipped_start = interval_start.max(char_start);
+        let clipped_end = interval_end.min(char_end);
+        if clipped_start >= clipped_end {
+            continue;
+        }
+        runs.push(TextPropertyUndoRun {
+            start: buf.char_to_byte_clamped(clipped_start),
+            end: buf.char_to_byte_clamped(clipped_end),
+            plist,
+        });
+    }
+    runs
+}
+
+fn record_text_property_first_change(buf: &mut Buffer, undo_list: &mut Value) {
+    if buf.undo_state.recorded_first_change() && undo::undo_list_contains_first_change(undo_list) {
+        return;
+    }
+    if undo::undo_list_is_disabled(undo_list) {
+        return;
+    }
+    if buf.modified_tick() > buf.save_modified_tick() {
+        return;
+    }
+    undo::undo_list_record_first_change(undo_list);
+    buf.undo_state.set_recorded_first_change(true);
+}
+
+fn record_buffer_text_property_undo_entries(
+    buf: &mut Buffer,
+    entries: Vec<(Value, Value, usize, usize)>,
+) {
+    if entries.is_empty() {
+        return;
+    }
+    let mut ul = buf.get_undo_list();
+    if undo::undo_list_is_disabled(&ul) {
+        return;
+    }
+    record_text_property_first_change(buf, &mut ul);
+    for (name, old_value, start, end) in entries {
+        undo::undo_list_record_property_change(&mut ul, name, old_value, start, end);
+    }
+    buf.set_undo_list(ul);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UndoExecutionResult {
     pub had_any_records: bool,
@@ -3615,17 +3701,18 @@ impl BufferManager {
         value: Value,
     ) -> Option<bool> {
         let buf = self.buffers.get_mut(&id)?;
-        // Record old value for undo before changing.
-        // GNU: record property change for redo even during undo-in-progress.
-        if !undo::undo_list_is_disabled(&buf.get_undo_list()) {
-            let old_val = buf
-                .text
-                .text_props_get_property(start, name)
-                .unwrap_or(Value::NIL);
-            let mut ul = buf.get_undo_list();
-            undo::undo_list_record_property_change(&mut ul, name, old_val, start, end);
-            buf.set_undo_list(ul);
-        }
+        let entries = buffer_text_property_undo_runs(buf, start, end)
+            .into_iter()
+            .filter_map(|run| {
+                let old_value = plist_get_eq(&run.plist, name);
+                if old_value.is_some_and(|old_value| eq_value(&old_value, &value)) {
+                    None
+                } else {
+                    Some((name, old_value.unwrap_or(Value::NIL), run.start, run.end))
+                }
+            })
+            .collect();
+        record_buffer_text_property_undo_entries(buf, entries);
         Some(buf.text.text_props_put_property(start, end, name, value))
     }
 
@@ -3676,19 +3763,14 @@ impl BufferManager {
         name: Value,
     ) -> Option<bool> {
         let buf = self.buffers.get_mut(&id)?;
-        // Record old value for undo before removing.
-        // GNU: record property change for redo even during undo-in-progress.
-        if !undo::undo_list_is_disabled(&buf.get_undo_list()) {
-            let old_val = buf
-                .text
-                .text_props_get_property(start, name)
-                .unwrap_or(Value::NIL);
-            if !old_val.is_nil() {
-                let mut ul = buf.get_undo_list();
-                undo::undo_list_record_property_change(&mut ul, name, old_val, start, end);
-                buf.set_undo_list(ul);
-            }
-        }
+        let entries = buffer_text_property_undo_runs(buf, start, end)
+            .into_iter()
+            .filter_map(|run| {
+                plist_get_eq(&run.plist, name)
+                    .map(|old_value| (name, old_value, run.start, run.end))
+            })
+            .collect();
+        record_buffer_text_property_undo_entries(buf, entries);
         Some(buf.text.text_props_remove_property(start, end, name))
     }
 
@@ -3712,10 +3794,17 @@ impl BufferManager {
         end: usize,
         plist: Vec<(Value, Value)>,
     ) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .text
-            .text_props_set_properties(start, end, plist);
+        let buf = self.buffers.get_mut(&id)?;
+        let mut entries = Vec::new();
+        if !plist.is_empty() {
+            for run in buffer_text_property_undo_runs(buf, start, end) {
+                for (new_name, _) in &plist {
+                    entries.push((*new_name, Value::NIL, run.start, run.end));
+                }
+            }
+        }
+        record_buffer_text_property_undo_entries(buf, entries);
+        buf.text.text_props_set_properties(start, end, plist);
         Some(())
     }
 
@@ -4139,6 +4228,28 @@ impl BufferManager {
                         }
                         (ValueKind::T, ValueKind::Fixnum(_)) => {
                             // First-change sentinel (t . MODTIME) — skip
+                        }
+                        (ValueKind::Nil, _) if cdr.is_cons() => {
+                            let prop = cdr.cons_car();
+                            let rest1 = cdr.cons_cdr();
+                            if rest1.is_cons() {
+                                let value = rest1.cons_car();
+                                let rest2 = rest1.cons_cdr();
+                                if rest2.is_cons() {
+                                    let beg = rest2.cons_car().as_fixnum();
+                                    let end = rest2.cons_cdr().as_fixnum();
+                                    if let (Some(beg1), Some(end1)) = (beg, end) {
+                                        let beg = (beg1 - 1).max(0) as usize;
+                                        let end = (end1 - 1).max(0) as usize;
+                                        let buf = self.buffers.get(&id)?;
+                                        if beg < buf.begv_byte || end > buf.zv_byte {
+                                            continue;
+                                        }
+                                        let _ = self
+                                            .put_buffer_text_property(id, beg, end, prop, value);
+                                    }
+                                }
+                            }
                         }
                         _ => {
                             // Other cons entries (e.g. property changes) — skip
