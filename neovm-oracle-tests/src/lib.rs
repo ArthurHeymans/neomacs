@@ -2042,6 +2042,8 @@ mod divergence_file_ops_deep;
 mod divergence_fill_abbrev_comment;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
+#[path = "divergence-frame-font-display.rs"]
+mod divergence_frame_font_display;
 #[path = "divergence-gc-memory-modules.rs"]
 mod divergence_gc_memory_modules;
 #[path = "divergence-hash-struct-records.rs"]
@@ -2088,6 +2090,8 @@ mod divergence_print_format_charset;
 mod divergence_process_shell;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
+#[path = "divergence-read-symbol-obarray.rs"]
+mod divergence_read_symbol_obarray;
 #[path = "divergence-reader-printer.rs"]
 mod divergence_reader_printer;
 #[path = "divergence-regex-deep.rs"]
