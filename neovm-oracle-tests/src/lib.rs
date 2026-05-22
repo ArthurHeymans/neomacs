@@ -1993,3 +1993,12 @@ mod xml_semantics;
 mod yank_properties_semantics;
 #[path = "zlib-decompress-region-semantics.rs"]
 mod zlib_decompress_region_semantics;
+
+#[path = "divergence-quit-error-hierarchy.rs"]
+mod divergence_quit_error_hierarchy;
+#[path = "divergence-undo-semantics.rs"]
+mod divergence_undo_semantics;
+#[path = "divergence-error-hierarchy.rs"]
+mod divergence_error_hierarchy;
+#[path = "divergence-buffer-editing.rs"]
+mod divergence_buffer_editing;
