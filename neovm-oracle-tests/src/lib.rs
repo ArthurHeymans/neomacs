@@ -2004,6 +2004,8 @@ mod divergence_advice_hooks_locals;
 mod divergence_arithmetic_float;
 #[path = "divergence-bignum-fixnum-deep.rs"]
 mod divergence_bignum_fixnum_deep;
+#[path = "divergence-buffer-edit-deep.rs"]
+mod divergence_buffer_edit_deep;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
 #[path = "divergence-buffer-local-killring-fileio.rs"]
@@ -2032,6 +2034,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-completion-ring-deep.rs"]
+mod divergence_completion_ring_deep;
 #[path = "divergence-data-types-deep.rs"]
 mod divergence_data_types_deep;
 #[path = "divergence-debug-trace-ert.rs"]
