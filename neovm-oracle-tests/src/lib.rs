@@ -1994,12 +1994,20 @@ mod yank_properties_semantics;
 #[path = "zlib-decompress-region-semantics.rs"]
 mod zlib_decompress_region_semantics;
 
+#[path = "divergence-advice-hooks-locals.rs"]
+mod divergence_advice_hooks_locals;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
 #[path = "divergence-closure-lexical-eval.rs"]
 mod divergence_closure_lexical_eval;
 #[path = "divergence-error-hierarchy.rs"]
 mod divergence_error_hierarchy;
+#[path = "divergence-keymap-syntax-category.rs"]
+mod divergence_keymap_syntax_category;
+#[path = "divergence-macro-pcase-cllib.rs"]
+mod divergence_macro_pcase_cllib;
+#[path = "divergence-narrowing-multibyte.rs"]
+mod divergence_narrowing_multibyte;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-reader-printer.rs"]

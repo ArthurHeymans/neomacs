@@ -1,0 +1,149 @@
+//! Divergence tests: keymap, syntax table, and category table edge cases.
+
+use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn divergence_define_key_and_lookup() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(let ((map (make-sparse-keymap)))
+  (define-key map "a" 'insert-a)
+  (define-key map "b" 'insert-b)
+  (define-key map (kbd "C-c a") 'prefix-a)
+  (list (lookup-key map "a")
+        (lookup-key map "b")
+        (lookup-key map "c")
+        (lookup-key map (kbd "C-c a"))))"#,
+    );
+}
+
+#[test]
+fn divergence_keymap_parent_inheritance() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(let ((parent (make-sparse-keymap))
+        (child (make-sparse-keymap)))
+  (define-key parent "a" 'parent-a)
+  (define-key child "b" 'child-b)
+  (set-keymap-parent child parent)
+  (list (lookup-key child "a")
+        (lookup-key child "b")
+        (keymap-parent child)))"#,
+    );
+}
+
+#[test]
+fn divergence_current_active_maps() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(let ((maps (current-active-maps)))
+  (list (length maps)
+        (> (length maps) 0)
+        (keymapp (car maps))))"#,
+    );
+}
+
+#[test]
+fn divergence_where_is() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(where-is-internal 'keyboard-quit (current-global-map))"#,
+    );
+}
+
+#[test]
+fn divergence_syntax_table_standard() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(let ((st (standard-syntax-table)))
+  (list (char-table-p st)
+        (aref st ?a)
+        (aref st ?0)
+        (aref st ? )
+        (aref st ?())))"#,
+    );
+}
+
+#[test]
+fn divergence_modify_syntax_entry() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(with-temp-buffer
+  (let ((st (copy-syntax-table (standard-syntax-table))))
+    (set-syntax-table st)
+    (modify-syntax-entry ?$ "'")
+    (list (char-syntax ?$)
+          (char-syntax ?a)
+          (char-syntax ? ))))"#,
+    );
+}
+
+#[test]
+fn divergence_scan_sexps() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(with-temp-buffer
+  (insert "(foo (bar baz) quux)")
+  (goto-char 1)
+  (let ((end (scan-sexps (point) 1)))
+    (list end (buffer-substring 1 end))))"#,
+    );
+}
+
+#[test]
+fn divergence_forward_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(with-temp-buffer
+  (insert "/* comment */ code")
+  (goto-char 1)
+  (forward-comment 1)
+  (point))"#,
+    );
+}
+
+#[test]
+fn divergence_parse_partial_sexp() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(with-temp-buffer
+  (insert "(defun foo ()\n  \"docstring\"\n  (list 1 2))")
+  (parse-partial-sexp 1 35))"#,
+    );
+}
+
+#[test]
+fn divergence_category_table_shape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(let ((ct (category-table)))
+  (list (char-table-p ct)
+        (category-table-mnemonics ct)
+        (char-table-range ct ?a)
+        (char-table-range ct ?0)))"#,
+    );
+}
+
+#[test]
+fn divergence_define_category() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity_with_bootstrap(
+        r#"(with-temp-buffer
+  (define-category ?T "Test category")
+  (modify-category-entry ?a ?T)
+  (list (aref (char-category-set ?a) 0)
+        (category-set-mnemonics (char-category-set ?a))))"#,
+    );
+}
