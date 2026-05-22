@@ -2020,6 +2020,10 @@ mod divergence_coding_process;
 mod divergence_combo_operations;
 #[path = "divergence-debug-bytecomp-loadhist.rs"]
 mod divergence_debug_bytecomp_loadhist;
+#[path = "divergence-display-table-glyph.rs"]
+mod divergence_display_table_glyph;
+#[path = "divergence-eieio-oop.rs"]
+mod divergence_eieio_oop;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
 #[path = "divergence-eval-load-read.rs"]
