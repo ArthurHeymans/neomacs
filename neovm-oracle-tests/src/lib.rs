@@ -2024,6 +2024,8 @@ mod divergence_debug_bytecomp_loadhist;
 mod divergence_display_table_glyph;
 #[path = "divergence-eieio-oop.rs"]
 mod divergence_eieio_oop;
+#[path = "divergence-error-signaling-deep.rs"]
+mod divergence_error_signaling_deep;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
 #[path = "divergence-eval-load-read.rs"]
@@ -2102,3 +2104,5 @@ mod divergence_undo_deep_2;
 mod divergence_undo_semantics;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
+#[path = "divergence-window-redisplay.rs"]
+mod divergence_window_redisplay;
