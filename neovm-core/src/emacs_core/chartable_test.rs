@@ -648,6 +648,66 @@ fn map_char_table_latest_nil_entry_falls_back_to_parent_run() {
 }
 
 #[test]
+fn effective_runs_parent_fallback_handles_multiple_nil_child_spans() {
+    crate::test_utils::init_test_tracing();
+    let parent = make_char_table_value(Value::symbol("test"), Value::NIL);
+    builtin_set_char_table_range(vec![
+        parent,
+        Value::cons(Value::fixnum('A' as i64), Value::fixnum('C' as i64)),
+        Value::symbol("parent-left"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![
+        parent,
+        Value::cons(Value::fixnum('G' as i64), Value::fixnum('I' as i64)),
+        Value::symbol("parent-right"),
+    ])
+    .unwrap();
+
+    let child = make_char_table_value(Value::symbol("test"), Value::NIL);
+    builtin_set_char_table_parent(vec![child, parent]).unwrap();
+    builtin_set_char_table_range(vec![
+        child,
+        Value::cons(Value::fixnum('A' as i64), Value::fixnum('I' as i64)),
+        Value::symbol("child"),
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![
+        child,
+        Value::cons(Value::fixnum('B' as i64), Value::fixnum('C' as i64)),
+        Value::NIL,
+    ])
+    .unwrap();
+    builtin_set_char_table_range(vec![
+        child,
+        Value::cons(Value::fixnum('G' as i64), Value::fixnum('H' as i64)),
+        Value::NIL,
+    ])
+    .unwrap();
+
+    let entries = ct_resolved_entries(&child);
+    assert_eq!(
+        entries,
+        vec![
+            (Value::fixnum('A' as i64), Value::symbol("child")),
+            (
+                Value::cons(Value::fixnum('B' as i64), Value::fixnum('C' as i64)),
+                Value::symbol("parent-left"),
+            ),
+            (
+                Value::cons(Value::fixnum('D' as i64), Value::fixnum('F' as i64)),
+                Value::symbol("child"),
+            ),
+            (
+                Value::cons(Value::fixnum('G' as i64), Value::fixnum('H' as i64)),
+                Value::symbol("parent-right"),
+            ),
+            (Value::fixnum('I' as i64), Value::symbol("child")),
+        ]
+    );
+}
+
+#[test]
 fn atomic_runs_in_range_preserve_child_shadowing_and_parent_fallback() {
     crate::test_utils::init_test_tracing();
     let parent = make_char_table_value(Value::symbol("test"), Value::NIL);

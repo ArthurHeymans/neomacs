@@ -1801,8 +1801,8 @@ pub(crate) fn char_table_local_entries(table: &Value) -> Result<Vec<(Value, Valu
             .map(|run| (run_key(run.start, run.end), run.value))
             .collect());
     }
-    let vec = table.as_vector_data().unwrap().clone();
-    let start = ct_data_start(&vec);
+    let vec = table.as_vector_data().unwrap();
+    let start = ct_data_start(vec);
     let mut out = Vec::new();
     let mut i = start;
     while i + 1 < vec.len() {
@@ -1843,7 +1843,7 @@ pub(crate) fn builtin_set_char_table_parent(args: Vec<Value>) -> EvalResult {
             cursor = if cursor.is_char_table() {
                 cursor.as_char_table_obj().unwrap().parent
             } else {
-                let vec = cursor.as_vector_data().unwrap().clone();
+                let vec = cursor.as_vector_data().unwrap();
                 vec[CT_PARENT]
             };
         }
@@ -2056,6 +2056,37 @@ fn clipped_runs(
     clipped
 }
 
+fn push_clipped_parent_runs_from_slice(
+    out: &mut Vec<EffectiveRun>,
+    parent_runs: &[EffectiveRun],
+    parent_idx: &mut usize,
+    from: i64,
+    to: i64,
+) {
+    if from > to {
+        return;
+    }
+    while *parent_idx < parent_runs.len() && parent_runs[*parent_idx].end < from {
+        *parent_idx += 1;
+    }
+
+    let mut idx = *parent_idx;
+    while let Some(run) = parent_runs.get(idx).copied() {
+        if run.start > to {
+            break;
+        }
+        let start = run.start.max(from);
+        let end = run.end.min(to);
+        if start <= end {
+            push_effective_run(out, start, end, run.value);
+        }
+        if run.end >= to {
+            break;
+        }
+        idx += 1;
+    }
+}
+
 fn push_parent_direct_span_runs(
     out: &mut Vec<EffectiveRun>,
     parent: Value,
@@ -2089,18 +2120,17 @@ fn ct_map_char_table_runs(table: &Value) -> Vec<EffectiveRun> {
     if !is_char_table(table) {
         return Vec::new();
     }
-    let vec = table.as_vector_data().map(|v| v.to_vec());
     let parent = if table.is_char_table() {
         table.as_char_table_obj().unwrap().parent
     } else {
-        vec.as_ref().unwrap()[CT_PARENT]
+        table.as_vector_data().unwrap()[CT_PARENT]
     };
     let local_runs = ct_local_direct_runs(table);
     let mut out = Vec::new();
     let mut val = if table.is_char_table() {
         table.as_char_table_obj().unwrap().ascii
     } else {
-        ct_ascii_initial_value(vec.as_ref().unwrap())
+        ct_ascii_initial_value(table.as_vector_data().unwrap())
     };
     let mut from = 0;
 
@@ -2404,14 +2434,19 @@ fn ct_effective_runs(table: &Value) -> Vec<EffectiveRun> {
         }
         let parent_runs = ct_effective_runs(&obj.parent);
         let mut out = Vec::new();
+        let mut parent_idx = 0usize;
         for run in local_runs {
             if !run.value.is_nil() {
                 push_effective_run(&mut out, run.start, run.end, run.value);
                 continue;
             }
-            for parent_run in clipped_runs(parent_runs.clone(), run.start, run.end) {
-                push_effective_run(&mut out, parent_run.start, parent_run.end, parent_run.value);
-            }
+            push_clipped_parent_runs_from_slice(
+                &mut out,
+                &parent_runs,
+                &mut parent_idx,
+                run.start,
+                run.end,
+            );
         }
         return out;
     }
@@ -2422,8 +2457,8 @@ fn ct_effective_runs(table: &Value) -> Vec<EffectiveRun> {
             value: Value::NIL,
         }];
     };
-    let vec = table.as_vector_data().unwrap().clone();
-    let raws = ct_collect_raw_entries(&vec, is_char_code_property_vec(&vec));
+    let vec = table.as_vector_data().unwrap();
+    let raws = ct_collect_raw_entries(vec, is_char_code_property_vec(vec));
     let default = vec[CT_DEFAULT];
     let parent = vec[CT_PARENT];
     let domain_end = MAX_CHAR.saturating_add(1);
