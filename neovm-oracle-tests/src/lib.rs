@@ -2070,10 +2070,14 @@ mod divergence_multibyte_bidi_deep;
 mod divergence_narrowing_multibyte;
 #[path = "divergence-net-thread-json-xml.rs"]
 mod divergence_net_thread_json_xml;
+#[path = "divergence-net-xml-dom-mail.rs"]
+mod divergence_net_xml_dom_mail;
 #[path = "divergence-overlay-deep.rs"]
 mod divergence_overlay_deep;
 #[path = "divergence-package-dired-elp.rs"]
 mod divergence_package_dired_elp;
+#[path = "divergence-print-circle-read.rs"]
+mod divergence_print_circle_read;
 #[path = "divergence-print-format-charset.rs"]
 mod divergence_print_format_charset;
 #[path = "divergence-process-shell.rs"]
@@ -2112,6 +2116,8 @@ mod divergence_timer_eventloop;
 mod divergence_undo_deep_2;
 #[path = "divergence-undo-semantics.rs"]
 mod divergence_undo_semantics;
+#[path = "divergence-unicode-normalization.rs"]
+mod divergence_unicode_normalization;
 #[path = "divergence-weak-hash-lifecycle.rs"]
 mod divergence_weak_hash_lifecycle;
 #[path = "divergence-window-frame-display.rs"]
