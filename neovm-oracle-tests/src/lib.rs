@@ -2056,6 +2056,8 @@ mod divergence_completion_ring_deep;
 mod divergence_custom_theme_deep;
 #[path = "divergence-data-formats.rs"]
 mod divergence_data_formats;
+#[path = "divergence-data-structures-real.rs"]
+mod divergence_data_structures_real;
 #[path = "divergence-data-types-deep.rs"]
 mod divergence_data_types_deep;
 #[path = "divergence-debug-trace-ert.rs"]
@@ -2250,6 +2252,8 @@ mod divergence_stress_large_deep;
 mod divergence_string_ops;
 #[path = "divergence-string-ops-deep.rs"]
 mod divergence_string_ops_deep;
+#[path = "divergence-string-regex-real.rs"]
+mod divergence_string_regex_real;
 #[path = "divergence-subr-bytecode-deep.rs"]
 mod divergence_subr_bytecode_deep;
 #[path = "divergence-symbol-reader-deep.rs"]
