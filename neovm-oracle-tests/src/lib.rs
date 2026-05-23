@@ -2064,6 +2064,8 @@ mod divergence_combo_error_recovery;
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
+#[path = "divergence-combo-macro-compiletime.rs"]
+mod divergence_combo_macro_compiletime;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
 mod divergence_combo_macro_eieio_generic;
 #[path = "divergence-combo-metaprogramming.rs"]
@@ -2084,6 +2086,8 @@ mod divergence_combo_serialization;
 mod divergence_combo_stdlib;
 #[path = "divergence-combo-stress.rs"]
 mod divergence_combo_stress;
+#[path = "divergence-combo-subprocess-buffer.rs"]
+mod divergence_combo_subprocess_buffer;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
 #[path = "divergence-combo-type-coercion.rs"]
