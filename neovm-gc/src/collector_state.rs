@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex, MutexGuard, TryLockError, TryLockResult};
 use std::time::{Duration, Instant};
 
 use crate::collector::MarkTracer;
-use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
+use crate::collector::MarkWorklist;
 use crate::collector::{
     self, ActiveReclaimPrepRequest, FinishedActiveCollection, PreparedActiveReclaim,
 };
+use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
 use crate::heap::AllocError;
 use crate::index_state::ObjectLocator;
-use crate::collector::MarkWorklist;
 use crate::object_store::ObjectReadRaw;
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan, MajorMarkProgress};
 use crate::reclaim::PreparedReclaim;
@@ -217,7 +217,9 @@ impl CollectorStateHandle {
         plan: CollectionPlan,
         sources: impl IntoIterator<Item = crate::descriptor::GcErased>,
     ) -> Result<(), AllocError> {
-        self.with_state(|state| crate::collector::session::begin_major_mark(state, objects, plan, sources))
+        self.with_state(|state| {
+            crate::collector::session::begin_major_mark(state, objects, plan, sources)
+        })
     }
 
     pub(crate) fn assist_active_major_mark_slices_and_refresh(
@@ -230,8 +232,9 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> Result<Option<MajorMarkProgress>, AllocError> {
         self.with_state(|state| {
-            let progress =
-                crate::collector::session::assist_active_major_mark_slices(state, objects, max_slices)?;
+            let progress = crate::collector::session::assist_active_major_mark_slices(
+                state, objects, max_slices,
+            )?;
             refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             Ok(progress)
         })
@@ -382,7 +385,8 @@ impl CollectorStateHandle {
         plan_for: impl FnMut(CollectionKind) -> CollectionPlan,
     ) -> bool {
         self.with_state(|state| {
-            let completed = crate::collector::session::complete_active_reclaim_prep(state, prepared);
+            let completed =
+                crate::collector::session::complete_active_reclaim_prep(state, prepared);
             if completed {
                 refresh_cached_collector_plans(state, stats, old_gen, old_config, plan_for);
             }

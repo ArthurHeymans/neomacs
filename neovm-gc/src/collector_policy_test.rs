@@ -1,8 +1,8 @@
 use super::*;
+use crate::collector::MarkWorklist;
 use crate::collector_state::CollectorState;
 use crate::descriptor::{MovePolicy, Trace, Tracer, fixed_type_desc};
 use crate::heap::HeapConfig;
-use crate::collector::MarkWorklist;
 use crate::object::{ObjectRecord, SpaceKind};
 use crate::plan::{CollectionKind, CollectionPhase};
 use crate::spaces::{LargeObjectSpaceConfig, NurseryConfig};

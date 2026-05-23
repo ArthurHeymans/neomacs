@@ -70,13 +70,37 @@ pub fn optimize_ssa_function(function: &mut SsaFunction) -> bool {
 }
 
 fn is_special_form_name(name: &str) -> bool {
-    matches!(name,
-        "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
-        | "quote" | "function" | "progn" | "prog1" | "prog2"
-        | "condition-case" | "unwind-protect" | "catch" | "throw"
-        | "defun" | "defvar" | "defconst" | "defmacro" | "defalias"
-        | "lambda" | "setf" | "interactive" | "letrec"
-        | "cl-block" | "cl-return" | "cl-return-from"
+    matches!(
+        name,
+        "and"
+            | "or"
+            | "if"
+            | "cond"
+            | "while"
+            | "let"
+            | "let*"
+            | "setq"
+            | "quote"
+            | "function"
+            | "progn"
+            | "prog1"
+            | "prog2"
+            | "condition-case"
+            | "unwind-protect"
+            | "catch"
+            | "throw"
+            | "defun"
+            | "defvar"
+            | "defconst"
+            | "defmacro"
+            | "defalias"
+            | "lambda"
+            | "setf"
+            | "interactive"
+            | "letrec"
+            | "cl-block"
+            | "cl-return"
+            | "cl-return-from"
     )
 }
 
@@ -292,9 +316,10 @@ pub fn constant_folding(function: &mut SsaFunction) -> OptOutput {
     for (_block_id, block) in function.blocks.iter() {
         for inst in block.instructions.iter() {
             if let SsaInstKind::Const(c) = &inst.kind
-                && let Some(result) = inst.result {
-                    const_map.insert(result, c.clone());
-                }
+                && let Some(result) = inst.result
+            {
+                const_map.insert(result, c.clone());
+            }
         }
     }
 
@@ -311,12 +336,13 @@ pub fn constant_folding(function: &mut SsaFunction) -> OptOutput {
         };
         let is_nil = matches!(c, SsaConst::Nil);
         if let SsaTerminator::BranchIfNil {
-                then_target,
-                then_args,
-                else_target,
-                else_args,
-                ..
-            } = &block.terminator {
+            then_target,
+            then_args,
+            else_target,
+            else_args,
+            ..
+        } = &block.terminator
+        {
             let (target, args) = if is_nil {
                 (*then_target, then_args.clone())
             } else {
@@ -365,7 +391,11 @@ fn try_fold_inst(kind: &SsaInstKind, const_map: &HashMap<ValueId, SsaConst>) -> 
 }
 
 #[inline]
-fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> bool) -> Option<SsaConst> {
+fn fold_cmp(
+    a: &SsaConst,
+    b: &SsaConst,
+    cmp: impl FnOnce(std::cmp::Ordering) -> bool,
+) -> Option<SsaConst> {
     let ordering = match (a, b) {
         (SsaConst::Int(a), SsaConst::Int(b)) => a.cmp(b),
         (SsaConst::Char(a), SsaConst::Char(b)) => a.cmp(b),
@@ -376,7 +406,11 @@ fn fold_cmp(a: &SsaConst, b: &SsaConst, cmp: impl FnOnce(std::cmp::Ordering) -> 
         (SsaConst::Float(a), SsaConst::Int(b)) => f64::total_cmp(a, &(*b as f64)),
         _ => return None,
     };
-    Some(if cmp(ordering) { SsaConst::True } else { SsaConst::Nil })
+    Some(if cmp(ordering) {
+        SsaConst::True
+    } else {
+        SsaConst::Nil
+    })
 }
 
 #[inline]
@@ -388,8 +422,14 @@ fn fold_binary_arith(
 ) -> Option<SsaConst> {
     let a_int = a.as_int();
     let b_int = b.as_int();
-    let a_float = match a { SsaConst::Float(f) => Some(*f), _ => None };
-    let b_float = match b { SsaConst::Float(f) => Some(*f), _ => None };
+    let a_float = match a {
+        SsaConst::Float(f) => Some(*f),
+        _ => None,
+    };
+    let b_float = match b {
+        SsaConst::Float(f) => Some(*f),
+        _ => None,
+    };
     match (a_int, b_int, a_float, b_float) {
         (Some(a), Some(b), _, _) => Some(SsaConst::Int(int_op(a, b))),
         (_, _, Some(a), Some(b)) => Some(SsaConst::Float(float_op(a, b))),
@@ -401,47 +441,76 @@ fn fold_binary_arith(
 
 fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
     match name {
-        "+" if args.len() == 2 => fold_binary_arith(args[0], args[1],
-            |a, b| a.wrapping_add(b), |a, b| a + b),
-        "-" if args.len() == 2 => fold_binary_arith(args[0], args[1],
-            |a, b| a.wrapping_sub(b), |a, b| a - b),
+        "+" if args.len() == 2 => {
+            fold_binary_arith(args[0], args[1], |a, b| a.wrapping_add(b), |a, b| a + b)
+        }
+        "-" if args.len() == 2 => {
+            fold_binary_arith(args[0], args[1], |a, b| a.wrapping_sub(b), |a, b| a - b)
+        }
         "-" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(a.wrapping_neg())),
             SsaConst::Float(f) => Some(SsaConst::Float(-f)),
             _ => None,
         },
         "-" if args.len() >= 2 => {
-            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+            if let Some(ints) = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<i64>>>()
+            {
                 let first = ints[0];
-                return Some(SsaConst::Int(ints[1..].iter().fold(first, |a, &b| a.wrapping_sub(b))));
+                return Some(SsaConst::Int(
+                    ints[1..].iter().fold(first, |a, &b| a.wrapping_sub(b)),
+                ));
             }
             if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
                 let first = floats[0];
-                return Some(SsaConst::Float(floats[1..].iter().fold(first, |a, &b| a - b)));
+                return Some(SsaConst::Float(
+                    floats[1..].iter().fold(first, |a, &b| a - b),
+                ));
             }
             None
-        },
-        "*" if args.len() == 2 => fold_binary_arith(args[0], args[1],
-            |a, b| a.wrapping_mul(b), |a, b| a * b),
+        }
+        "*" if args.len() == 2 => {
+            fold_binary_arith(args[0], args[1], |a, b| a.wrapping_mul(b), |a, b| a * b)
+        }
         "/" if args.len() == 2 => {
             if let (SsaConst::Int(a), SsaConst::Int(b)) = (args[0], args[1]) {
-                if *b == 0 { return None; }
+                if *b == 0 {
+                    return None;
+                }
                 Some(SsaConst::Int(a.wrapping_div(*b)))
             } else if let (SsaConst::Float(a), SsaConst::Float(b)) = (args[0], args[1]) {
-                if *b == 0.0 { return None; }
+                if *b == 0.0 {
+                    return None;
+                }
                 Some(SsaConst::Float(a / b))
-            } else { None }
+            } else {
+                None
+            }
         }
         "/" if args.len() >= 2 => {
-            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+            if let Some(ints) = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<i64>>>()
+            {
                 let first = ints[0];
-                if ints[1..].iter().any(|&b| b == 0) { return None; }
-                return Some(SsaConst::Int(ints[1..].iter().fold(first, |a, &b| a.wrapping_div(b))));
+                if ints[1..].iter().any(|&b| b == 0) {
+                    return None;
+                }
+                return Some(SsaConst::Int(
+                    ints[1..].iter().fold(first, |a, &b| a.wrapping_div(b)),
+                ));
             }
             if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
                 let first = floats[0];
-                if floats[1..].iter().any(|&b| b == 0.0) { return None; }
-                return Some(SsaConst::Float(floats[1..].iter().fold(first, |a, &b| a / b)));
+                if floats[1..].iter().any(|&b| b == 0.0) {
+                    return None;
+                }
+                return Some(SsaConst::Float(
+                    floats[1..].iter().fold(first, |a, &b| a / b),
+                ));
             }
             None
         }
@@ -471,28 +540,57 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 SsaConst::Nil
             }),
-            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
-            (SsaConst::Float(a), SsaConst::Float(b)) => {
-                Some(if a.to_bits() == b.to_bits() { SsaConst::True } else { SsaConst::Nil })
+            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => {
+                Some(SsaConst::True)
             }
+            (SsaConst::Float(a), SsaConst::Float(b)) => Some(if a.to_bits() == b.to_bits() {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             // Different types are never eq.
-            (SsaConst::Nil, _) | (SsaConst::True, _)
-            | (_, SsaConst::Nil) | (_, SsaConst::True)
-            | (SsaConst::Int(_), _) | (SsaConst::Float(_), _)
-            | (SsaConst::Char(_), _) | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
+            (SsaConst::Nil, _)
+            | (SsaConst::True, _)
+            | (_, SsaConst::Nil)
+            | (_, SsaConst::True)
+            | (SsaConst::Int(_), _)
+            | (SsaConst::Float(_), _)
+            | (SsaConst::Char(_), _)
+            | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
             _ => None,
         },
         "equal" if args.len() == 2 => match (args[0], args[1]) {
-            (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-            (SsaConst::Float(a), SsaConst::Float(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-            (SsaConst::String(a), SsaConst::String(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
-            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => Some(SsaConst::True),
-            (SsaConst::Symbol(a), SsaConst::Symbol(b)) => Some(if a == b { SsaConst::True } else { SsaConst::Nil }),
+            (SsaConst::Int(a), SsaConst::Int(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::Float(a), SsaConst::Float(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::String(a), SsaConst::String(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::Nil, SsaConst::Nil) | (SsaConst::True, SsaConst::True) => {
+                Some(SsaConst::True)
+            }
+            (SsaConst::Symbol(a), SsaConst::Symbol(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             // Different types are never equal.
-            (SsaConst::Nil, _) | (SsaConst::True, _)
-            | (_, SsaConst::Nil) | (_, SsaConst::True) => Some(SsaConst::Nil),
-            (SsaConst::Int(_), _) | (SsaConst::Float(_), _)
-            | (SsaConst::String(_), _) | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
+            (SsaConst::Nil, _) | (SsaConst::True, _) | (_, SsaConst::Nil) | (_, SsaConst::True) => {
+                Some(SsaConst::Nil)
+            }
+            (SsaConst::Int(_), _)
+            | (SsaConst::Float(_), _)
+            | (SsaConst::String(_), _)
+            | (SsaConst::Symbol(_), _) => Some(SsaConst::Nil),
             _ => None,
         },
         "1+" if args.len() == 1 => match args[0] {
@@ -514,24 +612,35 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "/=" if args.len() == 1 => Some(SsaConst::True),
         "/=" if args.len() >= 2 => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            let ints: Vec<i64> = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<_>>>()?;
             let mut seen = std::collections::HashSet::new();
             let all_distinct = ints.iter().all(|i| seen.insert(*i));
-            Some(if all_distinct { SsaConst::True } else { SsaConst::Nil })
+            Some(if all_distinct {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         "max" if !args.is_empty() => {
             if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>() {
                 return Some(SsaConst::Int(ints.into_iter().max().unwrap()));
             }
             let floats: Vec<f64> = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<_>>>()?;
-            Some(SsaConst::Float(floats.into_iter().fold(f64::NEG_INFINITY, f64::max)))
+            Some(SsaConst::Float(
+                floats.into_iter().fold(f64::NEG_INFINITY, f64::max),
+            ))
         }
         "min" if !args.is_empty() => {
             if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>() {
                 return Some(SsaConst::Int(ints.into_iter().min().unwrap()));
             }
             let floats: Vec<f64> = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<_>>>()?;
-            Some(SsaConst::Float(floats.into_iter().fold(f64::INFINITY, f64::min)))
+            Some(SsaConst::Float(
+                floats.into_iter().fold(f64::INFINITY, f64::min),
+            ))
         }
         "+" if args.is_empty() => Some(SsaConst::Int(0)),
         "+" if args.len() == 1 => match args[0] {
@@ -541,7 +650,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "+" if args.len() >= 2 => {
-            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+            if let Some(ints) = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<i64>>>()
+            {
                 return Some(SsaConst::Int(ints.into_iter().sum()));
             }
             if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
@@ -557,7 +670,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "*" if args.len() >= 2 => {
-            if let Some(ints) = args.iter().map(|a| a.as_int()).collect::<Option<Vec<i64>>>() {
+            if let Some(ints) = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<i64>>>()
+            {
                 return Some(SsaConst::Int(ints.into_iter().product()));
             }
             if let Some(floats) = args.iter().map(|a| to_f64(a)).collect::<Option<Vec<f64>>>() {
@@ -566,15 +683,24 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             None
         }
         "logand" => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            let ints: Vec<i64> = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(!0i64, |a, b| a & b)))
         }
         "logior" => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            let ints: Vec<i64> = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a | b)))
         }
         "logxor" => {
-            let ints: Vec<i64> = args.iter().map(|a| a.as_int()).collect::<Option<Vec<_>>>()?;
+            let ints: Vec<i64> = args
+                .iter()
+                .map(|a| a.as_int())
+                .collect::<Option<Vec<_>>>()?;
             Some(SsaConst::Int(ints.into_iter().fold(0, |a, b| a ^ b)))
         }
         "ash" if args.len() == 2 => {
@@ -662,23 +788,33 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "length=" if args.len() == 2 => match (args[0], args[1].as_int()) {
-            (SsaConst::String(s), Some(n)) => {
-                Some(if s.len() as i64 == n { SsaConst::True } else { SsaConst::Nil })
-            }
-            (SsaConst::Nil, Some(n)) => Some(if 0 == n { SsaConst::True } else { SsaConst::Nil }),
+            (SsaConst::String(s), Some(n)) => Some(if s.len() as i64 == n {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            (SsaConst::Nil, Some(n)) => Some(if 0 == n {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             _ => None,
         },
         "length<" if args.len() == 2 => match (args[0], args[1].as_int()) {
-            (SsaConst::String(s), Some(n)) => {
-                Some(if (s.len() as i64) < n { SsaConst::True } else { SsaConst::Nil })
-            }
+            (SsaConst::String(s), Some(n)) => Some(if (s.len() as i64) < n {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             (SsaConst::Nil, Some(n)) => Some(if 0 < n { SsaConst::True } else { SsaConst::Nil }),
             _ => None,
         },
         "length>" if args.len() == 2 => match (args[0], args[1].as_int()) {
-            (SsaConst::String(s), Some(n)) => {
-                Some(if (s.len() as i64) > n { SsaConst::True } else { SsaConst::Nil })
-            }
+            (SsaConst::String(s), Some(n)) => Some(if (s.len() as i64) > n {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             (SsaConst::Nil, Some(n)) => Some(if 0 > n { SsaConst::True } else { SsaConst::Nil }),
             _ => None,
         },
@@ -716,22 +852,29 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                         result.push(digits[digit] as char);
                         remaining /= base as i64;
                     }
-                    if neg { result.push('-'); }
+                    if neg {
+                        result.push('-');
+                    }
                     result = result.chars().rev().collect();
                 }
                 return Some(SsaConst::String(result));
             }
             None
-        },
+        }
         "substring" | "substring-no-properties" if args.len() >= 2 => {
-            let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
+            let s = match args[0] {
+                SsaConst::String(s) => s.as_str(),
+                _ => return None,
+            };
             let start = args[1].as_int()? as usize;
             let end = if args.len() >= 3 {
                 args[2].as_int()? as usize
             } else {
                 s.len()
             };
-            if start > end || start > s.len() || end > s.len() { return None; }
+            if start > end || start > s.len() || end > s.len() {
+                return None;
+            }
             Some(SsaConst::String(s[start..end].to_string()))
         }
         "aref" if args.len() == 2 => {
@@ -740,14 +883,14 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 SsaConst::String(s) => s.chars().nth(index).map(|c| SsaConst::Char(c as i64)),
                 _ => None,
             }
-        },
+        }
         "elt" if args.len() == 2 => {
             let index = args[1].as_int()? as usize;
             match args[0] {
                 SsaConst::String(s) => s.chars().nth(index).map(|c| SsaConst::Char(c as i64)),
                 _ => None,
             }
-        },
+        }
         "identity" if args.len() == 1 => Some(args[0].clone()),
         "symbol-name" if args.len() == 1 => match args[0] {
             SsaConst::Symbol(s) => Some(SsaConst::String(s.clone())),
@@ -771,7 +914,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             // Only fold the 0-length case (returns nil).
             if _count == 0 {
                 Some(SsaConst::Nil)
-            } else { None }
+            } else {
+                None
+            }
         }
         "copy-sequence" if args.len() == 1 => match args[0] {
             SsaConst::String(s) => Some(SsaConst::String(s.clone())),
@@ -813,8 +958,17 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => Some(SsaConst::Nil),
         },
         "string-to-number" if args.len() >= 1 => {
-            let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
-            let base = args.get(1).map(|b| match b { SsaConst::Int(n) => *n, _ => 0 }).unwrap_or(10);
+            let s = match args[0] {
+                SsaConst::String(s) => s.as_str(),
+                _ => return None,
+            };
+            let base = args
+                .get(1)
+                .map(|b| match b {
+                    SsaConst::Int(n) => *n,
+                    _ => 0,
+                })
+                .unwrap_or(10);
             // Auto-detect #x #o #b prefixes when base is 10 (default).
             let (effective_base, digits) = if base == 10 {
                 if let Some(hex) = s.strip_prefix("#x") {
@@ -841,16 +995,22 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
                 }
             }
             None
-        },
+        }
         "append" | "nconc" if args.is_empty() => Some(SsaConst::Nil),
         "concat" if args.is_empty() => Some(SsaConst::String(String::new())),
         "concat" if !args.is_empty() => {
             if args.iter().all(|a| matches!(a, SsaConst::String(_))) {
-                let s: String = args.iter()
-                    .filter_map(|a| match a { SsaConst::String(s) => Some(s.as_str()), _ => None })
+                let s: String = args
+                    .iter()
+                    .filter_map(|a| match a {
+                        SsaConst::String(s) => Some(s.as_str()),
+                        _ => None,
+                    })
                     .collect();
                 Some(SsaConst::String(s))
-            } else { None }
+            } else {
+                None
+            }
         }
         "lsh" if args.len() == 2 => {
             let value = args[0].as_int()?;
@@ -891,8 +1051,10 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             let base = to_f64(args[1])?;
             if x > 0.0 && base > 0.0 && base != 1.0 {
                 Some(SsaConst::Float(x.ln() / base.ln()))
-            } else { None }
-        },
+            } else {
+                None
+            }
+        }
         "log10" if args.len() == 1 => match args[0] {
             SsaConst::Float(f) if *f > 0.0 => Some(SsaConst::Float(f.log10())),
             SsaConst::Int(n) if *n > 0 => Some(SsaConst::Float((*n as f64).log10())),
@@ -922,7 +1084,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             (SsaConst::Float(y), SsaConst::Float(x)) => Some(SsaConst::Float(y.atan2(*x))),
             (SsaConst::Float(y), SsaConst::Int(x)) => Some(SsaConst::Float(y.atan2(*x as f64))),
             (SsaConst::Int(y), SsaConst::Float(x)) => Some(SsaConst::Float((*y as f64).atan2(*x))),
-            (SsaConst::Int(y), SsaConst::Int(x)) => Some(SsaConst::Float((*y as f64).atan2(*x as f64))),
+            (SsaConst::Int(y), SsaConst::Int(x)) => {
+                Some(SsaConst::Float((*y as f64).atan2(*x as f64)))
+            }
             _ => None,
         },
         "sqrt" if args.len() == 1 => match args[0] {
@@ -956,7 +1120,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "truncate" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 { return None; }
+            if b == 0 {
+                return None;
+            }
             Some(SsaConst::Int(a / b))
         }
         "floor" if args.len() == 1 => match args[0] {
@@ -966,7 +1132,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "floor" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 { return None; }
+            if b == 0 {
+                return None;
+            }
             let q = a / b;
             let r = a % b;
             Some(SsaConst::Int(if r != 0 && (a ^ b) < 0 { q - 1 } else { q }))
@@ -978,10 +1146,16 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "ceiling" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 { return None; }
+            if b == 0 {
+                return None;
+            }
             let q = a / b;
             let r = a % b;
-            Some(SsaConst::Int(if r != 0 && (a ^ b) >= 0 { q + 1 } else { q }))
+            Some(SsaConst::Int(if r != 0 && (a ^ b) >= 0 {
+                q + 1
+            } else {
+                q
+            }))
         }
         "round" | "fround" if args.len() == 1 => match args[0] {
             SsaConst::Int(a) => Some(SsaConst::Int(*a)),
@@ -990,7 +1164,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         },
         "round" if args.len() == 2 => {
             let (a, b) = (args[0].as_int()?, args[1].as_int()?);
-            if b == 0 { return None; }
+            if b == 0 {
+                return None;
+            }
             // Round to nearest, ties to even (banker's rounding)
             let q = a / b;
             let r = a % b;
@@ -1010,7 +1186,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "ffloor" if args.len() == 2 => {
             let a = to_f64(args[0])?;
             let b = to_f64(args[1])?;
-            if b == 0.0 { return None; }
+            if b == 0.0 {
+                return None;
+            }
             Some(SsaConst::Float((a / b).floor()))
         }
         "fceiling" if args.len() == 1 => match args[0] {
@@ -1021,7 +1199,9 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "fceiling" if args.len() == 2 => {
             let a = to_f64(args[0])?;
             let b = to_f64(args[1])?;
-            if b == 0.0 { return None; }
+            if b == 0.0 {
+                return None;
+            }
             Some(SsaConst::Float((a / b).ceil()))
         }
         "ftruncate" if args.len() == 1 => match args[0] {
@@ -1032,12 +1212,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         "ftruncate" if args.len() == 2 => {
             let a = to_f64(args[0])?;
             let b = to_f64(args[1])?;
-            if b == 0.0 { return None; }
+            if b == 0.0 {
+                return None;
+            }
             Some(SsaConst::Float((a / b).trunc()))
         }
-        "lognot" if args.len() == 1 => {
-            Some(SsaConst::Int(!args[0].as_int()?))
-        }
+        "lognot" if args.len() == 1 => Some(SsaConst::Int(!args[0].as_int()?)),
         "integerp" if args.len() == 1 => Some(match args[0] {
             SsaConst::Int(_) | SsaConst::Char(_) => SsaConst::True,
             _ => SsaConst::Nil,
@@ -1051,15 +1231,15 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => SsaConst::Nil,
         }),
         "string=" if args.len() == 2 => match (args[0], args[1]) {
-            (SsaConst::String(a), SsaConst::String(b)) => {
-                Some(if a == b { SsaConst::True } else { SsaConst::Nil })
-            }
+            (SsaConst::String(a), SsaConst::String(b)) => Some(if a == b {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             _ => None,
         },
         "string-equal" if args.len() == 2 => match (args[0], args[1]) {
-            (SsaConst::String(a), SsaConst::String(b)) if a == b => {
-                Some(SsaConst::True)
-            }
+            (SsaConst::String(a), SsaConst::String(b)) if a == b => Some(SsaConst::True),
             _ => None,
         },
         "string<" | "string-lessp" if args.len() == 2 => match (args[0], args[1]) {
@@ -1113,41 +1293,61 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             _ => None,
         },
         "string-remove-prefix" if args.len() == 2 => match (args[0], args[1]) {
-            (SsaConst::String(prefix), SsaConst::String(s)) => {
-                Some(SsaConst::String(s.strip_prefix(prefix.as_str()).unwrap_or(s).to_string()))
-            }
+            (SsaConst::String(prefix), SsaConst::String(s)) => Some(SsaConst::String(
+                s.strip_prefix(prefix.as_str()).unwrap_or(s).to_string(),
+            )),
             _ => None,
         },
         "string-remove-suffix" if args.len() == 2 => match (args[0], args[1]) {
-            (SsaConst::String(suffix), SsaConst::String(s)) => {
-                Some(SsaConst::String(s.strip_suffix(suffix.as_str()).unwrap_or(s).to_string()))
-            }
+            (SsaConst::String(suffix), SsaConst::String(s)) => Some(SsaConst::String(
+                s.strip_suffix(suffix.as_str()).unwrap_or(s).to_string(),
+            )),
             _ => None,
         },
         "zerop" if args.len() == 1 => match args[0] {
-            SsaConst::Int(a) => Some(if *a == 0 { SsaConst::True } else { SsaConst::Nil }),
-            SsaConst::Float(f) => Some(if *f == 0.0 || *f == -0.0 { SsaConst::True } else { SsaConst::Nil }),
+            SsaConst::Int(a) => Some(if *a == 0 {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
+            SsaConst::Float(f) => Some(if *f == 0.0 || *f == -0.0 {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             _ => None,
         },
         "rem" | "%" if args.len() == 2 => {
             if let (Some(a), Some(b)) = (args[0].as_int(), args[1].as_int()) {
-                if b == 0 { return None; }
+                if b == 0 {
+                    return None;
+                }
                 return Some(SsaConst::Int(a.wrapping_rem(b)));
             }
             let a = to_f64(args[0])?;
             let b = to_f64(args[1])?;
-            if b == 0.0 { return None; }
+            if b == 0.0 {
+                return None;
+            }
             Some(SsaConst::Float(a % b))
         }
         "mod" if args.len() == 2 => {
             if let (Some(a), Some(b)) = (args[0].as_int(), args[1].as_int()) {
-                if b == 0 { return None; }
+                if b == 0 {
+                    return None;
+                }
                 let r = a.wrapping_rem(b);
-                return Some(SsaConst::Int(if r == 0 || (a ^ b) >= 0 { r } else { r.wrapping_add(b) }));
+                return Some(SsaConst::Int(if r == 0 || (a ^ b) >= 0 {
+                    r
+                } else {
+                    r.wrapping_add(b)
+                }));
             }
             let a = to_f64(args[0])?;
             let b = to_f64(args[1])?;
-            if b == 0.0 { return None; }
+            if b == 0.0 {
+                return None;
+            }
             Some(SsaConst::Float(a - b * (a / b).floor()))
         }
         "consp" if args.len() == 1 => Some(match args[0] {
@@ -1182,10 +1382,12 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::Value(_) => return None,
             _ => SsaConst::True,
         }),
-        "functionp" | "subrp" | "compiled-function-p" | "macrop" if args.len() == 1 => Some(match args[0] {
-            SsaConst::Value(_) => return None,
-            _ => SsaConst::Nil,
-        }),
+        "functionp" | "subrp" | "compiled-function-p" | "macrop" if args.len() == 1 => {
+            Some(match args[0] {
+                SsaConst::Value(_) => return None,
+                _ => SsaConst::Nil,
+            })
+        }
         "car-safe" | "cdr-safe" if args.len() == 1 => Some(match args[0] {
             SsaConst::Value(_) => return None,
             _ => SsaConst::Nil,
@@ -1194,11 +1396,13 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             (SsaConst::Char(a), SsaConst::Char(b)) => {
                 let ca = char::from_u32(*a as u32)?;
                 let cb = char::from_u32(*b as u32)?;
-                Some(if ca == cb || ca.to_ascii_lowercase() == cb.to_ascii_lowercase() {
-                    SsaConst::True
-                } else {
-                    SsaConst::Nil
-                })
+                Some(
+                    if ca == cb || ca.to_ascii_lowercase() == cb.to_ascii_lowercase() {
+                        SsaConst::True
+                    } else {
+                        SsaConst::Nil
+                    },
+                )
             }
             _ => None,
         },
@@ -1209,15 +1413,27 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
         }),
         "natnump" | "wholenump" if args.len() == 1 => {
             let n = args[0].as_int()?;
-            Some(if n >= 0 { SsaConst::True } else { SsaConst::Nil })
+            Some(if n >= 0 {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         "evenp" | "cl-evenp" if args.len() == 1 => {
             let n = args[0].as_int()?;
-            Some(if n & 1 == 0 { SsaConst::True } else { SsaConst::Nil })
+            Some(if n & 1 == 0 {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         "oddp" | "cl-oddp" if args.len() == 1 => {
             let n = args[0].as_int()?;
-            Some(if n & 1 != 0 { SsaConst::True } else { SsaConst::Nil })
+            Some(if n & 1 != 0 {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            })
         }
         "minusp" | "cl-minusp" if args.len() == 1 => {
             let n = args[0].as_int()?;
@@ -1239,21 +1455,24 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             })
         }
         "reverse" | "nreverse" | "cl-reverse" | "cl-nreverse" if args.len() == 1 => match args[0] {
-            SsaConst::String(s) => {
-                Some(SsaConst::String(s.chars().rev().collect()))
-            }
+            SsaConst::String(s) => Some(SsaConst::String(s.chars().rev().collect())),
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
         "subseq" | "cl-subseq" if args.len() >= 2 => {
-            let s = match args[0] { SsaConst::String(s) => s.as_str(), _ => return None };
+            let s = match args[0] {
+                SsaConst::String(s) => s.as_str(),
+                _ => return None,
+            };
             let start = args[1].as_int()? as usize;
             let end = if args.len() >= 3 {
                 args[2].as_int()? as usize
             } else {
                 s.len()
             };
-            if start > end || start > s.len() || end > s.len() { return None; }
+            if start > end || start > s.len() || end > s.len() {
+                return None;
+            }
             Some(SsaConst::String(s[start..end].to_string()))
         }
         "booleanp" if args.len() == 1 => match args[0] {
@@ -1278,21 +1497,37 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             SsaConst::String(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
         },
-        "bool-vector-p" | "recordp" | "char-table-p" | "autoloadp"
-            if args.len() == 1 => Some(SsaConst::Nil),
+        "bool-vector-p" | "recordp" | "char-table-p" | "autoloadp" if args.len() == 1 => {
+            Some(SsaConst::Nil)
+        }
         "bare-symbol-p" if args.len() == 1 => match args[0] {
             SsaConst::Symbol(_) => Some(SsaConst::True),
             _ => Some(SsaConst::Nil),
         },
         "keywordp" if args.len() == 1 => match args[0] {
-            SsaConst::Symbol(s) => Some(if s.starts_with(':') { SsaConst::True } else { SsaConst::Nil }),
+            SsaConst::Symbol(s) => Some(if s.starts_with(':') {
+                SsaConst::True
+            } else {
+                SsaConst::Nil
+            }),
             _ => Some(SsaConst::Nil),
         },
         "ignore" => Some(SsaConst::Nil),
-        "delete" | "delq" | "remove" | "remq" | "delete-dups"
-        | "cl-remove" | "cl-delete" | "cl-remove-duplicates" | "cl-delete-duplicates"
-        | "cl-remove-if" | "cl-remove-if-not" | "cl-delete-if" | "cl-delete-if-not"
-            if args.len() >= 1 => {
+        "delete"
+        | "delq"
+        | "remove"
+        | "remq"
+        | "delete-dups"
+        | "cl-remove"
+        | "cl-delete"
+        | "cl-remove-duplicates"
+        | "cl-delete-duplicates"
+        | "cl-remove-if"
+        | "cl-remove-if-not"
+        | "cl-delete-if"
+        | "cl-delete-if-not"
+            if args.len() >= 1 =>
+        {
             // delete/remove/delq/remq: list is args[1]
             // delete-dups: list is args[0]
             if matches!(args.last()?, SsaConst::Nil) {
@@ -1300,21 +1535,20 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
-        "assoc" | "assq" | "rassoc" | "rassq" | "member" | "memq" | "memql"
-        | "cl-assoc" | "cl-assq" | "cl-rassoc" | "cl-rassq"
-        | "cl-assoc-if" | "cl-assoc-if-not" | "cl-rassoc-if" | "cl-rassoc-if-not"
-        | "cl-member-if" | "cl-member-if-not" | "cl-assoc-string"
-        | "assoc-string"
-        | "alist-get"
-            if args.len() >= 2 => {
+        }
+        "assoc" | "assq" | "rassoc" | "rassq" | "member" | "memq" | "memql" | "cl-assoc"
+        | "cl-assq" | "cl-rassoc" | "cl-rassq" | "cl-assoc-if" | "cl-assoc-if-not"
+        | "cl-rassoc-if" | "cl-rassoc-if-not" | "cl-member-if" | "cl-member-if-not"
+        | "cl-assoc-string" | "assoc-string" | "alist-get"
+            if args.len() >= 2 =>
+        {
             // All alist/list search functions return nil when the list/alist is nil
             if matches!(args[1], SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
             }
-        },
+        }
         "cl-endp" if args.len() == 1 => match args[0] {
             SsaConst::Nil => Some(SsaConst::True),
             _ => None, // non-nil may signal error, let runtime handle
@@ -1345,35 +1579,49 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "sort" | "cl-sort" | "cl-stable-sort" if args.len() == 2 => match args[0] {
             SsaConst::Nil => Some(SsaConst::Nil),
             _ => None,
         },
-        "cl-subst" | "cl-subst-if" | "cl-subst-if-not"
-        | "cl-nsubst" | "cl-nsubst-if" | "cl-nsubst-if-not"
-        | "cl-substitute" | "cl-substitute-if" | "cl-substitute-if-not"
-        | "cl-nsubstitute" | "cl-nsubstitute-if" | "cl-nsubstitute-if-not"
-            if args.len() >= 3 => {
+        "cl-subst"
+        | "cl-subst-if"
+        | "cl-subst-if-not"
+        | "cl-nsubst"
+        | "cl-nsubst-if"
+        | "cl-nsubst-if-not"
+        | "cl-substitute"
+        | "cl-substitute-if"
+        | "cl-substitute-if-not"
+        | "cl-nsubstitute"
+        | "cl-nsubstitute-if"
+        | "cl-nsubstitute-if-not"
+            if args.len() >= 3 =>
+        {
             // (cl-subst NEW OLD TREE) — tree is args[2]
             if matches!(args[2], SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
             }
-        },
-        "cl-intersection" | "cl-nintersection"
-        | "cl-union" | "cl-nunion"
-        | "cl-set-difference" | "cl-nset-difference"
-        | "cl-set-exclusive-or" | "cl-nset-exclusive-or"
-            if args.len() >= 2 => {
+        }
+        "cl-intersection"
+        | "cl-nintersection"
+        | "cl-union"
+        | "cl-nunion"
+        | "cl-set-difference"
+        | "cl-nset-difference"
+        | "cl-set-exclusive-or"
+        | "cl-nset-exclusive-or"
+            if args.len() >= 2 =>
+        {
             // (cl-intersection LIST1 LIST2) — if LIST1 is nil, result is nil
             if matches!(args[0], SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
             }
-        },
+        }
         "cl-reduce" if args.len() == 2 => {
             // Only fold without :initial-value keyword; (cl-reduce FN nil) → nil
             if matches!(args[1], SsaConst::Nil) {
@@ -1381,17 +1629,18 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
-        "cl-find" | "cl-position" | "cl-find-if" | "cl-position-if"
-        | "cl-find-if-not" | "cl-position-if-not"
-            if args.len() >= 2 => {
+        }
+        "cl-find" | "cl-position" | "cl-find-if" | "cl-position-if" | "cl-find-if-not"
+        | "cl-position-if-not"
+            if args.len() >= 2 =>
+        {
             // (cl-find ITEM SEQ) — seq is args[1]; nil seq → nil
             if matches!(args[1], SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
             }
-        },
+        }
         "cl-sublis" | "cl-nsublis" if args.len() >= 2 => {
             // (cl-sublis ALIST TREE) — tree is args[1]
             if matches!(args[1], SsaConst::Nil) {
@@ -1399,11 +1648,11 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
-        "mapcar" | "mapc" | "cl-mapcar" | "cl-mapc" | "mapconcat"
-        | "mapcan" | "mapcon" | "mapl" | "maplist" | "cl-mapcan" | "cl-mapcon"
-        | "cl-mapl" | "cl-maplist"
-            if args.len() >= 2 => {
+        }
+        "mapcar" | "mapc" | "cl-mapcar" | "cl-mapc" | "mapconcat" | "mapcan" | "mapcon"
+        | "mapl" | "maplist" | "cl-mapcan" | "cl-mapcon" | "cl-mapl" | "cl-maplist"
+            if args.len() >= 2 =>
+        {
             // (mapcar FN nil) → nil, (mapconcat FN nil SEP) → ""
             if matches!(args[1], SsaConst::Nil) {
                 if name == "mapconcat" {
@@ -1414,7 +1663,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "cl-merge" if args.len() >= 4 => {
             // (cl-merge TYPE SEQ1 SEQ2 PRED) — if both seqs nil, return nil
             if matches!(args[1], SsaConst::Nil) && matches!(args[2], SsaConst::Nil) {
@@ -1422,7 +1671,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "cl-count" | "cl-count-if" | "cl-count-if-not" if args.len() >= 2 => {
             // (cl-count ITEM SEQ) — seq is args[1]; nil seq → 0
             if matches!(args[1], SsaConst::Nil) {
@@ -1430,7 +1679,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "cl-every" | "cl-notany" if args.len() >= 2 => {
             // (cl-every PRED nil) → t  (universal quantifier: all 0 elements pass)
             // (cl-notany PRED nil) → t  (no element fails the test in empty set)
@@ -1439,7 +1688,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "cl-tree-equal" if args.len() >= 2 => {
             // (cl-tree-equal nil nil) → t
             if matches!(args[0], SsaConst::Nil) && matches!(args[1], SsaConst::Nil) {
@@ -1447,7 +1696,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "cl-some" | "cl-notevery" if args.len() >= 2 => {
             // (cl-some PRED nil) → nil  (existential: no element satisfies)
             // (cl-notevery PRED nil) → nil  (not every element... over empty set)
@@ -1456,7 +1705,7 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
+        }
         "nconc" if args.len() >= 1 => {
             // (nconc) → nil, (nconc nil ...) → nil
             // If all args are nil, result is nil
@@ -1465,17 +1714,18 @@ fn try_fold_call_named(name: &str, args: &[&SsaConst]) -> Option<SsaConst> {
             } else {
                 None
             }
-        },
-        "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr"
-        | "caaar" | "caadr" | "cadar" | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr"
-        | "nth" | "nthcdr" | "last" | "butlast" | "nbutlast"
-            if args.len() >= 1 => {
+        }
+        "car" | "cdr" | "caar" | "cadr" | "cdar" | "cddr" | "caaar" | "caadr" | "cadar"
+        | "caddr" | "cdaar" | "cdadr" | "cddar" | "cdddr" | "nth" | "nthcdr" | "last"
+        | "butlast" | "nbutlast"
+            if args.len() >= 1 =>
+        {
             if matches!(args[0], SsaConst::Nil) {
                 Some(SsaConst::Nil)
             } else {
                 None
             }
-        },
+        }
         "format" | "format-message" if !args.is_empty() => match args[0] {
             SsaConst::String(s) if !s.contains('%') => Some(SsaConst::String(s.clone())),
             _ => None,
@@ -1538,12 +1788,14 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
         for (bid, block) in function.blocks.iter() {
             if let SsaTerminator::Jump { target, args } = &block.terminator
                 && args.is_empty()
-                    && let Some(pred_list) = preds.get(target)
-                        && pred_list.len() == 1 && pred_list[0] == bid
-                            && function.blocks[*target].params.is_empty() {
-                                merge = Some((bid, *target));
-                                break;
-                            }
+                && let Some(pred_list) = preds.get(target)
+                && pred_list.len() == 1
+                && pred_list[0] == bid
+                && function.blocks[*target].params.is_empty()
+            {
+                merge = Some((bid, *target));
+                break;
+            }
         }
         let (src, dst) = match merge {
             Some(m) => m,
@@ -1570,9 +1822,10 @@ pub fn block_merging(function: &mut SsaFunction) -> OptOutput {
         // Redirect any other jumps to the merged block so they point to src
         for (_, block) in function.blocks.iter_mut() {
             if let SsaTerminator::Jump { target, .. } = &mut block.terminator
-                && *target == dst {
-                    *target = src;
-                }
+                && *target == dst
+            {
+                *target = src;
+            }
             if let SsaTerminator::BranchIfNil {
                 then_target,
                 else_target,

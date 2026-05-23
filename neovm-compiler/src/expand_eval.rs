@@ -278,26 +278,41 @@ impl MacroEval {
             }
 
             // Thread primitives — passed through to the HIR compiler.
-            Some("make-thread") | Some("thread-yield") | Some("thread-join")
-            | Some("thread-signal") | Some("current-thread") | Some("thread-alive-p") => {
+            Some("make-thread")
+            | Some("thread-yield")
+            | Some("thread-join")
+            | Some("thread-signal")
+            | Some("current-thread")
+            | Some("thread-alive-p") => {
                 let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
                 Ok(surface_to_value(&form))
             }
 
             // Atom and Agent primitives — passed through to HIR.
-            Some("make-atom") | Some("atom-swap!") | Some("atom-reset!")
-            | Some("atom-deref") | Some("atom-compare-and-set!")
-            | Some("make-agent") | Some("send") | Some("send-off")
-            | Some("agent-await") | Some("agent-deref") | Some("agent-error")
+            Some("make-atom")
+            | Some("atom-swap!")
+            | Some("atom-reset!")
+            | Some("atom-deref")
+            | Some("atom-compare-and-set!")
+            | Some("make-agent")
+            | Some("send")
+            | Some("send-off")
+            | Some("agent-await")
+            | Some("agent-deref")
+            | Some("agent-error")
             | Some("restart-agent") => {
                 let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
                 Ok(surface_to_value(&form))
             }
 
             // Mutex and condition variable primitives.
-            Some("make-mutex") | Some("with-mutex") | Some("mutex-lock")
-            | Some("mutex-unlock") | Some("make-condition-variable")
-            | Some("condition-wait") | Some("condition-notify")
+            Some("make-mutex")
+            | Some("with-mutex")
+            | Some("mutex-lock")
+            | Some("mutex-unlock")
+            | Some("make-condition-variable")
+            | Some("condition-wait")
+            | Some("condition-notify")
             | Some("condition-notify-all") => {
                 let form = SurfaceForm::new(SurfaceKind::List(items.to_vec()), span);
                 Ok(surface_to_value(&form))
@@ -586,14 +601,12 @@ impl MacroEval {
                     }
                 })
             }
-            Some("string-equal") => {
-                self.eval_binary_pred(span, &items[1..], env, |a, b| {
-                    match (a.as_string(), b.as_string()) {
-                        (Some(sa), Some(sb)) => sa.eq_ignore_ascii_case(sb),
-                        _ => false,
-                    }
-                })
-            }
+            Some("string-equal") => self.eval_binary_pred(span, &items[1..], env, |a, b| {
+                match (a.as_string(), b.as_string()) {
+                    (Some(sa), Some(sb)) => sa.eq_ignore_ascii_case(sb),
+                    _ => false,
+                }
+            }),
             Some("string-prefix-p") => {
                 if items.len() < 3 {
                     self.error(span, "string-prefix-p requires at least two arguments");
@@ -726,22 +739,23 @@ impl MacroEval {
                 // return the bindings list if so, nil otherwise.
                 if items.len() >= 3
                     && let Ok(binding_vals) = self.eval(&items[1], env)
-                        && let Some(binding_pairs) = binding_vals.to_vec() {
-                            let binding_names: Vec<String> = binding_pairs
-                                .iter()
-                                .filter_map(|pair| {
-                                    let car = pair.car();
-                                    if let MacroValue::Symbol(s) = car {
-                                        Some(s)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect();
-                            if form_references_bindings(&items[2], &binding_names) {
-                                return Ok(binding_vals);
+                    && let Some(binding_pairs) = binding_vals.to_vec()
+                {
+                    let binding_names: Vec<String> = binding_pairs
+                        .iter()
+                        .filter_map(|pair| {
+                            let car = pair.car();
+                            if let MacroValue::Symbol(s) = car {
+                                Some(s)
+                            } else {
+                                None
                             }
-                        }
+                        })
+                        .collect();
+                    if form_references_bindings(&items[2], &binding_names) {
+                        return Ok(binding_vals);
+                    }
+                }
                 Ok(MacroValue::Nil)
             }
 
@@ -1428,7 +1442,9 @@ impl MacroEval {
                     Err(_) => {
                         // Body signalled an error — try each handler pair.
                         for chunk in handlers.chunks(2) {
-                            if chunk.len() < 2 { break; }
+                            if chunk.len() < 2 {
+                                break;
+                            }
                             // Evaluate handler body (skip condition check —
                             // in macro expansion any error triggers the first handler).
                             let handler_body = &chunk[1];
@@ -1714,7 +1730,9 @@ impl MacroEval {
                         pos += 1;
                         if pos < items.len() && items[pos].symbol_name() == Some("into") {
                             pos += 1;
-                            if pos < items.len() { pos += 1; }
+                            if pos < items.len() {
+                                pos += 1;
+                            }
                         }
                     }
                 }
@@ -1777,23 +1795,38 @@ impl MacroEval {
                 }
                 Some("always") => {
                     pos += 1;
-                    if pos < items.len() { always_cond = Some(items[pos].clone()); pos += 1; }
+                    if pos < items.len() {
+                        always_cond = Some(items[pos].clone());
+                        pos += 1;
+                    }
                 }
                 Some("never") => {
                     pos += 1;
-                    if pos < items.len() { never_cond = Some(items[pos].clone()); pos += 1; }
+                    if pos < items.len() {
+                        never_cond = Some(items[pos].clone());
+                        pos += 1;
+                    }
                 }
                 Some("thereis") => {
                     pos += 1;
-                    if pos < items.len() { thereis_cond = Some(items[pos].clone()); pos += 1; }
+                    if pos < items.len() {
+                        thereis_cond = Some(items[pos].clone());
+                        pos += 1;
+                    }
                 }
                 Some("maximize") => {
                     pos += 1;
-                    if pos < items.len() { maximize_expr = Some(items[pos].clone()); pos += 1; }
+                    if pos < items.len() {
+                        maximize_expr = Some(items[pos].clone());
+                        pos += 1;
+                    }
                 }
                 Some("minimize") => {
                     pos += 1;
-                    if pos < items.len() { minimize_expr = Some(items[pos].clone()); pos += 1; }
+                    if pos < items.len() {
+                        minimize_expr = Some(items[pos].clone());
+                        pos += 1;
+                    }
                 }
                 Some("repeat") => {
                     pos += 1;
@@ -1817,9 +1850,19 @@ impl MacroEval {
                         pos += 1;
                         let init = if pos < items.len() && items[pos].symbol_name() == Some("=") {
                             pos += 1;
-                            if pos < items.len() { let v = Some(items[pos].clone()); pos += 1; v } else { None }
-                        } else { None };
-                        if let Some(n) = name { with_vars.push((n, init)); }
+                            if pos < items.len() {
+                                let v = Some(items[pos].clone());
+                                pos += 1;
+                                v
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(n) = name {
+                            with_vars.push((n, init));
+                        }
                     }
                 }
                 Some("while") => {
@@ -1874,10 +1917,30 @@ impl MacroEval {
                     pos += 1;
                     while pos < items.len() {
                         let kw = items[pos].symbol_name().unwrap_or("");
-                        if matches!(kw, "collect" | "sum" | "count" | "do" | "finally"
-                            | "while" | "until" | "if" | "when" | "return"
-                            | "for" | "with" | "always" | "never" | "thereis"
-                            | "initially" | "repeat" | "append" | "nconc") { break; }
+                        if matches!(
+                            kw,
+                            "collect"
+                                | "sum"
+                                | "count"
+                                | "do"
+                                | "finally"
+                                | "while"
+                                | "until"
+                                | "if"
+                                | "when"
+                                | "return"
+                                | "for"
+                                | "with"
+                                | "always"
+                                | "never"
+                                | "thereis"
+                                | "initially"
+                                | "repeat"
+                                | "append"
+                                | "nconc"
+                        ) {
+                            break;
+                        }
                         initially_body.push(items[pos].clone());
                         pos += 1;
                     }
@@ -1932,12 +1995,21 @@ impl MacroEval {
         }
 
         // Setup iteration state
-        let list_val = for_list.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let list_val = for_list
+            .as_ref()
+            .map(|expr| self.eval(expr, env))
+            .transpose()?;
         let mut current = list_val.unwrap_or(MacroValue::Nil);
 
         // Numeric iteration: from/start value
-        let from_val = for_from.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
-        let to_val = for_to.as_ref().map(|expr| self.eval(expr, env)).transpose()?;
+        let from_val = for_from
+            .as_ref()
+            .map(|expr| self.eval(expr, env))
+            .transpose()?;
+        let to_val = for_to
+            .as_ref()
+            .map(|expr| self.eval(expr, env))
+            .transpose()?;
         let to_int = to_val.as_ref().and_then(|v| v.as_int());
         let step_val: i64 = if let Some(ref step) = step_fn {
             // Evaluate the step expression once for numeric for
@@ -1954,8 +2026,20 @@ impl MacroEval {
         fn numeric_continue(idx: i64, to: Option<i64>, dir: &str, step: i64) -> bool {
             let Some(end) = to else { return true };
             match dir {
-                "to" | "upto" => if step > 0 { idx <= end } else { idx >= end },
-                "downto" => if step > 0 { idx >= end } else { idx <= end },
+                "to" | "upto" => {
+                    if step > 0 {
+                        idx <= end
+                    } else {
+                        idx >= end
+                    }
+                }
+                "downto" => {
+                    if step > 0 {
+                        idx >= end
+                    } else {
+                        idx <= end
+                    }
+                }
                 "below" => idx < end,
                 "above" => idx > end,
                 _ => true,
@@ -2021,36 +2105,56 @@ impl MacroEval {
             // while/until conditions
             let mut should_break = false;
             for cond in &while_conds {
-                if !self.eval(cond, env)?.is_truthy() { should_break = true; break; }
+                if !self.eval(cond, env)?.is_truthy() {
+                    should_break = true;
+                    break;
+                }
             }
             if !should_break {
                 for cond in &until_conds {
-                    if self.eval(cond, env)?.is_truthy() { should_break = true; break; }
+                    if self.eval(cond, env)?.is_truthy() {
+                        should_break = true;
+                        break;
+                    }
                 }
             }
-            if should_break { break; }
+            if should_break {
+                break;
+            }
 
             // always: if expr is nil, return nil immediately
             if let Some(ref cond) = always_cond
-                && !self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
+                && !self.eval(cond, env)?.is_truthy()
+            {
+                return Ok(MacroValue::Nil);
+            }
             // never: if expr is truthy, return nil immediately
             if let Some(ref cond) = never_cond
-                && self.eval(cond, env)?.is_truthy() { return Ok(MacroValue::Nil); }
+                && self.eval(cond, env)?.is_truthy()
+            {
+                return Ok(MacroValue::Nil);
+            }
             // thereis: if expr is non-nil, return it immediately
             if let Some(ref cond) = thereis_cond {
                 let v = self.eval(cond, env)?;
-                if v.is_truthy() { return Ok(v); }
+                if v.is_truthy() {
+                    return Ok(v);
+                }
             }
             if let Some(ref expr) = maximize_expr {
                 let v = self.eval(expr, env)?;
                 let n = v.as_int().unwrap_or(0);
-                if sum_exprs.is_empty() { sum_result = n; }
+                if sum_exprs.is_empty() {
+                    sum_result = n;
+                }
                 sum_result = sum_result.max(n);
             }
             if let Some(ref expr) = minimize_expr {
                 let v = self.eval(expr, env)?;
                 let n = v.as_int().unwrap_or(0);
-                if sum_exprs.is_empty() { sum_result = n; }
+                if sum_exprs.is_empty() {
+                    sum_result = n;
+                }
                 sum_result = sum_result.min(n);
             }
 
@@ -2924,7 +3028,11 @@ impl MacroEval {
             values.push(val);
         }
         if has_float {
-            let mut result = if is_max { f64::NEG_INFINITY } else { f64::INFINITY };
+            let mut result = if is_max {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            };
             for v in &values {
                 let f = match v {
                     MacroValue::Float(f) => *f,
@@ -3221,14 +3329,15 @@ impl MacroEval {
         // (function name) — function-quoted symbol: extract the name
         if let MacroValue::Cons(pair) = func_val
             && let MacroValue::Symbol(ref fn_sym) = pair.car
-                && fn_sym == "function"
-                    && let MacroValue::Cons(rest) = &pair.cdr
-                        && let MacroValue::Symbol(ref name) = rest.car {
-                            if let Some(func) = env.lookup_function(name).cloned() {
-                                return self.call_macro_function(&func, args, env);
-                            }
-                            return self.call_builtin_predicate(span, name, args);
-                        }
+            && fn_sym == "function"
+            && let MacroValue::Cons(rest) = &pair.cdr
+            && let MacroValue::Symbol(ref name) = rest.car
+        {
+            if let Some(func) = env.lookup_function(name).cloned() {
+                return self.call_macro_function(&func, args, env);
+            }
+            return self.call_builtin_predicate(span, name, args);
+        }
         // Try lambda value
         if let Some((params, body_forms)) = extract_lambda(func_val) {
             let func = MacroFunction {
@@ -3318,9 +3427,7 @@ impl MacroEval {
                     Ok(MacroValue::Nil)
                 }
             }
-            "char-or-string-p" => Ok(MacroValue::from_bool(
-                args[0].is_string(),
-            )),
+            "char-or-string-p" => Ok(MacroValue::from_bool(args[0].is_string())),
             "string-or-null-p" => Ok(MacroValue::from_bool(
                 args[0].is_nil() || args[0].is_string(),
             )),
@@ -3334,8 +3441,9 @@ impl MacroEval {
                     Ok(MacroValue::Nil)
                 }
             }
-            "autoloadp" | "bignump" | "bool-vector-p" | "bufferp"
-            | "recordp" | "char-table-p" => Ok(MacroValue::Nil),
+            "autoloadp" | "bignump" | "bool-vector-p" | "bufferp" | "recordp" | "char-table-p" => {
+                Ok(MacroValue::Nil)
+            }
             _ => Ok(MacroValue::Nil),
         }
     }

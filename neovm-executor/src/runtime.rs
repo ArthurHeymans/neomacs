@@ -365,7 +365,8 @@ impl Runtime {
         });
         let addr = (&mut *cell as *mut LexicalCell) as usize;
         self.object_index.insert(addr, HeapKind::LexicalCell);
-        self.lexical_cell_index.insert(addr, self.lexical_cells.len());
+        self.lexical_cell_index
+            .insert(addr, self.lexical_cells.len());
         self.lexical_cells.push(cell);
         LispValue::from_heap_addr(addr)
     }
@@ -461,33 +462,46 @@ impl Runtime {
 
     #[inline(always)]
     pub fn is_cons(&self, value: LispValue) -> bool {
-        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Cons))
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Cons))
     }
 
     #[inline(always)]
     pub fn is_symbol(&self, value: LispValue) -> bool {
-        value.is_nil() || value.is_true()
-            || value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Symbol))
+        value.is_nil()
+            || value.is_true()
+            || value
+                .heap_addr()
+                .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Symbol))
     }
 
     #[inline(always)]
     pub fn is_string(&self, value: LispValue) -> bool {
-        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::String))
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::String))
     }
 
     #[inline(always)]
     pub fn is_vector(&self, value: LispValue) -> bool {
-        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Vector))
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Vector))
     }
 
     #[inline(always)]
     pub fn is_hash_table(&self, value: LispValue) -> bool {
-        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::HashTable))
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::HashTable))
     }
 
     #[inline(always)]
     pub fn is_function(&self, value: LispValue) -> bool {
-        value.heap_addr().is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Function))
+        value
+            .heap_addr()
+            .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Function))
     }
 
     pub fn float(&mut self, value: f64) -> LispValue {
@@ -517,7 +531,10 @@ impl Runtime {
             value,
         })?;
         if self.heap_kind(addr) != Some(HeapKind::Float) {
-            return Err(RuntimeError::WrongTypeArgument { expected: "float", value });
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "float",
+                value,
+            });
         }
         let obj: &FloatObj = unsafe { Self::deref_heap(addr) };
         Ok(obj.value)
@@ -580,7 +597,10 @@ impl Runtime {
             value,
         })?;
         if self.heap_kind(addr) != Some(HeapKind::Bignum) {
-            return Err(RuntimeError::WrongTypeArgument { expected: "bignum", value });
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "bignum",
+                value,
+            });
         }
         let obj: &BignumObj = unsafe { Self::deref_heap(addr) };
         Ok(obj.value.clone())
@@ -596,7 +616,9 @@ impl Runtime {
         }
         // Fall back to Vec-based allocation
         let mut boxed = Box::new(AtomObj {
-            header: HeapHeader { kind: HeapKind::Atom },
+            header: HeapHeader {
+                kind: HeapKind::Atom,
+            },
             value: std::sync::atomic::AtomicU64::new(val_u64),
         });
         let addr = (&mut *boxed as *mut AtomObj) as usize;
@@ -609,7 +631,9 @@ impl Runtime {
         let mut mutator = self.gc_heap.mutator();
         let mut scope = mutator.handle_scope();
         let obj = AtomObj {
-            header: HeapHeader { kind: HeapKind::Atom },
+            header: HeapHeader {
+                kind: HeapKind::Atom,
+            },
             value: std::sync::atomic::AtomicU64::new(val_u64),
         };
         let root = mutator.alloc(&mut scope, obj).ok()?;
@@ -634,10 +658,16 @@ impl Runtime {
     }
 
     /// Atomically set the atom to `new_value`. Returns the new value.
-    pub fn atom_reset(&self, atom: LispValue, new_value: LispValue) -> Result<LispValue, RuntimeError> {
+    pub fn atom_reset(
+        &self,
+        atom: LispValue,
+        new_value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
         let obj = self.atom_obj(atom)?;
-        obj.value
-            .store(new_value.to_abi_i64() as u64, std::sync::atomic::Ordering::Relaxed);
+        obj.value.store(
+            new_value.to_abi_i64() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         Ok(new_value)
     }
 
@@ -723,10 +753,13 @@ impl Runtime {
     /// Read the current agent value (non-blocking, may be stale).
     pub fn agent_deref(&self, agent: LispValue) -> Result<LispValue, RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         Ok(inner.value)
     }
 
@@ -739,10 +772,13 @@ impl Runtime {
         via_pool: bool,
     ) -> Result<LispValue, RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let mut inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         inner.queue.push(AgentAction {
             func,
             args: args.to_vec(),
@@ -754,12 +790,18 @@ impl Runtime {
     /// Pop the next pending action for this agent.  Returns `None` if
     /// the queue is empty.  The caller (interpreter) executes the action
     /// and calls `agent_update` with the result.
-    pub(crate) fn agent_pop_action(&self, agent: LispValue) -> Result<Option<AgentAction>, RuntimeError> {
+    pub(crate) fn agent_pop_action(
+        &self,
+        agent: LispValue,
+    ) -> Result<Option<AgentAction>, RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let mut inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         if inner.queue.is_empty() {
             return Ok(None);
         }
@@ -775,10 +817,13 @@ impl Runtime {
         error: Option<LispValue>,
     ) -> Result<(), RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let mut inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let mut inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         if let Some(err) = error {
             inner.error = Some(err);
         } else {
@@ -789,19 +834,25 @@ impl Runtime {
 
     pub fn agent_has_actions(&self, agent: LispValue) -> Result<bool, RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         Ok(!inner.queue.is_empty())
     }
 
     pub fn agent_error(&self, agent: LispValue) -> Result<Option<LispValue>, RuntimeError> {
         let obj = self.agent_obj(agent)?;
-        let inner = obj.inner.lock().map_err(|_| RuntimeError::WrongTypeArgument {
-            expected: "agent (not poisoned)",
-            value: agent,
-        })?;
+        let inner = obj
+            .inner
+            .lock()
+            .map_err(|_| RuntimeError::WrongTypeArgument {
+                expected: "agent (not poisoned)",
+                value: agent,
+            })?;
         Ok(inner.error)
     }
 
@@ -1191,8 +1242,12 @@ impl Runtime {
 
     pub fn default_value(&self, symbol: LispValue) -> Result<LispValue, RuntimeError> {
         // Bypass dynamic bindings — return the symbol's global value cell directly.
-        if symbol.is_nil() { return Ok(LispValue::NIL); }
-        if symbol.is_true() { return Ok(LispValue::TRUE); }
+        if symbol.is_nil() {
+            return Ok(LispValue::NIL);
+        }
+        if symbol.is_true() {
+            return Ok(LispValue::TRUE);
+        }
         let sym = self.expect_symbol(symbol)?;
         sym.value.ok_or_else(|| RuntimeError::VoidVariable {
             name: sym.name.clone(),
@@ -1201,15 +1256,26 @@ impl Runtime {
 
     pub fn default_boundp(&self, symbol: LispValue) -> bool {
         // Bypass dynamic bindings — check symbol's global value cell only.
-        if symbol.is_nil() || symbol.is_true() { return true; }
-        self.expect_symbol(symbol).map_or(false, |s| s.value.is_some())
+        if symbol.is_nil() || symbol.is_true() {
+            return true;
+        }
+        self.expect_symbol(symbol)
+            .map_or(false, |s| s.value.is_some())
     }
 
-    pub fn set_default(&mut self, symbol: LispValue, value: LispValue) -> Result<LispValue, RuntimeError> {
+    pub fn set_default(
+        &mut self,
+        symbol: LispValue,
+        value: LispValue,
+    ) -> Result<LispValue, RuntimeError> {
         // Bypass dynamic bindings — set the symbol's global value cell directly.
         if symbol.is_nil() || symbol.is_true() {
             return Err(RuntimeError::ConstantSymbol {
-                name: if symbol.is_nil() { "nil".into() } else { "t".into() },
+                name: if symbol.is_nil() {
+                    "nil".into()
+                } else {
+                    "t".into()
+                },
             });
         }
         self.expect_symbol_mut(symbol)?.value = Some(value);
@@ -1335,12 +1401,23 @@ impl Runtime {
         }
     }
 
-    pub fn save_excursion_state(&self) -> (usize, usize, Option<usize>, Option<usize>, Option<usize>) {
+    pub fn save_excursion_state(
+        &self,
+    ) -> (usize, usize, Option<usize>, Option<usize>, Option<usize>) {
         let buf = self.current_buffer();
-        (self.current_buffer, buf.point, buf.mark, buf.narrowed_start, buf.narrowed_end)
+        (
+            self.current_buffer,
+            buf.point,
+            buf.mark,
+            buf.narrowed_start,
+            buf.narrowed_end,
+        )
     }
 
-    pub fn restore_excursion_state(&mut self, state: (usize, usize, Option<usize>, Option<usize>, Option<usize>)) {
+    pub fn restore_excursion_state(
+        &mut self,
+        state: (usize, usize, Option<usize>, Option<usize>, Option<usize>),
+    ) {
         if state.0 < self.buffers.len() {
             self.current_buffer = state.0;
             let buf = self.current_buffer_mut();
@@ -1352,7 +1429,9 @@ impl Runtime {
     }
 
     pub fn kill_buffer(&mut self, name: &str) -> bool {
-        let Some(idx) = self.get_buffer(name) else { return false };
+        let Some(idx) = self.get_buffer(name) else {
+            return false;
+        };
         if self.current_buffer == idx {
             self.current_buffer = if idx > 0 { idx - 1 } else { 0 };
         }
@@ -1650,10 +1729,16 @@ impl Runtime {
         let table_object = self.expect_hash_table(table)?;
         match table_object.test {
             HashTableTest::Equal => {
-                let pos = table_object.equal_entries.iter().position(|entry| self.equal(entry.key, key));
+                let pos = table_object
+                    .equal_entries
+                    .iter()
+                    .position(|entry| self.equal(entry.key, key));
                 Ok(pos.map(|i| table_object.equal_entries[i].value))
             }
-            _ => Ok(table_object.entries.get(&(key.to_abi_i64() as u64)).copied()),
+            _ => Ok(table_object
+                .entries
+                .get(&(key.to_abi_i64() as u64))
+                .copied()),
         }
     }
 
@@ -1726,7 +1811,11 @@ impl Runtime {
         let ht = self.expect_hash_table(table)?;
         match ht.test {
             HashTableTest::Equal => Ok(ht.equal_entries.iter().map(|e| (e.key, e.value)).collect()),
-            _ => Ok(ht.entries.iter().map(|(k, v)| (LispValue::from_abi_i64(*k as i64), *v)).collect()),
+            _ => Ok(ht
+                .entries
+                .iter()
+                .map(|(k, v)| (LispValue::from_abi_i64(*k as i64), *v))
+                .collect()),
         }
     }
 
@@ -1832,50 +1921,120 @@ impl Runtime {
     }
 
     fn expect_string(&self, value: LispValue) -> Result<&LispString, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "stringp", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::String) { return Err(RuntimeError::WrongTypeArgument { expected: "stringp", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "stringp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::String) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "stringp",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_vector(&self, value: LispValue) -> Result<&VectorObject, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "vectorp", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::Vector) { return Err(RuntimeError::WrongTypeArgument { expected: "vectorp", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "vectorp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Vector) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_vector_mut(&mut self, value: LispValue) -> Result<&mut VectorObject, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "vectorp", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::Vector) { return Err(RuntimeError::WrongTypeArgument { expected: "vectorp", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "vectorp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Vector) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "vectorp",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_hash_table(&self, value: LispValue) -> Result<&HashTableObject, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::HashTable) { return Err(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "hash-table-p",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::HashTable) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap(addr) })
     }
 
-    fn expect_hash_table_mut(&mut self, value: LispValue) -> Result<&mut HashTableObject, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::HashTable) { return Err(RuntimeError::WrongTypeArgument { expected: "hash-table-p", value }); }
+    fn expect_hash_table_mut(
+        &mut self,
+        value: LispValue,
+    ) -> Result<&mut HashTableObject, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "hash-table-p",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::HashTable) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "hash-table-p",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
     fn expect_function(&self, value: LispValue) -> Result<&FunctionObject, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "functionp", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::Function) { return Err(RuntimeError::WrongTypeArgument { expected: "functionp", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "functionp",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::Function) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "functionp",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap(addr) })
     }
 
     fn expect_lexical_cell(&self, value: LispValue) -> Result<&LexicalCell, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) { return Err(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value }); }
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "lexical-cell",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap(addr) })
     }
 
-    fn expect_lexical_cell_mut(&mut self, value: LispValue) -> Result<&mut LexicalCell, RuntimeError> {
-        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value })?;
-        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) { return Err(RuntimeError::WrongTypeArgument { expected: "lexical-cell", value }); }
+    fn expect_lexical_cell_mut(
+        &mut self,
+        value: LispValue,
+    ) -> Result<&mut LexicalCell, RuntimeError> {
+        let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
+            expected: "lexical-cell",
+            value,
+        })?;
+        if self.heap_kind(addr) != Some(HeapKind::LexicalCell) {
+            return Err(RuntimeError::WrongTypeArgument {
+                expected: "lexical-cell",
+                value,
+            });
+        }
         Ok(unsafe { Self::deref_heap_mut(addr) })
     }
 
@@ -1924,7 +2083,10 @@ impl Runtime {
         if (&**sym as *const Symbol) as usize == addr {
             return Some(sym);
         }
-        self.symbols.iter().find(|s| (&***s as *const Symbol) as usize == addr).map(|s| &**s)
+        self.symbols
+            .iter()
+            .find(|s| (&***s as *const Symbol) as usize == addr)
+            .map(|s| &**s)
     }
 
     fn symbol_by_addr_mut(&mut self, addr: usize) -> Option<&mut Symbol> {
@@ -1951,7 +2113,10 @@ impl Runtime {
         if (&**s as *const LispString) as usize == addr {
             return Some(s);
         }
-        self.strings.iter().find(|s| (&***s as *const LispString) as usize == addr).map(|s| &**s)
+        self.strings
+            .iter()
+            .find(|s| (&***s as *const LispString) as usize == addr)
+            .map(|s| &**s)
     }
 
     pub fn string_set_char(
@@ -2133,7 +2298,10 @@ impl Runtime {
         if (&**obj as *const FloatObj) as usize == addr {
             return Some(obj);
         }
-        self.floats.iter().find(|o| (&***o as *const FloatObj) as usize == addr).map(|o| &**o)
+        self.floats
+            .iter()
+            .find(|o| (&***o as *const FloatObj) as usize == addr)
+            .map(|o| &**o)
     }
 
     fn plist_pair(&self, pair_cell: LispValue) -> Option<(LispValue, LispValue, LispValue)> {
@@ -2383,7 +2551,10 @@ impl Runtime {
         if let Some(addr) = value.heap_addr()
             && let Some(table) = self.hash_table_by_addr(addr)
         {
-            return format!("#<hash-table count {}>", table.entries.len() + table.equal_entries.len());
+            return format!(
+                "#<hash-table count {}>",
+                table.entries.len() + table.equal_entries.len()
+            );
         }
         if self.is_function(value) {
             return "#<function>".to_string();

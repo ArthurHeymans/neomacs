@@ -10,7 +10,11 @@
 //! In the native threading model (Phase 3), the pool processes actions
 //! on background OS threads.
 
-use std::sync::{Arc, Mutex, mpsc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+    mpsc,
+};
 
 /// Statistics for the agent thread pool.
 #[derive(Debug, Default)]

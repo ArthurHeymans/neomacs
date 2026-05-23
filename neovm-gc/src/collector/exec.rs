@@ -5,10 +5,10 @@ use std::time::Instant;
 
 use crossbeam_deque::{Steal, Stealer, Worker};
 
+use crate::collector::MarkWorklist;
 use crate::descriptor::{EphemeronVisitor, GcErased, ObjectKey, Relocator, Tracer, WeakProcessor};
 use crate::heap::AllocError;
 use crate::index_state::{ForwardingMap, HeapIndexState, ObjectIndex, ObjectLocator};
-use crate::collector::MarkWorklist;
 use crate::object::{ObjectHeader, ObjectRecord, SpaceKind};
 use crate::object_store::{FlatReadView, ObjectReadRaw, ObjectReadView};
 use crate::plan::{CollectionKind, CollectionPhase, CollectionPlan};
@@ -207,9 +207,7 @@ impl<'a> MajorMarkSession<'a> {
 
     pub(crate) fn run_ephemeron_fixpoint_parallel(&mut self) {
         loop {
-            let changed = if self.worker_count.max(1) == 1
-                || self.ephemeron_candidates.len() <= 1
-            {
+            let changed = if self.worker_count.max(1) == 1 || self.ephemeron_candidates.len() <= 1 {
                 let mut visitor = MajorEphemeronTracer::new(&mut self.tracer);
                 for &locator in &self.ephemeron_candidates {
                     let object = self.objects.get(locator);
@@ -299,7 +297,8 @@ pub(crate) fn trace_major(
     slice_budget: usize,
     sources: impl IntoIterator<Item = GcErased>,
 ) -> (u64, u64) {
-    let mut session = MajorMarkSession::new(objects, ephemeron_candidates, worker_count, slice_budget);
+    let mut session =
+        MajorMarkSession::new(objects, ephemeron_candidates, worker_count, slice_budget);
     for source in sources {
         session.seed(source);
     }
@@ -321,7 +320,6 @@ pub(crate) fn collect_global_sources(
         .map(ObjectRecord::erased);
     roots.iter().chain(immortal_sources).collect()
 }
-
 
 /// Walk every old-gen block, enumerate dirty cards, and gather the
 /// `ObjectRecord` indices whose payload base falls inside any dirty
@@ -391,10 +389,8 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                             seen[object_index] = true;
                             roots.push(object_index);
                         }
-                        offset = crate::util::align_up(
-                            offset.saturating_add(total_size),
-                            line_bytes,
-                        );
+                        offset =
+                            crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                     }
                 } else {
                     // Cache miss: look up via ObjectIndex and populate cache.
@@ -439,10 +435,8 @@ pub(crate) fn collect_dirty_card_root_indices_with_counter(
                             seen[object_index] = true;
                             roots.push(object_index);
                         }
-                        offset = crate::util::align_up(
-                            offset.saturating_add(total_size),
-                            line_bytes,
-                        );
+                        offset =
+                            crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                         continue;
                     }
                 }
@@ -514,7 +508,8 @@ pub(crate) fn collect_dirty_card_root_locators_with_counter(
                         if seen.insert(key) {
                             roots.push(locator);
                         }
-                        offset = crate::util::align_up(offset.saturating_add(total_size), line_bytes);
+                        offset =
+                            crate::util::align_up(offset.saturating_add(total_size), line_bytes);
                     } else {
                         *counter += 1;
                         offset = crate::util::align_up(offset.saturating_add(1), line_bytes);
@@ -770,7 +765,8 @@ pub(crate) fn execute_collection_plan(
     // young-target edges that mutators marked since the last
     // cycle.
     if matches!(plan.kind, CollectionKind::Minor) {
-        let dirty_card_root_indices = collect_dirty_card_root_indices(objects, old_gen, &indexes.object_index);
+        let dirty_card_root_indices =
+            collect_dirty_card_root_indices(objects, old_gen, &indexes.object_index);
         for object_index in dirty_card_root_indices {
             sources.push(objects[object_index].erased());
         }
@@ -1637,9 +1633,7 @@ pub(crate) fn trace_minor_ephemerons(
     let mut mark_steps = 0u64;
     let mut mark_rounds = 0u64;
     loop {
-        let changed = if worker_count.max(1) == 1
-            || ephemeron_candidates.len() <= 1
-        {
+        let changed = if worker_count.max(1) == 1 || ephemeron_candidates.len() <= 1 {
             let mut visitor = MinorEphemeronTracer::new(tracer);
             for &locator in ephemeron_candidates {
                 let object = objects.get(locator);

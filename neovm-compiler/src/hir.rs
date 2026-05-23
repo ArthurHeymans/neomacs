@@ -241,11 +241,12 @@ fn hoist_top_level_defuns(forms: Vec<SurfaceForm>) -> Vec<SurfaceForm> {
             Some(items) if !items.is_empty() => {
                 let head = items[0].symbol_name().unwrap_or("");
                 match head {
-                    "progn" | "eval-and-compile" | "eval-when-compile"
-                    | "with-no-warnings" | "prog1" | "prog2" => {
+                    "progn" | "eval-and-compile" | "eval-when-compile" | "with-no-warnings"
+                    | "prog1" | "prog2" => {
                         let mut body = Vec::new();
                         for sub in &items[1..] {
-                            let is_def = sub.symbol_name()
+                            let is_def = sub
+                                .symbol_name()
                                 .map(|n| matches!(n, "defun" | "defsubst"))
                                 .unwrap_or(false)
                                 || list_items(sub)
@@ -261,17 +262,12 @@ fn hoist_top_level_defuns(forms: Vec<SurfaceForm>) -> Vec<SurfaceForm> {
                         }
                         if !body.is_empty() {
                             let new_head = SurfaceForm::new(
-                                SurfaceKind::Atom(SurfaceAtom::Symbol(
-                                    head.to_string()
-                                )),
+                                SurfaceKind::Atom(SurfaceAtom::Symbol(head.to_string())),
                                 form.span,
                             );
                             let mut new_items = vec![new_head];
                             new_items.extend(body);
-                            result.push(SurfaceForm::new(
-                                SurfaceKind::List(new_items),
-                                form.span,
-                            ));
+                            result.push(SurfaceForm::new(SurfaceKind::List(new_items), form.span));
                         }
                     }
                     _ => result.push(form),
@@ -1411,14 +1407,16 @@ impl Lowerer<'_> {
                 let elem_expr = car_expr_inner(nth_cdr_hir(accessor.clone(), i, span), span);
                 if part.symbol_name().is_some() {
                     if let Some(name) = part.symbol_name()
-                        && name != "_" && name != "nil" {
-                            bindings.push(HirBinding {
-                                name: name.to_string(),
-                                mode: BindingMode::Lexical,
-                                init: elem_expr,
-                                span,
-                            });
-                        }
+                        && name != "_"
+                        && name != "nil"
+                    {
+                        bindings.push(HirBinding {
+                            name: name.to_string(),
+                            mode: BindingMode::Lexical,
+                            init: elem_expr,
+                            span,
+                        });
+                    }
                 } else {
                     let sub_temp = format!("\0destruct.{}", self.fresh_id());
                     bindings.push(HirBinding {
@@ -1687,7 +1685,9 @@ impl Lowerer<'_> {
             || matches!(&tail[0].kind, SurfaceKind::List(items) if items.is_empty())
         {
             None
-        } else { tail[0].symbol_name().map(|name| name.to_string()) };
+        } else {
+            tail[0].symbol_name().map(|name| name.to_string())
+        };
         let body = self.lower_expr(&tail[1])?;
         let mut handlers = Vec::new();
         for handler_form in &tail[2..] {
@@ -1831,17 +1831,18 @@ impl Lowerer<'_> {
         }
         // Handle trailing single symbol: (setq foo) just returns foo's value
         if i < pairs.len()
-            && let Some(name) = pairs[i].symbol_name().map(str::to_string) {
-                let kind = if self.is_lexical(&name) {
-                    HirExprKind::LexicalGet(name)
-                } else {
-                    HirExprKind::SymbolGet(name)
-                };
-                exprs.push(HirExpr {
-                    kind,
-                    span: pairs[i].span,
-                });
-            }
+            && let Some(name) = pairs[i].symbol_name().map(str::to_string)
+        {
+            let kind = if self.is_lexical(&name) {
+                HirExprKind::LexicalGet(name)
+            } else {
+                HirExprKind::SymbolGet(name)
+            };
+            exprs.push(HirExpr {
+                kind,
+                span: pairs[i].span,
+            });
+        }
         if exprs.is_empty() {
             return nil_expr(form.span).into();
         }
@@ -2049,14 +2050,15 @@ impl Lowerer<'_> {
             // A string is only a docstring if it is followed by declare/interactive
             // or another body form — a lone string is a return value.
             if body_start == 0
-                && let SurfaceKind::Atom(SurfaceAtom::String(_)) = &form.kind {
-                    // Only treat as docstring if there is more content after it
-                    if forms.len() > 1 {
-                        body_start += 1;
-                        continue;
-                    }
-                    break;
+                && let SurfaceKind::Atom(SurfaceAtom::String(_)) = &form.kind
+            {
+                // Only treat as docstring if there is more content after it
+                if forms.len() > 1 {
+                    body_start += 1;
+                    continue;
                 }
+                break;
+            }
             let Some(items) = list_items(form) else {
                 break;
             };

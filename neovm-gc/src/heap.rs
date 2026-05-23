@@ -1,8 +1,8 @@
 use crate::background::{BackgroundCollectorConfig, BackgroundService, SharedHeap};
-use crate::mutator::BarrierKind;
 use crate::collector::collect_global_sources;
 use crate::collector_state::{CollectorSharedSnapshot, CollectorStateHandle};
 use crate::descriptor::{GcErased, Trace, TypeDesc, fixed_type_desc};
+use crate::mutator::BarrierKind;
 use crate::mutator::Mutator;
 use crate::object::{ObjectHeader, ObjectMemoryKind, ObjectRecord, SpaceKind};
 use crate::object_store::{FlatObjectStore, ObjectPublishLocal, ObjectStore, ObjectStoreReadGuard};

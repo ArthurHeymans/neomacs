@@ -202,23 +202,28 @@ impl ThreadScheduler {
 
     pub fn thread_result(&self, id: ThreadId) -> Option<LispValue> {
         let s = self.inner.lock().unwrap();
-        s.threads.iter().find(|t| t.id == id).and_then(|t| match t.state {
-            ThreadState::Dead(val) => Some(val),
-            ThreadState::Error(err) => Some(err),
-            _ => None,
-        })
+        s.threads
+            .iter()
+            .find(|t| t.id == id)
+            .and_then(|t| match t.state {
+                ThreadState::Dead(val) => Some(val),
+                ThreadState::Error(err) => Some(err),
+                _ => None,
+            })
     }
 
     pub fn thread_alive_p(&self, id: ThreadId) -> bool {
         let s = self.inner.lock().unwrap();
-        s.threads
-            .iter()
-            .any(|t| t.id == id && matches!(t.state, ThreadState::Runnable | ThreadState::Waiting(_)))
+        s.threads.iter().any(|t| {
+            t.id == id && matches!(t.state, ThreadState::Runnable | ThreadState::Waiting(_))
+        })
     }
 
     pub fn has_runnable(&self) -> bool {
         let s = self.inner.lock().unwrap();
-        s.threads.iter().any(|t| matches!(t.state, ThreadState::Runnable))
+        s.threads
+            .iter()
+            .any(|t| matches!(t.state, ThreadState::Runnable))
     }
 
     pub fn thread_count(&self) -> usize {

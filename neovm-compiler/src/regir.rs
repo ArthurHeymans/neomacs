@@ -161,8 +161,7 @@ pub enum RegInstKind {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum RegTerminator {
     Return(Option<RegId>),
     Jump {

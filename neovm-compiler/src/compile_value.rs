@@ -178,12 +178,9 @@ impl CompileValue {
                 car: Box::new(CompileValue::from_macro_value(&pair.car)),
                 cdr: Box::new(CompileValue::from_macro_value(&pair.cdr)),
             },
-            MacroValue::Vector(items) => CompileValue::Vector(
-                items
-                    .iter()
-                    .map(CompileValue::from_macro_value)
-                    .collect(),
-            ),
+            MacroValue::Vector(items) => {
+                CompileValue::Vector(items.iter().map(CompileValue::from_macro_value).collect())
+            }
         }
     }
 

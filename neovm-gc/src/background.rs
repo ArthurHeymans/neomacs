@@ -1593,7 +1593,6 @@ impl SharedHeap {
     }
 }
 
-
 /// Background collection coordinator for incremental major-mark sessions.
 #[derive(Debug, Default)]
 pub struct BackgroundCollector {
@@ -2290,9 +2289,8 @@ impl SharedBackgroundService {
     }
 }
 
-
 // ── BackgroundWorker lives in background_worker.rs ──
 pub use crate::background_worker::{
-    BackgroundWorker, BackgroundWorkerConfig, BackgroundWorkerError,
-    BackgroundWorkerStats, BackgroundWorkerStatus,
+    BackgroundWorker, BackgroundWorkerConfig, BackgroundWorkerError, BackgroundWorkerStats,
+    BackgroundWorkerStatus,
 };

@@ -398,8 +398,7 @@ fn dispatch_named_call_uncached(
         let fns = unsafe { &*ctx.functions_by_name };
         if let Some(&fid) = fns.get(name) {
             if let Some(key) = cache_key {
-                ctx.call_cache
-                    .insert(key, ResolvedCall::RegIrFunction(fid));
+                ctx.call_cache.insert(key, ResolvedCall::RegIrFunction(fid));
             }
             return crate::object_interp::execute_module_function(regir, fns, fid, args, rt)
                 .unwrap_or(LispValue::NIL)
@@ -412,8 +411,7 @@ fn dispatch_named_call_uncached(
         if let Ok(Some(func)) = rt.symbol_function(sym) {
             if rt.is_function(func) {
                 if let Some(key) = cache_key {
-                    ctx.call_cache
-                        .insert(key, ResolvedCall::SymbolFunctionCell);
+                    ctx.call_cache.insert(key, ResolvedCall::SymbolFunctionCell);
                 }
                 let regir = unsafe { &*ctx.regir };
                 let fns = unsafe { &*ctx.functions_by_name };
@@ -428,8 +426,7 @@ fn dispatch_named_call_uncached(
 
     // 4. Fall back to interpreter for higher-order ops.
     if let Some(key) = cache_key {
-        ctx.call_cache
-            .insert(key, ResolvedCall::InterpreterOnly);
+        ctx.call_cache.insert(key, ResolvedCall::InterpreterOnly);
     }
     if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {
         return value.to_abi_i64();
@@ -456,8 +453,7 @@ fn dispatch_cached_call(
         }
         ResolvedCall::SymbolFunctionCell => {
             let rodeo = unsafe { &*ctx.symbols };
-            let spur = Spur::try_from_usize(symbol_index as usize)
-                .expect("invalid symbol index");
+            let spur = Spur::try_from_usize(symbol_index as usize).expect("invalid symbol index");
             let name = rodeo.resolve(&spur);
             if let Some(sym) = rt.intern_soft(name) {
                 if let Ok(Some(func)) = rt.symbol_function(sym) {
@@ -478,8 +474,7 @@ fn dispatch_cached_call(
         }
         ResolvedCall::InterpreterOnly => {
             let rodeo = unsafe { &*ctx.symbols };
-            let spur = Spur::try_from_usize(symbol_index as usize)
-                .expect("invalid symbol index");
+            let spur = Spur::try_from_usize(symbol_index as usize).expect("invalid symbol index");
             let name = rodeo.resolve(&spur);
             if let Some(value) = unsafe { dispatch_interpreter_fallback(ctx, name, args) } {
                 value.to_abi_i64()
@@ -1052,12 +1047,18 @@ fn dispatch_primitive(
         "%" => numeric_rem(rt, args),
         "mod" => numeric_mod(rt, args),
         "random" => {
-            let limit = args.first().and_then(|v| v.as_fixnum()).unwrap_or(i64::MAX).max(1);
+            let limit = args
+                .first()
+                .and_then(|v| v.as_fixnum())
+                .unwrap_or(i64::MAX)
+                .max(1);
             use std::hash::Hasher;
             let mut h = std::collections::hash_map::DefaultHasher::new();
             h.write_u64(0);
             let hash = h.finish();
-            Some(LispValue::expect_fixnum((hash as i64).wrapping_abs() % limit))
+            Some(LispValue::expect_fixnum(
+                (hash as i64).wrapping_abs() % limit,
+            ))
         }
         "rem" => numeric_rem(rt, args),
         "abs" => numeric_abs(rt, args[0]),
@@ -1109,18 +1110,44 @@ fn dispatch_primitive(
         }
         "macrop" => Some(bool_value(
             rt.is_symbol(args[0])
-                && rt.symbol_name(args[0]).ok()
-                    .is_some_and(|name| jit_functions.contains_key(&format!("{name}-macro")))
+                && rt
+                    .symbol_name(args[0])
+                    .ok()
+                    .is_some_and(|name| jit_functions.contains_key(&format!("{name}-macro"))),
         )),
         "special-form-p" => Some(bool_value(
             rt.is_symbol(args[0])
-                && rt.symbol_name(args[0]).ok()
-                    .is_some_and(|name| matches!(name.as_str(),
-                        "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
-                        | "quote" | "function" | "progn" | "prog1" | "prog2"
-                        | "catch" | "throw" | "condition-case" | "unwind-protect"
-                        | "defun" | "defvar" | "defconst" | "defmacro" | "lambda"
-                        | "letrec" | "cl-loop" | "pcase" | "setf"))
+                && rt.symbol_name(args[0]).ok().is_some_and(|name| {
+                    matches!(
+                        name.as_str(),
+                        "and"
+                            | "or"
+                            | "if"
+                            | "cond"
+                            | "while"
+                            | "let"
+                            | "let*"
+                            | "setq"
+                            | "quote"
+                            | "function"
+                            | "progn"
+                            | "prog1"
+                            | "prog2"
+                            | "catch"
+                            | "throw"
+                            | "condition-case"
+                            | "unwind-protect"
+                            | "defun"
+                            | "defvar"
+                            | "defconst"
+                            | "defmacro"
+                            | "lambda"
+                            | "letrec"
+                            | "cl-loop"
+                            | "pcase"
+                            | "setf"
+                    )
+                }),
         )),
         "booleanp" => Some(bool_value(args[0].is_nil() || args[0].is_true())),
         "natnump" | "wholenump" => Some(bool_value(args[0].as_fixnum().is_some_and(|v| v >= 0))),
@@ -1941,26 +1968,43 @@ fn numeric_min(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
 }
 
 fn numeric_eq(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
-    if args.len() < 2 { return Some(LispValue::TRUE); }
+    if args.len() < 2 {
+        return Some(LispValue::TRUE);
+    }
     let has_float = any_float(rt, args);
-    let first = if has_float { to_f64(rt, args[0]) } else { args[0].as_fixnum()? as f64 };
+    let first = if has_float {
+        to_f64(rt, args[0])
+    } else {
+        args[0].as_fixnum()? as f64
+    };
     Some(bool_value(args[1..].iter().all(|a| {
-        let v = if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 };
+        let v = if has_float {
+            to_f64(rt, *a)
+        } else {
+            a.as_fixnum().unwrap_or(0) as f64
+        };
         v == first
     })))
 }
 
 fn numeric_ne(rt: &mut Runtime, args: &[LispValue]) -> Option<LispValue> {
     // In Emacs, (/=) and (/= x) return t.
-    if args.len() < 2 { return Some(LispValue::TRUE); }
+    if args.len() < 2 {
+        return Some(LispValue::TRUE);
+    }
     let has_float = any_float(rt, args);
-    let vals: Vec<f64> = args.iter().map(|a| {
-        if has_float { to_f64(rt, *a) } else { a.as_fixnum().unwrap_or(0) as f64 }
-    }).collect();
+    let vals: Vec<f64> = args
+        .iter()
+        .map(|a| {
+            if has_float {
+                to_f64(rt, *a)
+            } else {
+                a.as_fixnum().unwrap_or(0) as f64
+            }
+        })
+        .collect();
     // Check all pairs for distinctness.
-    let all_distinct = (0..vals.len()).all(|i|
-        (i+1..vals.len()).all(|j| vals[i] != vals[j])
-    );
+    let all_distinct = (0..vals.len()).all(|i| (i + 1..vals.len()).all(|j| vals[i] != vals[j]));
     Some(bool_value(all_distinct))
 }
 
@@ -1969,12 +2013,21 @@ fn numeric_cmp(
     args: &[LispValue],
     cmp: impl Fn(f64, f64) -> bool,
 ) -> Option<LispValue> {
-    if args.len() < 2 { return Some(LispValue::TRUE); }
+    if args.len() < 2 {
+        return Some(LispValue::TRUE);
+    }
     let has_float = args.iter().any(|v| rt.is_float(*v));
     // Convert all args to f64 for comparison
-    let values: Vec<f64> = args.iter().map(|v| {
-        if has_float { to_f64(rt, *v) } else { v.as_fixnum().unwrap_or(0) as f64 }
-    }).collect();
+    let values: Vec<f64> = args
+        .iter()
+        .map(|v| {
+            if has_float {
+                to_f64(rt, *v)
+            } else {
+                v.as_fixnum().unwrap_or(0) as f64
+            }
+        })
+        .collect();
     // Check pairwise: (< a b c) means a < b AND b < c
     Some(bool_value(values.windows(2).all(|w| cmp(w[0], w[1]))))
 }

@@ -302,7 +302,8 @@ impl RememberedSetState {
     ) {
         self.merge_pending_owners();
         let mut next_owners = Vec::with_capacity(self.owners.len());
-        let mut next_set = HashSet::with_capacity_and_hasher(self.owners.len(), ObjectKeyBuildHasher);
+        let mut next_set =
+            HashSet::with_capacity_and_hasher(self.owners.len(), ObjectKeyBuildHasher);
         for owner_key in &self.owners {
             let Some(&owner_locator) = object_index.get(owner_key) else {
                 continue;
@@ -593,7 +594,8 @@ impl HeapIndexState {
 
         let mut rebuilt_object_index =
             ObjectIndex::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
-        let mut survivor_keys = ObjectKeySet::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
+        let mut survivor_keys =
+            ObjectKeySet::with_capacity_and_hasher(survivors.len(), ObjectKeyBuildHasher);
         let mut finalizable_candidates = Vec::new();
         let mut weak_candidates = Vec::new();
         let mut ephemeron_candidates = Vec::new();

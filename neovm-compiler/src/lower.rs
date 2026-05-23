@@ -219,7 +219,10 @@ pub fn ssa_to_regir_with_yield(function: &SsaFunction) -> LowerOutput<RegFunctio
     ssa_to_regir_with_opts(function, true)
 }
 
-fn ssa_to_regir_with_opts(function: &SsaFunction, inject_yield_points: bool) -> LowerOutput<RegFunction> {
+fn ssa_to_regir_with_opts(
+    function: &SsaFunction,
+    inject_yield_points: bool,
+) -> LowerOutput<RegFunction> {
     let mut lowerer = RegLowerer::new(function, inject_yield_points);
     lowerer.lower();
     LowerOutput {
@@ -263,12 +266,14 @@ fn lower_destructured_param(builder: &mut SsaBuilder, temp_name: &str, pattern: 
             }
         }
     } else if let Some(name) = pattern.symbol_name()
-        && name != "_" && name != "nil" {
-            builder.emit_no_result(SsaInstKind::BindLexical {
-                name: name.to_string(),
-                value: temp_val,
-            });
-        }
+        && name != "_"
+        && name != "nil"
+    {
+        builder.emit_no_result(SsaInstKind::BindLexical {
+            name: name.to_string(),
+            value: temp_val,
+        });
+    }
 }
 
 fn build_nth_car_cdr(builder: &mut SsaBuilder, base: ValueId, n: usize) -> ValueId {

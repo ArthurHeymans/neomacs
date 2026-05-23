@@ -147,7 +147,6 @@ impl NurseryArena {
     }
 }
 
-
 /// A bump-pointer sub-arena owned by a single evacuation worker.
 ///
 /// During parallel minor GC the to-space buffer is partitioned into N

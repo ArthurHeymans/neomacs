@@ -241,9 +241,10 @@ impl MacroValue {
         while let MacroValue::Cons(cell) = &current {
             let entry = &cell.car;
             if let MacroValue::Cons(entry_cell) = entry
-                && entry_cell.cdr == *val {
-                    return entry.clone();
-                }
+                && entry_cell.cdr == *val
+            {
+                return entry.clone();
+            }
             current = cell.cdr.clone();
         }
         MacroValue::Nil
@@ -254,9 +255,10 @@ impl MacroValue {
         while let MacroValue::Cons(cell) = &current {
             let entry = &cell.car;
             if let MacroValue::Cons(entry_cell) = entry
-                && entry_cell.car == *key {
-                    return entry.clone();
-                }
+                && entry_cell.car == *key
+            {
+                return entry.clone();
+            }
             current = cell.cdr.clone();
         }
         MacroValue::Nil
@@ -267,9 +269,10 @@ impl MacroValue {
         while let MacroValue::Cons(cell) = &current {
             let entry = &cell.car;
             if let MacroValue::Cons(pair) = entry
-                && pair.cdr.eq_value(val) {
-                    return entry.clone();
-                }
+                && pair.cdr.eq_value(val)
+            {
+                return entry.clone();
+            }
             current = cell.cdr.clone();
         }
         MacroValue::Nil

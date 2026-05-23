@@ -166,7 +166,9 @@ impl CardTable {
         // no concurrent access. CARD_CLEAN == 0, so memset to 0.
         let ptr = self.cards.as_ptr() as *mut u8;
         let len = self.cards.len();
-        unsafe { std::ptr::write_bytes(ptr, 0, len); }
+        unsafe {
+            std::ptr::write_bytes(ptr, 0, len);
+        }
         self.has_dirty.store(false, Ordering::Relaxed);
     }
 

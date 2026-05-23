@@ -165,8 +165,7 @@ pub enum SsaConst {
     Value(crate::compile_value::CompileValue),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum SsaTerminator {
     Return(Option<ValueId>),
     Jump {

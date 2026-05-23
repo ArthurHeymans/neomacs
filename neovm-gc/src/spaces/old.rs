@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use crate::card_table::CardTable;
 use crate::index_state::ObjectLocator;
@@ -299,7 +299,9 @@ impl OldBlock {
         if !self.occupied_lines.is_empty() {
             let ptr = self.occupied_lines.as_ptr() as *mut u8;
             let len = self.occupied_lines.len();
-            unsafe { std::ptr::write_bytes(ptr, 0, len); }
+            unsafe {
+                std::ptr::write_bytes(ptr, 0, len);
+            }
         }
     }
 
@@ -315,10 +317,7 @@ impl OldBlock {
     /// `None` when no object starts in that card.
     #[inline]
     pub(crate) fn object_start_for_card(&self, card_index: usize) -> Option<u32> {
-        let raw = self
-            .object_starts
-            .get(card_index)?
-            .load(Ordering::Relaxed);
+        let raw = self.object_starts.get(card_index)?.load(Ordering::Relaxed);
         if raw == OBJECT_START_NONE {
             None
         } else {
@@ -332,11 +331,15 @@ impl OldBlock {
     pub(crate) fn clear_object_starts(&mut self) {
         let ptr = self.object_starts.as_ptr() as *mut u8;
         let len = self.object_starts.len() * core::mem::size_of::<u32>();
-        unsafe { std::ptr::write_bytes(ptr, 0xFF, len); }
+        unsafe {
+            std::ptr::write_bytes(ptr, 0xFF, len);
+        }
         // Also invalidate the locator cache — object positions changed.
         let lptr = self.card_locators.as_ptr() as *mut u8;
         let llen = self.card_locators.len() * core::mem::size_of::<u64>();
-        unsafe { std::ptr::write_bytes(lptr, 0xFF, llen); }
+        unsafe {
+            std::ptr::write_bytes(lptr, 0xFF, llen);
+        }
     }
 
     /// Pack an ObjectLocator into a u64 for storage in `card_locators`.
@@ -348,7 +351,9 @@ impl OldBlock {
     /// Unpack a u64 from `card_locators` back to ObjectLocator.
     #[inline]
     fn unpack_locator(raw: u64) -> Option<ObjectLocator> {
-        if raw == CARD_LOCATOR_NONE { return None; }
+        if raw == CARD_LOCATOR_NONE {
+            return None;
+        }
         Some(ObjectLocator {
             shard: (raw >> 32) as usize,
             slot: (raw & 0xFFFF_FFFF) as usize,
@@ -359,8 +364,7 @@ impl OldBlock {
     /// no locator has been cached yet.
     #[inline]
     pub(crate) fn cached_locator_for_card(&self, card_index: usize) -> Option<ObjectLocator> {
-        let raw = self.card_locators.get(card_index)?
-            .load(Ordering::Relaxed);
+        let raw = self.card_locators.get(card_index)?.load(Ordering::Relaxed);
         Self::unpack_locator(raw)
     }
 
@@ -488,7 +492,9 @@ impl OldBlock {
         // guarantees no concurrent access to line marks.
         let ptr = self.line_marks.as_ptr() as *mut u8;
         let len = self.line_marks.len();
-        unsafe { std::ptr::write_bytes(ptr, 0, len); }
+        unsafe {
+            std::ptr::write_bytes(ptr, 0, len);
+        }
         self.has_marks.store(false, Ordering::Relaxed);
     }
 
@@ -582,8 +588,7 @@ impl OldBlock {
                             }
                             self.record_object_start(offset);
                             // SAFETY: offset is in-range; the buffer outlives the block.
-                            let raw =
-                                unsafe { (self.buffer.as_ptr() as *mut u8).add(offset) };
+                            let raw = unsafe { (self.buffer.as_ptr() as *mut u8).add(offset) };
                             let ptr = core::ptr::NonNull::new(raw)?;
                             return Some((offset, ptr));
                         }

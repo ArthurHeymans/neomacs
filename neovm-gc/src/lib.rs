@@ -109,11 +109,10 @@
 /// Shared/background collector surfaces (`SharedHeap`,
 /// background worker, lock-free status snapshots).
 pub mod background;
-pub(crate) mod collector;
-pub(crate) mod util;
 pub(crate) mod background_worker;
 /// Write-barrier event types and remembered-set edge metadata.
 pub(crate) mod card_table;
+pub(crate) mod collector;
 mod collector_policy;
 mod collector_state;
 /// Dedicated concurrent-marker scaffold built on top of
@@ -154,6 +153,7 @@ mod runtime_state;
 pub mod spaces;
 /// Per-space statistics and rolling collection counters.
 pub mod stats;
+pub(crate) mod util;
 /// Weak reference, weak map, and ephemeron primitives.
 pub mod weak;
 
@@ -165,7 +165,6 @@ pub use background::{
     SharedBackgroundStatus, SharedBackgroundWaitResult, SharedHeap, SharedHeapAccessError,
     SharedHeapError, SharedHeapStatus,
 };
-pub use mutator::{BarrierEvent, BarrierKind};
 pub use concurrent_marker::{
     ConcurrentMarker, ConcurrentMarkerConfig, ConcurrentMarkerError, ConcurrentMarkerStats,
     ConcurrentMarkerStatus,
@@ -177,6 +176,7 @@ pub use descriptor::{
 pub use edge::EdgeCell;
 pub use heap::{AllocError, Heap, HeapConfig};
 pub use mutator::Mutator;
+pub use mutator::{BarrierEvent, BarrierKind};
 pub use object::estimated_allocation_size;
 pub use pacer::{Pacer, PacerAllocationSpace, PacerConfig, PacerDecision, PacerStats};
 pub use pause_stats::PauseHistogram;

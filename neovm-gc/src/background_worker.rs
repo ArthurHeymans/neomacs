@@ -1,12 +1,15 @@
-use crate::background::{BackgroundCollector, BackgroundCollectorConfig, BackgroundCollectorStats, SharedBackgroundError, SharedHeapStatus};
+use crate::background::{
+    BackgroundCollector, BackgroundCollectorConfig, BackgroundCollectorStats,
+    SharedBackgroundError, SharedHeapStatus,
+};
+use crate::collector_state::CollectorSharedSnapshot;
 use crate::heap::AllocError;
 use crate::plan::BackgroundCollectionStatus;
 use crate::runtime::SharedCollectorRuntime;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use crate::collector_state::CollectorSharedSnapshot;
 
 /// Background worker configuration for an autonomous collector thread.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -162,7 +165,6 @@ impl BackgroundWorkerCounters {
             .store(collector.sessions_finished, Ordering::Relaxed);
     }
 }
-
 
 impl BackgroundWorker {
     pub(crate) fn spawn(runtime: SharedCollectorRuntime, config: BackgroundWorkerConfig) -> Self {

@@ -1044,38 +1044,94 @@ impl Interpreter<'_, '_, '_> {
     //   "my-func" => self.subr_2(name, args, |s| { ... }),
     // The closure receives &mut Self, args is captured from the outer scope.
 
-    fn subr_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_1(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.exact_arity(name, args, 1).and_then(|_| f(self))
     }
-    fn subr_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_2(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.exact_arity(name, args, 2).and_then(|_| f(self))
     }
-    fn subr_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_3(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.exact_arity(name, args, 3).and_then(|_| f(self))
     }
-    fn subr_0_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_0_1(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_max_arity(name, args, 0, 1).and_then(|_| f(self))
     }
-    fn subr_1_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_1_2(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_max_arity(name, args, 1, 2).and_then(|_| f(self))
     }
-    fn subr_2_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_2_3(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_max_arity(name, args, 2, 3).and_then(|_| f(self))
     }
-    fn subr_2_5(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_2_5(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_max_arity(name, args, 2, 5).and_then(|_| f(self))
     }
-    fn subr_1_3(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_1_3(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_max_arity(name, args, 1, 3).and_then(|_| f(self))
     }
-    fn subr_min_1(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_min_1(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_arity(name, args, 1).and_then(|_| f(self))
     }
-    fn subr_min_2(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
+    fn subr_min_2(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
         self.min_arity(name, args, 2).and_then(|_| f(self))
     }
-    fn subr_vararg(&mut self, name: &str, args: &[LispValue], f: impl FnOnce(&mut Self) -> Option<LispValue>) -> Option<LispValue> {
-        self.min_max_arity(name, args, 0, usize::MAX).and_then(|_| f(self))
+    fn subr_vararg(
+        &mut self,
+        name: &str,
+        args: &[LispValue],
+        f: impl FnOnce(&mut Self) -> Option<LispValue>,
+    ) -> Option<LispValue> {
+        self.min_max_arity(name, args, 0, usize::MAX)
+            .and_then(|_| f(self))
     }
 
     fn execute_primitive_call(
@@ -1182,11 +1238,17 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(self.runtime.is_symbol(args[0]))),
             "string-prefix-p" => self.subr_2(name, args, |s| {
-                let (prefix, s) = (s.string_contents_owned(args[0])?, s.string_contents_owned(args[1])?);
+                let (prefix, s) = (
+                    s.string_contents_owned(args[0])?,
+                    s.string_contents_owned(args[1])?,
+                );
                 Some(bool_value(s.starts_with(&prefix)))
             }),
             "string-suffix-p" => self.subr_2(name, args, |s| {
-                let (suffix, s) = (s.string_contents_owned(args[0])?, s.string_contents_owned(args[1])?);
+                let (suffix, s) = (
+                    s.string_contents_owned(args[0])?,
+                    s.string_contents_owned(args[1])?,
+                );
                 Some(bool_value(s.ends_with(&suffix)))
             }),
             "stringp" => self
@@ -1204,14 +1266,20 @@ impl Interpreter<'_, '_, '_> {
             "char-equal" => self.subr_2(name, args, |s| {
                 let a = args[0].as_char();
                 let b = args[1].as_char();
-                Some(bool_value(a.is_some() && b.is_some()
-                    && a.unwrap().to_ascii_lowercase() == b.unwrap().to_ascii_lowercase()))
+                Some(bool_value(
+                    a.is_some()
+                        && b.is_some()
+                        && a.unwrap().to_ascii_lowercase() == b.unwrap().to_ascii_lowercase(),
+                ))
             }),
-            "char-table-p" | "bool-vector-p" | "recordp"
-            | "mutexp" | "threadp" | "windowp" | "bufferp" | "markerp" | "processp"
-            | "framep" | "overlayp" | "keymapp" | "syntax-table-p" | "case-table-p"
-            | "category-table-p" | "fontp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
-            "display-graphic-p" => self.min_max_arity(name, args, 0, 1).map(|_| bool_value(false)),
+            "char-table-p" | "bool-vector-p" | "recordp" | "mutexp" | "threadp" | "windowp"
+            | "bufferp" | "markerp" | "processp" | "framep" | "overlayp" | "keymapp"
+            | "syntax-table-p" | "case-table-p" | "category-table-p" | "fontp" => {
+                self.exact_arity(name, args, 1).map(|_| bool_value(false))
+            }
+            "display-graphic-p" => self
+                .min_max_arity(name, args, 0, 1)
+                .map(|_| bool_value(false)),
             "char-valid-p" => self.exact_arity(name, args, 1).map(|_| {
                 let code = args[0].as_fixnum().unwrap_or(-1);
                 bool_value(code >= 0 && code <= 0x10FFFF && (code < 0xD800 || code > 0xDFFF))
@@ -1221,10 +1289,7 @@ impl Interpreter<'_, '_, '_> {
                 s.fixnum(ch as i64, "char-code")
             }),
             "char-or-string-p" => self.exact_arity(name, args, 1).map(|_| {
-                bool_value(
-                    args[0].as_char().is_some()
-                        || self.runtime.is_string(args[0])
-                )
+                bool_value(args[0].as_char().is_some() || self.runtime.is_string(args[0]))
             }),
             "atom" => self
                 .exact_arity(name, args, 1)
@@ -1278,7 +1343,9 @@ impl Interpreter<'_, '_, '_> {
             "setenv" => self.subr_2(name, args, |s| {
                 let var = s.runtime.string_contents(args[0]).ok()?;
                 let val = s.runtime.string_contents(args[1]).ok()?;
-                unsafe { std::env::set_var(&*var, &*val); }
+                unsafe {
+                    std::env::set_var(&*var, &*val);
+                }
                 Some(LispValue::NIL)
             }),
             "file-exists-p" => self.subr_1(name, args, |s| {
@@ -1295,12 +1362,16 @@ impl Interpreter<'_, '_, '_> {
             }),
             "file-readable-p" => self.subr_1(name, args, |s| {
                 let path = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let ok = std::fs::metadata(&path).map(|m| m.permissions().readonly() == false).unwrap_or(false);
+                let ok = std::fs::metadata(&path)
+                    .map(|m| m.permissions().readonly() == false)
+                    .unwrap_or(false);
                 Some(bool_value(ok))
             }),
             "file-writable-p" => self.subr_1(name, args, |s| {
                 let path = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let ok = !std::fs::metadata(&path).map(|m| m.permissions().readonly()).unwrap_or(true);
+                let ok = !std::fs::metadata(&path)
+                    .map(|m| m.permissions().readonly())
+                    .unwrap_or(true);
                 Some(bool_value(ok))
             }),
             "file-name-absolute-p" => self.subr_1(name, args, |s| {
@@ -1309,12 +1380,17 @@ impl Interpreter<'_, '_, '_> {
             }),
             "expand-file-name" => self.subr_1_2(name, args, |s| {
                 let name = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let default = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
+                let default = args
+                    .get(1)
+                    .and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
                 let default_dir = default.as_deref().unwrap_or(".");
                 let expanded = if std::path::Path::new(&name).is_absolute() {
                     name
                 } else {
-                    std::path::Path::new(default_dir).join(&name).to_string_lossy().to_string()
+                    std::path::Path::new(default_dir)
+                        .join(&name)
+                        .to_string_lossy()
+                        .to_string()
                 };
                 Some(s.runtime.string(expanded))
             }),
@@ -1328,7 +1404,8 @@ impl Interpreter<'_, '_, '_> {
             }),
             "file-name-nondirectory" => self.subr_1(name, args, |s| {
                 let name = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let result = std::path::Path::new(&name).file_name()
+                let result = std::path::Path::new(&name)
+                    .file_name()
                     .map(|f| f.to_string_lossy().to_string())
                     .unwrap_or_default();
                 Some(s.runtime.string(result))
@@ -1342,7 +1419,8 @@ impl Interpreter<'_, '_, '_> {
             }),
             "file-name-base" => self.subr_1(name, args, |s| {
                 let name = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let result = std::path::Path::new(&name).file_stem()
+                let result = std::path::Path::new(&name)
+                    .file_stem()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
                 Some(s.runtime.string(result))
@@ -1362,28 +1440,44 @@ impl Interpreter<'_, '_, '_> {
                 let input = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let mut result = String::with_capacity(input.len());
                 for ch in input.chars() {
-                    match ch { '\\'|'^'|'$'|'.'|'['|']'|'*'|'+'|'?'|'{'|'}'|'|'|'('|')' => {
-                        result.push('\\');
-                        result.push(ch);
-                    }
-                    _ => result.push(ch),
+                    match ch {
+                        '\\' | '^' | '$' | '.' | '[' | ']' | '*' | '+' | '?' | '{' | '}' | '|'
+                        | '(' | ')' => {
+                            result.push('\\');
+                            result.push(ch);
+                        }
+                        _ => result.push(ch),
                     }
                 }
                 Some(s.runtime.string(result))
             }),
             "split-string" => self.subr_1_3(name, args, |s| {
                 let input = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let sep = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
+                let sep = args
+                    .get(1)
+                    .and_then(|v| s.runtime.string_contents(*v).ok().map(|d| d.to_string()));
                 let omit_nulls = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
                 let sep_ref = sep.as_deref();
                 let split: Vec<String> = if let Some(s) = sep_ref {
                     if s.is_empty() {
-                        input.split(char::is_whitespace).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                        input
+                            .split(char::is_whitespace)
+                            .filter(|p| !omit_nulls || !p.is_empty())
+                            .map(|p| p.to_string())
+                            .collect()
                     } else {
-                        input.split(s).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                        input
+                            .split(s)
+                            .filter(|p| !omit_nulls || !p.is_empty())
+                            .map(|p| p.to_string())
+                            .collect()
                     }
                 } else {
-                    input.split(char::is_whitespace).filter(|p| !omit_nulls || !p.is_empty()).map(|p| p.to_string()).collect()
+                    input
+                        .split(char::is_whitespace)
+                        .filter(|p| !omit_nulls || !p.is_empty())
+                        .map(|p| p.to_string())
+                        .collect()
                 };
                 let mut list = LispValue::NIL;
                 for part in split.into_iter().rev() {
@@ -1405,15 +1499,22 @@ impl Interpreter<'_, '_, '_> {
                 } else {
                     std::fs::remove_dir(&path)
                 };
-                match result { Ok(()) => Some(LispValue::NIL), Err(_) => None }
+                match result {
+                    Ok(()) => Some(LispValue::NIL),
+                    Err(_) => None,
+                }
             }),
             "file-symlink-p" => self.subr_1(name, args, |s| {
                 let path = s.runtime.string_contents(args[0]).ok()?.to_string();
-                Some(bool_value(std::fs::symlink_metadata(&path).map(|m| m.file_type().is_symlink()).unwrap_or(false)))
+                Some(bool_value(
+                    std::fs::symlink_metadata(&path)
+                        .map(|m| m.file_type().is_symlink())
+                        .unwrap_or(false),
+                ))
             }),
-            "emacs-pid" => self.min_max_arity(name, args, 0, 0).map(|_| {
-                LispValue::expect_fixnum(std::process::id() as i64)
-            }),
+            "emacs-pid" => self
+                .min_max_arity(name, args, 0, 0)
+                .map(|_| LispValue::expect_fixnum(std::process::id() as i64)),
             "make-directory" => self.subr_1_2(name, args, |s| {
                 let path = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let parents = args.get(1).map(|v| !v.is_nil()).unwrap_or(false);
@@ -1452,13 +1553,21 @@ impl Interpreter<'_, '_, '_> {
                 let total_days = days + 719528;
                 let (y, m, d) = days_to_ymd(total_days);
                 let tod = secs % 86400;
-                let mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-                let day = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                let mon = [
+                    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov",
+                    "Dec",
+                ];
+                let day = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
                 let wday = ((total_days + 3) % 7) as usize;
                 Some(s.runtime.string(format!(
                     "{} {} {:02} {:02}:{:02}:{:02} {}",
-                    day[wday], mon[m as usize - 1], d,
-                    tod / 3600, (tod % 3600) / 60, tod % 60, y
+                    day[wday],
+                    mon[m as usize - 1],
+                    d,
+                    tod / 3600,
+                    (tod % 3600) / 60,
+                    tod % 60,
+                    y
                 )))
             }),
             "gensym" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
@@ -1522,7 +1631,8 @@ impl Interpreter<'_, '_, '_> {
                 LispValue::expect_fixnum((buf.point_max() - buf.point_min()) as i64)
             }),
             "current-buffer" => self.min_max_arity(name, args, 0, 0).map(|_| {
-                self.runtime.string(self.runtime.current_buffer().name.clone())
+                self.runtime
+                    .string(self.runtime.current_buffer().name.clone())
             }),
             "buffer-name" => self.subr_1(name, args, |s| {
                 let name = s.runtime.string_contents(args[0]).ok()?.to_string();
@@ -1557,8 +1667,12 @@ impl Interpreter<'_, '_, '_> {
                 Some(bool_value(s.runtime.kill_buffer(&name)))
             }),
             "buffer-list" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
-                let names: Vec<String> = self.runtime.buffer_list().into_iter()
-                    .map(|b| b.name.clone()).collect();
+                let names: Vec<String> = self
+                    .runtime
+                    .buffer_list()
+                    .into_iter()
+                    .map(|b| b.name.clone())
+                    .collect();
                 let rt = &mut self.runtime;
                 let mut list = LispValue::NIL;
                 for name in names.into_iter().rev() {
@@ -1568,14 +1682,25 @@ impl Interpreter<'_, '_, '_> {
                 Some(list)
             }),
             "insert" => self.min_arity(name, args, 1).and_then(|_| {
-                let strings: Vec<String> = args.iter().filter_map(|arg| {
-                    self.runtime.string_contents(*arg).ok().map(|s| s.to_string())
-                }).collect();
-                let ints: Vec<u32> = args.iter().filter_map(|arg| {
-                    if !self.runtime.is_string(*arg) {
-                        arg.as_fixnum().map(|n| n as u32)
-                    } else { None }
-                }).collect();
+                let strings: Vec<String> = args
+                    .iter()
+                    .filter_map(|arg| {
+                        self.runtime
+                            .string_contents(*arg)
+                            .ok()
+                            .map(|s| s.to_string())
+                    })
+                    .collect();
+                let ints: Vec<u32> = args
+                    .iter()
+                    .filter_map(|arg| {
+                        if !self.runtime.is_string(*arg) {
+                            arg.as_fixnum().map(|n| n as u32)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 let buf = self.runtime.current_buffer_mut();
                 for s in strings {
                     buf.contents.insert_str(buf.point, &s);
@@ -1597,7 +1722,11 @@ impl Interpreter<'_, '_, '_> {
                     buf.contents.drain(buf.point..end);
                     buf.modified = true;
                 } else if n < 0 {
-                    let start = if buf.point >= (-n) as usize { buf.point - (-n) as usize } else { 0 };
+                    let start = if buf.point >= (-n) as usize {
+                        buf.point - (-n) as usize
+                    } else {
+                        0
+                    };
                     buf.contents.drain(start..buf.point);
                     buf.point = start;
                     buf.modified = true;
@@ -1607,7 +1736,11 @@ impl Interpreter<'_, '_, '_> {
             "delete-backward-char" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
                 let buf = self.runtime.current_buffer_mut();
-                let start = if buf.point >= n as usize { buf.point - n as usize } else { 0 };
+                let start = if buf.point >= n as usize {
+                    buf.point - n as usize
+                } else {
+                    0
+                };
                 buf.contents.drain(start..buf.point);
                 buf.point = start;
                 buf.modified = true;
@@ -1623,7 +1756,9 @@ impl Interpreter<'_, '_, '_> {
                 let end = end.clamp(pmin, pmax);
                 if start < end {
                     buf.contents.drain(start..end);
-                    if buf.point > start { buf.point = start; }
+                    if buf.point > start {
+                        buf.point = start;
+                    }
                     buf.modified = true;
                 }
                 Some(LispValue::NIL)
@@ -1658,8 +1793,14 @@ impl Interpreter<'_, '_, '_> {
                 let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
                 let buf = self.runtime.current_buffer_mut();
                 for _ in 0..n {
-                    if buf.point >= buf.contents.len() { break; }
-                    buf.point += buf.contents[buf.point..].chars().next().map(|c| c.len_utf8()).unwrap_or(0);
+                    if buf.point >= buf.contents.len() {
+                        break;
+                    }
+                    buf.point += buf.contents[buf.point..]
+                        .chars()
+                        .next()
+                        .map(|c| c.len_utf8())
+                        .unwrap_or(0);
                 }
                 buf.point = buf.point.min(buf.point_max());
                 Some(LispValue::NIL)
@@ -1668,8 +1809,14 @@ impl Interpreter<'_, '_, '_> {
                 let buf = self.runtime.current_buffer_mut();
                 let n = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(1);
                 for _ in 0..n {
-                    if buf.point == 0 { break; }
-                    buf.point -= buf.contents[..buf.point].chars().last().map(|c| c.len_utf8()).unwrap_or(1);
+                    if buf.point == 0 {
+                        break;
+                    }
+                    buf.point -= buf.contents[..buf.point]
+                        .chars()
+                        .last()
+                        .map(|c| c.len_utf8())
+                        .unwrap_or(1);
                 }
                 buf.point = buf.point.max(buf.point_min());
                 Some(LispValue::NIL)
@@ -1681,14 +1828,19 @@ impl Interpreter<'_, '_, '_> {
                 if n > 0 {
                     let mut pos = buf.point;
                     for _ in 0..n {
-                        pos = contents[pos..].find('\n').map(|i| pos + i + 1).unwrap_or(contents.len());
+                        pos = contents[pos..]
+                            .find('\n')
+                            .map(|i| pos + i + 1)
+                            .unwrap_or(contents.len());
                     }
                     buf.point = pos;
                 } else if n < 0 {
                     let mut pos = buf.point;
                     for _ in 0..(-n) {
-                        if pos == 0 { break; }
-                        pos = contents[..pos-1].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                        if pos == 0 {
+                            break;
+                        }
+                        pos = contents[..pos - 1].rfind('\n').map(|i| i + 1).unwrap_or(0);
                     }
                     buf.point = pos;
                 }
@@ -1704,19 +1856,26 @@ impl Interpreter<'_, '_, '_> {
             "end-of-line" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let buf = self.runtime.current_buffer_mut();
                 let pt = buf.point;
-                let eol = buf.contents[pt..].find('\n').map(|i| pt + i).unwrap_or(buf.contents.len());
+                let eol = buf.contents[pt..]
+                    .find('\n')
+                    .map(|i| pt + i)
+                    .unwrap_or(buf.contents.len());
                 buf.point = eol;
                 Some(LispValue::NIL)
             }),
             "bolp" => self.min_max_arity(name, args, 0, 0).map(|_| {
                 let buf = self.runtime.current_buffer();
                 let pt = buf.point;
-                bool_value(pt == 0 || buf.contents.as_bytes().get(pt.saturating_sub(1)) == Some(&b'\n'))
+                bool_value(
+                    pt == 0 || buf.contents.as_bytes().get(pt.saturating_sub(1)) == Some(&b'\n'),
+                )
             }),
             "eolp" => self.min_max_arity(name, args, 0, 0).map(|_| {
                 let buf = self.runtime.current_buffer();
                 let pt = buf.point;
-                bool_value(pt >= buf.contents.len() || buf.contents.as_bytes().get(pt) == Some(&b'\n'))
+                bool_value(
+                    pt >= buf.contents.len() || buf.contents.as_bytes().get(pt) == Some(&b'\n'),
+                )
             }),
             "char-after" => self.min_max_arity(name, args, 0, 1).and_then(|_| {
                 let pos = args.get(0).and_then(|v| v.as_fixnum()).map(|n| n as usize);
@@ -1732,7 +1891,10 @@ impl Interpreter<'_, '_, '_> {
                 let buf = self.runtime.current_buffer();
                 let idx = pos.map(|p| p.saturating_sub(1)).unwrap_or(buf.point);
                 if idx > 0 {
-                    buf.contents[..idx].chars().last().map(|ch| LispValue::from_char(ch))
+                    buf.contents[..idx]
+                        .chars()
+                        .last()
+                        .map(|ch| LispValue::from_char(ch))
                 } else {
                     Some(LispValue::NIL)
                 }
@@ -1741,7 +1903,11 @@ impl Interpreter<'_, '_, '_> {
                 let charset = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let buf = s.runtime.current_buffer_mut();
                 let after = &buf.contents[buf.point..];
-                let len = after.chars().take_while(|c| charset.contains(*c)).map(|c| c.len_utf8()).sum::<usize>();
+                let len = after
+                    .chars()
+                    .take_while(|c| charset.contains(*c))
+                    .map(|c| c.len_utf8())
+                    .sum::<usize>();
                 buf.point += len;
                 Some(LispValue::NIL)
             }),
@@ -1749,7 +1915,12 @@ impl Interpreter<'_, '_, '_> {
                 let charset = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let buf = s.runtime.current_buffer_mut();
                 let before = &buf.contents[..buf.point];
-                let skip_len: usize = before.chars().rev().take_while(|c| charset.contains(*c)).map(|c| c.len_utf8()).sum();
+                let skip_len: usize = before
+                    .chars()
+                    .rev()
+                    .take_while(|c| charset.contains(*c))
+                    .map(|c| c.len_utf8())
+                    .sum();
                 buf.point -= skip_len;
                 Some(LispValue::NIL)
             }),
@@ -1758,7 +1929,9 @@ impl Interpreter<'_, '_, '_> {
                 let buf = s.runtime.current_buffer();
                 let haystack = &buf.contents[buf.point..];
                 match regex::Regex::new(&pattern) {
-                    Ok(re) => Some(bool_value(re.find(haystack).map_or(false, |m| m.start() == 0))),
+                    Ok(re) => Some(bool_value(
+                        re.find(haystack).map_or(false, |m| m.start() == 0),
+                    )),
                     Err(_) => Some(LispValue::NIL),
                 }
             }),
@@ -1773,8 +1946,11 @@ impl Interpreter<'_, '_, '_> {
                     (ss, se, buf.contents[ss..se].to_string())
                 };
                 if search_start >= search_end {
-                    if no_error { return Some(LispValue::NIL); }
-                    else { return None; }
+                    if no_error {
+                        return Some(LispValue::NIL);
+                    } else {
+                        return None;
+                    }
                 }
                 match haystack.find(&pattern) {
                     Some(idx) => {
@@ -1782,8 +1958,11 @@ impl Interpreter<'_, '_, '_> {
                         Some(LispValue::expect_fixnum((search_start + idx) as i64))
                     }
                     None => {
-                        if no_error { Some(LispValue::NIL) }
-                        else { None }
+                        if no_error {
+                            Some(LispValue::NIL)
+                        } else {
+                            None
+                        }
                     }
                 }
             }),
@@ -1798,8 +1977,11 @@ impl Interpreter<'_, '_, '_> {
                     (ss, se, buf.contents[ss..se].to_string())
                 };
                 if search_start >= search_end {
-                    if no_error { return Some(LispValue::NIL); }
-                    else { return None; }
+                    if no_error {
+                        return Some(LispValue::NIL);
+                    } else {
+                        return None;
+                    }
                 }
                 match haystack.rfind(&pattern) {
                     Some(idx) => {
@@ -1807,8 +1989,11 @@ impl Interpreter<'_, '_, '_> {
                         Some(LispValue::expect_fixnum((search_start + idx) as i64))
                     }
                     None => {
-                        if no_error { Some(LispValue::NIL) }
-                        else { None }
+                        if no_error {
+                            Some(LispValue::NIL)
+                        } else {
+                            None
+                        }
                     }
                 }
             }),
@@ -1834,20 +2019,32 @@ impl Interpreter<'_, '_, '_> {
             }),
             "directory-files" => self.subr_1_2(name, args, |s| {
                 let dir = s.runtime.string_contents(args[0]).ok()?.to_string();
-                let full = args.get(1).and_then(|v| s.runtime.string_contents(*v).ok().map(|s| s.to_string()));
+                let full = args
+                    .get(1)
+                    .and_then(|v| s.runtime.string_contents(*v).ok().map(|s| s.to_string()));
                 let nosort = args.get(2).map(|v| !v.is_nil()).unwrap_or(false);
-                let Ok(entries) = std::fs::read_dir(&dir) else { return Some(LispValue::NIL) };
-                let mut names: Vec<String> = entries.filter_map(|e| {
-                    let e = e.ok()?;
-                    let name = e.file_name().to_string_lossy().to_string();
-                    let full_name = full.as_ref().and_then(|f| {
-                        if f.is_empty() { None }
-                        else if f == "full" { Some(e.path().to_string_lossy().to_string()) }
-                        else { Some(format!("{}/{}", dir, name)) }
-                    });
-                    full_name.or(Some(name))
-                }).collect();
-                if !nosort { names.sort(); }
+                let Ok(entries) = std::fs::read_dir(&dir) else {
+                    return Some(LispValue::NIL);
+                };
+                let mut names: Vec<String> = entries
+                    .filter_map(|e| {
+                        let e = e.ok()?;
+                        let name = e.file_name().to_string_lossy().to_string();
+                        let full_name = full.as_ref().and_then(|f| {
+                            if f.is_empty() {
+                                None
+                            } else if f == "full" {
+                                Some(e.path().to_string_lossy().to_string())
+                            } else {
+                                Some(format!("{}/{}", dir, name))
+                            }
+                        });
+                        full_name.or(Some(name))
+                    })
+                    .collect();
+                if !nosort {
+                    names.sort();
+                }
                 let rt = &mut s.runtime;
                 let mut list = LispValue::NIL;
                 for name in names.into_iter().rev() {
@@ -1866,7 +2063,11 @@ impl Interpreter<'_, '_, '_> {
                         let nil = LispValue::NIL;
                         let c = rt.cons(LispValue::expect_fixnum(0), nil);
                         let b = rt.cons(LispValue::expect_fixnum(len), c);
-                        let a = if is_dir { rt.cons(LispValue::TRUE, b) } else { rt.cons(nil, b) };
+                        let a = if is_dir {
+                            rt.cons(LispValue::TRUE, b)
+                        } else {
+                            rt.cons(nil, b)
+                        };
                         Some(a)
                     }
                     Err(_) => Some(LispValue::NIL),
@@ -1891,7 +2092,8 @@ impl Interpreter<'_, '_, '_> {
                 let end = s.fixnum_arg(name, args[1])? as usize;
                 let path = s.runtime.string_contents(args[2]).ok()?.to_string();
                 let buf = s.runtime.current_buffer();
-                let content = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                let content =
+                    &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
                 match std::fs::write(&path, content) {
                     Ok(()) => Some(LispValue::TRUE),
                     Err(_) => Some(LispValue::NIL),
@@ -1908,12 +2110,8 @@ impl Interpreter<'_, '_, '_> {
                 let _end = s.fixnum_arg(name, args[1])? as usize;
                 Some(LispValue::NIL)
             }),
-            "add-text-properties" => self.subr_min_2(name, args, |s| {
-                Some(LispValue::NIL)
-            }),
-            "remove-text-properties" => self.subr_min_2(name, args, |s| {
-                Some(LispValue::TRUE)
-            }),
+            "add-text-properties" => self.subr_min_2(name, args, |s| Some(LispValue::NIL)),
+            "remove-text-properties" => self.subr_min_2(name, args, |s| Some(LispValue::TRUE)),
             "overlayp" => self.exact_arity(name, args, 1).map(|_| bool_value(false)),
             "make-overlay" => self.subr_2_3(name, args, |s| {
                 let _start = s.fixnum_arg(name, args[0])? as usize;
@@ -1925,27 +2123,31 @@ impl Interpreter<'_, '_, '_> {
                 });
                 Some(LispValue::expect_fixnum(idx as i64))
             }),
-            "delete-overlay" => self.subr_1(name, args, |s| {
-                Some(LispValue::NIL)
-            }),
+            "delete-overlay" => self.subr_1(name, args, |s| Some(LispValue::NIL)),
             "overlay-start" => self.subr_1(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < s.runtime.markers.len() {
-                    Some(LispValue::expect_fixnum((s.runtime.markers[i].position + 1) as i64))
-                } else { Some(LispValue::NIL) }
+                    Some(LispValue::expect_fixnum(
+                        (s.runtime.markers[i].position + 1) as i64,
+                    ))
+                } else {
+                    Some(LispValue::NIL)
+                }
             }),
             "overlay-end" => self.subr_1(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 Some(LispValue::expect_fixnum(n + 1))
             }),
             "overlay-get" => self.subr_2(name, args, |s| {
                 let _prop = s.runtime.string_contents(args[1]).ok()?.to_string();
                 Some(LispValue::NIL)
             }),
-            "overlay-put" => self.subr_3(name, args, |s| {
-                Some(LispValue::NIL)
-            }),
+            "overlay-put" => self.subr_3(name, args, |s| Some(LispValue::NIL)),
             "sleep-for" => self.subr_0_1(name, args, |s| {
                 let secs = args.get(0).and_then(|v| v.as_fixnum()).unwrap_or(0) as f64;
                 if secs > 0.0 {
@@ -1954,27 +2156,43 @@ impl Interpreter<'_, '_, '_> {
                 Some(LispValue::NIL)
             }),
             "message" => self.subr_vararg(name, args, |s| {
-                if args.is_empty() { return Some(LispValue::NIL); }
+                if args.is_empty() {
+                    return Some(LispValue::NIL);
+                }
                 let fmt = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let msg = if args.len() == 1 {
                     fmt
                 } else {
-                    let rest: Vec<String> = args[1..].iter().filter_map(|a| {
-                        if a.is_nil() { Some("nil".to_string()) }
-                        else if *a == LispValue::TRUE { Some("t".to_string()) }
-                        else if let Some(n) = a.as_fixnum() { Some(n.to_string()) }
-                        else { s.runtime.string_contents(*a).ok().map(|s| s.to_string()) }
-                    }).collect();
+                    let rest: Vec<String> = args[1..]
+                        .iter()
+                        .filter_map(|a| {
+                            if a.is_nil() {
+                                Some("nil".to_string())
+                            } else if *a == LispValue::TRUE {
+                                Some("t".to_string())
+                            } else if let Some(n) = a.as_fixnum() {
+                                Some(n.to_string())
+                            } else {
+                                s.runtime.string_contents(*a).ok().map(|s| s.to_string())
+                            }
+                        })
+                        .collect();
                     let mut result = String::new();
                     let mut ri = 0;
                     let chars: Vec<char> = fmt.chars().collect();
                     let mut i = 0;
                     while i < chars.len() {
-                        if chars[i] == '%' && i + 1 < chars.len() && chars[i+1] == 's' && ri < rest.len() {
+                        if chars[i] == '%'
+                            && i + 1 < chars.len()
+                            && chars[i + 1] == 's'
+                            && ri < rest.len()
+                        {
                             result.push_str(&rest[ri]);
-                            ri += 1; i += 2;
+                            ri += 1;
+                            i += 2;
                         } else {
-                            result.push(chars[i]); i += 1;
+                            result.push(chars[i]);
+                            i += 1;
                         }
                     }
                     result
@@ -1990,7 +2208,8 @@ impl Interpreter<'_, '_, '_> {
             "format-time-string" => self.subr_1_3(name, args, |s| {
                 let fmt = s.runtime.string_contents(args[0]).ok()?.to_string();
                 let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
                 let secs = now.as_secs() as i64;
                 let days = secs / 86400 + 719528;
                 let (y, m, d) = days_to_ymd(days);
@@ -2007,7 +2226,8 @@ impl Interpreter<'_, '_, '_> {
             }),
             "decode-time" => self.subr_0_1(name, args, |s| {
                 let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
                 let secs = now.as_secs() as i64;
                 let days = secs / 86400 + 719528;
                 let (y, m, d) = days_to_ymd(days);
@@ -2081,12 +2301,8 @@ impl Interpreter<'_, '_, '_> {
                 let result = s.runtime.set_symbol_plist(args[0], args[1]);
                 s.runtime_value(result)
             }),
-            "plist-get" => self.subr_2(name, args, |s| {
-                Some(s.runtime.plist_get(args[0], args[1]))
-            }),
-            "plist-member" => self.subr_2(name, args, |s| {
-                s.plist_member(args[0], args[1])
-            }),
+            "plist-get" => self.subr_2(name, args, |s| Some(s.runtime.plist_get(args[0], args[1]))),
+            "plist-member" => self.subr_2(name, args, |s| s.plist_member(args[0], args[1])),
             "plist-put" => self.subr_3(name, args, |s| {
                 Some(s.runtime.plist_put(args[0], args[1], args[2]))
             }),
@@ -2139,13 +2355,14 @@ impl Interpreter<'_, '_, '_> {
                 .map(|_| bool_value(args[0].is_nil())),
             "identity" => self.exact_arity(name, args, 1).map(|_| args[0]),
             "garbage-collect" => {
-                let _ = self.runtime.gc_heap.collect(neovm_gc::plan::CollectionKind::Minor);
+                let _ = self
+                    .runtime
+                    .gc_heap
+                    .collect(neovm_gc::plan::CollectionKind::Minor);
                 Some(LispValue::NIL)
             }
             "purecopy" => self.exact_arity(name, args, 1).map(|_| args[0]),
-            "indirect-function" => self.subr_1(name, args, |s| {
-                s.indirect_function(args[0])
-            }),
+            "indirect-function" => self.subr_1(name, args, |s| s.indirect_function(args[0])),
             "ignore" => Some(LispValue::NIL),
             "always" => Some(LispValue::TRUE),
             "prog1" => {
@@ -2262,13 +2479,14 @@ impl Interpreter<'_, '_, '_> {
             }),
             "region-active-p" => self.min_max_arity(name, args, 0, 0).map(|_| {
                 let buf = self.runtime.current_buffer();
-                bool_value(buf.mark_active && buf.mark.is_some()
-                    && buf.mark != Some(buf.point))
+                bool_value(buf.mark_active && buf.mark.is_some() && buf.mark != Some(buf.point))
             }),
             "activate-mark" => self.min_max_arity(name, args, 0, 0).map(|_| {
                 let buf = self.runtime.current_buffer_mut();
                 buf.mark_active = true;
-                if buf.mark.is_none() { buf.mark = Some(buf.point); }
+                if buf.mark.is_none() {
+                    buf.mark = Some(buf.point);
+                }
                 LispValue::NIL
             }),
             "zap-to-char" => self.subr_1(name, args, |s| {
@@ -2289,7 +2507,10 @@ impl Interpreter<'_, '_, '_> {
                 let col = s.fixnum_arg(name, args[0])? as usize;
                 let (current_col, pt) = {
                     let buf = s.runtime.current_buffer();
-                    let bol = buf.contents[..buf.point].rfind('\n').map(|i| i + 1).unwrap_or(0);
+                    let bol = buf.contents[..buf.point]
+                        .rfind('\n')
+                        .map(|i| i + 1)
+                        .unwrap_or(0);
                     (buf.point - bol, buf.point)
                 };
                 if col > current_col {
@@ -2315,9 +2536,10 @@ impl Interpreter<'_, '_, '_> {
             "cua-mode" => self.min_max_arity(name, args, 0, 1).map(|_| LispValue::NIL),
             "delete-trailing-whitespace" => self.min_max_arity(name, args, 0, 2).and_then(|_| {
                 let content = self.runtime.current_buffer().contents.clone();
-                let new_content: String = content.lines().map(|line| {
-                    line.trim_end().to_string() + "\n"
-                }).collect();
+                let new_content: String = content
+                    .lines()
+                    .map(|line| line.trim_end().to_string() + "\n")
+                    .collect();
                 let buf = self.runtime.current_buffer_mut();
                 buf.contents = new_content;
                 buf.modified = true;
@@ -2327,15 +2549,21 @@ impl Interpreter<'_, '_, '_> {
                 let start = s.fixnum_arg(name, args[0])? as usize;
                 let end = s.fixnum_arg(name, args[1])? as usize;
                 let buf = s.runtime.current_buffer();
-                let region = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
-                let count = if region.is_empty() { 0 } else { region.lines().count() as i64 };
+                let region =
+                    &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                let count = if region.is_empty() {
+                    0
+                } else {
+                    region.lines().count() as i64
+                };
                 Some(LispValue::expect_fixnum(count))
             }),
             "count-words-region" => self.subr_2(name, args, |s| {
                 let start = s.fixnum_arg(name, args[0])? as usize;
                 let end = s.fixnum_arg(name, args[1])? as usize;
                 let buf = s.runtime.current_buffer();
-                let region = &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
+                let region =
+                    &buf.contents[start.min(buf.contents.len())..end.min(buf.contents.len())];
                 let count = region.split_whitespace().count() as i64;
                 Some(LispValue::expect_fixnum(count))
             }),
@@ -2365,14 +2593,22 @@ impl Interpreter<'_, '_, '_> {
                 LispValue::expect_fixnum(idx as i64)
             }),
             "marker-position" => self.subr_1(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < s.runtime.markers.len() {
-                    Some(LispValue::expect_fixnum((s.runtime.markers[i].position + 1) as i64))
-                } else { Some(LispValue::NIL) }
+                    Some(LispValue::expect_fixnum(
+                        (s.runtime.markers[i].position + 1) as i64,
+                    ))
+                } else {
+                    Some(LispValue::NIL)
+                }
             }),
             "set-marker" => self.subr_2_3(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < s.runtime.markers.len() {
                     let pos = s.fixnum_arg(name, args[1])? as usize;
@@ -2381,7 +2617,9 @@ impl Interpreter<'_, '_, '_> {
                 Some(args[0])
             }),
             "copy-marker" => self.min_max_arity(name, args, 1, 2).and_then(|_| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < self.runtime.markers.len() {
                     let new_idx = self.runtime.markers.len();
@@ -2391,30 +2629,46 @@ impl Interpreter<'_, '_, '_> {
                 Some(LispValue::NIL)
             }),
             "marker-buffer" => self.subr_1(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
-                if i < s.runtime.markers.len() && s.runtime.markers[i].buffer_index < s.runtime.buffers.len() {
-                    Some(s.runtime.string(s.runtime.buffers[s.runtime.markers[i].buffer_index].name.clone()))
-                } else { Some(LispValue::NIL) }
+                if i < s.runtime.markers.len()
+                    && s.runtime.markers[i].buffer_index < s.runtime.buffers.len()
+                {
+                    Some(
+                        s.runtime.string(
+                            s.runtime.buffers[s.runtime.markers[i].buffer_index]
+                                .name
+                                .clone(),
+                        ),
+                    )
+                } else {
+                    Some(LispValue::NIL)
+                }
             }),
             "marker-insertion-type" => self.subr_1(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < s.runtime.markers.len() {
                     Some(bool_value(s.runtime.markers[i].insertion_type))
-                } else { Some(LispValue::NIL) }
+                } else {
+                    Some(LispValue::NIL)
+                }
             }),
             "set-marker-insertion-type" => self.subr_2(name, args, |s| {
-                let Some(n) = args[0].as_fixnum() else { return Some(LispValue::NIL) };
+                let Some(n) = args[0].as_fixnum() else {
+                    return Some(LispValue::NIL);
+                };
                 let i = n as usize;
                 if i < s.runtime.markers.len() {
                     s.runtime.markers[i].insertion_type = !args[1].is_nil();
                 }
                 Some(LispValue::NIL)
             }),
-            "upcase-initials" => self.subr_1(name, args, |s| {
-                Some(s.upcase_initials(args[0]))
-            }),
+            "upcase-initials" => self.subr_1(name, args, |s| Some(s.upcase_initials(args[0]))),
             "upcase" => self
                 .exact_arity(name, args, 1)
                 .map(|_| self.upcase(args[0])),
@@ -2443,7 +2697,9 @@ impl Interpreter<'_, '_, '_> {
             "commandp" => self.subr_1(name, args, |s| {
                 // Any callable function can be used as a command
                 let obj = args[0];
-                Some(bool_value(s.runtime.is_function(obj) || s.runtime.is_symbol(obj)))
+                Some(bool_value(
+                    s.runtime.is_function(obj) || s.runtime.is_symbol(obj),
+                ))
             }),
             "compiled-function-p" => self
                 .exact_arity(name, args, 1)
@@ -2481,28 +2737,16 @@ impl Interpreter<'_, '_, '_> {
             "butlast" => self
                 .min_max_arity(name, args, 1, 2)
                 .and_then(|_| self.butlast(args[0], args.get(1).copied())),
-            "cl-delete-if" => self.subr_2(name, args, |s| {
-                s.cl_delete_if(args[0], args[1], false)
-            }),
-            "cl-delete-if-not" => self.subr_2(name, args, |s| {
-                s.cl_delete_if(args[0], args[1], true)
-            }),
+            "cl-delete-if" => self.subr_2(name, args, |s| s.cl_delete_if(args[0], args[1], false)),
+            "cl-delete-if-not" => {
+                self.subr_2(name, args, |s| s.cl_delete_if(args[0], args[1], true))
+            }
             "display-graphic-p" => Some(LispValue::NIL),
-            "delete-dups" => self.subr_1(name, args, |s| {
-                Some(s.delete_dups(args[0]))
-            }),
-            "delq" | "cl-delq" => self.subr_2(name, args, |s| {
-                s.delq(args[0], args[1])
-            }),
-            "delete" | "cl-delete" => self.subr_2(name, args, |s| {
-                s.remove(args[0], args[1])
-            }),
-            "remq" | "cl-remq" => self.subr_2(name, args, |s| {
-                s.delq(args[0], args[1])
-            }),
-            "remove" | "cl-remove" => self.subr_2(name, args, |s| {
-                s.remove(args[0], args[1])
-            }),
+            "delete-dups" => self.subr_1(name, args, |s| Some(s.delete_dups(args[0]))),
+            "delq" | "cl-delq" => self.subr_2(name, args, |s| s.delq(args[0], args[1])),
+            "delete" | "cl-delete" => self.subr_2(name, args, |s| s.remove(args[0], args[1])),
+            "remq" | "cl-remq" => self.subr_2(name, args, |s| s.delq(args[0], args[1])),
+            "remove" | "cl-remove" => self.subr_2(name, args, |s| s.remove(args[0], args[1])),
             "copy-tree" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_tree(args[0])),
@@ -2510,9 +2754,7 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_alist(args[0])),
             "vconcat" => self.vconcat(args),
-            "cl-fill" => self.subr_2(name, args, |s| {
-                s.cl_fill(args[0], args[1])
-            }),
+            "cl-fill" => self.subr_2(name, args, |s| s.cl_fill(args[0], args[1])),
             "fillarray" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.fillarray(args[0], args[1])),
@@ -2724,9 +2966,7 @@ impl Interpreter<'_, '_, '_> {
                 .and_then(|_| self.number_arg(name, args[0]))
                 .map(|v| self.runtime.float(v.exp())),
             "list" | "cl-list" => Some(make_list(self.runtime, args.iter().copied())),
-            "length=" => self.subr_2(name, args, |s| {
-                s.length_equals(args[0], args[1])
-            }),
+            "length=" => self.subr_2(name, args, |s| s.length_equals(args[0], args[1])),
             "length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.length(args[0]))
@@ -2858,15 +3098,15 @@ impl Interpreter<'_, '_, '_> {
                 let result = self.runtime.hash_table_count(args[0]);
                 self.runtime_usize(result, name)
             }),
-            "hash-table-keys" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.hash_table_keys(args[0])
-            }),
-            "hash-table-values" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.hash_table_values(args[0])
-            }),
-            "copy-hash-table" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.copy_hash_table(args[0])
-            }),
+            "hash-table-keys" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.hash_table_keys(args[0])),
+            "hash-table-values" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.hash_table_values(args[0])),
+            "copy-hash-table" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.copy_hash_table(args[0])),
             "gethash" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.gethash(args[0], args[1], args.get(2).copied())),
@@ -2930,9 +3170,9 @@ impl Interpreter<'_, '_, '_> {
             "nthcdr" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.nthcdr(args[0], args[1])),
-            "sort" | "cl-sort" | "cl-stable-sort" => self.subr_2(name, args, |s| {
-                s.sort_seq(args[0], args[1])
-            }),
+            "sort" | "cl-sort" | "cl-stable-sort" => {
+                self.subr_2(name, args, |s| s.sort_seq(args[0], args[1]))
+            }
             "safe-length" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.safe_length(args[0])),
@@ -2946,28 +3186,16 @@ impl Interpreter<'_, '_, '_> {
             "memq" => self.subr_2(name, args, |s| s.memq(args[0], args[1])),
             "memql" => self.subr_2(name, args, |s| s.memql(args[0], args[1])),
             "member" | "cl-member" => self.subr_2(name, args, |s| s.member(args[0], args[1])),
-            "cl-member-if" => self.subr_2(name, args, |s| {
-                s.cl_member_if(args[0], args[1])
-            }),
-            "cl-member-if-not" => self.subr_2(name, args, |s| {
-                s.cl_member_if_not(args[0], args[1])
-            }),
+            "cl-member-if" => self.subr_2(name, args, |s| s.cl_member_if(args[0], args[1])),
+            "cl-member-if-not" => self.subr_2(name, args, |s| s.cl_member_if_not(args[0], args[1])),
             "assq" | "cl-assq" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], false)),
             "assoc" | "cl-assoc" => self.subr_2(name, args, |s| s.assoc(args[0], args[1], true)),
-            "cl-assoc-if" => self.subr_2(name, args, |s| {
-                s.cl_assoc_if(args[0], args[1])
-            }),
-            "cl-assoc-if-not" => self.subr_2(name, args, |s| {
-                s.cl_assoc_if_not(args[0], args[1])
-            }),
+            "cl-assoc-if" => self.subr_2(name, args, |s| s.cl_assoc_if(args[0], args[1])),
+            "cl-assoc-if-not" => self.subr_2(name, args, |s| s.cl_assoc_if_not(args[0], args[1])),
             "rassq" | "cl-rassq" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], false)),
             "rassoc" | "cl-rassoc" => self.subr_2(name, args, |s| s.rassoc(args[0], args[1], true)),
-            "cl-rassoc-if" => self.subr_2(name, args, |s| {
-                s.cl_rassoc_if(args[0], args[1])
-            }),
-            "cl-rassoc-if-not" => self.subr_2(name, args, |s| {
-                s.cl_rassoc_if_not(args[0], args[1])
-            }),
+            "cl-rassoc-if" => self.subr_2(name, args, |s| s.cl_rassoc_if(args[0], args[1])),
+            "cl-rassoc-if-not" => self.subr_2(name, args, |s| s.cl_rassoc_if_not(args[0], args[1])),
             "assoc-string" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.assoc_string(args[0], args[1], args.get(2).copied())),
@@ -2975,59 +3203,34 @@ impl Interpreter<'_, '_, '_> {
                 let pair = s.runtime.cons(args[0], args[1]);
                 Some(s.runtime.cons(pair, args[2]))
             }),
-            "alist-get" => self
-                .min_max_arity(name, args, 2, 5)
-                .and_then(|_| self.alist_get(
-                    args[0], args[1],
+            "alist-get" => self.min_max_arity(name, args, 2, 5).and_then(|_| {
+                self.alist_get(
+                    args[0],
+                    args[1],
                     args.get(2).copied(),
                     args.get(3).copied(),
                     args.get(4).copied(),
-                )),
-            "cl-remove-if" => self.subr_2(name, args, |s| {
-                s.remove_if(args[0], args[1], false)
+                )
             }),
-            "cl-remove-if-not" => self.subr_2(name, args, |s| {
-                s.remove_if(args[0], args[1], true)
-            }),
-            "cl-remprop" => self.subr_2(name, args, |s| {
-                s.cl_remprop(args[0], args[1])
-            }),
-            "cl-remove-duplicates" | "cl-delete-duplicates" => self.subr_1(name, args, |s| {
-                s.remove_duplicates(args[0])
-            }),
-            "cl-position" => self.subr_2(name, args, |s| {
-                s.cl_position(args[0], args[1])
-            }),
-            "cl-find" => self.subr_2(name, args, |s| {
-                s.cl_find(args[0], args[1])
-            }),
-            "cl-find-if" => self.subr_2(name, args, |s| {
-                s.cl_find_if(args[0], args[1])
-            }),
-            "cl-position-if" => self.subr_2(name, args, |s| {
-                s.cl_position_if(args[0], args[1])
-            }),
-            "cl-count" => self.subr_2(name, args, |s| {
-                s.cl_count(args[0], args[1])
-            }),
-            "cl-count-if" => self.subr_2(name, args, |s| {
-                s.cl_count_if(args[0], args[1])
-            }),
-            "cl-count-if-not" => self.subr_2(name, args, |s| {
-                s.cl_count_if_not(args[0], args[1])
-            }),
-            "cl-find-if-not" => self.subr_2(name, args, |s| {
-                s.cl_find_if_not(args[0], args[1])
-            }),
-            "cl-position-if-not" => self.subr_2(name, args, |s| {
-                s.cl_position_if_not(args[0], args[1])
-            }),
-            "cl-mismatch" => self.subr_2(name, args, |s| {
-                s.cl_mismatch(args[0], args[1])
-            }),
-            "cl-merge" => self.subr_vararg(name, args, |s| {
-                s.cl_merge(args)
-            }),
+            "cl-remove-if" => self.subr_2(name, args, |s| s.remove_if(args[0], args[1], false)),
+            "cl-remove-if-not" => self.subr_2(name, args, |s| s.remove_if(args[0], args[1], true)),
+            "cl-remprop" => self.subr_2(name, args, |s| s.cl_remprop(args[0], args[1])),
+            "cl-remove-duplicates" | "cl-delete-duplicates" => {
+                self.subr_1(name, args, |s| s.remove_duplicates(args[0]))
+            }
+            "cl-position" => self.subr_2(name, args, |s| s.cl_position(args[0], args[1])),
+            "cl-find" => self.subr_2(name, args, |s| s.cl_find(args[0], args[1])),
+            "cl-find-if" => self.subr_2(name, args, |s| s.cl_find_if(args[0], args[1])),
+            "cl-position-if" => self.subr_2(name, args, |s| s.cl_position_if(args[0], args[1])),
+            "cl-count" => self.subr_2(name, args, |s| s.cl_count(args[0], args[1])),
+            "cl-count-if" => self.subr_2(name, args, |s| s.cl_count_if(args[0], args[1])),
+            "cl-count-if-not" => self.subr_2(name, args, |s| s.cl_count_if_not(args[0], args[1])),
+            "cl-find-if-not" => self.subr_2(name, args, |s| s.cl_find_if_not(args[0], args[1])),
+            "cl-position-if-not" => {
+                self.subr_2(name, args, |s| s.cl_position_if_not(args[0], args[1]))
+            }
+            "cl-mismatch" => self.subr_2(name, args, |s| s.cl_mismatch(args[0], args[1])),
+            "cl-merge" => self.subr_vararg(name, args, |s| s.cl_merge(args)),
             "cl-endp" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() {
                     bool_value(true)
@@ -3041,24 +3244,22 @@ impl Interpreter<'_, '_, '_> {
                     bool_value(false)
                 }
             }),
-            "pairlis" | "cl-pairlis" => self
-                .min_max_arity(name, args, 2, 3)
-                .and_then(|_| self.pairlis(args[0], args[1], args.get(2).copied().unwrap_or(LispValue::NIL))),
-            "cl-adjoin" => self.subr_2(name, args, |s| {
-                s.cl_adjoin(args[0], args[1])
+            "pairlis" | "cl-pairlis" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
+                self.pairlis(
+                    args[0],
+                    args[1],
+                    args.get(2).copied().unwrap_or(LispValue::NIL),
+                )
             }),
-            "cl-replace" | "cl-nreplace" => self.subr_2(name, args, |s| {
-                s.cl_replace(args[0], args[1])
-            }),
+            "cl-adjoin" => self.subr_2(name, args, |s| s.cl_adjoin(args[0], args[1])),
+            "cl-replace" | "cl-nreplace" => {
+                self.subr_2(name, args, |s| s.cl_replace(args[0], args[1]))
+            }
             "cl-reduce" => self
                 .min_max_arity(name, args, 2, 3)
                 .and_then(|_| self.cl_reduce(args[0], args[1], args.get(2).copied())),
-            "cl-concatenate" => self.subr_vararg(name, args, |s| {
-                s.cl_concatenate(args)
-            }),
-            "cl-coerce" => self.subr_2(name, args, |s| {
-                s.cl_coerce(args[0], args[1])
-            }),
+            "cl-concatenate" => self.subr_vararg(name, args, |s| s.cl_concatenate(args)),
+            "cl-coerce" => self.subr_2(name, args, |s| s.cl_coerce(args[0], args[1])),
             "cl-tree-equal" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.tree_equal(args[0], args[1])))
             }),
@@ -3068,36 +3269,30 @@ impl Interpreter<'_, '_, '_> {
             "cl-subst-if-not" | "cl-nsubst-if-not" => self.subr_3(name, args, |s| {
                 s.cl_subst_if(args[0], args[1], args[2], true)
             }),
-            "cl-set-difference" | "cl-nset-difference" => self.subr_2(name, args, |s| {
-                s.cl_set_difference(args[0], args[1])
-            }),
-            "cl-intersection" | "cl-nintersection" => self.subr_2(name, args, |s| {
-                s.cl_intersection(args[0], args[1])
-            }),
-            "cl-ldiff" => self.subr_2(name, args, |s| {
-                s.cl_ldiff(args[0], args[1])
-            }),
-            "cl-list-length" | "proper-list-p" => self.subr_1(name, args, |s| {
-                s.cl_list_length(args[0])
-            }),
-            "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| {
-                s.cl_union(args[0], args[1])
-            }),
-            "cl-set-exclusive-or" | "cl-nset-exclusive-or" => self.subr_2(name, args, |s| {
-                s.cl_set_exclusive_or(args[0], args[1])
-            }),
-            "cl-search" => self.subr_2(name, args, |s| {
-                s.cl_search(args[0], args[1])
-            }),
+            "cl-set-difference" | "cl-nset-difference" => {
+                self.subr_2(name, args, |s| s.cl_set_difference(args[0], args[1]))
+            }
+            "cl-intersection" | "cl-nintersection" => {
+                self.subr_2(name, args, |s| s.cl_intersection(args[0], args[1]))
+            }
+            "cl-ldiff" => self.subr_2(name, args, |s| s.cl_ldiff(args[0], args[1])),
+            "cl-list-length" | "proper-list-p" => {
+                self.subr_1(name, args, |s| s.cl_list_length(args[0]))
+            }
+            "cl-union" | "cl-nunion" => self.subr_2(name, args, |s| s.cl_union(args[0], args[1])),
+            "cl-set-exclusive-or" | "cl-nset-exclusive-or" => {
+                self.subr_2(name, args, |s| s.cl_set_exclusive_or(args[0], args[1]))
+            }
+            "cl-search" => self.subr_2(name, args, |s| s.cl_search(args[0], args[1])),
             "cl-tailp" => self.subr_2(name, args, |s| {
                 Some(bool_value(s.cl_tailp(args[0], args[1])))
             }),
-            "cl-sublis" | "cl-nsublis" => self.subr_2(name, args, |s| {
-                s.cl_sublis(args[0], args[1])
-            }),
-            "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => self.subr_3(name, args, |s| {
-                s.substitute_seq(args[0], args[1], args[2])
-            }),
+            "cl-sublis" | "cl-nsublis" => {
+                self.subr_2(name, args, |s| s.cl_sublis(args[0], args[1]))
+            }
+            "cl-substitute" | "cl-nsubstitute" | "cl-nsubst" | "cl-subst" => {
+                self.subr_3(name, args, |s| s.substitute_seq(args[0], args[1], args[2]))
+            }
             "cl-substitute-if" | "cl-nsubstitute-if" => self.subr_3(name, args, |s| {
                 s.substitute_seq_if(args[0], args[1], args[2], false)
             }),
@@ -3119,38 +3314,39 @@ impl Interpreter<'_, '_, '_> {
             "mapc" | "cl-mapc" => self
                 .exact_arity(name, args, 2)
                 .and_then(|_| self.mapc(args[0], args[1])),
-            "maplist" | "cl-maplist" => self.subr_2(name, args, |s| {
-                s.maplist(args[0], args[1])
-            }),
-            "mapl" | "cl-mapl" => self.subr_2(name, args, |s| {
-                s.maplist(args[0], args[1]).map(|_| args[1])
-            }),
-            "mapcan" | "cl-mapcan" => self.subr_2(name, args, |s| {
-                s.mapcan(args[0], args[1])
-            }),
-            "mapcon" | "cl-mapcon" => self.subr_2(name, args, |s| {
-                s.mapcon(args[0], args[1])
-            }),
-            "every" | "cl-every" => self.subr_2(name, args, |s| {
-                s.sequence_every(args[0], args[1])
-            }),
-            "some" | "cl-some" => self.subr_2(name, args, |s| {
-                s.sequence_some(args[0], args[1])
-            }),
+            "maplist" | "cl-maplist" => self.subr_2(name, args, |s| s.maplist(args[0], args[1])),
+            "mapl" | "cl-mapl" => {
+                self.subr_2(name, args, |s| s.maplist(args[0], args[1]).map(|_| args[1]))
+            }
+            "mapcan" | "cl-mapcan" => self.subr_2(name, args, |s| s.mapcan(args[0], args[1])),
+            "mapcon" | "cl-mapcon" => self.subr_2(name, args, |s| s.mapcon(args[0], args[1])),
+            "every" | "cl-every" => self.subr_2(name, args, |s| s.sequence_every(args[0], args[1])),
+            "some" | "cl-some" => self.subr_2(name, args, |s| s.sequence_some(args[0], args[1])),
             "notany" | "cl-notany" => self.subr_2(name, args, |s| {
-                s.sequence_some(args[0], args[1])
-                    .map(|v| if v.is_nil() { LispValue::TRUE } else { LispValue::NIL })
+                s.sequence_some(args[0], args[1]).map(|v| {
+                    if v.is_nil() {
+                        LispValue::TRUE
+                    } else {
+                        LispValue::NIL
+                    }
+                })
             }),
             "notevery" | "cl-notevery" => self.subr_2(name, args, |s| {
-                s.sequence_every(args[0], args[1])
-                    .map(|v| if v.is_nil() { LispValue::TRUE } else { LispValue::NIL })
+                s.sequence_every(args[0], args[1]).map(|v| {
+                    if v.is_nil() {
+                        LispValue::TRUE
+                    } else {
+                        LispValue::NIL
+                    }
+                })
             }),
             "copy-list" => self
                 .exact_arity(name, args, 1)
                 .and_then(|_| self.copy_list(args[0])),
             "make-string" => self.subr_2(name, args, |s| {
                 let count = s.fixnum_arg("make-string", args[0])?;
-                let ch = args[1].as_char()
+                let ch = args[1]
+                    .as_char()
                     .or_else(|| args[1].as_fixnum().and_then(|n| char::from_u32(n as u32)))
                     .unwrap_or(' ');
                 let s_str: String = std::iter::repeat(ch).take(count as usize).collect();
@@ -3197,23 +3393,25 @@ impl Interpreter<'_, '_, '_> {
             ">=" => self.number_compare(args, |left, right| left >= right),
             "/=" => self.min_max_arity(name, args, 0, usize::MAX).and_then(|_| {
                 // (=/=) and (=/= x) return t.
-                if args.len() < 2 { return Some(LispValue::TRUE); }
+                if args.len() < 2 {
+                    return Some(LispValue::TRUE);
+                }
                 // All args must be pairwise distinct (GNU Emacs semantics).
                 if self.has_float_arg(args) {
-                    let vals: Vec<f64> = args.iter()
+                    let vals: Vec<f64> = args
+                        .iter()
                         .map(|v| self.number_arg(name, *v))
                         .collect::<Option<Vec<_>>>()?;
-                    let all_distinct = (0..vals.len()).all(|i|
-                        (i+1..vals.len()).all(|j| vals[i] != vals[j])
-                    );
+                    let all_distinct =
+                        (0..vals.len()).all(|i| (i + 1..vals.len()).all(|j| vals[i] != vals[j]));
                     Some(bool_value(all_distinct))
                 } else {
-                    let vals: Vec<i64> = args.iter()
+                    let vals: Vec<i64> = args
+                        .iter()
                         .map(|v| self.fixnum_arg(name, *v))
                         .collect::<Option<Vec<_>>>()?;
-                    let all_distinct = (0..vals.len()).all(|i|
-                        (i+1..vals.len()).all(|j| vals[i] != vals[j])
-                    );
+                    let all_distinct =
+                        (0..vals.len()).all(|i| (i + 1..vals.len()).all(|j| vals[i] != vals[j]));
                     Some(bool_value(all_distinct))
                 }
             }),
@@ -3327,13 +3525,18 @@ impl Interpreter<'_, '_, '_> {
             "define-error" => self.min_max_arity(name, args, 2, 3).and_then(|_| {
                 let symbol = args[0];
                 let message = args[1];
-                let parent = args.get(2).copied().unwrap_or_else(|| self.runtime.intern("error"));
+                let parent = args
+                    .get(2)
+                    .copied()
+                    .unwrap_or_else(|| self.runtime.intern("error"));
                 let parent_cons = self.runtime.cons(parent, LispValue::NIL);
                 let conditions = self.runtime.cons(symbol, parent_cons);
                 let msg_key = self.runtime.intern("error-message");
                 let cond_key = self.runtime.intern("error-conditions");
                 let _ = self.runtime.put_symbol_property(symbol, msg_key, message);
-                let _ = self.runtime.put_symbol_property(symbol, cond_key, conditions);
+                let _ = self
+                    .runtime
+                    .put_symbol_property(symbol, cond_key, conditions);
                 Some(symbol)
             }),
             "error" => {
@@ -3376,15 +3579,20 @@ impl Interpreter<'_, '_, '_> {
             "macrop" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(
                     self.runtime.is_symbol(args[0])
-                        && self.runtime.symbol_name(args[0]).ok()
-                            .is_some_and(|name| self.functions_by_name.contains_key(&format!("{name}-macro")))
+                        && self.runtime.symbol_name(args[0]).ok().is_some_and(|name| {
+                            self.functions_by_name
+                                .contains_key(&format!("{name}-macro"))
+                        }),
                 )
             }),
             "special-form-p" => self.exact_arity(name, args, 1).map(|_| {
                 bool_value(
                     self.runtime.is_symbol(args[0])
-                        && self.runtime.symbol_name(args[0]).ok()
-                            .is_some_and(|name| self.is_special_form_name(&name))
+                        && self
+                            .runtime
+                            .symbol_name(args[0])
+                            .ok()
+                            .is_some_and(|name| self.is_special_form_name(&name)),
                 )
             }),
             "rem" => self.exact_arity(name, args, 2).and_then(|_| {
@@ -3494,9 +3702,7 @@ impl Interpreter<'_, '_, '_> {
                     self.fixnum(result, name)
                 }
             }
-            "cl-typep" => self.subr_2(name, args, |s| {
-                s.cl_typep(args[0], args[1])
-            }),
+            "cl-typep" => self.subr_2(name, args, |s| s.cl_typep(args[0], args[1])),
             "type-of" => self.exact_arity(name, args, 1).map(|_| {
                 if args[0].is_nil() || args[0].is_true() {
                     self.runtime.intern("symbol")
@@ -3575,14 +3781,16 @@ impl Interpreter<'_, '_, '_> {
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || self.runtime.is_string(args[0]))),
             "bare-symbol-p" => self.exact_arity(name, args, 1).map(|_| {
-                bool_value(!args[0].is_nil() && !args[0].is_true() && self.runtime.is_symbol(args[0]))
+                bool_value(
+                    !args[0].is_nil() && !args[0].is_true() && self.runtime.is_symbol(args[0]),
+                )
             }),
-            "bignump" => self.exact_arity(name, args, 1).map(|_| {
-                bool_value(self.runtime.is_bignum(args[0]))
-            }),
-            "fixnump" => self.exact_arity(name, args, 1).map(|_| {
-                bool_value(args[0].is_fixnum())
-            }),
+            "bignump" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(self.runtime.is_bignum(args[0]))),
+            "fixnump" => self
+                .exact_arity(name, args, 1)
+                .map(|_| bool_value(args[0].is_fixnum())),
             "booleanp" => self
                 .exact_arity(name, args, 1)
                 .map(|_| bool_value(args[0].is_nil() || args[0].is_true())),
@@ -3679,15 +3887,15 @@ impl Interpreter<'_, '_, '_> {
             }),
 
             // --- Atom primitives ---
-            "make-atom" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
-                Some(self.runtime.make_atom(args[0]))
-            }),
-            "atom-deref" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.runtime.atom_deref(args[0]).ok()
-            }),
-            "atom-reset!" => self.exact_arity(name, args, 2).and_then(|_| {
-                self.runtime.atom_reset(args[0], args[1]).ok()
-            }),
+            "make-atom" => self
+                .min_max_arity(name, args, 1, 1)
+                .and_then(|_| Some(self.runtime.make_atom(args[0]))),
+            "atom-deref" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.runtime.atom_deref(args[0]).ok()),
+            "atom-reset!" => self
+                .exact_arity(name, args, 2)
+                .and_then(|_| self.runtime.atom_reset(args[0], args[1]).ok()),
             "atom-compare-and-set!" => self.exact_arity(name, args, 3).and_then(|_| {
                 self.runtime
                     .atom_compare_and_set(args[0], args[1], args[2])
@@ -3718,15 +3926,16 @@ impl Interpreter<'_, '_, '_> {
             }),
 
             // --- Agent primitives ---
-            "make-agent" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
-                Some(self.runtime.make_agent(args[0]))
-            }),
-            "agent-deref" => self.exact_arity(name, args, 1).and_then(|_| {
-                self.runtime.agent_deref(args[0]).ok()
-            }),
+            "make-agent" => self
+                .min_max_arity(name, args, 1, 1)
+                .and_then(|_| Some(self.runtime.make_agent(args[0]))),
+            "agent-deref" => self
+                .exact_arity(name, args, 1)
+                .and_then(|_| self.runtime.agent_deref(args[0]).ok()),
             "send" | "send-off" => self.min_max_arity(name, args, 2, usize::MAX).and_then(|_| {
                 let via_pool = name == "send-off";
-                let result = self.runtime
+                let result = self
+                    .runtime
                     .agent_send(args[0], args[1], &args[2..], via_pool)
                     .ok();
                 if via_pool {
@@ -3761,7 +3970,13 @@ impl Interpreter<'_, '_, '_> {
                 self.runtime.agent_deref(agent).ok()
             }),
             "agent-error" => self.exact_arity(name, args, 1).and_then(|_| {
-                Some(self.runtime.agent_error(args[0]).ok().flatten().unwrap_or(LispValue::NIL))
+                Some(
+                    self.runtime
+                        .agent_error(args[0])
+                        .ok()
+                        .flatten()
+                        .unwrap_or(LispValue::NIL),
+                )
             }),
             "restart-agent" => self.exact_arity(name, args, 2).and_then(|_| {
                 let _ = self.runtime.agent_update(args[0], args[1], None);
@@ -3770,7 +3985,8 @@ impl Interpreter<'_, '_, '_> {
 
             // --- Mutex/condition variable primitives ---
             "make-mutex" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
-                let name = self.string_contents_owned(args[0])
+                let name = self
+                    .string_contents_owned(args[0])
                     .unwrap_or("unnamed".to_string());
                 Some(self.runtime.make_mutex(name))
             }),
@@ -3783,7 +3999,8 @@ impl Interpreter<'_, '_, '_> {
                 Some(LispValue::TRUE)
             }),
             "make-condition-variable" => self.min_max_arity(name, args, 1, 1).and_then(|_| {
-                let name = self.string_contents_owned(args[0])
+                let name = self
+                    .string_contents_owned(args[0])
                     .unwrap_or("unnamed".to_string());
                 Some(self.runtime.make_condvar(name))
             }),
@@ -3805,13 +4022,16 @@ impl Interpreter<'_, '_, '_> {
             "fib" => self.subr_1(name, args, |s| {
                 let n = s.fixnum_arg("fib", args[0])?;
                 let (mut a, mut b) = (0i64, 1i64);
-                for _ in 0..n { let t = a + b; a = b; b = t; }
+                for _ in 0..n {
+                    let t = a + b;
+                    a = b;
+                    b = t;
+                }
                 s.fixnum(a, "fib")
             }),
             // Step 2: add "fib" to is_primitive_name HashSet (done below).
             // Step 3: (optional) add JIT fast path in jit_rt.rs.
             // Now callable from Elisp: (fib 10) → 55
-
             _ => return None,
         };
         Some(value)
@@ -3929,17 +4149,47 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn is_special_form_name(&self, name: &str) -> bool {
-        matches!(name,
-            "and" | "or" | "if" | "cond" | "while" | "let" | "let*" | "setq"
-            | "quote" | "function" | "progn" | "prog1" | "prog2"
-            | "catch" | "throw" | "condition-case" | "unwind-protect"
-            | "defun" | "defvar" | "defconst" | "defmacro" | "lambda"
-            | "letrec" | "cl-loop" | "pcase" | "setf" | "cl-labels"
-            | "cl-flet" | "interactive" | "save-excursion"
-            | "save-restriction" | "save-current-buffer"
-            | "with-mutex" | "make-thread" | "thread-yield"
-            | "make-atom" | "make-agent" | "make-mutex"
-            | "make-condition-variable"
+        matches!(
+            name,
+            "and"
+                | "or"
+                | "if"
+                | "cond"
+                | "while"
+                | "let"
+                | "let*"
+                | "setq"
+                | "quote"
+                | "function"
+                | "progn"
+                | "prog1"
+                | "prog2"
+                | "catch"
+                | "throw"
+                | "condition-case"
+                | "unwind-protect"
+                | "defun"
+                | "defvar"
+                | "defconst"
+                | "defmacro"
+                | "lambda"
+                | "letrec"
+                | "cl-loop"
+                | "pcase"
+                | "setf"
+                | "cl-labels"
+                | "cl-flet"
+                | "interactive"
+                | "save-excursion"
+                | "save-restriction"
+                | "save-current-buffer"
+                | "with-mutex"
+                | "make-thread"
+                | "thread-yield"
+                | "make-atom"
+                | "make-agent"
+                | "make-mutex"
+                | "make-condition-variable"
         )
     }
 
@@ -3990,7 +4240,11 @@ impl Interpreter<'_, '_, '_> {
             }
         };
         let target = find_condition_handler(
-            instructions, signal_index, &signal_name, signaled.symbol, self.runtime,
+            instructions,
+            signal_index,
+            &signal_name,
+            signaled.symbol,
+            self.runtime,
         )?;
         // Pop skipped inner condition-case frames. Clamp to avoid over-popping
         // when inner handlers have already been activated (and thus already
@@ -4285,14 +4539,22 @@ impl Interpreter<'_, '_, '_> {
 
     fn length_equals(&mut self, seq: LispValue, expected: LispValue) -> Option<LispValue> {
         let n = self.fixnum_arg("length=", expected)?;
-        if n < 0 { return Some(LispValue::NIL); }
+        if n < 0 {
+            return Some(LispValue::NIL);
+        }
         let len = if seq.is_nil() || self.runtime.is_cons(seq) {
             let mut current = seq;
             let mut count = 0i64;
             loop {
-                if current.is_nil() { break; }
-                if count > n { return Some(LispValue::NIL); }
-                if !self.runtime.is_cons(current) { return Some(LispValue::NIL); }
+                if current.is_nil() {
+                    break;
+                }
+                if count > n {
+                    return Some(LispValue::NIL);
+                }
+                if !self.runtime.is_cons(current) {
+                    return Some(LispValue::NIL);
+                }
                 count += 1;
                 current = self.runtime.cdr(current).ok()?;
             }
@@ -4330,9 +4592,7 @@ impl Interpreter<'_, '_, '_> {
         start: LispValue,
         end: Option<LispValue>,
     ) -> Option<LispValue> {
-        let is_negative = |v: LispValue| -> bool {
-            v.as_fixnum().map(|n| n < 0).unwrap_or(false)
-        };
+        let is_negative = |v: LispValue| -> bool { v.as_fixnum().map(|n| n < 0).unwrap_or(false) };
         let len = if self.runtime.is_string(seq) {
             self.string_contents_owned(seq)?.len()
         } else if self.runtime.is_cons(seq) || seq.is_nil() {
@@ -4429,7 +4689,10 @@ impl Interpreter<'_, '_, '_> {
                 return Some(LispValue::NIL);
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper alist, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper alist, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             let entry = self.runtime.car(current).ok()?;
@@ -4446,8 +4709,12 @@ impl Interpreter<'_, '_, '_> {
     fn cl_rassoc_if(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
         let mut current = alist;
         loop {
-            if current.is_nil() { return Some(LispValue::NIL); }
-            if !self.runtime.is_cons(current) { break; }
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                break;
+            }
             let entry = self.runtime.car(current).ok()?;
             if self.runtime.is_cons(entry) {
                 let val = self.runtime.cdr(entry).ok()?;
@@ -4463,8 +4730,12 @@ impl Interpreter<'_, '_, '_> {
     fn cl_rassoc_if_not(&mut self, predicate: LispValue, alist: LispValue) -> Option<LispValue> {
         let mut current = alist;
         loop {
-            if current.is_nil() { return Some(LispValue::NIL); }
-            if !self.runtime.is_cons(current) { break; }
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                break;
+            }
             let entry = self.runtime.car(current).ok()?;
             if self.runtime.is_cons(entry) {
                 let val = self.runtime.cdr(entry).ok()?;
@@ -4484,7 +4755,10 @@ impl Interpreter<'_, '_, '_> {
                 return Some(LispValue::NIL);
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper alist, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper alist, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             let entry = self.runtime.car(current).ok()?;
@@ -4505,7 +4779,10 @@ impl Interpreter<'_, '_, '_> {
                 return Some(LispValue::NIL);
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             let car = self.runtime.car(current).ok()?;
@@ -4523,7 +4800,10 @@ impl Interpreter<'_, '_, '_> {
                 return Some(LispValue::NIL);
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             let car = self.runtime.car(current).ok()?;
@@ -4694,7 +4974,8 @@ impl Interpreter<'_, '_, '_> {
                     Some(make_list(self.runtime, elems.into_iter()))
                 } else if self.runtime.is_string(object) {
                     let s = self.string_contents_owned(object)?;
-                    let chars: Vec<LispValue> = s.chars().map(|c| LispValue::from_char(c)).collect();
+                    let chars: Vec<LispValue> =
+                        s.chars().map(|c| LispValue::from_char(c)).collect();
                     Some(make_list(self.runtime, chars.into_iter()))
                 } else {
                     Some(make_list(self.runtime, [object].into_iter()))
@@ -4709,11 +4990,14 @@ impl Interpreter<'_, '_, '_> {
                     Some(object)
                 } else {
                     let elems = self.sequence_values(object)?;
-                    let s: String = elems.into_iter()
+                    let s: String = elems
+                        .into_iter()
                         .filter_map(|v| {
                             if v.is_fixnum() {
                                 char::from_u32(v.as_fixnum()? as u32)
-                            } else { None }
+                            } else {
+                                None
+                            }
                         })
                         .collect();
                     Some(self.runtime.string(s))
@@ -4781,27 +5065,43 @@ impl Interpreter<'_, '_, '_> {
     fn plist_member(&mut self, plist: LispValue, prop: LispValue) -> Option<LispValue> {
         let mut current = plist;
         loop {
-            if current.is_nil() { return Some(LispValue::NIL); }
-            if !self.runtime.is_cons(current) { return Some(LispValue::NIL); }
+            if current.is_nil() {
+                return Some(LispValue::NIL);
+            }
+            if !self.runtime.is_cons(current) {
+                return Some(LispValue::NIL);
+            }
             let key = self.runtime.car(current).ok()?;
-            if key == prop { return Some(current); }
+            if key == prop {
+                return Some(current);
+            }
             let next = self.runtime.cdr(current).ok()?;
-            if next.is_nil() || !self.runtime.is_cons(next) { return Some(LispValue::NIL); }
+            if next.is_nil() || !self.runtime.is_cons(next) {
+                return Some(LispValue::NIL);
+            }
             current = self.runtime.cdr(next).ok()?;
         }
     }
 
     fn cl_remprop(&mut self, symbol: LispValue, propname: LispValue) -> Option<LispValue> {
-        let Ok(plist) = self.runtime.symbol_plist(symbol) else { return Some(LispValue::NIL); };
+        let Ok(plist) = self.runtime.symbol_plist(symbol) else {
+            return Some(LispValue::NIL);
+        };
         // Walk plist: (prop1 val1 prop2 val2 ...)
         let mut current = plist;
         let mut prev: Option<LispValue> = None;
         loop {
-            if current.is_nil() { break; }
-            if !self.runtime.is_cons(current) { break; }
+            if current.is_nil() {
+                break;
+            }
+            if !self.runtime.is_cons(current) {
+                break;
+            }
             let key = self.runtime.car(current).ok()?;
             let val_cell = self.runtime.cdr(current).ok()?;
-            if val_cell.is_nil() || !self.runtime.is_cons(val_cell) { break; }
+            if val_cell.is_nil() || !self.runtime.is_cons(val_cell) {
+                break;
+            }
             if key == propname {
                 // Splice out key and val: prev->cdr = cddr(current)
                 let rest = self.runtime.cdr(val_cell).ok()?;
@@ -5073,7 +5373,10 @@ impl Interpreter<'_, '_, '_> {
             if self.runtime.is_cons(entry) {
                 let entry_key = self.runtime.car(entry).ok()?;
                 if self.runtime.is_string(entry_key) {
-                    let entry_str = self.runtime.string_contents_emacs(entry_key).unwrap_or_default();
+                    let entry_str = self
+                        .runtime
+                        .string_contents_emacs(entry_key)
+                        .unwrap_or_default();
                     let matched = if fold {
                         entry_str.eq_ignore_ascii_case(&key_str)
                     } else {
@@ -5221,7 +5524,10 @@ impl Interpreter<'_, '_, '_> {
                 break;
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             results.push(self.execute_funcall(function, &[current])?);
@@ -5246,11 +5552,7 @@ impl Interpreter<'_, '_, '_> {
         Some(sequence)
     }
 
-    fn sequence_every(
-        &mut self,
-        predicate: LispValue,
-        sequence: LispValue,
-    ) -> Option<LispValue> {
+    fn sequence_every(&mut self, predicate: LispValue, sequence: LispValue) -> Option<LispValue> {
         for element in self.sequence_values(sequence)? {
             if self.execute_funcall(predicate, &[element])?.is_nil() {
                 return Some(LispValue::NIL);
@@ -5259,11 +5561,7 @@ impl Interpreter<'_, '_, '_> {
         Some(LispValue::TRUE)
     }
 
-    fn sequence_some(
-        &mut self,
-        predicate: LispValue,
-        sequence: LispValue,
-    ) -> Option<LispValue> {
+    fn sequence_some(&mut self, predicate: LispValue, sequence: LispValue) -> Option<LispValue> {
         for element in self.sequence_values(sequence)? {
             let result = self.execute_funcall(predicate, &[element])?;
             if !result.is_nil() {
@@ -5286,7 +5584,10 @@ impl Interpreter<'_, '_, '_> {
                 return Some(LispValue::NIL);
             }
             if !self.runtime.is_cons(current) {
-                self.error(format!("expected a proper list, got {}", self.runtime.format_value(current)));
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(current)
+                ));
                 return None;
             }
             let car = self.runtime.car(current).ok()?;
@@ -5305,7 +5606,10 @@ impl Interpreter<'_, '_, '_> {
                 break;
             }
             if !self.runtime.is_cons(cdr) {
-                self.error(format!("expected a proper list, got {}", self.runtime.format_value(cdr)));
+                self.error(format!(
+                    "expected a proper list, got {}",
+                    self.runtime.format_value(cdr)
+                ));
                 return None;
             }
             let car = self.runtime.car(cdr).ok()?;
@@ -5418,8 +5722,12 @@ impl Interpreter<'_, '_, '_> {
             "symbol" => obj.is_nil() || obj.is_true() || self.runtime.is_symbol(obj),
             "cons" | "list" => self.runtime.is_cons(obj),
             "null" => obj.is_nil(),
-            "sequence" => obj.is_nil() || self.runtime.is_cons(obj)
-                || self.runtime.is_vector(obj) || self.runtime.is_string(obj),
+            "sequence" => {
+                obj.is_nil()
+                    || self.runtime.is_cons(obj)
+                    || self.runtime.is_vector(obj)
+                    || self.runtime.is_string(obj)
+            }
             "vector" | "array" => self.runtime.is_vector(obj),
             "function" => self.runtime.is_function(obj),
             "hash-table" => self.runtime.is_hash_table(obj),
@@ -5563,8 +5871,10 @@ impl Interpreter<'_, '_, '_> {
         let result: Vec<LispValue> = elements
             .into_iter()
             .map(|elem| {
-                let matched = !self.execute_funcall(predicate, &[elem])
-                    .unwrap_or(LispValue::NIL).is_nil();
+                let matched = !self
+                    .execute_funcall(predicate, &[elem])
+                    .unwrap_or(LispValue::NIL)
+                    .is_nil();
                 if matched != negate { new_val } else { elem }
             })
             .collect();
@@ -5611,7 +5921,11 @@ impl Interpreter<'_, '_, '_> {
         }
         if !self.runtime.is_cons(tree) {
             let result = self.execute_funcall(predicate, &[tree])?;
-            let matches = if negate { result.is_nil() } else { !result.is_nil() };
+            let matches = if negate {
+                result.is_nil()
+            } else {
+                !result.is_nil()
+            };
             return if matches { Some(new_val) } else { Some(tree) };
         }
         let car = self.runtime.car(tree).ok()?;
@@ -5631,8 +5945,14 @@ impl Interpreter<'_, '_, '_> {
         let elements = self.sequence_values(sequence)?;
         let mut parts = Vec::new();
         for elem in elements {
-            let result = self.execute_funcall(function, &[elem]).unwrap_or(LispValue::NIL);
-            parts.push(self.runtime.string_contents_emacs(result).unwrap_or_default());
+            let result = self
+                .execute_funcall(function, &[elem])
+                .unwrap_or(LispValue::NIL);
+            parts.push(
+                self.runtime
+                    .string_contents_emacs(result)
+                    .unwrap_or_default(),
+            );
         }
         Some(self.runtime.string(&parts.join(&sep)))
     }
@@ -6003,7 +6323,9 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn string_bytes_equal_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
-        if args.len() <= 1 { return Some(LispValue::TRUE); }
+        if args.len() <= 1 {
+            return Some(LispValue::TRUE);
+        }
         let first = self.string_contents_owned(args[0])?;
         Some(bool_value(args[1..].iter().all(|a| {
             self.string_contents_owned(*a).as_deref() == Some(first.as_str())
@@ -6011,22 +6333,29 @@ impl Interpreter<'_, '_, '_> {
     }
 
     fn string_case_insensitive_equal_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
-        if args.len() <= 1 { return Some(LispValue::TRUE); }
+        if args.len() <= 1 {
+            return Some(LispValue::TRUE);
+        }
         let first = self.string_contents_owned(args[0])?.to_lowercase();
         Some(bool_value(args[1..].iter().all(|a| {
-            self.string_contents_owned(*a).map(|s| s.to_lowercase()).as_deref() == Some(first.as_str())
+            self.string_contents_owned(*a)
+                .map(|s| s.to_lowercase())
+                .as_deref()
+                == Some(first.as_str())
         })))
     }
 
     fn string_lessp_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
-        let vals: Vec<String> = args.iter()
+        let vals: Vec<String> = args
+            .iter()
             .map(|v| self.string_contents_owned(*v))
             .collect::<Option<Vec<_>>>()?;
         Some(bool_value(vals.windows(2).all(|w| w[0] < w[1])))
     }
 
     fn string_greaterp_multi(&mut self, args: &[LispValue]) -> Option<LispValue> {
-        let vals: Vec<String> = args.iter()
+        let vals: Vec<String> = args
+            .iter()
             .map(|v| self.string_contents_owned(*v))
             .collect::<Option<Vec<_>>>()?;
         Some(bool_value(vals.windows(2).all(|w| w[0] > w[1])))
@@ -6308,14 +6637,20 @@ impl Interpreter<'_, '_, '_> {
     fn delete_dups(&mut self, list: LispValue) -> LispValue {
         let mut current = list;
         loop {
-            if current.is_nil() || !self.runtime.is_cons(current) { break; }
+            if current.is_nil() || !self.runtime.is_cons(current) {
+                break;
+            }
             let cdr = self.runtime.cdr(current).ok().unwrap_or(LispValue::NIL);
-            if cdr.is_nil() || !self.runtime.is_cons(cdr) { break; }
+            if cdr.is_nil() || !self.runtime.is_cons(cdr) {
+                break;
+            }
             let car = self.runtime.car(current).ok().unwrap_or(LispValue::NIL);
             let cadr = self.runtime.car(cdr).ok().unwrap_or(LispValue::NIL);
             if self.runtime.equal(car, cadr) {
                 let cddr = self.runtime.cdr(cdr).ok().unwrap_or(LispValue::NIL);
-                if self.runtime.set_cdr(current, cddr).is_err() { break; }
+                if self.runtime.set_cdr(current, cddr).is_err() {
+                    break;
+                }
             } else {
                 current = cdr;
             }
@@ -6579,10 +6914,7 @@ impl Interpreter<'_, '_, '_> {
         if expand_output.forms.is_empty() {
             return Some(form);
         }
-        Some(surface_to_lisp_value(
-            self.runtime,
-            &expand_output.forms[0],
-        ))
+        Some(surface_to_lisp_value(self.runtime, &expand_output.forms[0]))
     }
 
     fn eval_form(&mut self, form: LispValue) -> Option<LispValue> {
@@ -6925,9 +7257,10 @@ impl Interpreter<'_, '_, '_> {
     fn sxhash_eq(&mut self, obj: LispValue) -> Option<LispValue> {
         // Identity hash: use the raw bits of the LispValue as the hash.
         // Fixnums and other immediates use their tag bits.
-        let hash = obj.as_fixnum().map(|n| n as u64).unwrap_or_else(|| {
-            obj.heap_addr().map(|a| a as u64).unwrap_or(0)
-        });
+        let hash = obj
+            .as_fixnum()
+            .map(|n| n as u64)
+            .unwrap_or_else(|| obj.heap_addr().map(|a| a as u64).unwrap_or(0));
         self.fixnum(hash as i64, "sxhash-eq")
     }
 
@@ -6990,9 +7323,9 @@ impl Interpreter<'_, '_, '_> {
             let elements = self.runtime.vector_elements(obj).ok()?;
             let mut h: u64 = 0;
             for elem in &elements {
-                h = h.wrapping_mul(31).wrapping_add(
-                    self.sxhash_equal_value(*elem, depth + 1).unwrap_or(0)
-                );
+                h = h
+                    .wrapping_mul(31)
+                    .wrapping_add(self.sxhash_equal_value(*elem, depth + 1).unwrap_or(0));
             }
             return Some(h);
         }
@@ -7856,418 +8189,420 @@ fn days_to_ymd(days: i64) -> (i64, i64, i64) {
 fn is_primitive_name(name: &str) -> bool {
     use std::sync::OnceLock;
     static PRIMITIVES: OnceLock<std::collections::HashSet<&'static str>> = OnceLock::new();
-    PRIMITIVES.get_or_init(|| {
-        std::collections::HashSet::from([
-            "%",
-            "*",
-            "+",
-            "-",
-            "/",
-            "/=",
-            "<",
-            "<=",
-            "=",
-            ">",
-            ">=",
-            "1+",
-            "1-",
-            "abs",
-            "add-load-path",
-            "alist-get",
-            "always",
-            "append",
-            "apply",
-            "aref",
-            "arrayp",
-            "aset",
-            "ash",
-            "assoc",
-            "assoc-string",
-            "assq",
-            "cl-adjoin",
-            "cl-assoc",
-            "cl-assoc-if",
-            "cl-assoc-if-not",
-            "cl-assq",
-            "atom",
-            "autoload",
-            "autoloadp",
-            "bare-symbol-p",
-            "bignump",
-            "bobp",
-            "bool-vector-p",
-            "booleanp",
-            "boundp",
-            "buffer-list",
-            "buffer-modified-p",
-            "buffer-name",
-            "buffer-size",
-            "buffer-string",
-            "buffer-substring",
-            "bufferp",
-            "butlast",
-            "caaaar",
-            "caaadr",
-            "caaar",
-            "caadar",
-            "caaddr",
-            "caadr",
-            "caar",
-            "cadaar",
-            "cadadr",
-            "cadar",
-            "caddar",
-            "cadddr",
-            "caddr",
-            "cadr",
-            "capitalize",
-            "car",
-            "car-safe",
-            "case-table-p",
-            "category-table-p",
-            "cdaaar",
-            "cdaadr",
-            "cdaar",
-            "cdadar",
-            "cdaddr",
-            "cdadr",
-            "cdar",
-            "cddaar",
-            "cddadr",
-            "cddar",
-            "cdddar",
-            "cddddr",
-            "cdddr",
-            "cddr",
-            "cdr",
-            "cdr-safe",
-            "ceiling",
-            "char-code",
-            "char-equal",
-            "char-or-string-p",
-            "char-table-p",
-            "char-to-string",
-            "char-valid-p",
-            "cl-count",
-            "cl-count-if",
-            "cl-count-if-not",
-            "cl-endp",
-            "cl-evenp",
-            "cl-fill",
-            "cl-find",
-            "cl-find-if",
-            "cl-find-if-not",
-            "cl-minusp",
-            "cl-oddp",
-            "cl-plusp",
-            "cl-position",
-            "cl-position-if",
-            "cl-position-if-not",
-            "cl-coerce",
-            "cl-concatenate",
-            "cl-delete",
-            "cl-delete-duplicates",
-            "cl-delete-if",
-            "cl-delete-if-not",
-            "cl-delq",
-            "cl-nset-difference",
-            "cl-nsubst-if",
-            "cl-nsubst-if-not",
-            "cl-nsublis",
-            "cl-nsubstitute",
-            "cl-nsubstitute-if",
-            "cl-nsubstitute-if-not",
-            "cl-subst-if",
-            "cl-subst-if-not",
-            "cl-sublis",
-            "cl-substitute",
-            "cl-substitute-if",
-            "cl-substitute-if-not",
-            "cl-nintersection",
-            "cl-nset-exclusive-or",
-            "cl-nunion",
-            "cl-intersection",
-            "cl-ldiff",
-            "cl-tree-equal",
-            "cl-union",
-            "cl-typep",
-            "cl-nreplace",
-            "cl-nreverse",
-            "cl-rassoc",
-            "cl-rassoc-if",
-            "cl-rassoc-if-not",
-            "cl-rassq",
-            "cl-remprop",
-            "cl-remq",
-            "cl-remove",
-            "cl-reverse",
-            "cl-remove-duplicates",
-            "cl-reduce",
-            "cl-remove-if",
-            "cl-remove-if-not",
-            "cl-replace",
-            "cl-set-difference",
-            "cl-set-exclusive-or",
-            "cl-search",
-            "cl-sort",
-            "cl-stable-sort",
-            "clrhash",
-            "color-defined-p",
-            "commandp",
-            "compiled-function-p",
-            "concat",
-            "cons",
-            "consp",
-            "copy-alist",
-            "copy-list",
-            "copy-sequence",
-            "copy-tree",
-            "cos",
-            "defalias",
-            "current-buffer",
-            "current-time",
-            "current-time-string",
-            "define-error",
-            "default-boundp",
-            "default-value",
-            "defun",
-            "delete",
-            "delete-backward-char",
-            "delete-char",
-            "delete-dups",
-            "delete-file",
-            "delete-region",
-            "directory-file-name",
-            "delq",
-            "display-graphic-p",
-            "downcase",
-            "elt",
-            "emacs-pid",
-            "eobp",
-            "eql",
-            "eq",
-            "equal",
-            "error",
-            "eval",
-            "evenp",
-            "every",
-            "exp",
-            "expt",
-            "fboundp",
-            "featurep",
-            "file-directory-p",
-            "file-exists-p",
-            "file-name-absolute-p",
-            "file-name-base",
-            "file-name-directory",
-            "file-name-extension",
-            "file-name-nondirectory",
-            "file-name-sans-extension",
-            "file-readable-p",
-            "file-regular-p",
-            "file-writable-p",
-            "fillarray",
-            "fixnump",
-            "float",
-            "float-time",
-            "floatp",
-            "floor",
-            "fontp",
-            "framep",
-            "fmakunbound",
-            "format",
-            "format-message",
-            "fset",
-            "funcall",
-            "functionp",
-            "garbage-collect",
-            "gensym",
-            "getenv",
-            "get",
-            "gethash",
-            "hash-table-count",
-            "hash-table-p",
-            "identity",
-            "ignore",
-            "indirect-function",
-            "integer-or-marker-p",
-            "integerp",
-            "intern",
-            "intern-soft",
-            "keymapp",
-            "keywordp",
-            "last",
-            "length",
-            "length=",
-            "list",
-            "list*",
-            "cl-list",
-            "cl-list*",
-            "cl-list-length",
-            "listp",
-            "load",
-            "log",
-            "logand",
-            "logior",
-            "lognot",
-            "logxor",
-            "lsh",
-            "macroexpand",
-            "macroexpand-1",
-            "macrop",
-            "make-vector",
-            "make-hash-table",
-            "make-list",
-            "make-directory",
-            "make-string",
-            "make-symbol",
-            "mapl",
-            "maplist",
-            "mapc",
-            "mapcan",
-            "mapcon",
-            "mapcar",
-            "markerp",
-            "cl-mapc",
-            "cl-mapcar",
-            "cl-merge",
-            "cl-map",
-            "cl-member-if",
-            "cl-member-if-not",
-            "cl-mismatch",
-            "cl-member",
-            "maphash",
-            "match-beginning",
-            "match-end",
-            "match-string",
-            "max",
-            "member",
-            "memq",
-            "memql",
-            "message",
-            "min",
-            "minibuffer-window",
-            "mod",
-            "natnump",
-            "mutexp",
-            "cl-nconc",
-            "nconc",
-            "nlistp",
-            "not",
-            "notany",
-            "notevery",
-            "nreverse",
-            "nth",
-            "nthcdr",
-            "null",
-            "number-or-marker-p",
-            "number-sequence",
-            "number-or-marker-p",
-            "number-to-string",
-            "numberp",
-            "oddp",
-            "overlayp",
-            "pairlis",
-            "plist-get",
-            "plist-member",
-            "plist-put",
-            "point-max",
-            "point-min",
-            "prin1",
-            "prin1-to-string",
-            "princ-to-string",
-            "print",
-            "processp",
-            "prog1",
-            "proper-list-p",
-            "provide",
-            "purecopy",
-            "put",
-            "puthash",
-            "random",
-            "rassoc",
-            "rassq",
-            "read",
-            "recordp",
-            "rem",
-            "remhash",
-            "remq",
-            "remove",
-            "replace-match",
-            "replace-regexp-in-string",
-            "require",
-            "reverse",
-            "round",
-            "safe-length",
-            "set",
-            "set-default",
-            "setcar",
-            "setcdr",
-            "setenv",
-            "setplist",
-            "signal",
-            "sin",
-            "some",
-            "sort",
-            "special-form-p",
-            "special-variable-p",
-            "split-string",
-            "sqrt",
-            "standard-syntax-table",
-            "string-bytes",
-            "string-equal",
-            "string-greaterp",
-            "string-join",
-            "string-lessp",
-            "string-match",
-            "string-match-p",
-            "string-or-null-p",
-            "string-prefix-p",
-            "string-suffix-p",
-            "string-to-char",
-            "string-to-number",
-            "string-trim",
-            "string-trim-left",
-            "string-trim-right",
-            "string<",
-            "string=",
-            "string>",
-            "stringp",
-            "subr-arity",
-            "subr-native-elisp-p",
-            "subrp",
-            "cl-tailp",
-            "cl-subseq",
-            "subseq",
-            "substring",
-            "substring-no-properties",
-            "sxhash-eq",
-            "sxhash-eql",
-            "sxhash-equal",
-            "symbol-function",
-            "symbol-name",
-            "symbol-plist",
-            "symbol-value",
-            "symbolp",
-            "syntax-table-p",
-            "tan",
-            "terpri",
-            "threadp",
-            "truncate",
-            "type-of",
-            "upcase",
-            "upcase-initials",
-            "use-region-p",
-            "user-error",
-            "vconcat",
-            "vector",
-            "vectorp",
-            "window-buffer",
-            "wholenump",
-            "windowp",
-            "zerop",
-        ])
-    }).contains(name)
+    PRIMITIVES
+        .get_or_init(|| {
+            std::collections::HashSet::from([
+                "%",
+                "*",
+                "+",
+                "-",
+                "/",
+                "/=",
+                "<",
+                "<=",
+                "=",
+                ">",
+                ">=",
+                "1+",
+                "1-",
+                "abs",
+                "add-load-path",
+                "alist-get",
+                "always",
+                "append",
+                "apply",
+                "aref",
+                "arrayp",
+                "aset",
+                "ash",
+                "assoc",
+                "assoc-string",
+                "assq",
+                "cl-adjoin",
+                "cl-assoc",
+                "cl-assoc-if",
+                "cl-assoc-if-not",
+                "cl-assq",
+                "atom",
+                "autoload",
+                "autoloadp",
+                "bare-symbol-p",
+                "bignump",
+                "bobp",
+                "bool-vector-p",
+                "booleanp",
+                "boundp",
+                "buffer-list",
+                "buffer-modified-p",
+                "buffer-name",
+                "buffer-size",
+                "buffer-string",
+                "buffer-substring",
+                "bufferp",
+                "butlast",
+                "caaaar",
+                "caaadr",
+                "caaar",
+                "caadar",
+                "caaddr",
+                "caadr",
+                "caar",
+                "cadaar",
+                "cadadr",
+                "cadar",
+                "caddar",
+                "cadddr",
+                "caddr",
+                "cadr",
+                "capitalize",
+                "car",
+                "car-safe",
+                "case-table-p",
+                "category-table-p",
+                "cdaaar",
+                "cdaadr",
+                "cdaar",
+                "cdadar",
+                "cdaddr",
+                "cdadr",
+                "cdar",
+                "cddaar",
+                "cddadr",
+                "cddar",
+                "cdddar",
+                "cddddr",
+                "cdddr",
+                "cddr",
+                "cdr",
+                "cdr-safe",
+                "ceiling",
+                "char-code",
+                "char-equal",
+                "char-or-string-p",
+                "char-table-p",
+                "char-to-string",
+                "char-valid-p",
+                "cl-count",
+                "cl-count-if",
+                "cl-count-if-not",
+                "cl-endp",
+                "cl-evenp",
+                "cl-fill",
+                "cl-find",
+                "cl-find-if",
+                "cl-find-if-not",
+                "cl-minusp",
+                "cl-oddp",
+                "cl-plusp",
+                "cl-position",
+                "cl-position-if",
+                "cl-position-if-not",
+                "cl-coerce",
+                "cl-concatenate",
+                "cl-delete",
+                "cl-delete-duplicates",
+                "cl-delete-if",
+                "cl-delete-if-not",
+                "cl-delq",
+                "cl-nset-difference",
+                "cl-nsubst-if",
+                "cl-nsubst-if-not",
+                "cl-nsublis",
+                "cl-nsubstitute",
+                "cl-nsubstitute-if",
+                "cl-nsubstitute-if-not",
+                "cl-subst-if",
+                "cl-subst-if-not",
+                "cl-sublis",
+                "cl-substitute",
+                "cl-substitute-if",
+                "cl-substitute-if-not",
+                "cl-nintersection",
+                "cl-nset-exclusive-or",
+                "cl-nunion",
+                "cl-intersection",
+                "cl-ldiff",
+                "cl-tree-equal",
+                "cl-union",
+                "cl-typep",
+                "cl-nreplace",
+                "cl-nreverse",
+                "cl-rassoc",
+                "cl-rassoc-if",
+                "cl-rassoc-if-not",
+                "cl-rassq",
+                "cl-remprop",
+                "cl-remq",
+                "cl-remove",
+                "cl-reverse",
+                "cl-remove-duplicates",
+                "cl-reduce",
+                "cl-remove-if",
+                "cl-remove-if-not",
+                "cl-replace",
+                "cl-set-difference",
+                "cl-set-exclusive-or",
+                "cl-search",
+                "cl-sort",
+                "cl-stable-sort",
+                "clrhash",
+                "color-defined-p",
+                "commandp",
+                "compiled-function-p",
+                "concat",
+                "cons",
+                "consp",
+                "copy-alist",
+                "copy-list",
+                "copy-sequence",
+                "copy-tree",
+                "cos",
+                "defalias",
+                "current-buffer",
+                "current-time",
+                "current-time-string",
+                "define-error",
+                "default-boundp",
+                "default-value",
+                "defun",
+                "delete",
+                "delete-backward-char",
+                "delete-char",
+                "delete-dups",
+                "delete-file",
+                "delete-region",
+                "directory-file-name",
+                "delq",
+                "display-graphic-p",
+                "downcase",
+                "elt",
+                "emacs-pid",
+                "eobp",
+                "eql",
+                "eq",
+                "equal",
+                "error",
+                "eval",
+                "evenp",
+                "every",
+                "exp",
+                "expt",
+                "fboundp",
+                "featurep",
+                "file-directory-p",
+                "file-exists-p",
+                "file-name-absolute-p",
+                "file-name-base",
+                "file-name-directory",
+                "file-name-extension",
+                "file-name-nondirectory",
+                "file-name-sans-extension",
+                "file-readable-p",
+                "file-regular-p",
+                "file-writable-p",
+                "fillarray",
+                "fixnump",
+                "float",
+                "float-time",
+                "floatp",
+                "floor",
+                "fontp",
+                "framep",
+                "fmakunbound",
+                "format",
+                "format-message",
+                "fset",
+                "funcall",
+                "functionp",
+                "garbage-collect",
+                "gensym",
+                "getenv",
+                "get",
+                "gethash",
+                "hash-table-count",
+                "hash-table-p",
+                "identity",
+                "ignore",
+                "indirect-function",
+                "integer-or-marker-p",
+                "integerp",
+                "intern",
+                "intern-soft",
+                "keymapp",
+                "keywordp",
+                "last",
+                "length",
+                "length=",
+                "list",
+                "list*",
+                "cl-list",
+                "cl-list*",
+                "cl-list-length",
+                "listp",
+                "load",
+                "log",
+                "logand",
+                "logior",
+                "lognot",
+                "logxor",
+                "lsh",
+                "macroexpand",
+                "macroexpand-1",
+                "macrop",
+                "make-vector",
+                "make-hash-table",
+                "make-list",
+                "make-directory",
+                "make-string",
+                "make-symbol",
+                "mapl",
+                "maplist",
+                "mapc",
+                "mapcan",
+                "mapcon",
+                "mapcar",
+                "markerp",
+                "cl-mapc",
+                "cl-mapcar",
+                "cl-merge",
+                "cl-map",
+                "cl-member-if",
+                "cl-member-if-not",
+                "cl-mismatch",
+                "cl-member",
+                "maphash",
+                "match-beginning",
+                "match-end",
+                "match-string",
+                "max",
+                "member",
+                "memq",
+                "memql",
+                "message",
+                "min",
+                "minibuffer-window",
+                "mod",
+                "natnump",
+                "mutexp",
+                "cl-nconc",
+                "nconc",
+                "nlistp",
+                "not",
+                "notany",
+                "notevery",
+                "nreverse",
+                "nth",
+                "nthcdr",
+                "null",
+                "number-or-marker-p",
+                "number-sequence",
+                "number-or-marker-p",
+                "number-to-string",
+                "numberp",
+                "oddp",
+                "overlayp",
+                "pairlis",
+                "plist-get",
+                "plist-member",
+                "plist-put",
+                "point-max",
+                "point-min",
+                "prin1",
+                "prin1-to-string",
+                "princ-to-string",
+                "print",
+                "processp",
+                "prog1",
+                "proper-list-p",
+                "provide",
+                "purecopy",
+                "put",
+                "puthash",
+                "random",
+                "rassoc",
+                "rassq",
+                "read",
+                "recordp",
+                "rem",
+                "remhash",
+                "remq",
+                "remove",
+                "replace-match",
+                "replace-regexp-in-string",
+                "require",
+                "reverse",
+                "round",
+                "safe-length",
+                "set",
+                "set-default",
+                "setcar",
+                "setcdr",
+                "setenv",
+                "setplist",
+                "signal",
+                "sin",
+                "some",
+                "sort",
+                "special-form-p",
+                "special-variable-p",
+                "split-string",
+                "sqrt",
+                "standard-syntax-table",
+                "string-bytes",
+                "string-equal",
+                "string-greaterp",
+                "string-join",
+                "string-lessp",
+                "string-match",
+                "string-match-p",
+                "string-or-null-p",
+                "string-prefix-p",
+                "string-suffix-p",
+                "string-to-char",
+                "string-to-number",
+                "string-trim",
+                "string-trim-left",
+                "string-trim-right",
+                "string<",
+                "string=",
+                "string>",
+                "stringp",
+                "subr-arity",
+                "subr-native-elisp-p",
+                "subrp",
+                "cl-tailp",
+                "cl-subseq",
+                "subseq",
+                "substring",
+                "substring-no-properties",
+                "sxhash-eq",
+                "sxhash-eql",
+                "sxhash-equal",
+                "symbol-function",
+                "symbol-name",
+                "symbol-plist",
+                "symbol-value",
+                "symbolp",
+                "syntax-table-p",
+                "tan",
+                "terpri",
+                "threadp",
+                "truncate",
+                "type-of",
+                "upcase",
+                "upcase-initials",
+                "use-region-p",
+                "user-error",
+                "vconcat",
+                "vector",
+                "vectorp",
+                "window-buffer",
+                "wholenump",
+                "windowp",
+                "zerop",
+            ])
+        })
+        .contains(name)
 }
 
 fn macro_value_to_lisp(
@@ -8302,8 +8637,11 @@ fn macro_value_to_lisp(
     }
 }
 
-fn surface_to_lisp_value(runtime: &mut Runtime, form: &neovm_compiler::surface::SurfaceForm) -> LispValue {
-    use neovm_compiler::surface::{SurfaceKind, SurfaceAtom};
+fn surface_to_lisp_value(
+    runtime: &mut Runtime,
+    form: &neovm_compiler::surface::SurfaceForm,
+) -> LispValue {
+    use neovm_compiler::surface::{SurfaceAtom, SurfaceKind};
     match &form.kind {
         SurfaceKind::Atom(atom) => match atom {
             SurfaceAtom::Nil => LispValue::NIL,
@@ -10632,17 +10970,13 @@ mod tests {
 
     #[test]
     fn executes_apply_empty_spread() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(apply '+ '())",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(apply '+ '())");
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
     #[test]
     fn executes_apply_prefix_with_empty_spread() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(apply '+ 5 '())",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(apply '+ 5 '())");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
@@ -10760,25 +11094,20 @@ mod tests {
     #[test]
     fn executes_float_negative_zero_is_distinct() {
         // In Emacs, (eql 0.0 -0.0) -> nil
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(eql 0.0 -0.0)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(eql 0.0 -0.0)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_and_short_circuits() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and nil (error \"unreachable\"))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(and nil (error \"unreachable\"))");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_or_short_circuits() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(or t (error \"unreachable\"))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(or t (error \"unreachable\"))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
@@ -10915,28 +11244,46 @@ mod tests {
 
     #[test]
     fn executes_cl_tree_equal() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 3)))").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 4)))").0,
-            Some(LispValue::NIL));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal nil nil)").0,
-            Some(LispValue::TRUE));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 3)))").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal '(1 (2 3)) '(1 (2 4)))").0,
+            Some(LispValue::NIL)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-tree-equal nil nil)").0,
+            Some(LispValue::TRUE)
+        );
     }
 
     #[test]
     fn executes_cl_typep_basic_types() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'integer)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 3.14 'float)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep \"hi\" 'string)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep nil 'null)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep '(1 . 2) 'cons)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'cons)").0,
-            Some(LispValue::NIL));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'integer)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 3.14 'float)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep \"hi\" 'string)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep nil 'null)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep '(1 . 2) 'cons)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-typep 42 'cons)").0,
+            Some(LispValue::NIL)
+        );
     }
 
     #[test]
@@ -10947,7 +11294,6 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
-
 
     #[test]
     fn executes_funcall_with_multiple_args() {
@@ -11013,18 +11359,15 @@ mod tests {
 
     #[test]
     fn executes_subseq_on_list() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (subseq '(a b c d e) 1 4))");
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
     #[test]
     fn executes_macroexpand() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(macroexpand '(when t 42))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(macroexpand '(when t 42))");
         assert!(value.is_some());
     }
 
@@ -11316,17 +11659,13 @@ mod tests {
 
     #[test]
     fn executes_not_equal_zero_args_returns_t() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(/=)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(/=)");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_not_equal_one_arg_returns_t() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(/= 42)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(/= 42)");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
@@ -11351,9 +11690,7 @@ mod tests {
     #[test]
     fn executes_comparison_zero_args_returns_t() {
         for op in ["=", "<", ">", "<=", ">="] {
-            let (value, _) = execute(
-                &format!(";;; -*- lexical-binding: t; -*-\n({op})"),
-            );
+            let (value, _) = execute(&format!(";;; -*- lexical-binding: t; -*-\n({op})"));
             assert_eq!(value, Some(LispValue::TRUE), "({op}) should return t");
         }
     }
@@ -11361,9 +11698,7 @@ mod tests {
     #[test]
     fn executes_comparison_one_arg_returns_t() {
         for op in ["=", "<", ">", "<=", ">="] {
-            let (value, _) = execute(
-                &format!(";;; -*- lexical-binding: t; -*-\n({op} 1)"),
-            );
+            let (value, _) = execute(&format!(";;; -*- lexical-binding: t; -*-\n({op} 1)"));
             assert_eq!(value, Some(LispValue::TRUE), "({op} 1) should return t");
         }
     }
@@ -11446,9 +11781,7 @@ mod tests {
 
     #[test]
     fn executes_add_zero_args_returns_zero() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(+)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(+)");
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
@@ -11463,17 +11796,14 @@ mod tests {
 
     #[test]
     fn executes_minusp_and_plusp() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and (minusp -3) (plusp 5))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(and (minusp -3) (plusp 5))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_not_and_null() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and (not nil) (null nil) (not (null t)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(and (not nil) (null nil) (not (null t)))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
@@ -11488,17 +11818,13 @@ mod tests {
 
     #[test]
     fn executes_save_excursion_noop() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(save-excursion 42)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(save-excursion 42)");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
     #[test]
     fn executes_if_then_else() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(if t 42 0)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(if t 42 0)");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
@@ -11515,86 +11841,68 @@ mod tests {
 
     #[test]
     fn executes_nconc_destructive_append() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (nconc (list 1 2) (list 3 4)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (nconc (list 1 2) (list 3 4)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(4)));
     }
 
     fn executes_symbol_name_returns_string() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(symbol-name 'hello)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(symbol-name 'hello)");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_floatp_edges() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and (floatp 1.0) (not (floatp 1)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(and (floatp 1.0) (not (floatp 1)))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_nthcdr_skip_and_access() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(nthcdr 2 '(10 20 30 40))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(nthcdr 2 '(10 20 30 40))");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_cdr_safe_non_cons_returns_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(cdr-safe 42)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cdr-safe 42)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     fn executes_car_cdr_of_nil_return_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and (null (car nil)) (null (cdr nil)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(and (null (car nil)) (null (cdr nil)))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     fn executes_ignore_returns_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(ignore 1 2 3)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(ignore 1 2 3)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_identity_returns_arg() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(identity 42)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(identity 42)");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
     #[test]
     fn executes_string_equal_case_insensitive() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(string-equal \"Hello\" \"hello\")",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(string-equal \"Hello\" \"hello\")");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_mul_mixed_float() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(* 2 3.5)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(* 2 3.5)");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_eq_float_int() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(= 1 1.0)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(= 1 1.0)");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
@@ -11608,105 +11916,83 @@ mod tests {
 
     #[test]
     fn executes_list_constructor() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (list 1 2 3 4 5))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(length (list 1 2 3 4 5))");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
     #[test]
     fn executes_cdar_alist_access() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(cdar '((a . 1) (b . 2)))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cdar '((a . 1) (b . 2)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
     #[test]
     fn executes_cddr_skips_two() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(car (cddr '(10 20 30 40)))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(car (cddr '(10 20 30 40)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(30)));
     }
 
     #[test]
     fn executes_substring_from_index() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(substring \"hello\" 1)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(substring \"hello\" 1)");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_string_join_separator() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(string-join '(\"a\" \"b\" \"c\") \"-\")",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(string-join '(\"a\" \"b\" \"c\") \"-\")");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_last_returns_tail() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(car (last '(1 2 3 4 5)))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(car (last '(1 2 3 4 5)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
     #[test]
     fn executes_number_sequence_range() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (number-sequence 1 5))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(length (number-sequence 1 5))");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
     #[test]
     fn executes_caddr_third_element() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(caddr '(10 20 30))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(caddr '(10 20 30))");
         assert_eq!(value, Some(LispValue::expect_fixnum(30)));
     }
 
     #[test]
     fn executes_cadr_second_element() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(cadr '(10 20 30))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cadr '(10 20 30))");
         assert_eq!(value, Some(LispValue::expect_fixnum(20)));
     }
 
     #[test]
     fn executes_remq_removes_by_identity() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (remq 'b (list 'a 'b 'c)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
     fn executes_delete_removes_element() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (delete 2 (list 1 2 3 2)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (delete 2 (list 1 2 3 2)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
     fn executes_string_greaterp_reverse() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(string-greaterp \"b\" \"a\")",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(string-greaterp \"b\" \"a\")");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_vconcat_concatenates() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (vconcat [1 2] [3 4] [5 6]))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (vconcat [1 2] [3 4] [5 6]))");
         assert_eq!(value, Some(LispValue::expect_fixnum(6)));
     }
 
@@ -11721,25 +12007,21 @@ mod tests {
 
     #[test]
     fn executes_string_lessp_ordering() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(string-lessp \"abc\" \"abd\")",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(string-lessp \"abc\" \"abd\")");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_rassq_finds_by_value() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(rassq 2 '((a . 1) (b . 2) (c . 3)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(rassq 2 '((a . 1) (b . 2) (c . 3)))");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_butlast_removes_last() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (butlast '(1 2 3 4) 2))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (butlast '(1 2 3 4) 2))");
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
@@ -11772,25 +12054,19 @@ mod tests {
 
     #[test]
     fn executes_safe_length_dotted() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(safe-length '(a b . c))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(safe-length '(a b . c))");
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
     fn executes_make_list_fill() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (make-list 5 42))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(length (make-list 5 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
     #[test]
     fn executes_lognot_bitwise() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(lognot 0)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(lognot 0)");
         assert_eq!(value, Some(LispValue::expect_fixnum(-1)));
     }
 
@@ -11816,17 +12092,13 @@ mod tests {
 
     #[test]
     fn executes_string_trim_strips_whitespace() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(string-trim \"  hello  \")",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(string-trim \"  hello  \")");
         assert!(value.is_some());
     }
 
     #[test]
     fn executes_make_vector_default_init() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(aref (make-vector 3 42) 1)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(aref (make-vector 3 42) 1)");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
@@ -11897,9 +12169,7 @@ mod tests {
 
     #[test]
     fn executes_logand_no_args_returns_neg_one() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(logand)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(logand)");
         assert_eq!(value, Some(LispValue::expect_fixnum(-1)));
     }
 
@@ -11923,9 +12193,7 @@ mod tests {
 
     #[test]
     fn executes_logior_no_args_returns_zero() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(logior)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(logior)");
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
@@ -11940,41 +12208,32 @@ mod tests {
 
     #[test]
     fn executes_cons_with_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(car (cons 42 nil))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(car (cons 42 nil))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
     #[test]
     fn executes_append_concatenates() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(length (append '(1 2) '(3 4) '(5 6)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(length (append '(1 2) '(3 4) '(5 6)))");
         assert_eq!(value, Some(LispValue::expect_fixnum(6)));
     }
 
     #[test]
     fn executes_if_no_else() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(if nil 42)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(if nil 42)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_let_parallel() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(let ((x 1) (y 2)) (+ x y))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(let ((x 1) (y 2)) (+ x y))");
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
     #[test]
     fn executes_let_star_sequential() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(let* ((x 1) (y (+ x 2))) y)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(let* ((x 1) (y (+ x 2))) y)");
         assert_eq!(value, Some(LispValue::expect_fixnum(3)));
     }
 
@@ -11998,17 +12257,14 @@ mod tests {
 
     #[test]
     fn executes_with_current_buffer_noop() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(with-current-buffer \"*scratch*\" 99)",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(with-current-buffer \"*scratch*\" 99)");
         assert_eq!(value, Some(LispValue::expect_fixnum(99)));
     }
 
     #[test]
     fn executes_abs_negative() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(abs -5)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(abs -5)");
         assert_eq!(value, Some(LispValue::expect_fixnum(5)));
     }
 
@@ -12067,17 +12323,14 @@ mod tests {
 
     #[test]
     fn executes_zerop() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(and (zerop 0) (not (zerop 1)))",
-        );
+        let (value, _) =
+            execute(";;; -*- lexical-binding: t; -*-\n(and (zerop 0) (not (zerop 1)))");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
     #[test]
     fn executes_mod_negative() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(mod -5 3)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(mod -5 3)");
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
@@ -12092,17 +12345,13 @@ mod tests {
 
     #[test]
     fn executes_neg_single_arg() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(- 5)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(- 5)");
         assert_eq!(value, Some(LispValue::expect_fixnum(-5)));
     }
 
     #[test]
     fn executes_mul_zero_args_returns_one() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(*)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(*)");
         assert_eq!(value, Some(LispValue::expect_fixnum(1)));
     }
 
@@ -12264,9 +12513,7 @@ mod tests {
 
     #[test]
     fn executes_logxor_no_args_returns_zero() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(logxor)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(logxor)");
         assert_eq!(value, Some(LispValue::expect_fixnum(0)));
     }
 
@@ -12278,7 +12525,6 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
-
 
     fn executes_copy_sequence_list() {
         let (value, _) = execute(
@@ -12492,41 +12738,62 @@ mod tests {
 
     #[test]
     fn executes_cl_evenp_oddp_aliases() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-evenp 4)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-oddp 3)").0,
-            Some(LispValue::TRUE));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-evenp 4)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-oddp 3)").0,
+            Some(LispValue::TRUE)
+        );
     }
 
     #[test]
     fn executes_cl_plusp_minusp_predicates() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp 5)").0,
-            Some(LispValue::TRUE));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp -1)").0,
-            Some(LispValue::NIL));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(cl-minusp -3)").0,
-            Some(LispValue::TRUE));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp 5)").0,
+            Some(LispValue::TRUE)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-plusp -1)").0,
+            Some(LispValue::NIL)
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(cl-minusp -3)").0,
+            Some(LispValue::TRUE)
+        );
     }
 
     #[test]
     fn executes_ash_left_and_right_shift() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(ash 8 -2)").0,
-            Some(LispValue::expect_fixnum(2)));
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(ash 2 3)").0,
-            Some(LispValue::expect_fixnum(16)));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(ash 8 -2)").0,
+            Some(LispValue::expect_fixnum(2))
+        );
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(ash 2 3)").0,
+            Some(LispValue::expect_fixnum(16))
+        );
     }
 
     #[test]
     fn executes_lsh_right_shift_test() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n(lsh 16 -2)").0,
-            Some(LispValue::expect_fixnum(4)));
+        assert_eq!(
+            execute(";;; -*- lexical-binding: t; -*-\n(lsh 16 -2)").0,
+            Some(LispValue::expect_fixnum(4))
+        );
     }
 
     #[test]
     fn executes_symbol_function_retrieves_binding() {
-        assert_eq!(execute(";;; -*- lexical-binding: t; -*-\n\
-            (functionp (symbol-function '+))").0,
-            Some(LispValue::TRUE));
+        assert_eq!(
+            execute(
+                ";;; -*- lexical-binding: t; -*-\n\
+            (functionp (symbol-function '+))"
+            )
+            .0,
+            Some(LispValue::TRUE)
+        );
     }
 
     #[test]
@@ -12590,25 +12857,19 @@ mod tests {
 
     #[test]
     fn executes_list_empty_returns_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(list)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(list)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_list_single_element() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(car (list 42))",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(car (list 42))");
         assert_eq!(value, Some(LispValue::expect_fixnum(42)));
     }
 
     #[test]
     fn executes_rust_subr_fib() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(fib 10)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(fib 10)");
         assert_eq!(value, Some(LispValue::expect_fixnum(55)));
     }
 
@@ -12632,34 +12893,26 @@ mod tests {
 
     #[test]
     fn executes_progn_empty_returns_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(progn)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(progn)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_prog2_returns_second_form() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(prog2 1 2 3)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(prog2 1 2 3)");
         assert_eq!(value, Some(LispValue::expect_fixnum(2)));
     }
 
     #[test]
     fn executes_eql_distinguishes_types() {
         // eql returns nil for different numeric types (fixnum vs float)
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(eql 1 1.0)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(eql 1 1.0)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
     #[test]
     fn executes_eql_equivalent_values() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(eql 1 1)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(eql 1 1)");
         assert_eq!(value, Some(LispValue::TRUE));
     }
 
@@ -12683,9 +12936,7 @@ mod tests {
 
     #[test]
     fn executes_cond_empty_returns_nil() {
-        let (value, _) = execute(
-            ";;; -*- lexical-binding: t; -*-\n(cond)",
-        );
+        let (value, _) = execute(";;; -*- lexical-binding: t; -*-\n(cond)");
         assert_eq!(value, Some(LispValue::NIL));
     }
 
@@ -12860,10 +13111,7 @@ mod tests {
              (cl-adjoin 3 '(1 2))",
         );
         let result = value.unwrap();
-        assert_eq!(
-            rt.format_value(result),
-            "(3 1 2)"
-        );
+        assert_eq!(rt.format_value(result), "(3 1 2)");
     }
 
     #[test]
@@ -13799,7 +14047,10 @@ mod tests {
             ";;; -*- lexical-binding: t; -*-\n\
              (pairlis '(c d) '(3 4) '((a . 1) (b . 2)))",
         );
-        assert_eq!(rt.format_value(value.unwrap()), "((c . 3) (d . 4) (a . 1) (b . 2))");
+        assert_eq!(
+            rt.format_value(value.unwrap()),
+            "((c . 3) (d . 4) (a . 1) (b . 2))"
+        );
     }
 
     #[test]
@@ -14320,7 +14571,6 @@ mod tests {
         assert!(value.is_some());
     }
 
-
     #[test]
     fn executes_split_string_splits_by_separator() {
         let (value, _) = execute(
@@ -14514,7 +14764,6 @@ mod tests {
         );
         assert_eq!(value, Some(LispValue::TRUE));
     }
-
 
     #[test]
     fn executes_asin_returns_arcsine() {

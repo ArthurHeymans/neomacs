@@ -284,9 +284,33 @@ fn real_melpa_dash_usage() {
   (let ((result (-map (lambda (n) (* n 2)) '(1 2 3 4))))
     (unless (equal result '(2 4 6 8))
       (error "dash -map failed: got %S" result)))
+  (let ((result (-filter (lambda (n) (> n 2)) '(1 2 3 4))))
+    (unless (equal result '(3 4))
+      (error "dash -filter failed: got %S" result)))
+  (let ((result (-reduce '+ '(1 2 3 4))))
+    (unless (equal result 10)
+      (error "dash -reduce failed: got %S" result)))
+  (let ((result (-flatten '((1 2) (3 (4 5))))))
+    (unless (equal result '(1 2 3 4 5))
+      (error "dash -flatten failed: got %S" result)))
+  (let ((result (-zip '(1 2 3) '(a b c))))
+    (unless (equal result '((1 . a) (2 . b) (3 . c)))
+      (error "dash -zip failed: got %S" result)))
+  (let ((result (-take 2 '(1 2 3 4))))
+    (unless (equal result '(1 2))
+      (error "dash -take failed: got %S" result)))
+  (let ((result (-drop 2 '(1 2 3 4))))
+    (unless (equal result '(3 4))
+      (error "dash -drop failed: got %S" result)))
+  (let ((result (-concat '(1 2) '(3 4) '(5))))
+    (unless (equal result '(1 2 3 4 5))
+      (error "dash -concat failed: got %S" result)))
+  (let ((result (-mapcat (lambda (x) (list x x)) '(1 2 3))))
+    (unless (equal result '(1 1 2 2 3 3))
+      (error "dash -mapcat failed: got %S" result)))
   (message "REAL-DASH-OK"))))"#,
     )
-    .expect("real dash -map should work after activation");
+    .expect("real dash should work after activation");
 }
 
 #[test]
@@ -301,12 +325,32 @@ fn real_melpa_s_usage() {
   (package-initialize)
   (package-activate 's)
   (require 's)
-  (let ((result (s-trim-left "  hello")))
-    (unless (string= result "hello")
-      (error "s-trim-left failed: got %S" result)))
+  (unless (string= (s-trim-left "  hello") "hello")
+    (error "s-trim-left failed"))
+  (unless (string= (s-trim-right "hello  ") "hello")
+    (error "s-trim-right failed"))
+  (unless (string= (s-trim "  hello  ") "hello")
+    (error "s-trim failed"))
+  (unless (equal (s-split "," "a,b,c") '("a" "b" "c"))
+    (error "s-split failed"))
+  (unless (s-contains? "lo" "hello")
+    (error "s-contains? failed"))
+  (unless (string= (s-replace "world" "emacs" "hello world") "hello emacs")
+    (error "s-replace failed"))
+  (unless (string= (s-upcase "hello") "HELLO")
+    (error "s-upcase failed"))
+  (unless (string= (s-downcase "HELLO") "hello")
+    (error "s-downcase failed"))
+  (unless (string= (s-capitalized-words "some-CamelCase") "Some camel case")
+    (error "s-capitalized-words failed"))
+  (let ((name "emacs"))
+    (unless (string= (s-lex-format "hello ${name}") "hello emacs")
+      (error "s-lex-format failed")))
+  (unless (= (s-count-matches "o" "foo boo") 4)
+    (error "s-count-matches failed"))
   (message "REAL-S-OK"))))"#,
     )
-    .expect("real s-trim-left should work after activation");
+    .expect("real s should work after activation");
 }
 
 #[test]
@@ -322,10 +366,21 @@ fn real_melpa_which_key_usage() {
   (package-activate 'which-key)
   (require 'which-key)
   (unless (fboundp 'which-key-mode)
-    (error "which-key-mode not defined after activation"))
+    (error "which-key-mode not defined"))
+  (unless (fboundp 'which-key-add-key-based-replacements)
+    (error "which-key-add-key-based-replacements not defined"))
+  (which-key-add-key-based-replacements "C-x 1" "maximize")
+  (which-key-add-key-based-replacements "C-x 0" "delete-window")
+  (which-key-setup-side-window-bottom)
+  (which-key-mode 1)
+  (unless which-key-mode
+    (error "which-key-mode did not enable"))
+  (which-key-mode -1)
+  (when which-key-mode
+    (error "which-key-mode did not disable"))
   (message "REAL-WHICH-KEY-OK"))))"#,
     )
-    .expect("real which-key should be usable after activation");
+    .expect("real which-key should work after activation");
 }
 
 #[test]
@@ -341,10 +396,56 @@ fn real_melpa_projectile_usage() {
   (package-activate 'projectile)
   (require 'projectile)
   (unless (fboundp 'projectile-mode)
-    (error "projectile-mode not defined after activation"))
+    (error "projectile-mode not defined"))
+  (unless (fboundp 'projectile-project-root)
+    (error "projectile-project-root not defined"))
+  (unless (fboundp 'projectile-expand-root)
+    (error "projectile-expand-root not defined"))
+  (let ((expanded (projectile-expand-root "src")))
+    (unless (stringp expanded)
+      (error "projectile-expand-root returned non-string: %S" expanded)))
+  (projectile-mode 1)
+  (unless projectile-mode
+    (error "projectile-mode did not enable"))
+  (projectile-mode -1)
+  (when projectile-mode
+    (error "projectile-mode did not disable"))
   (message "REAL-PROJECTILE-OK"))))"#,
     )
-    .expect("real projectile should be usable after activation");
+    .expect("real projectile should work after activation");
+}
+
+#[test]
+fn real_melpa_flycheck_usage() {
+    let pkg = real_pkg_by_name("flycheck");
+    let home = setup_real_melpa_home(&[pkg]);
+    run_neomacs_ok(
+        home.path(),
+        r#"(progn
+  (require 'package)
+  (setq package-user-dir (expand-file-name ".emacs.d/elpa" (getenv "HOME")))
+  (package-initialize)
+  (package-activate 'flycheck)
+  (require 'flycheck)
+  (unless (fboundp 'flycheck-mode)
+    (error "flycheck-mode not defined"))
+  (unless (fboundp 'flycheck-define-generic-checker)
+    (error "flycheck-define-generic-checker not defined"))
+  (unless (fboundp 'flycheck-version)
+    (error "flycheck-version not defined"))
+  (let ((ver (flycheck-version)))
+    (unless (stringp ver)
+      (error "flycheck-version returned non-string: %S" ver)))
+  (with-temp-buffer
+    (flycheck-mode 1)
+    (unless flycheck-mode
+      (error "flycheck-mode did not enable in buffer"))
+    (flycheck-mode -1)
+    (when flycheck-mode
+      (error "flycheck-mode did not disable in buffer")))
+  (message "REAL-FLYCHECK-OK"))))"#,
+    )
+    .expect("real flycheck should work after activation");
 }
 
 // ===========================================================================

@@ -4,12 +4,12 @@ use crate::background::{
     SharedBackgroundService, SharedBackgroundStatus, SharedBackgroundWaitResult,
     SharedCollectorHandle, SharedHeap, SharedHeapError, SharedHeapStatus, SharedRuntimeHandle,
 };
+use crate::collector::{self, build_prepared_active_reclaim, prepare_active_reclaim};
 use crate::collector::{
     collect_global_sources, execute_collection_plan, prepare_major_reclaim_for_plan,
     trace_major_ephemerons_for_candidates,
 };
 use crate::collector_policy::refresh_cached_plans as refresh_cached_collector_plans;
-use crate::collector::{self, build_prepared_active_reclaim, prepare_active_reclaim};
 use crate::collector_state::{CollectorSharedSnapshot, CollectorState};
 use crate::descriptor::{GcErased, TypeDesc};
 use crate::heap::{AllocError, HeapCore};
@@ -578,9 +578,11 @@ impl<'heap> CollectorRuntime<'heap> {
         let mut state = state;
         {
             let objects = self.heap.objects();
-            crate::collector::session::finish_major_mark(&mut state, objects.raw(), |tracer, plan| {
-                trace_heap_major_ephemerons(self.heap, tracer, plan)
-            });
+            crate::collector::session::finish_major_mark(
+                &mut state,
+                objects.raw(),
+                |tracer, plan| trace_heap_major_ephemerons(self.heap, tracer, plan),
+            );
         }
         let finished = crate::collector::session::finish_active_collection(state, |plan| {
             self.prepare_reclaim_for_plan(plan)
@@ -1313,8 +1315,10 @@ impl SharedCollectorRuntime {
         let (progress, auto_prepare_major_reclaim) = self
             .with_heap_read_collector_update(|core, collector| {
                 let objects = core.objects();
-                let progress =
-                    crate::collector::session::poll_active_major_mark_round(collector, objects.raw())?;
+                let progress = crate::collector::session::poll_active_major_mark_round(
+                    collector,
+                    objects.raw(),
+                )?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
                     progress.completed
                         && crate::collector::session::active_reclaim_prep_request(collector)
@@ -1350,8 +1354,10 @@ impl SharedCollectorRuntime {
         let (progress, auto_prepare_major_reclaim) = self
             .try_with_heap_read_collector_update(|core, collector| {
                 let objects = core.objects();
-                let progress =
-                    crate::collector::session::poll_active_major_mark_round(collector, objects.raw())?;
+                let progress = crate::collector::session::poll_active_major_mark_round(
+                    collector,
+                    objects.raw(),
+                )?;
                 let auto_prepare_major_reclaim = progress.as_ref().is_some_and(|progress| {
                     progress.completed
                         && crate::collector::session::active_reclaim_prep_request(collector)

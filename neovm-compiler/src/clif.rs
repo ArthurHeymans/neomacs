@@ -1790,10 +1790,11 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
                     // If the handler body didn't complete normally, we're in a
                     // different block — jump to no_match_block first.
                     if let Some(nmb) = no_match_block
-                        && !handler_result_seen {
-                            self.builder.ins().jump(nmb, &[]);
-                            self.builder.switch_to_block(nmb);
-                        }
+                        && !handler_result_seen
+                    {
+                        self.builder.ins().jump(nmb, &[]);
+                        self.builder.switch_to_block(nmb);
+                    }
                     let Some(pop_ref) = self.exception_func_ref("condition_case_pop", 0) else {
                         return;
                     };
@@ -2167,9 +2168,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         let block = &self.ssa.blocks[block_id];
         for inst in &block.instructions[inst_index + 1..] {
             if let SsaInstKind::ConditionCaseEnd { body_result } = &inst.kind
-                && let Some(vid) = body_result {
-                    return self.value_map.get(vid).copied();
-                }
+                && let Some(vid) = body_result
+            {
+                return self.value_map.get(vid).copied();
+            }
         }
         None
     }
@@ -2180,9 +2182,10 @@ impl<M: ClifModuleBackend> ClifBlockLowerer<'_, M> {
         if inst_index < block.instructions.len()
             && let SsaInstKind::ConditionCaseEnd { body_result } =
                 &block.instructions[inst_index].kind
-                && let Some(vid) = body_result {
-                    return self.value_map.get(vid).copied();
-                }
+            && let Some(vid) = body_result
+        {
+            return self.value_map.get(vid).copied();
+        }
         None
     }
 

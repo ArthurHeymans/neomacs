@@ -10795,12 +10795,16 @@ fn object_start_index_rebuilds_after_sweep() {
     let starts_before: Vec<Vec<(usize, u32)>> = {
         let guard = mutator.heap().read_core();
         let old_gen = guard.old_gen();
-        old_gen.blocks().iter().map(|block| {
-            let card_count = block.card_table().card_count();
-            (0..card_count)
-                .filter_map(|i| block.object_start_for_card(i).map(|off| (i, off)))
-                .collect()
-        }).collect()
+        old_gen
+            .blocks()
+            .iter()
+            .map(|block| {
+                let card_count = block.card_table().card_count();
+                (0..card_count)
+                    .filter_map(|i| block.object_start_for_card(i).map(|off| (i, off)))
+                    .collect()
+            })
+            .collect()
     };
 
     mutator
