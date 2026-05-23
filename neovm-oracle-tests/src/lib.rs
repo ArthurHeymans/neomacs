@@ -2237,6 +2237,8 @@ mod divergence_combo_metaprogramming;
 mod divergence_combo_milestone_100;
 #[path = "divergence-combo-misc-ops-undo.rs"]
 mod divergence_combo_misc_ops_undo;
+#[path = "divergence-combo-modification-hooks-marker-overlay-undo.rs"]
+mod divergence_combo_modification_hooks_marker_overlay_undo;
 #[path = "divergence-combo-motion-marker-overlay-undo.rs"]
 mod divergence_combo_motion_marker_overlay_undo;
 #[path = "divergence-combo-multibyte-coding-undo.rs"]
