@@ -2331,6 +2331,8 @@ mod divergence_combo_timer_process_time;
 mod divergence_combo_type_coercion;
 #[path = "divergence-combo-undo-boundary-deep.rs"]
 mod divergence_combo_undo_boundary_deep;
+#[path = "divergence-combo-undo-boundary-limit-narrow-marker-overlay-textprop.rs"]
+mod divergence_combo_undo_boundary_limit_narrow_marker_overlay_textprop;
 #[path = "divergence-combo-undo-deep-stress.rs"]
 mod divergence_combo_undo_deep_stress;
 #[path = "divergence-combo-undo-list-inspect.rs"]
