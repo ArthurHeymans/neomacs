@@ -2054,6 +2054,8 @@ mod divergence_combo_advice_eieio_keymap;
 mod divergence_combo_arith_math_compare;
 #[path = "divergence-combo-buffer-overlay.rs"]
 mod divergence_combo_buffer_overlay;
+#[path = "divergence-combo-buflocal-narrow-closure-eval.rs"]
+mod divergence_combo_buflocal_narrow_closure_eval;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
 mod divergence_combo_buflocal_narrow_marker;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
@@ -2118,6 +2120,8 @@ mod divergence_combo_read_eval_obarray;
 mod divergence_combo_read_print_hash;
 #[path = "divergence-combo-real-world.rs"]
 mod divergence_combo_real_world;
+#[path = "divergence-combo-regex-matchdata-replace-overlay.rs"]
+mod divergence_combo_regex_matchdata_replace_overlay;
 #[path = "divergence-combo-regex-stress.rs"]
 mod divergence_combo_regex_stress;
 #[path = "divergence-combo-search-marker-undo.rs"]
