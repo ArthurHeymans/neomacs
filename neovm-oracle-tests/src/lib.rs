@@ -2088,6 +2088,8 @@ mod divergence_combo_error_condition_unwind;
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
+#[path = "divergence-combo-excursion-marker-bufswitch.rs"]
+mod divergence_combo_excursion_marker_bufswitch;
 #[path = "divergence-combo-file-path-ops.rs"]
 mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-format-string-char.rs"]
@@ -2120,6 +2122,8 @@ mod divergence_combo_operations;
 mod divergence_combo_overlay_textprop_narrow_undo;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
 mod divergence_combo_pcase_thread_rx;
+#[path = "divergence-combo-plist-symprop-face.rs"]
+mod divergence_combo_plist_symprop_face;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-read-eval-circular.rs"]
