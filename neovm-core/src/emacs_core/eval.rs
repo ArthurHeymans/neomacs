@@ -3291,6 +3291,7 @@ impl Context {
         obarray.set_symbol_value("hscroll-step", Value::fixnum(0));
         obarray.set_symbol_value("line-number-display-limit-width", Value::fixnum(200));
         obarray.set_symbol_value("maximum-scroll-margin", Value::fixnum(25));
+        obarray.set_symbol_value("messages-buffer-name", Value::string("*Messages*"));
         obarray.set_symbol_value("message-log-max", Value::fixnum(1000));
         obarray.set_symbol_value("meta-prefix-char", Value::fixnum(27));
         obarray.set_symbol_value("next-screen-context-lines", Value::fixnum(2));

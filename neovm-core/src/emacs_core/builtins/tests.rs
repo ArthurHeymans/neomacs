@@ -11439,6 +11439,12 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
 
+    assert_eq!(
+        eval.eval_str("(list (boundp 'messages-buffer-name) messages-buffer-name)")
+            .expect("messages-buffer-name should be bound"),
+        Value::list(vec![Value::T, Value::string("*Messages*")])
+    );
+
     builtin_message(&mut eval, vec![Value::string("hello echo")])
         .expect("message eval should log to *Messages*");
 
@@ -11452,6 +11458,29 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
         eval.buffers.find_buffer_by_name(" *Messages*").is_none(),
         "message should not create hidden legacy messages buffer"
     );
+}
+
+#[test]
+fn message_respects_rebound_messages_buffer_name_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    eval.eval_str(r#"(let ((messages-buffer-name "*Alt Messages*")) (message "redirected"))"#)
+        .expect("message should accept rebound messages-buffer-name");
+
+    assert!(
+        eval.buffers.find_buffer_by_name("*Messages*").is_none(),
+        "rebound messages-buffer-name should avoid the default buffer"
+    );
+    let alt_id = eval
+        .buffers
+        .find_buffer_by_name("*Alt Messages*")
+        .expect("alternate messages buffer");
+    let alt = eval
+        .buffers
+        .get(alt_id)
+        .expect("alternate messages buffer live");
+    assert_eq!(alt.buffer_string(), "redirected\n");
 }
 
 #[test]

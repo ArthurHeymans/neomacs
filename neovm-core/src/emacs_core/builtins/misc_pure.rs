@@ -34,12 +34,16 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         return;
     }
 
-    // GNU xdisp.c defaults `messages-buffer-name` to "*Messages*".
-    let messages_name = "*Messages*";
-    let buf_id = if let Some(id) = ctx.buffers.find_buffer_by_name(messages_name) {
+    // GNU xdisp.c defaults `messages-buffer-name` to "*Messages*" and lets
+    // Lisp rebind it to redirect message logging.
+    let messages_name = ctx
+        .visible_variable_value_or_nil("messages-buffer-name")
+        .as_str_owned()
+        .unwrap_or_else(|| "*Messages*".to_string());
+    let buf_id = if let Some(id) = ctx.buffers.find_buffer_by_name(&messages_name) {
         id
     } else {
-        ctx.buffers.create_buffer(messages_name)
+        ctx.buffers.create_buffer(&messages_name)
     };
 
     // Insert the message text at the end, followed by newline.
