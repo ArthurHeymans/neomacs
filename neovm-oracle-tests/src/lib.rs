@@ -2092,6 +2092,8 @@ mod divergence_combo_edit_simulation;
 mod divergence_combo_editing_session;
 #[path = "divergence-combo-eieio-error-binding.rs"]
 mod divergence_combo_eieio_error_binding;
+#[path = "divergence-combo-eieio-hash-struct.rs"]
+mod divergence_combo_eieio_hash_struct;
 #[path = "divergence-combo-eieio-inheritance-advice.rs"]
 mod divergence_combo_eieio_inheritance_advice;
 #[path = "divergence-combo-eieio-inheritance-method.rs"]

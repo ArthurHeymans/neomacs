@@ -2889,8 +2889,6 @@ name = "neovm-oracle-tests"
 version = "0.0.2"
 dependencies = [
  "libc",
- "neovm-core",
- "neovm-executor",
  "proptest",
  "tempfile",
  "tracing",
