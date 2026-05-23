@@ -2092,6 +2092,8 @@ mod divergence_combo_eieio_inheritance_advice;
 mod divergence_combo_eieio_inheritance_method;
 #[path = "divergence-combo-encoding-buffer-marker.rs"]
 mod divergence_combo_encoding_buffer_marker;
+#[path = "divergence-combo-encoding-multibyte-char.rs"]
+mod divergence_combo_encoding_multibyte_char;
 #[path = "divergence-combo-error-condition-unwind.rs"]
 mod divergence_combo_error_condition_unwind;
 #[path = "divergence-combo-error-recovery.rs"]
