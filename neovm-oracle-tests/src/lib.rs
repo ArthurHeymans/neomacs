@@ -2276,6 +2276,8 @@ mod divergence_combo_overlay_textprop_narrow_undo;
 mod divergence_combo_pcase_marker_overlay_undo_textprop;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
 mod divergence_combo_pcase_thread_rx;
+#[path = "divergence-combo-plist-get-put-remprop-marker-overlay-undo.rs"]
+mod divergence_combo_plist_get_put_remprop_marker_overlay_undo;
 #[path = "divergence-combo-plist-hash-symbol-eval.rs"]
 mod divergence_combo_plist_hash_symbol_eval;
 mod divergence_combo_plist_hash_symbol_eval_deep;
