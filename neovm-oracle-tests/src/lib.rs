@@ -2056,6 +2056,10 @@ mod divergence_combo_arith_math_compare;
 mod divergence_combo_buffer_overlay;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
 mod divergence_combo_buflocal_narrow_marker;
+#[path = "divergence-combo-chartab-syntax-category.rs"]
+mod divergence_combo_chartab_syntax_category;
+#[path = "divergence-combo-comment-fill-indent.rs"]
+mod divergence_combo_comment_fill_indent;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
