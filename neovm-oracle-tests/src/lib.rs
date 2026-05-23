@@ -2080,6 +2080,8 @@ mod divergence_display_table_glyph;
 mod divergence_eieio_method_deep;
 #[path = "divergence-eieio-oop.rs"]
 mod divergence_eieio_oop;
+#[path = "divergence-encoding-process-real.rs"]
+mod divergence_encoding_process_real;
 #[path = "divergence-error-conditions-deep.rs"]
 mod divergence_error_conditions_deep;
 #[path = "divergence-error-signaling-deep.rs"]
@@ -2318,6 +2320,8 @@ mod divergence_whitespace_display_modes;
 mod divergence_window_config_deep;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
+#[path = "divergence-window-frame-real.rs"]
+mod divergence_window_frame_real;
 #[path = "divergence-window-geometry.rs"]
 mod divergence_window_geometry;
 #[path = "divergence-window-redisplay.rs"]
