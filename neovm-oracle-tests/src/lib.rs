@@ -2066,6 +2066,8 @@ mod divergence_combo_buffer_local_closure;
 mod divergence_combo_buffer_overlay;
 #[path = "divergence-combo-buffer-overlay-eieio.rs"]
 mod divergence_combo_buffer_overlay_eieio;
+#[path = "divergence-combo-buffer-string-erase-marker-overlay-undo.rs"]
+mod divergence_combo_buffer_string_erase_marker_overlay_undo;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
 mod divergence_combo_buflocal_default_setq_kill_deep;
@@ -2173,6 +2175,8 @@ mod divergence_combo_hook_run_add_remove_buffer_local;
 #[path = "divergence-combo-indent-fill-paragraph.rs"]
 mod divergence_combo_indent_fill_paragraph;
 mod divergence_combo_indirect_buffer_base_shared_deep;
+#[path = "divergence-combo-insert-char-buffer-switch-marker-overlay-undo.rs"]
+mod divergence_combo_insert_char_buffer_switch_marker_overlay_undo;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-interval-split-merge-undo.rs"]
@@ -2225,6 +2229,8 @@ mod divergence_combo_metaprogramming;
 mod divergence_combo_milestone_100;
 #[path = "divergence-combo-misc-ops-undo.rs"]
 mod divergence_combo_misc_ops_undo;
+#[path = "divergence-combo-motion-marker-overlay-undo.rs"]
+mod divergence_combo_motion_marker_overlay_undo;
 #[path = "divergence-combo-multibyte-coding-undo.rs"]
 mod divergence_combo_multibyte_coding_undo;
 #[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
