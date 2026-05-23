@@ -2050,6 +2050,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-buffer-overlay.rs"]
 mod divergence_combo_buffer_overlay;
+#[path = "divergence-combo-edge-cases.rs"]
+mod divergence_combo_edge_cases;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
@@ -2060,6 +2062,8 @@ mod divergence_combo_operations;
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-search-marker-undo.rs"]
 mod divergence_combo_search_marker_undo;
+#[path = "divergence-combo-stress.rs"]
+mod divergence_combo_stress;
 #[path = "divergence-combo-window-buffer-process.rs"]
 mod divergence_combo_window_buffer_process;
 #[path = "divergence-compat-legacy.rs"]
