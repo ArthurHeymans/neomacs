@@ -76,7 +76,13 @@ jobs:
           tool: cargo-nextest
 
       - name: Verify build with cargo xtask fresh-build
-        run: cargo xtask fresh-build
+        run: cargo xtask fresh-build --release
 
-      - name: Run unit tests with cargo nextest run --no-fail-fast
-        run: cargo nextest run --no-fail-fast
+      - name: Run unit tests for neovm-core
+        run: cargo nextest run -p neovm-core --no-fail-fast
+
+      - name: Run oracle tests for neovm-core
+        run: cargo nextest run -p neovm-oracle-tests --no-fail-fast
+
+      - name: Run tui tests for neomacs
+        run: cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
