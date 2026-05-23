@@ -2030,6 +2030,8 @@ mod divergence_buffer_motion_search;
 mod divergence_bufferlocal_frame_deep;
 #[path = "divergence-bytecomp-deep.rs"]
 mod divergence_bytecomp_deep;
+#[path = "divergence-bytecomp-real.rs"]
+mod divergence_bytecomp_real;
 #[path = "divergence-calendar-time-deep.rs"]
 mod divergence_calendar_time_deep;
 #[path = "divergence-category-unicode-props.rs"]
@@ -2056,6 +2058,8 @@ mod divergence_completion_frameworks;
 mod divergence_completion_ring_deep;
 #[path = "divergence-control-flow-real.rs"]
 mod divergence_control_flow_real;
+#[path = "divergence-custom-hooks-real.rs"]
+mod divergence_custom_hooks_real;
 #[path = "divergence-custom-theme-deep.rs"]
 mod divergence_custom_theme_deep;
 #[path = "divergence-data-formats.rs"]
