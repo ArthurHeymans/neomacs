@@ -2074,6 +2074,8 @@ mod divergence_combo_defstruct_eieio_interop;
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
 mod divergence_combo_edge_cases;
+#[path = "divergence-combo-editing-session.rs"]
+mod divergence_combo_editing_session;
 #[path = "divergence-combo-eieio-error-binding.rs"]
 mod divergence_combo_eieio_error_binding;
 #[path = "divergence-combo-eieio-inheritance-advice.rs"]
@@ -2116,6 +2118,8 @@ mod divergence_combo_milestone_100;
 mod divergence_combo_operations;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
 mod divergence_combo_overlay_textprop_narrow_undo;
+#[path = "divergence-combo-pcase-thread-rx.rs"]
+mod divergence_combo_pcase_thread_rx;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-read-eval-circular.rs"]
