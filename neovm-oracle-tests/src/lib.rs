@@ -2054,8 +2054,12 @@ mod divergence_combo_abbrev_completion_syntax;
 mod divergence_combo_advice_eieio_keymap;
 #[path = "divergence-combo-advice-eieio-undo-deep.rs"]
 mod divergence_combo_advice_eieio_undo_deep;
+#[path = "divergence-combo-advice-filter-before-after-combo.rs"]
+mod divergence_combo_advice_filter_before_after_combo;
 #[path = "divergence-combo-arith-math-compare.rs"]
 mod divergence_combo_arith_math_compare;
+#[path = "divergence-combo-bool-vector-bitwise-operations-deep.rs"]
+mod divergence_combo_bool_vector_bitwise_operations_deep;
 #[path = "divergence-combo-buffer-local-closure.rs"]
 mod divergence_combo_buffer_local_closure;
 #[path = "divergence-combo-buffer-overlay.rs"]
@@ -2080,6 +2084,8 @@ mod divergence_combo_char_table_syntax_category_deep;
 mod divergence_combo_chartab_syntax_category;
 #[path = "divergence-combo-charwidth-display-fill.rs"]
 mod divergence_combo_charwidth_display_fill;
+#[path = "divergence-combo-circular-list-print-read-reverse.rs"]
+mod divergence_combo_circular_list_print_read_reverse;
 #[path = "divergence-combo-cl-loop-advanced-undo.rs"]
 mod divergence_combo_cl_loop_advanced_undo;
 #[path = "divergence-combo-cl-loop-destructuring-accumulate-deep.rs"]
@@ -2088,6 +2094,8 @@ mod divergence_combo_cl_loop_destructuring_accumulate_deep;
 mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
 mod divergence_combo_cl_macs_buffer_deep;
+#[path = "divergence-combo-cl-pcase-destructure-guard-deep.rs"]
+mod divergence_combo_cl_pcase_destructure_guard_deep;
 #[path = "divergence-combo-cl-pcase-rx-thread.rs"]
 mod divergence_combo_cl_pcase_rx_thread;
 #[path = "divergence-combo-cl-seq-loop.rs"]
@@ -2098,6 +2106,8 @@ mod divergence_combo_comment_fill_indent;
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-deep-undo-stress-2.rs"]
 mod divergence_combo_deep_undo_stress_2;
+#[path = "divergence-combo-defmacro-eval-and-compile-expansion.rs"]
+mod divergence_combo_defmacro_eval_and_compile_expansion;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
 mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-defstruct-eieio-interop.rs"]
@@ -2144,6 +2154,8 @@ mod divergence_combo_excursion_marker_bufswitch;
 mod divergence_combo_excursion_restriction_buffer_switch_deep;
 #[path = "divergence-combo-face-font-display.rs"]
 mod divergence_combo_face_font_display;
+#[path = "divergence-combo-file-path-expand-directory-ops.rs"]
+mod divergence_combo_file_path_expand_directory_ops;
 #[path = "divergence-combo-file-path-ops.rs"]
 mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-final-stress.rs"]
@@ -2158,6 +2170,8 @@ mod divergence_combo_format_time_float_arithmetic_deep;
 mod divergence_combo_fringe;
 #[path = "divergence-combo-fringe-display-overlay.rs"]
 mod divergence_combo_fringe_display_overlay;
+#[path = "divergence-combo-hook-run-add-remove-buffer-local.rs"]
+mod divergence_combo_hook_run_add_remove_buffer_local;
 #[path = "divergence-combo-indent-fill-paragraph.rs"]
 mod divergence_combo_indent_fill_paragraph;
 #[path = "divergence-combo-indirect-buffer-base-shared-deep.rs"]
@@ -2174,6 +2188,8 @@ mod divergence_combo_keymap_command;
 mod divergence_combo_keymap_command_advice_error;
 #[path = "divergence-combo-keymap-define-lookup-where-is.rs"]
 mod divergence_combo_keymap_define_lookup_where_is;
+#[path = "divergence-combo-kill-ring-yank-undo-proprs-deep.rs"]
+mod divergence_combo_kill_ring_yank_undo_proprs_deep;
 #[path = "divergence-combo-list-seq-map.rs"]
 mod divergence_combo_list_seq_map;
 #[path = "divergence-combo-loop-seq-generator.rs"]
@@ -2206,6 +2222,8 @@ mod divergence_combo_misc_ops_undo;
 mod divergence_combo_multibyte_coding_undo;
 #[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
 mod divergence_combo_narrow_marker_overlay_mega;
+#[path = "divergence-combo-number-bignum-float-edge-deep.rs"]
+mod divergence_combo_number_bignum_float_edge_deep;
 #[path = "divergence-combo-obarray-intern-symbol-deep.rs"]
 mod divergence_combo_obarray_intern_symbol_deep;
 #[path = "divergence-combo-operations.rs"]
@@ -2264,6 +2282,8 @@ mod divergence_combo_regexp_match_replace_narrow_prop;
 mod divergence_combo_search_marker_undo;
 #[path = "divergence-combo-serialization.rs"]
 mod divergence_combo_serialization;
+#[path = "divergence-combo-setf-generalized-buffer-local-deep.rs"]
+mod divergence_combo_setf_generalized_buffer_local_deep;
 #[path = "divergence-combo-stdlib.rs"]
 mod divergence_combo_stdlib;
 #[path = "divergence-combo-stress.rs"]
