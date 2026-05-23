@@ -2202,6 +2202,8 @@ mod divergence_combo_real_world;
 mod divergence_combo_record_type_eval_bytecomp;
 #[path = "divergence-combo-regex-match-replace-props.rs"]
 mod divergence_combo_regex_match_replace_props;
+#[path = "divergence-combo-regex-match-undo-deep.rs"]
+mod divergence_combo_regex_match_undo_deep;
 #[path = "divergence-combo-regex-matchdata-replace-overlay.rs"]
 mod divergence_combo_regex_matchdata_replace_overlay;
 #[path = "divergence-combo-regex-stress.rs"]
