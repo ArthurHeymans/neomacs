@@ -2050,6 +2050,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-advice-eieio-keymap.rs"]
 mod divergence_combo_advice_eieio_keymap;
+#[path = "divergence-combo-arith-math-compare.rs"]
+mod divergence_combo_arith_math_compare;
 #[path = "divergence-combo-buffer-overlay.rs"]
 mod divergence_combo_buffer_overlay;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
@@ -2076,6 +2078,8 @@ mod divergence_combo_format_string_char;
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
 mod divergence_combo_keymap_command;
+#[path = "divergence-combo-list-seq-map.rs"]
+mod divergence_combo_list_seq_map;
 #[path = "divergence-combo-macro-compile-eval.rs"]
 mod divergence_combo_macro_compile_eval;
 #[path = "divergence-combo-macro-compiletime.rs"]
