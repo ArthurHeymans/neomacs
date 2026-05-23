@@ -2156,6 +2156,8 @@ mod divergence_combo_milestone_100;
 mod divergence_combo_narrow_marker_overlay_mega;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-combo-overlay-advanced.rs"]
+mod divergence_combo_overlay_advanced;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
 mod divergence_combo_overlay_textprop_narrow_undo;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
