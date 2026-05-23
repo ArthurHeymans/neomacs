@@ -2249,6 +2249,8 @@ mod divergence_combo_plist_symprop_face;
 mod divergence_combo_print_read_charset;
 #[path = "divergence-combo-print-read-hash-record-closure-marker.rs"]
 mod divergence_combo_print_read_hash_record_closure_marker;
+#[path = "divergence-combo-process-marker-overlay-undo-textprop.rs"]
+mod divergence_combo_process_marker_overlay_undo_textprop;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-process-sentinel-buflocal-overlay-marker-undo.rs"]
