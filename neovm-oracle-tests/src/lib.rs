@@ -2060,12 +2060,16 @@ mod divergence_combo_buflocal_narrow_closure_eval;
 mod divergence_combo_buflocal_narrow_marker;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
 mod divergence_combo_chartab_syntax_category;
+#[path = "divergence-combo-cl-loop-seq-accumulate.rs"]
+mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
 mod divergence_combo_defstruct_accessor_print;
+#[path = "divergence-combo-defstruct-eieio-interop.rs"]
+mod divergence_combo_defstruct_eieio_interop;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
