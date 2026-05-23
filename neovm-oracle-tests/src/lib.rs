@@ -2194,6 +2194,8 @@ mod divergence_rx_pcase_pattern;
 mod divergence_rx_regex_builder;
 #[path = "divergence-scope-binding.rs"]
 mod divergence_scope_binding;
+#[path = "divergence-search-charfold-deep.rs"]
+mod divergence_search_charfold_deep;
 #[path = "divergence-search-charfold-occur.rs"]
 mod divergence_search_charfold_occur;
 #[path = "divergence-search-match-deep.rs"]
@@ -2248,6 +2250,8 @@ mod divergence_undo_semantics;
 mod divergence_unicode_normalization;
 #[path = "divergence-weak-hash-lifecycle.rs"]
 mod divergence_weak_hash_lifecycle;
+#[path = "divergence-whitespace-display-modes.rs"]
+mod divergence_whitespace_display_modes;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
 #[path = "divergence-window-geometry.rs"]
