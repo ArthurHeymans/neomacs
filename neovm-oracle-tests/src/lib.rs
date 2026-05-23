@@ -2144,6 +2144,8 @@ mod divergence_combo_pcase_thread_rx;
 mod divergence_combo_plist_hash_symbol_eval;
 #[path = "divergence-combo-plist-symprop-face.rs"]
 mod divergence_combo_plist_symprop_face;
+#[path = "divergence-combo-print-read-charset.rs"]
+mod divergence_combo_print_read_charset;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-read-eval-circular.rs"]
