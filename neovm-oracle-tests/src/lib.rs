@@ -2129,6 +2129,8 @@ mod divergence_combo_defstruct_record_type_of_marker_overlay_undo;
 mod divergence_combo_defun_defmacro_marker_overlay_undo;
 #[path = "divergence-combo-defvar-defconst-make-local-marker-overlay-undo.rs"]
 mod divergence_combo_defvar_defconst_make_local_marker_overlay_undo;
+#[path = "divergence-combo-delete-char-whitespace-marker-overlay-undo.rs"]
+mod divergence_combo_delete_char_whitespace_marker_overlay_undo;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
