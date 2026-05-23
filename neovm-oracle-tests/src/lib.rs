@@ -2252,6 +2252,8 @@ mod divergence_combo_undo_deep_stress;
 mod divergence_combo_undo_mega_stress;
 #[path = "divergence-combo-undo-overlay-marker-stress.rs"]
 mod divergence_combo_undo_overlay_marker_stress;
+#[path = "divergence-combo-undo-replace-prop-extreme.rs"]
+mod divergence_combo_undo_replace_prop_extreme;
 #[path = "divergence-combo-undo-stress-marker-textprop.rs"]
 mod divergence_combo_undo_stress_marker_textprop;
 #[path = "divergence-combo-window-buf-marker.rs"]
