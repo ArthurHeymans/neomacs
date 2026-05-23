@@ -1,13 +1,13 @@
 //! Divergence tests: char-table + syntax + category table combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_char_table_basic_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ct (make-char-table 'syntax-table nil)))
     (aset ct ?A 'word)
@@ -30,7 +30,7 @@ fn divergence_char_table_basic_operations() {
 fn divergence_syntax_table_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((st (syntax-table)))
     (list (char-syntax ?a)
@@ -50,7 +50,7 @@ fn divergence_syntax_table_access() {
 fn divergence_modify_syntax_entry_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((st (copy-syntax-table (syntax-table))))
     (with-syntax-table st
@@ -67,7 +67,7 @@ fn divergence_modify_syntax_entry_effect() {
 fn divergence_category_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ct (category-table)))
     (define-category ?1 "test cat 1" ct)
@@ -91,7 +91,7 @@ fn divergence_category_table_operations() {
 fn divergence_char_table_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ct (make-char-table 'test-ct-xxx nil)))
     (set-char-table-range ct ?A ?Z 'letter)
@@ -113,7 +113,7 @@ fn divergence_char_table_range() {
 fn divergence_syntax_class_of_various_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (char-syntax ?a)
         (eq (char-syntax ?a) ?w)
@@ -136,7 +136,7 @@ fn divergence_syntax_class_of_various_chars() {
 fn divergence_parse_partial_sexp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo (bar baz) quux)")
   (let ((p1 (scan-lists 1 1 0))
@@ -154,7 +154,7 @@ fn divergence_parse_partial_sexp_basic() {
 fn divergence_forward_comment_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert ";; comment 1\ncode\n;; comment 2\nmore code")
   (goto-char 1)
@@ -174,7 +174,7 @@ fn divergence_forward_comment_navigation() {
 fn divergence_syntax_text_property_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abc-def ghi")
   (let ((st (copy-syntax-table)))
@@ -195,7 +195,7 @@ fn divergence_syntax_text_property_override() {
 fn divergence_char_table_parent_extra_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((parent (make-char-table 'test-ct-parent-xxx nil))
         (child (make-char-table 'test-ct-child-xxx nil)))

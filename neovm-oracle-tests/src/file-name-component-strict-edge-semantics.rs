@@ -4,7 +4,7 @@
 //! `src/fileio.c`.  These functions are syntactic and preserve repeated slash
 //! structure in the returned component.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -41,7 +41,7 @@ fn oracle_file_name_directory_and_nondirectory_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn oracle_file_name_directory_handler_result_contract_edges() {
     (fmakunbound 'neomacs--oracle-file-name-component-bad-handler)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn oracle_file_name_extension_and_version_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn oracle_file_name_with_extension_strict_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -207,5 +207,5 @@ fn oracle_file_name_split_and_parent_directory_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: cl-loop + seq + accumulation + hash table combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_loop_multi_accumulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '((a 1) (b 2) (c 3) (d 4) (e 5))))
     (cl-loop for (key val) in data
@@ -30,7 +30,7 @@ fn divergence_cl_loop_multi_accumulation() {
 fn divergence_cl_loop_with_hash_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash 'x 10 ht)
@@ -55,7 +55,7 @@ fn divergence_cl_loop_with_hash_destructuring() {
 fn divergence_seq_into_different_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((lst '(1 2 3 4 5))
         (vec [1 2 3 4 5]))
@@ -76,7 +76,7 @@ fn divergence_seq_into_different_types() {
 fn divergence_cl_loop_with_vectors_and_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v [10 20 30 40 50])
         (s "Hello World"))
@@ -96,7 +96,7 @@ fn divergence_cl_loop_with_vectors_and_strings() {
 fn divergence_cl_loop_for_in_package() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((syms nil))
     (cl-loop for s being the symbols
@@ -115,7 +115,7 @@ fn divergence_cl_loop_for_in_package() {
 fn divergence_seq_mapcat_concatenate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((lists '((1 2) (3 4) (5 6))))
     (list (seq-mapcat #'identity lists)
@@ -135,7 +135,7 @@ fn divergence_seq_mapcat_concatenate() {
 fn divergence_cl_loop_with_multiple_for_clauses() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x from 1 to 5
                  for y = (* x x)
@@ -158,7 +158,7 @@ fn divergence_cl_loop_with_multiple_for_clauses() {
 fn divergence_seq_window_slide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v [1 2 3 4 5]))
     (list (seq-subseq v 1 4)
@@ -178,7 +178,7 @@ fn divergence_seq_window_slide() {
 fn divergence_cl_loop_with_conditionals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data (number-sequence 1 20)))
     (list (cl-loop for x in data
@@ -206,7 +206,7 @@ fn divergence_cl_loop_with_conditionals() {
 fn divergence_seq_intersection_difference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((a '(1 2 3 4 5))
         (b '(4 5 6 7 8)))

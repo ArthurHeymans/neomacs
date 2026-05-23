@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // seq-mapn: map over multiple sequences simultaneously
@@ -28,7 +28,7 @@ fn oracle_prop_seq_mapn_multiple_sequences() {
                     (seq-mapn #'* [2 3 4] '(10 20 30))
                     ;; Single sequence degenerates to seq-map
                     (seq-mapn #'1+ '(5 6 7))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn oracle_prop_seq_mapn_truncation_strings_and_error_contracts() {
     (condition-case err
         (seq-mapn #'list 42 '(1 2))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ fn oracle_prop_seq_group_by() {
                     ;; Sort by key for determinism
                     (sort result (lambda (a b)
                                    (and (null (car a)) (car b)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn oracle_prop_seq_group_by_complex_key() {
                     (let ((groups (seq-group-by #'length words)))
                       ;; Sort by key (length) for determinism
                       (sort groups (lambda (a b) (< (car a) (car b))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ fn oracle_prop_seq_sort_by() {
                                  '((alice . 30) (bob . 25) (carol . 35) (dave . 28)))
                     ;; Sort numbers by absolute value
                     (seq-sort-by #'abs #'< '(-5 3 -1 4 -2 0))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ fn oracle_prop_seq_min_max() {
                     ;; Negative numbers
                     (seq-min '(-10 -5 -20 -1))
                     (seq-max '(-10 -5 -20 -1))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ fn oracle_prop_seq_partition() {
                     (seq-partition #'numberp '("a" "b" "c"))
                     ;; Empty
                     (seq-partition #'numberp nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ fn oracle_prop_seq_subseq() {
                     ;; Negative indices (from end)
                     (seq-subseq '(a b c d e) -3)
                     (seq-subseq "abcdef" -4 -1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ fn oracle_prop_seq_data_analysis_pipeline() {
                                    (lambda (a b)
                                      (string-lessp (symbol-name (car a))
                                                    (symbol-name (car b)))))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,5 +309,5 @@ fn oracle_prop_seq_custom_set_operations() {
                                (sort (seq-map id-of sym-diff) #'<)
                                ;; Union count
                                (length union))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

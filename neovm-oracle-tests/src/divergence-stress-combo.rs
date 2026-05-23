@@ -1,13 +1,13 @@
 //! Divergence tests: stress tests - many operations combined, edge case combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_stress_many_inserts_deletes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (dotimes (i 100)
@@ -26,7 +26,7 @@ fn divergence_stress_many_inserts_deletes() {
 fn divergence_stress_nested_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (save-excursion
@@ -44,7 +44,7 @@ fn divergence_stress_nested_save_excursion() {
 fn divergence_stress_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 100 ?X))
   (let ((ovs nil))
@@ -60,7 +60,7 @@ fn divergence_stress_many_overlays() {
 fn divergence_stress_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 100 ?X))
   (dotimes (i 10)
@@ -76,7 +76,7 @@ fn divergence_stress_many_text_props() {
 fn divergence_stress_many_narrows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (save-restriction
@@ -93,7 +93,7 @@ fn divergence_stress_many_narrows() {
 fn divergence_stress_many_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((markers (mapcar (lambda (i) (set-marker (make-marker) i))
@@ -108,7 +108,7 @@ fn divergence_stress_many_markers() {
 fn divergence_stress_condition_case_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (dotimes (i 5)
     (condition-case err
@@ -122,7 +122,7 @@ fn divergence_stress_condition_case_loop() {
 fn divergence_stress_undo_redo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (insert "one")
@@ -143,7 +143,7 @@ fn divergence_stress_undo_redo_cycle() {
 fn divergence_stress_hash_many_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :test 'eql)))
   (dotimes (i 100)
     (puthash i (* i i) ht))
@@ -159,7 +159,7 @@ fn divergence_stress_hash_many_ops() {
 fn divergence_stress_list_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((lst (number-sequence 1 50)))
   (setq lst (mapcar #'1+ lst))
   (setq lst (delq 2 (remq 51 lst)))

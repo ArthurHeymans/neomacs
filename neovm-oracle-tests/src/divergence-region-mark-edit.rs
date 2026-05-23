@@ -1,13 +1,13 @@
 //! Divergence tests: region, mark, transient-mark-mode deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_mark_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (push-mark 1)
@@ -21,7 +21,7 @@ fn divergence_mark_region() {
 fn divergence_use_region_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'use-region-p)
   (boundp 'transient-mark-mode)
@@ -33,7 +33,7 @@ fn divergence_use_region_p() {
 fn divergence_mark_ring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'mark-ring)
   (listp mark-ring)
@@ -47,7 +47,7 @@ fn divergence_mark_ring() {
 fn divergence_exchange_point_and_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (push-mark 1)
@@ -62,7 +62,7 @@ fn divergence_exchange_point_and_mark() {
 fn divergence_kill_region_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (push-mark 1)
@@ -80,7 +80,7 @@ fn divergence_kill_region_yank() {
 fn divergence_rectangle_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'kill-rectangle)
   (fboundp 'yank-rectangle)
@@ -96,7 +96,7 @@ fn divergence_rectangle_functions() {
 fn divergence_delete_extract_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\n")
   (list (extract-rectangle 1 4)
@@ -108,7 +108,7 @@ fn divergence_delete_extract_rectangle() {
 fn divergence_indent_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'indent-region)
   (fboundp 'indent-relative)
@@ -121,7 +121,7 @@ fn divergence_indent_region() {
 fn divergence_comment_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'comment-region)
   (fboundp 'uncomment-region)
@@ -135,7 +135,7 @@ fn divergence_comment_region() {
 fn divergence_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'fill-region)
   (fboundp 'fill-paragraph)

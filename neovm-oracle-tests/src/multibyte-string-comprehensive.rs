@@ -8,7 +8,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // string-to-multibyte / string-to-unibyte
@@ -49,7 +49,7 @@ fn oracle_prop_multibyte_string_conversion() {
           (> (string-bytes s) (length s))
           (multibyte-string-p s))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ fn oracle_prop_multibyte_encode_decode_coding() {
     (string= (encode-coding-string s 'utf-8)
              (encode-coding-string s 'iso-latin-1))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ fn oracle_prop_multibyte_char_to_string_unicode() {
                    (char-to-string #x263a))))
     (list (length s) (substring s 0 2))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ fn oracle_prop_multibyte_string_width_cjk() {
                         (char-to-string #x4e8c)
                         (char-to-string #x4e09))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +205,7 @@ fn oracle_prop_multibyte_char_width() {
   ;; Halfwidth Katakana
   (char-width #xff71))  ;; halfwidth A (katakana)
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ fn oracle_prop_multibyte_truncate_string_to_width() {
   (let ((mixed (concat "ab" (char-to-string #x4e2d) "cd")))
     (truncate-string-to-width mixed 4)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ fn oracle_prop_multibyte_string_to_list_vector() {
          (rebuilt (concat v)))
     (string= orig rebuilt)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ fn oracle_prop_multibyte_regex_matching() {
     (string-match "a.*b" "aXXbYYb")
     (match-string 0 "aXXbYYb")))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ fn oracle_prop_multibyte_string_as_conversion() {
           (length (string-as-unibyte ascii))
           (length (string-to-unibyte ascii)))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,5 +420,5 @@ fn oracle_prop_multibyte_comprehensive_combined() {
       (list (length result)
             (string-width result)))))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

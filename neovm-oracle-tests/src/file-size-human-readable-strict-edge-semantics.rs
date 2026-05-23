@@ -4,7 +4,7 @@
 //! nil/`iec` use a 1024 divisor, any other non-nil flavor uses 1000, and
 //! formatting follows GNU `ls -lh` one-decimal rounding rules.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -45,5 +45,5 @@ fn oracle_file_size_human_readable_flavors_rounding_units_and_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

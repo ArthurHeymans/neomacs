@@ -1,13 +1,13 @@
 //! Divergence tests: EIEIO method dispatch, class hierarchy deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_core() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'defclass)
   (fboundp 'make-instance)
@@ -21,7 +21,7 @@ fn divergence_eieio_core() {
 fn divergence_eieio_class_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'find-class)
   (fboundp 'class-name)
@@ -36,7 +36,7 @@ fn divergence_eieio_class_functions() {
 fn divergence_eieio_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'slot-boundp)
   (fboundp 'slot-makeunbound)
@@ -50,7 +50,7 @@ fn divergence_eieio_slots() {
 fn divergence_eieio_generic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'defgeneric)
   (fboundp 'defmethod)
@@ -65,7 +65,7 @@ fn divergence_eieio_generic() {
 fn divergence_eieio_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eieio--class-precedence-c3)
   (fboundp 'eieio--c3-candidate)
@@ -78,7 +78,7 @@ fn divergence_eieio_accessors() {
 fn divergence_eieio_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'initialize-instance)
   (fboundp 'shared-initialize)
@@ -91,7 +91,7 @@ fn divergence_eieio_constructor() {
 fn divergence_eieio_method_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eieio--defmethod)
   (fboundp 'eieio--defgeneric)
@@ -103,7 +103,7 @@ fn divergence_eieio_method_combination() {
 fn divergence_cl_defstruct_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'cl-defstruct)
   (fboundp 'cl-struct-setf-expander)
@@ -116,7 +116,7 @@ fn divergence_cl_defstruct_compat() {
 fn divergence_record_type_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'cl--make-random-access-record)
   (fboundp 'cl--random-access-record-p)
@@ -129,7 +129,7 @@ fn divergence_record_type_compat() {
 fn divergence_eieio_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eieio-validate-slot-value)
   (fboundp 'eieio-perform-slot-validation-for-default)

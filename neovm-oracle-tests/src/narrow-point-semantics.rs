@@ -4,7 +4,7 @@
 //! cover reversed bounds, point clamping, out-of-range errors, and marker values
 //! for narrowed `point-min` / `point-max`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_narrow_to_region_swaps_reversed_bounds_and_widen_restores() {
       (list wide narrowed (point-min) (point-max) (point)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_narrow_to_region_clamps_point_to_new_bounds() {
     (list before after (point-min) (point-max))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn oracle_narrow_to_region_out_of_range_error_payloads() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn oracle_point_min_max_markers_reflect_current_restriction() {
      (marker-insertion-type max-marker))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn oracle_goto_char_clips_point_but_returns_requested_position() {
           (point-min) (point-max))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -135,5 +135,5 @@ fn oracle_goto_char_marker_uses_marker_position_and_type_checks() {
        (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

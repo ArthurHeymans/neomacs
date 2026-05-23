@@ -1,13 +1,13 @@
 //! Divergence tests: subr-x, compat, legacy compat functions.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_subr_x() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-join)
   (fboundp 'string-replace)
@@ -25,7 +25,7 @@ fn divergence_subr_x() {
 fn divergence_string_functions_modern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-join '("a" "b" "c") ", ")
   (string-replace "foo" "bar" "foo baz foo")
@@ -39,7 +39,7 @@ fn divergence_string_functions_modern() {
 fn divergence_hash_table_modern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht)
   (puthash "b" 2 ht)
@@ -54,7 +54,7 @@ fn divergence_hash_table_modern() {
 fn divergence_compat_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compat-function)
   (fboundp 'compat-version)
@@ -66,7 +66,7 @@ fn divergence_compat_functions() {
 fn divergence_legacy_aliases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-to-number)
   (fboundp 'number-to-string)
@@ -81,7 +81,7 @@ fn divergence_legacy_aliases() {
 fn divergence_buffer_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'buffer-name)
   (fboundp 'buffer-file-name)
@@ -98,7 +98,7 @@ fn divergence_buffer_compat() {
 fn divergence_file_name_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'file-name-split)
   (fboundp 'file-name-concat)
@@ -114,7 +114,7 @@ fn divergence_file_name_handling() {
 fn divergence_path_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'directory-name-p)
   (fboundp 'file-name-absolute-p)
@@ -128,7 +128,7 @@ fn divergence_path_functions() {
 fn divergence_internal_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'internal--scratch-buffer)
   (fboundp 'internal-show-call-stack)
@@ -141,7 +141,7 @@ fn divergence_internal_functions() {
 fn divergence_comp_warn_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'warning-suppress-types)
   (listp warning-suppress-types)

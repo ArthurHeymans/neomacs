@@ -4,9 +4,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{
-    ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-};
+use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_make_string_basic() {
@@ -39,7 +37,7 @@ fn oracle_prop_make_string_space() {
 fn oracle_prop_make_string_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(length (make-string 3 ?\\n))");
+    assert_oracle_parity("(length (make-string 3 ?\\n))");
 }
 
 #[test]
@@ -57,7 +55,7 @@ fn oracle_prop_make_string_bignum_length_error_like_gnu() {
     // GNU Emacs alloc.c:Fmake_string validates LENGTH with CHECK_FIXNAT:
     // bignum lengths are rejected as `wholenump`, not as generic `integerp`.
     let form = r#"(make-string 1000000000000000000000000000000 ?x)"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +69,7 @@ fn oracle_make_string_float_length_error_predicate_like_gnu() {
     (make-string 1.0 ?a)
   (error (list (car err) (cdr err))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 proptest! {

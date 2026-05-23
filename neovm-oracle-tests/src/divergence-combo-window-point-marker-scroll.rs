@@ -1,13 +1,13 @@
 //! Divergence tests: window + point + marker + overlay + textprop + scroll sim.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_point_marker_after_large_insert_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 100 ?A))
   (put-text-property 1 50 'half 'first)
@@ -44,7 +44,7 @@ fn divergence_point_marker_after_large_insert_scroll() {
 fn divergence_overlay_recenter_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 500 ?X))
   (put-text-property 1 100 'block 'a)
@@ -76,7 +76,7 @@ fn divergence_overlay_recenter_tracking() {
 fn divergence_window_start_end_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 1000 ?Z))
   (dotimes (i 10)
@@ -103,7 +103,7 @@ fn divergence_window_start_end_with_overlays() {
 fn divergence_narrow_to_visible_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH-III-JJJ-KKK-LLL")
   (let ((ov1 (make-overlay 1 3)) (ov2 (make-overlay 5 7))
@@ -160,7 +160,7 @@ fn divergence_narrow_to_visible_with_undo() {
 fn divergence_marker_insertion_type_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (put-text-property 1 4 'part 'left)
@@ -194,7 +194,7 @@ fn divergence_marker_insertion_type_with_undo() {
 fn divergence_overlay_chain_move_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "111-222-333-444-555-666-777")
   (let ((ovs (list (make-overlay 1 3) (make-overlay 5 7) (make-overlay 9 11)
@@ -230,7 +230,7 @@ fn divergence_overlay_chain_move_with_undo() {
 fn divergence_textprop_boundary_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAXXXXBBBBCCCC")
   (put-text-property 1 3 'zone 'a)
@@ -267,7 +267,7 @@ fn divergence_textprop_boundary_after_kill_yank() {
 fn divergence_100_overlay_sweep_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 500 ?T))
   (let ((ovs nil)
@@ -306,7 +306,7 @@ fn divergence_100_overlay_sweep_undo() {
 fn divergence_overlay_face_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "NORMAL-BOLD-ITALIC-UNDERLINE-NORMAL")
   (let ((ov-bold (make-overlay 8 11))
@@ -353,7 +353,7 @@ fn divergence_overlay_face_propagation() {
 fn divergence_region_active_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 4 'zone 'a)

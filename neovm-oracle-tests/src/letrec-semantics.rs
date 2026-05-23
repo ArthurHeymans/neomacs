@@ -5,7 +5,7 @@
 //! binders in a `let` plus `setq` block, and accepts an omitted initializer as
 //! nil via the same binder syntax as `let`/`let*`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_letrec_macroexpansion_rewrite_shapes() {
      (list neovm--lr-a (funcall neovm--lr-b) neovm--lr-c))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_letrec_runtime_omitted_initializers_and_scope() {
    (list a (funcall b))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -74,5 +74,5 @@ fn oracle_letrec_nonrecursive_rewrite_edges() {
    (list x y)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

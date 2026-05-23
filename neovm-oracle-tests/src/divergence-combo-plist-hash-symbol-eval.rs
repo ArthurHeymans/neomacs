@@ -1,13 +1,13 @@
 //! Divergence tests: plist + hash-table + obarray + symbol + eval combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_plist_manipulation_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pl '(:name "test" :count 5 :tags (a b c) :active t)))
     (list (plist-get pl :name)
@@ -30,7 +30,7 @@ fn divergence_plist_manipulation_and_access() {
 fn divergence_hash_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal :size 10)))
     (puthash 'alpha 1 ht)
@@ -60,7 +60,7 @@ fn divergence_hash_table_operations() {
 fn divergence_hash_table_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal))
         (keys nil)
@@ -90,7 +90,7 @@ fn divergence_hash_table_iteration() {
 fn divergence_symbol_plist_vs_separate_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-spvs-xxx nil)
   (put 'test-spvs-xxx 'prop1 'val1)
@@ -118,7 +118,7 @@ fn divergence_symbol_plist_vs_separate_plist() {
 fn divergence_obarray_intern_unintern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((sym-name "test-oiu-xxx"))
     (let ((s1 (intern-soft sym-name)))
@@ -143,7 +143,7 @@ fn divergence_obarray_intern_unintern() {
 fn divergence_eval_with_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-ewdb-xxx 10)
   (list (eval 'test-ewdb-xxx)
@@ -167,7 +167,7 @@ fn divergence_eval_with_dynamic_binding() {
 fn divergence_hash_table_with_string_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash "key1" 'value1 ht)
@@ -193,7 +193,7 @@ fn divergence_hash_table_with_string_keys() {
 fn divergence_plist_lax_vs_strict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((strict-pl '(:a 1 :b 2 :c 3))
         (lax-pl '(a 1 b 2 c 3)))
@@ -219,7 +219,7 @@ fn divergence_plist_lax_vs_strict() {
 fn divergence_symbol_function_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-sfb-xxx (x) (+ x 1))
   (let ((original (symbol-function 'test-sfb-xxx)))
@@ -243,7 +243,7 @@ fn divergence_symbol_function_binding() {
 fn divergence_eval_with_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((x 10)
         (y 20)

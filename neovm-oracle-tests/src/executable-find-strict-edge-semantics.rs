@@ -5,7 +5,7 @@
 //! local paths.  These tests keep the executable search path isolated so the
 //! result does not depend on host-installed programs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -53,5 +53,5 @@ fn oracle_executable_find_exec_path_modes_and_error_edges() {
     (delete-directory root t)))
 "##;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

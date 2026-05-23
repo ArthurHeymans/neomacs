@@ -1,13 +1,13 @@
 //! Divergence tests: final integration stress batch — mega combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "fn foo(x) {\n  return x + 1;\n}\n\nfn bar(y) {\n  return y * 2;\n}\n")
   (let ((ov-fn1 (make-overlay 1 7))
@@ -54,7 +54,7 @@ fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
 fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-mega-obj-xxx ()
     ((name :initarg :name :accessor test-mega-name-xxx)
@@ -98,7 +98,7 @@ fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
 fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "SECTION1-AAAA SECTION2-BBBB SECTION3-CCCC SECTION4-DDDD")
   (let ((ov1 (make-overlay 1 13))
@@ -146,7 +146,7 @@ fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
 fn divergence_mega_combo_keymap_closure_eieio_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-mkce-xxx ()
     ((val :initarg :val :initform 0)
@@ -182,7 +182,7 @@ fn divergence_mega_combo_keymap_closure_eieio_error() {
 fn divergence_mega_combo_multibyte_overlay_undo_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "start-\xc3\xa9\xc3\xa0-\xc3\xb9-end")
   (let ((ov (make-overlay 7 9))

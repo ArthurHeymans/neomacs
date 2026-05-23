@@ -5,10 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Closures capturing lexical variables with deep nesting and shadowing
@@ -33,7 +30,7 @@ fn oracle_prop_closure_capture_lexical_deep_nesting() {
                   ;; Verify independence
                   (funcall f1)
                   (funcall f2))))))))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         "((1 2 3) (10 2 3 40) (100 200 300 400) (1 2 3) (10 2 3 40))",
         &o,
@@ -84,7 +81,7 @@ fn oracle_prop_closure_shared_mutable_variable() {
             (funcall get-log)   ;; empty after clear
             (funcall add-entry 'info "restarted")
             (funcall get-log)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +112,7 @@ fn oracle_prop_closure_mutation_accumulator() {
           (funcall add -50)
           (let ((s2 (funcall stats)))
             (list s1 s2)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +161,7 @@ fn oracle_prop_closure_nested_composition_pipeline() {
           ;; Verify independence of closures
           (funcall (funcall make-adder 100) 1)
           (funcall (funcall make-multiplier 100) 2))))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(16 11 19 (10 12 14 16 18) 101 200)", &o, &n);
 }
 
@@ -226,7 +223,7 @@ fn oracle_prop_closure_rest_and_optional_args() {
           (funcall variadic-math 'product 2 3 4)
           (funcall variadic-math 'max-val 3 7 2 9 1)
           (funcall variadic-math 'min-val 3 7 2 9 1))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +329,7 @@ fn oracle_prop_closure_iterator_implementation() {
     (fmakunbound 'neovm--make-map-iter)
     (fmakunbound 'neovm--make-filter-iter)
     (fmakunbound 'neovm--iter-collect)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +387,7 @@ fn oracle_prop_closure_memoization() {
                   ;; Verify correctness
                   (mapcar memo-fib '(0 1 2 3 4 5 6 7 8 9 10))))))
     (fmakunbound 'neovm--memoize)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +445,7 @@ fn oracle_prop_closure_event_handler_registration() {
             (list r1 r2 r3 r4 r5 r6
                   click-count total-keys
                   (length (funcall get-log)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,5 +480,5 @@ fn oracle_prop_closure_capture_loop_variables() {
                     (let ((captured k))
                       (setq makers (cons (lambda (x) (+ x captured)) makers))))
                   (mapcar (lambda (f) (funcall f 100)) makers))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

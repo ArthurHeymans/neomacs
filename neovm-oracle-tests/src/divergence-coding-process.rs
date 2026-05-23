@@ -1,13 +1,13 @@
 //! Divergence tests: coding systems, encoding/decoding, process stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_coding_system_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-p 'utf-8)
   (coding-system-p 'iso-8859-1)
@@ -21,7 +21,7 @@ fn divergence_coding_system_list() {
 fn divergence_encode_decode_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((str "Héllo 世界")
          (encoded (encode-coding-string str 'utf-8))
          (decoded (decode-coding-string encoded 'utf-8)))
@@ -36,7 +36,7 @@ fn divergence_encode_decode_utf8() {
 fn divergence_encode_decode_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((bytes (unibyte-string 72 101 108 108 111))
          (decoded (decode-coding-string bytes 'binary)))
   (list (string-equal decoded "Hello")
@@ -49,7 +49,7 @@ fn divergence_encode_decode_binary() {
 fn divergence_coding_system_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-base 'utf-8)
   (coding-system-base 'utf-8-dos)
@@ -63,7 +63,7 @@ fn divergence_coding_system_base() {
 fn divergence_coding_system_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((cs (find-coding-systems-string "Hello World")))
   (list (consp cs)
         (member 'utf-8 cs)
@@ -75,7 +75,7 @@ fn divergence_coding_system_priority() {
 fn divergence_preferred_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-p preferred-coding-system)
   (coding-system-p default-terminal-coding-system)
@@ -87,7 +87,7 @@ fn divergence_preferred_coding_system() {
 fn divergence_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp (process-list))
   (process-list))"#,
@@ -98,7 +98,7 @@ fn divergence_process_list() {
 fn divergence_get_buffer_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (processp (get-buffer-process "*scratch*"))
   (null (get-buffer-process "*scratch*"))
@@ -110,7 +110,7 @@ fn divergence_get_buffer_process() {
 fn divergence_make_network_process_params() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'make-network-process)
   (fboundp 'make-network-process)
@@ -122,7 +122,7 @@ fn divergence_make_network_process_params() {
 fn divergence_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'call-process)
   (fboundp 'call-process-region)

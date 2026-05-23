@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Process representation and sequential composition
@@ -98,7 +98,7 @@ fn oracle_prop_process_algebra_sequential_composition() {
     (fmakunbound 'neovm--pa-seq)
     (fmakunbound 'neovm--pa-step)
     (fmakunbound 'neovm--pa-run)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ fn oracle_prop_process_algebra_parallel_interleaving() {
            all-valid)))
     (fmakunbound 'neovm--pa2-interleave)
     (fmakunbound 'neovm--pa2-count-interleavings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +284,7 @@ fn oracle_prop_process_algebra_choice_operator() {
     (fmakunbound 'neovm--pa3-initials)
     (fmakunbound 'neovm--pa3-resolve)
     (fmakunbound 'neovm--pa3-trace)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +387,7 @@ fn oracle_prop_process_algebra_channel_communication() {
     (fmakunbound 'neovm--pa4-send)
     (fmakunbound 'neovm--pa4-recv)
     (fmakunbound 'neovm--pa4-sync)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +488,7 @@ fn oracle_prop_process_algebra_deadlock_detection() {
     (fmakunbound 'neovm--pa5-reachable)
     (fmakunbound 'neovm--pa5-has-cycle-from)
     (fmakunbound 'neovm--pa5-detect-deadlock)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -590,7 +590,7 @@ fn oracle_prop_process_algebra_trace_semantics() {
     (fmakunbound 'neovm--pa6-all-traces)
     (fmakunbound 'neovm--pa6-trace-subset)
     (fmakunbound 'neovm--pa6-prefixes)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -670,5 +670,5 @@ fn oracle_prop_process_algebra_hiding_restriction() {
     (fmakunbound 'neovm--pa7-restrict-trace)
     (fmakunbound 'neovm--pa7-abstract-tau)
     (fmakunbound 'neovm--pa7-alphabet)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

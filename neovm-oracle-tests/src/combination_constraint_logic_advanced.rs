@@ -8,7 +8,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Constraint store with domain variables
@@ -104,7 +104,7 @@ fn oracle_prop_constraint_logic_adv_domain_store() {
     (fmakunbound 'neovm--cla-store-value)
     (fmakunbound 'neovm--cla-store-copy)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ fn oracle_prop_constraint_logic_adv_arc_consistency_propagation() {
     (fmakunbound 'neovm--cla-ac3-revise)
     (fmakunbound 'neovm--cla-ac3)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +285,7 @@ fn oracle_prop_constraint_logic_adv_backtrack_with_propagation() {
     (fmakunbound 'neovm--cla-bt-search)
     (fmakunbound 'neovm--cla-bt-inner)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ fn oracle_prop_constraint_logic_adv_all_different_global() {
     (fmakunbound 'neovm--cla-alldiff-solve)
     (fmakunbound 'neovm--cla-alldiff-bt)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,7 +475,7 @@ fn oracle_prop_constraint_logic_adv_linear_inequalities() {
     (fmakunbound 'neovm--cla-lin-bt)
     (fmakunbound 'neovm--cla-lin-env-get)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,7 +565,7 @@ fn oracle_prop_constraint_logic_adv_reification() {
     (fmakunbound 'neovm--cla-reify-solve)
     (fmakunbound 'neovm--cla-reify-bt)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -694,5 +694,5 @@ fn oracle_prop_constraint_logic_adv_branch_and_bound() {
     (fmakunbound 'neovm--cla-bb-solve)
     (fmakunbound 'neovm--cla-bb-inner)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

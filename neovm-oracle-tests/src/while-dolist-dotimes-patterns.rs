@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // while with multiple termination conditions (compound guard)
@@ -53,7 +53,7 @@ fn oracle_prop_while_multiple_termination_conditions() {
                                 'reason reason
                                 'remaining-len (length remaining))
                           results)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ fn oracle_prop_dolist_result_form_complex_aggregation() {
     (when (or (null max-val) (> v max-val))
       (setq max-val v))
     (aset histogram v (1+ (aref histogram v)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ fn oracle_prop_dotimes_result_form_sieve() {
           (while (<= j limit)
             (aset sieve j nil)
             (setq j (+ j i))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ fn oracle_prop_dolist_destructuring_via_let() {
         'class-avg (/ total-avg (length students))
         'top (nreverse top-students)
         'bottom (nreverse bottom-students)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ fn oracle_prop_dotimes_foreach_with_index() {
         'odd (nreverse odd-items)
         'pairs (nreverse pairs)
         'total len))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ fn oracle_prop_nested_dolist_dotimes_cartesian() {
         (setq result (cons (concat (mapcar #'char-to-string (nreverse chars)))
                            result))))
     (nreverse result)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ fn oracle_prop_while_reduce_fold() {
          (funcall 'neovm--foldr #'cons nil '(only))))
     (fmakunbound 'neovm--foldl)
     (fmakunbound 'neovm--foldr)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +398,7 @@ fn oracle_prop_while_stack_calculator() {
        ;; Empty
        (funcall 'neovm--rpn-eval nil))
     (fmakunbound 'neovm--rpn-eval)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -444,5 +444,5 @@ fn oracle_prop_dotimes_edge_cases() {
         (dotimes (j 3
                   (setq matrix (cons (nreverse row) matrix)))
           (setq row (cons (+ (* i 10) j) row)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

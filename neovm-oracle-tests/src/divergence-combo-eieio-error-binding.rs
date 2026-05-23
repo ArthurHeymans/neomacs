@@ -1,13 +1,13 @@
 //! Divergence tests: EIEIO + error recovery + dynamic binding deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_method_error_after_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-eieio-log-xxx nil)
   (defclass test-state-xxx () ((val :initarg :val :initform 0)))
@@ -33,7 +33,7 @@ fn divergence_eieio_method_error_after_state() {
 fn divergence_eieio_initform_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-eieio-dyn-xxx 10)
   (defclass test-dyn-init-xxx ()
@@ -51,7 +51,7 @@ fn divergence_eieio_initform_dynamic_binding() {
 fn divergence_cl_labels_recursive_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((visited nil))
   (cl-labels ((visit (n depth)
                  (push (list n depth) visited)
@@ -69,7 +69,7 @@ fn divergence_cl_labels_recursive_with_condition_case() {
 fn divergence_eieio_defclass_with_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-valid-xxx ()
     ((value :initarg :value :initform 0
@@ -91,7 +91,7 @@ fn divergence_eieio_defclass_with_validation() {
 fn divergence_eieio_clone_after_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-pair-xxx ()
     ((a :initarg :a :accessor test-pair-a-xxx)
@@ -111,7 +111,7 @@ fn divergence_eieio_clone_after_mutation() {
 fn divergence_advice_on_generic_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-adv-eieio-xxx () ((v :initarg :v :initform 1)))
   (cl-defgeneric test-compute-xxx (obj) "Compute.")
@@ -134,7 +134,7 @@ fn divergence_advice_on_generic_method() {
 fn divergence_unwind_protect_in_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-ctor-log-xxx nil)
   (defclass test-ctor-xxx ()
@@ -154,7 +154,7 @@ fn divergence_unwind_protect_in_constructor() {
 fn divergence_dynamic_var_in_method_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-dispatch-ctx-xxx 'default)
   (defclass test-ctx-xxx () ())
@@ -178,7 +178,7 @@ fn divergence_dynamic_var_in_method_dispatch() {
 fn divergence_cl_defmethod_eql_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defgeneric test-eql-dispatch-xxx (x) "EQL dispatch.")
   (cl-defmethod test-eql-dispatch-xxx ((x (eql 42)))
@@ -198,7 +198,7 @@ fn divergence_cl_defmethod_eql_specializer() {
 fn divergence_eieio_object_with_overridden_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-eq-obj-xxx ()
     ((id :initarg :id)

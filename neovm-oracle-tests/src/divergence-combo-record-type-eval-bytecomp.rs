@@ -1,13 +1,13 @@
 //! Divergence tests: cl-record + type + bytecomp + eval combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_record_type_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-rec-xxx (:type list)) a b c)
   (let ((r (make-test-rec-xxx :a 1 :b 2 :c 3)))
@@ -29,7 +29,7 @@ fn divergence_cl_record_type_basic() {
 fn divergence_eval_defun_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-edc-state-xxx 0)
   (let ((test-edc-state-xxx 100))
@@ -51,7 +51,7 @@ fn divergence_eval_defun_with_closure_capture() {
 fn divergence_macro_expansion_nested_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-nme-xxx (op &rest args)
     (list op (cons 'list args)))
@@ -71,7 +71,7 @@ fn divergence_macro_expansion_nested_eval() {
 fn divergence_lambda_in_eval_with_dynvar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-led-xxx 'outer)
   (let ((fn (eval '(lambda () test-led-xxx))))
@@ -93,7 +93,7 @@ fn divergence_lambda_in_eval_with_dynvar() {
 fn divergence_closure_let_binding_evaluation_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-lbe-log-xxx nil)
   (let ((fns nil))
@@ -114,7 +114,7 @@ fn divergence_closure_let_binding_evaluation_order() {
 fn divergence_record_vector_accessor_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-rva-xxx (:type vector)) x y z)
   (let ((r (make-test-rva-xxx :x 10 :y 20 :z 30)))
@@ -134,7 +134,7 @@ fn divergence_record_vector_accessor_compatibility() {
 fn divergence_defalias_and_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-da-original-xxx (x) (+ x 1))
   (defalias 'test-da-alias-xxx 'test-da-original-xxx)
@@ -154,7 +154,7 @@ fn divergence_defalias_and_funcall() {
 fn divergence_advised_closure_in_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-acie-xxx (x) (* x 2))
   (advice-add 'test-acie-xxx :filter-return
@@ -177,7 +177,7 @@ fn divergence_advised_closure_in_eval() {
 fn divergence_defvar_vs_defconst_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-dvc-var-xxx 10)
   (defconst test-dvc-const-xxx 20)
@@ -198,7 +198,7 @@ fn divergence_defvar_vs_defconst_eval() {
 fn divergence_function_interactive_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-fis-xxx (a b) (interactive "nA: \nnB: ") (+ a b))
   (list (commandp 'test-fis-xxx)

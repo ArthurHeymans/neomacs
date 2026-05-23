@@ -1,13 +1,13 @@
 //! Divergence tests: encoding + coding-system + multibyte + char combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_coding_system_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (coding-system-p 'utf-8)
         (eq (coding-system-p 'utf-8) t)
@@ -27,7 +27,7 @@ fn divergence_coding_system_operations() {
 fn divergence_multibyte_char_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (char-to-string ?A)
         (string= (char-to-string ?A) "A")
@@ -58,7 +58,7 @@ fn divergence_multibyte_char_operations() {
 fn divergence_string_multibyte_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((str "hello"))
     (list (multibyte-string-p str)
@@ -80,7 +80,7 @@ fn divergence_string_multibyte_operations() {
 fn divergence_string_with_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((str "\x03B1\x03B2\x03B3"))
     (list (length str)
@@ -102,7 +102,7 @@ fn divergence_string_with_unicode() {
 fn divergence_coding_system_alias_and_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-coding-system-alias 'test-csa-xxx 'utf-8)
   (let ((aliases (coding-system-aliases 'utf-8)))
@@ -121,7 +121,7 @@ fn divergence_coding_system_alias_and_priority() {
 fn divergence_char_tables_and_categories() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ct (make-char-table 'category-table t)))
     (set-char-table-range ct ?A 'letter)
@@ -146,7 +146,7 @@ fn divergence_char_tables_and_categories() {
 fn divergence_string_bytes_vs_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ascii "abcde")
         (mixed "abc\x03B1\x03B2")
@@ -170,7 +170,7 @@ fn divergence_string_bytes_vs_length() {
 fn divergence_unicode_property_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (get-char-code-property ?A 'general-category)
         (equal (get-char-code-property ?A 'general-category) "Lu")
@@ -190,7 +190,7 @@ fn divergence_unicode_property_lookup() {
 fn divergence_case_conversion_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((str "Hello World 123"))
     (list (upcase str)
@@ -212,7 +212,7 @@ fn divergence_case_conversion_functions() {
 fn divergence_string_conversion_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (number-to-string 42)
         (string= (number-to-string 42) "42")

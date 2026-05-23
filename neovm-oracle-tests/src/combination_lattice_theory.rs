@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Partial order from pairs and reflexive-transitive closure
@@ -83,7 +83,7 @@ fn oracle_prop_lattice_partial_order() {
     (fmakunbound 'neovm--lat-direct-above)
     (fmakunbound 'neovm--lat-all-above)
     (fmakunbound 'neovm--lat-leq)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ fn oracle_prop_lattice_hasse_diagram() {
     (fmakunbound 'neovm--lat-direct-above)
     (fmakunbound 'neovm--lat-trans-closure)
     (fmakunbound 'neovm--lat-hasse)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ fn oracle_prop_lattice_join_meet() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,7 +376,7 @@ fn oracle_prop_lattice_validation() {
     (fmakunbound 'neovm--lat-has-join)
     (fmakunbound 'neovm--lat-has-meet)
     (fmakunbound 'neovm--lat-is-lattice)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -489,7 +489,7 @@ fn oracle_prop_lattice_distributive() {
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-distributive-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +600,7 @@ fn oracle_prop_lattice_complemented_boolean() {
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-complement)
     (fmakunbound 'neovm--lat-complemented-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -705,7 +705,7 @@ fn oracle_prop_lattice_knaster_tarski_fixed_point() {
     (fmakunbound 'neovm--lat-powerset)
     (fmakunbound 'neovm--lat-lfp)
     (fmakunbound 'neovm--lat-lfp-iter)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -798,7 +798,7 @@ fn oracle_prop_lattice_ideal_generation() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-principal-ideal)
     (fmakunbound 'neovm--lat-is-ideal-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -895,7 +895,7 @@ fn oracle_prop_lattice_filter_generation() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-principal-filter)
     (fmakunbound 'neovm--lat-is-filter-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -994,5 +994,5 @@ fn oracle_prop_lattice_sublattice() {
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-is-sublattice-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 //! contract is that Lisp-visible `process-environment` is authoritative for
 //! let-bound environment changes.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_prop_setenv_mutates_let_bound_process_environment() {
                process-environment)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_prop_setenv_nil_creates_negative_entry() {
      (not (equal before process-environment)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn oracle_prop_getenv_internal_explicit_env_list_first_match_and_negative() {
    (getenv-internal "D" env)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_getenv_internal_explicit_env_list_strict_edges() {
    (getenv-internal "G" env)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn oracle_prop_setenv_internal_mutation_and_scan_edges() {
          env)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn oracle_prop_substitute_env_in_file_name_uses_lisp_environment() {
    (substitute-env-in-file-name "$NEOMACS_ORACLE_ENV_MISSING/x")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -163,5 +163,5 @@ fn oracle_prop_with_environment_variables_scoping_edges() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

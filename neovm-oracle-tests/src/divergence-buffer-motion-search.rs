@@ -1,13 +1,13 @@
 //! Divergence tests: misc buffer operations, goto-char, search edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_goto_char_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (goto-char 1)
@@ -23,7 +23,7 @@ fn divergence_goto_char_bounds() {
 fn divergence_forward_char_backward_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (goto-char 3)
@@ -40,7 +40,7 @@ fn divergence_forward_char_backward_char() {
 fn divergence_forward_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (goto-char 1)
@@ -59,7 +59,7 @@ fn divergence_forward_line() {
 fn divergence_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abcabcabc")
   (goto-char 1)
@@ -76,7 +76,7 @@ fn divergence_search_forward_backward() {
 fn divergence_search_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world")
   (goto-char 1)
@@ -90,7 +90,7 @@ fn divergence_search_no_error() {
 fn divergence_re_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo123bar456baz")
   (goto-char 1)
@@ -105,7 +105,7 @@ fn divergence_re_search_forward() {
 fn divergence_skip_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "   \t\n  hello")
   (goto-char 1)
@@ -120,7 +120,7 @@ fn divergence_skip_chars() {
 fn divergence_thing_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world 42")
   (goto-char 1)
@@ -134,7 +134,7 @@ fn divergence_thing_at_point() {
 fn divergence_bounds_of_thing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world 42")
   (goto-char 1)
@@ -148,7 +148,7 @@ fn divergence_bounds_of_thing() {
 fn divergence_forward_word_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "one two three four")
   (goto-char 1)

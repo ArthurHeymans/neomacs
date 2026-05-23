@@ -4,7 +4,7 @@
 //! The tests compare final buffer text and return values for region
 //! narrowing, field keys, numeric bases, line reversal, and duplicate removal.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_prop_sort_lines_respects_region_and_fold_case() {
     (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn oracle_prop_sort_fields_positive_and_negative_field_numbers() {
     (list first second)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_prop_sort_numeric_fields_base_detection_and_blank_lines() {
     (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn oracle_prop_reverse_region_uses_only_full_lines() {
     (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -110,5 +110,5 @@ fn oracle_prop_delete_duplicate_lines_modes_and_return_count() {
     (list normal reverse adjacent keep-blanks)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

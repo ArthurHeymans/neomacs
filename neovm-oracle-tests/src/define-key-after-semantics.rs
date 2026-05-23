@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `define-key-after'.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_define_key_after_orders_and_deduplicates_direct_bindings() {
@@ -20,7 +20,7 @@ fn oracle_define_key_after_orders_and_deduplicates_direct_bindings() {
           (lookup-key m [?a])
           (lookup-key m [?b])
           (lookup-key m [?c]))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_define_key_after_inserts_before_inherited_parent() {
           (lookup-key m [?p])
           (lookup-key parent [?z])
           (eq (keymap-parent m) parent))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,5 +65,5 @@ fn oracle_define_key_after_descends_into_prefix_keymap_for_multi_key() {
           (lookup-key m [?x ?a])
           (lookup-key m [?x ?b])
           (lookup-key m [?x ?c]))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

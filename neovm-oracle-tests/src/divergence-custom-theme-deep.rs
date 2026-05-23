@@ -1,13 +1,13 @@
 //! Divergence tests: custom themes, customize interface deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_customize_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'customize-variable)
   (fboundp 'customize-group)
@@ -22,7 +22,7 @@ fn divergence_customize_functions() {
 fn divergence_custom_theme_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'load-theme)
   (fboundp 'enable-theme)
@@ -36,7 +36,7 @@ fn divergence_custom_theme_functions() {
 fn divergence_custom_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'custom-enabled-themes)
   (listp custom-enabled-themes)
@@ -49,7 +49,7 @@ fn divergence_custom_variables() {
 fn divergence_custom_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'customize-save-variable)
   (fboundp 'customize-save-customized)
@@ -62,7 +62,7 @@ fn divergence_custom_save() {
 fn divergence_custom_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'custom-variable-p)
   (fboundp 'custom-variable-documentation)
@@ -75,7 +75,7 @@ fn divergence_custom_types() {
 fn divergence_face_customize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-spec-set)
   (fboundp 'face-spec-match-p)
@@ -88,7 +88,7 @@ fn divergence_face_customize() {
 fn divergence_face_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-inherits-from-face-p)
   (fboundp 'face-all-attributes)
@@ -101,7 +101,7 @@ fn divergence_face_inheritance() {
 fn divergence_widget_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'widget-create)
   (fboundp 'widget-browse)
@@ -114,7 +114,7 @@ fn divergence_widget_functions() {
 fn divergence_widget_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'widget-type)
   (fboundp 'widgetp)
@@ -127,7 +127,7 @@ fn divergence_widget_types() {
 fn divergence_custom_dependencies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'custom-dependencies)
   (fboundp 'custom-load-symbol)

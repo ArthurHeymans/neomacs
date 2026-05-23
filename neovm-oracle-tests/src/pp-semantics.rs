@@ -4,7 +4,7 @@
 //! variables such as `print-escape-newlines`, and preserves the traditional
 //! trailing newline behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -21,7 +21,7 @@ fn oracle_prop_pp_to_string_basic_objects_and_trailing_newline() {
    (string-suffix-p "\n" (pp-to-string '(a b)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn oracle_prop_pp_escape_newlines_binding() {
   (list a b))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn oracle_prop_pp_to_string_custom_function_dispatch() {
      calls))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -74,5 +74,5 @@ fn oracle_prop_pp_buffer_multiple_objects_and_comments() {
     (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

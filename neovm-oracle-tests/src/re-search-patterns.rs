@@ -4,7 +4,7 @@
 //! loops, multi-line regexp patterns, and search with narrowing.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // re-search-forward with COUNT parameter — find Nth occurrence
@@ -32,7 +32,7 @@ fn oracle_prop_re_search_forward_count_param() {
         (let ((r4 (progn (goto-char (point-min))
                          (re-search-forward "[a-z]+-[0-9]+" nil t 7))))
           (list r1 r2 r3 r4))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ fn oracle_prop_re_search_forward_bound_param() {
           (while (re-search-forward "\\([a-z]+\\):\\([0-9]+\\)" nil t)
             (setq remaining (cons (list (match-string 1) (match-string 2)) remaining)))
           (list r1-match r2-match r3 (nreverse remaining)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ fn oracle_prop_re_search_capturing_groups_match_data() {
                 verify1 verify2 verify3
                 (length md)
                 kw expr))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ fn oracle_prop_re_search_replace_loop() {
         (replace-match replacement t t)
         (setq count (1+ count))))
     (list (buffer-string) count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ fn oracle_prop_re_search_multiline_patterns() {
       (list (nreverse blocks)
             (length blocks)
             line-count))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ fn oracle_prop_re_search_with_narrowing() {
                   narrow-max
                   (point-min)
                   (point-max))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ Diana,28,Boston"))
                 (cdr (assoc "city" (car (last rows)))))))
     (fmakunbound 'neovm--test-parse-csv-line)
     (fmakunbound 'neovm--test-parse-csv)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,5 +308,5 @@ fn oracle_prop_re_search_interleaved_save_excursion() {
             (mapcar (lambda (s) (length (cdr s))) result)
             ;; Full data
             result))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,6 +1,6 @@
 //! Oracle parity tests for the public GNU inotify primitives.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -52,5 +52,5 @@ fn oracle_inotify_public_lifecycle_and_error_semantics() {
            (inotify-rm-watch (cons 0 0))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

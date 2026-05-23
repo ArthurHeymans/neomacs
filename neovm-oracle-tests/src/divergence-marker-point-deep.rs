@@ -1,13 +1,13 @@
 //! Divergence tests: register operations, point, marker deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_marker_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"Hello World\")
   (let ((m1 (make-marker))
@@ -26,7 +26,7 @@ fn divergence_marker_creation() {
 fn divergence_marker_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"Hello World\")
   (let ((m (make-marker)))
@@ -44,7 +44,7 @@ fn divergence_marker_insertion_type() {
 fn divergence_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (make-marker)))
@@ -61,7 +61,7 @@ fn divergence_marker_tracking() {
 fn divergence_marker_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (make-marker)))
@@ -77,7 +77,7 @@ fn divergence_marker_delete() {
 fn divergence_many_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((markers (mapcar (lambda (i) (let ((m (make-marker)))
@@ -95,7 +95,7 @@ fn divergence_many_markers() {
 fn divergence_point_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"Hello World\")
   (let ((pm (point-marker)))
@@ -111,7 +111,7 @@ fn divergence_point_marker() {
 fn divergence_region_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'region-beginning)
   (fboundp 'region-end)
@@ -125,7 +125,7 @@ fn divergence_region_marker() {
 fn divergence_temporary_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'copy-marker)
   (fboundp 'set-marker)
@@ -139,7 +139,7 @@ fn divergence_temporary_marker() {
 fn divergence_field_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"Hello World\")
   (put-text-property 1 6 'field 'greeting)
@@ -154,7 +154,7 @@ fn divergence_field_boundary() {
 fn divergence_restriction_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'internal--char-to-point)
   (fboundp 'posnp)

@@ -4,7 +4,7 @@
 //! equal, closures compare by shared closure code object, and unrelated
 //! functions are not treated as equal.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,5 +26,5 @@ fn oracle_function_equal_closure_and_symbol_identity() {
    (function-equal '(lambda (x) x) '(lambda (x) x))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -6,10 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Alist patterns (commonly used for configuration)
@@ -23,7 +20,7 @@ fn oracle_prop_interactive_alist_assoc_string() {
                                    ("version" . "29")
                                    ("editor" . "best"))))
                     (cdr (assoc "version" config)))"####;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq(r#""29""#, &o, &n);
 }
 
@@ -34,7 +31,7 @@ fn oracle_prop_interactive_alist_add_to_front() {
     let form = "(let ((al '((a . 1) (b . 2))))
                   (setq al (cons '(c . 3) al))
                   (mapcar 'car al))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(c a b)", &o, &n);
 }
 
@@ -60,7 +57,7 @@ fn oracle_prop_interactive_hook_pattern() {
     // (void-variable log) because the closures capture `log` at definition time
     // but `setq` inside them modifies a different binding.
     // Both GNU Emacs and NeoVM should agree on the result.
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_eq!(n, o, "neovm and oracle should match");
 }
 
@@ -78,7 +75,7 @@ fn oracle_prop_interactive_format_table() {
                     (mapcar (lambda (row)
                               (format "%d: %s (%d)" (car row) (cadr row) (caddr row)))
                             rows))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +93,7 @@ fn oracle_prop_interactive_list_processing_pipeline() {
                     (when (> x 5)
                       (setq result (cons (* x x) result))))
                   (nreverse result))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(36 49 64 81 100)", &o, &n);
 }
 
@@ -111,7 +108,7 @@ fn oracle_prop_interactive_partition() {
                         (setq yes (cons x yes))
                       (setq no (cons x no))))
                   (list (nreverse yes) (nreverse no)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("((2 4 6 8 10) (1 3 5 7 9))", &o, &n);
 }
 
@@ -131,7 +128,7 @@ fn oracle_prop_interactive_stack_operations() {
                   (let ((top (car stack)))
                     (setq stack (cdr stack))
                     (list top stack)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(c (b a))", &o, &n);
 }
 
@@ -148,7 +145,7 @@ fn oracle_prop_interactive_multi_level_alist() {
                   (let ((alice-data (cdr (assq 'alice db))))
                     (list (cdr (assq 'age alice-data))
                           (cdr (assq 'role alice-data)))))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(30 engineer)", &o, &n);
 }
 
@@ -161,7 +158,7 @@ fn oracle_prop_interactive_join_with_separator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(mapconcat 'symbol-name '(foo bar baz) "/")"####;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq(r#""foo/bar/baz""#, &o, &n);
 }
 
@@ -175,7 +172,7 @@ fn oracle_prop_interactive_string_replace_pattern() {
                                     "_"
                                   (char-to-string c)))
                               "hello-world-foo" "")"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +188,7 @@ fn oracle_prop_interactive_running_average() {
                     (setq sum (+ sum x)
                           count (1+ count)))
                   (/ sum count))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("30", &o, &n);
 }
 
@@ -204,7 +201,7 @@ fn oracle_prop_interactive_find_max_in_list() {
                     (when (or (null best) (> x best))
                       (setq best x)))
                   best)";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("9", &o, &n);
 }
 
@@ -224,7 +221,7 @@ fn oracle_prop_interactive_cond_dispatch() {
                             ((< x 100) 'medium)
                             (t 'large)))
                         '(-5 0 3 42 200))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +250,6 @@ fn oracle_prop_interactive_eval_simple_arithmetic() {
                             (funcall 'neovm--test-my-eval '(* (+ 1 2) (+ 3 4)))
                             (funcall 'neovm--test-my-eval 42))
                     (fmakunbound 'neovm--test-my-eval)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(7 21 42)", &o, &n);
 }

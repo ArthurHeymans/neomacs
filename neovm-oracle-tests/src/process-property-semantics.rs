@@ -5,9 +5,7 @@
 //! `process-live-p` returns nil for non-process objects, while plist accessors
 //! signal `wrong-type-argument processp`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_process_live_p_non_processes_return_nil_like_gnu() {
@@ -23,7 +21,7 @@ fn oracle_prop_process_live_p_non_processes_return_nil_like_gnu() {
  (process-live-p '(fake process)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -49,7 +47,7 @@ fn oracle_prop_process_plist_get_put_contracts() {
       (ignore-errors (delete-process p)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -66,5 +64,5 @@ fn oracle_prop_process_plist_accessors_signal_on_non_process() {
  (condition-case err (process-get "x" 'a) (error err)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

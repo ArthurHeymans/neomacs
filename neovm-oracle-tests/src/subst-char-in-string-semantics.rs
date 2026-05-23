@@ -4,7 +4,7 @@
 //! `string-replace` and then repairs copied string properties, while the
 //! inplace path mutates with `aset`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,7 +26,7 @@ fn oracle_subst_char_preserves_properties_on_multibyte_copy_path() {
           (text-properties-at 3 r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_subst_char_no_match_multibyte_copy_identity() {
           (text-properties-at 1 r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_subst_char_ascii_copy_path_properties() {
           (text-properties-at 5 r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn oracle_subst_char_inplace_preserves_object_and_properties() {
           (text-properties-at 3 s))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn oracle_subst_char_unibyte_to_multibyte_conversion() {
    (string-bytes r2)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -130,5 +130,5 @@ fn oracle_subst_char_argument_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: read/print circularity + hash + obarray deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_print_circle_shared_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn\n\
   (let ((shared (list 1 2 3)))\n\
     (let ((tree (list shared shared)))\n\
@@ -26,7 +26,7 @@ fn divergence_print_circle_shared_structure() {
 fn divergence_hash_with_symbol_keys_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'eq)))
     (mapatoms (lambda (sym)
@@ -48,7 +48,7 @@ fn divergence_hash_with_symbol_keys_obarray() {
 fn divergence_read_print_preserves_circularity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn\n\
   (let ((x (list 'a 'b)))\n\
     (nconc x x)\n\
@@ -68,7 +68,7 @@ fn divergence_read_print_preserves_circularity() {
 fn divergence_gensym_obarray_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((g1 (gensym "test-g-"))
         (g2 (gensym "test-g-")))
@@ -89,7 +89,7 @@ fn divergence_gensym_obarray_interaction() {
 fn divergence_hash_table_with_equal_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash '(1 2 3) 'list-value ht)
@@ -111,7 +111,7 @@ fn divergence_hash_table_with_equal_keys() {
 fn divergence_obarray_intern_unintern_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (intern "test-cycle-xxx")
   (let ((s1 (intern-soft "test-cycle-xxx")))
@@ -136,7 +136,7 @@ fn divergence_obarray_intern_unintern_cycle() {
 fn divergence_print_gensym_read_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn\n\
   (let ((g (gensym)))\n\
     (let ((printed (let ((print-gensym t)) (prin1-to-string g))))\n\
@@ -152,7 +152,7 @@ fn divergence_print_gensym_read_back() {
 fn divergence_hash_table_nested_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((outer (make-hash-table :test 'equal))
         (inner (make-hash-table :test 'equal)))
@@ -175,7 +175,7 @@ fn divergence_hash_table_nested_structure() {
 fn divergence_mapatoms_count_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((count 0)
         (names nil))
@@ -194,7 +194,7 @@ fn divergence_mapatoms_count_classes() {
 fn divergence_print_readability_lists_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data (list '(1 2 3) [4 5 6] '(a . b) '(nil) '() t nil)))
     (let ((printed (prin1-to-string data))

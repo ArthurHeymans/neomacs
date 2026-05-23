@@ -7,7 +7,7 @@
 //! preserves the old list prefix, and LIST-VAR is resolved as a dynamic symbol
 //! value rather than a lexical binding.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_add_to_list_default_uses_equal_membership() {
    (equal first second)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_add_to_list_append_adds_at_end_only_when_absent() {
    xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_add_to_list_compare_function_selects_membership_semantics() {
    (length eql-xs)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn oracle_add_to_list_custom_compare_argument_order_and_short_circuit() {
    (nreverse calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -128,5 +128,5 @@ fn oracle_add_to_list_resolves_symbol_value_not_lexical_binding() {
      (makunbound 'neomacs--oracle-add-to-list-dynamic))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

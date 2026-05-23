@@ -4,7 +4,7 @@
 //! Emacs.  These tests observe the public hook states and accessors without
 //! depending on echo-area display.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -30,7 +30,7 @@ fn oracle_prop_progress_reporter_numeric_updates_and_throttling() {
     (nreverse events)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn oracle_prop_progress_reporter_pulse_updates_and_suffix_memory() {
     (nreverse events)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_progress_reporter_message_and_alias_semantics() {
      (nreverse events))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,5 +104,5 @@ fn oracle_prop_progress_reporter_loop_macros_return_values() {
      (nreverse events))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

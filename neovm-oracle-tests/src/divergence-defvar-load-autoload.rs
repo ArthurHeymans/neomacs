@@ -1,13 +1,13 @@
 //! Divergence tests: defvar/defconst, load, provide/require, autoload.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_defvar_only_sets_when_void() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dv-test-1 100)
   (defvar my-dv-test-1 999)
@@ -19,7 +19,7 @@ fn divergence_defvar_only_sets_when_void() {
 fn divergence_defconst_always_sets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defconst my-dc-test-1 100)
   (defconst my-dc-test-1 999)
@@ -31,7 +31,7 @@ fn divergence_defconst_always_sets() {
 fn divergence_defvar_inside_let_shadow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dv-shadow 0)
   (let ((my-dv-shadow 42))
@@ -46,7 +46,7 @@ fn divergence_defvar_inside_let_shadow() {
 fn divergence_special_variable_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-spec-var 0)
   (list (special-variable-p 'my-spec-var)
@@ -60,7 +60,7 @@ fn divergence_special_variable_p() {
 fn divergence_defvar_local_bare_declare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ()
   (defvar my-bare-dv)
   (list (special-variable-p 'my-bare-dv)
@@ -72,7 +72,7 @@ fn divergence_defvar_local_bare_declare() {
 fn divergence_featurep_after_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (provide 'my-test-feature)
   (list (featurep 'my-test-feature)
@@ -84,7 +84,7 @@ fn divergence_featurep_after_provide() {
 fn divergence_provide_subfeature() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (provide '(my-test-sub . 42))
   (list (featurep 'my-test-sub)
@@ -96,7 +96,7 @@ fn divergence_provide_subfeature() {
 fn divergence_autoload_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (autoload 'my-autoload-fn "nonexistent-file" "doc" t)
   (list (fboundp 'my-autoload-fn)
@@ -109,7 +109,7 @@ fn divergence_autoload_function() {
 fn divergence_load_path_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list (member (expand-file-name "emacs-lisp" (car load-path)) load-path)
               (consp load-path)
               (> (length load-path) 0))"#,
@@ -120,7 +120,7 @@ fn divergence_load_path_search() {
 fn divergence_load_file_name_during_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list load-file-name
               load-in-progress
               (booleanp load-in-progress))"#,
@@ -131,7 +131,7 @@ fn divergence_load_file_name_during_eval() {
 fn divergence_variable_alias() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-alias-source 42)
   (defvaralias 'my-alias-target 'my-alias-source)

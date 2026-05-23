@@ -1,13 +1,13 @@
 //! Divergence tests: mega undo stress — marker + textprop + overlay + narrow + regex.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_replace_with_props_and_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH-II-JJ")
   (let ((ov (make-overlay 4 17))
@@ -67,7 +67,7 @@ fn divergence_undo_replace_with_props_and_markers() {
 fn divergence_undo_narrow_insert_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH-II-JJ-KK-LL")
   (let ((m1 (copy-marker 1 t))
@@ -116,7 +116,7 @@ fn divergence_undo_narrow_insert_replace_chain() {
 fn divergence_undo_kill_yank_with_overlay_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "BLOCK1---BLOCK2---BLOCK3---BLOCK4")
   (let ((ov1 (make-overlay 1 6))
@@ -163,7 +163,7 @@ fn divergence_undo_kill_yank_with_overlay_tracking() {
 fn divergence_undo_multiple_overlays_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3\nLINE4\nLINE5")
   (let ((ovs (list (make-overlay 1 5) (make-overlay 7 11)
@@ -212,7 +212,7 @@ fn divergence_undo_multiple_overlays_with_props() {
 fn divergence_undo_with_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "KEEP-REMOVE-KEEP-REMOVE-KEEP")
   (let ((ov1 (make-overlay 6 11))
@@ -260,7 +260,7 @@ fn divergence_undo_with_overlay_evaporate() {
 fn divergence_undo_regex_replace_preserve_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "tok1-sep-tok2-sep-tok3-sep-tok4-sep-tok5")
   (let ((m1 (copy-marker 1 t))
@@ -309,7 +309,7 @@ fn divergence_undo_regex_replace_preserve_intervals() {
 fn divergence_undo_insert_delete_with_prop_transitions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAABBBBCCCCDDDDEEEE")
   (let ((m (copy-marker 5 t))

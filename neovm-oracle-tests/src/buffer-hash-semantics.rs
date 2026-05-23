@@ -4,7 +4,7 @@
 //! non-nil input is resolved through `get-buffer`, and live buffer contents are
 //! hashed with SHA-1 over the raw buffer bytes.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,5 +28,5 @@ fn oracle_buffer_hash_live_buffer_lookup_and_error_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

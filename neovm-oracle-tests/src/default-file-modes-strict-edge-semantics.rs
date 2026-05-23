@@ -4,7 +4,7 @@
 //! `src/fileio.c`.  `set-default-file-modes` stores `~MODE & 0777`, so only
 //! the low 9 permission bits are observable through `default-file-modes`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -37,5 +37,5 @@ fn oracle_default_file_modes_low_bits_and_errors() {
     (set-default-file-modes original)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

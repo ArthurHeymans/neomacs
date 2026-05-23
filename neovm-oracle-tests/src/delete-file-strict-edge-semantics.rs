@@ -5,7 +5,7 @@
 //! touching their targets, treats a missing file as nil, and delegates to
 //! `move-file-to-trash` only when both trash flags are active.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -60,5 +60,5 @@ fn oracle_delete_file_wrapper_edges() {
     (ignore-errors (delete-directory dir t))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: real text processing behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_re_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"aaa bbb ccc aaa ddd\")
   (goto-char 1)
@@ -27,7 +27,7 @@ fn divergence_re_search_forward_backward() {
 fn divergence_replace_regexp_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"foo123bar456baz\")
   (goto-char 1)
@@ -41,7 +41,7 @@ fn divergence_replace_regexp_in_buffer() {
 fn divergence_query_replace_no_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello world hello\")
   (goto-char 1)
@@ -55,7 +55,7 @@ fn divergence_query_replace_no_query() {
 fn divergence_extract_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"The quick brown fox jumps over the lazy dog\"))
   (list (split-string s \" +\" t)
         (length (split-string s \" +\" t))
@@ -68,7 +68,7 @@ fn divergence_extract_words() {
 fn divergence_thing_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello world\")
   (goto-char 3)
@@ -84,7 +84,7 @@ fn divergence_thing_at_point() {
 fn divergence_forward_word_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello world foo bar\")
   (goto-char 1)
@@ -103,7 +103,7 @@ fn divergence_forward_word_backward_word() {
 fn divergence_kill_ring_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"first second third\")
   (goto-char 1)
@@ -121,7 +121,7 @@ fn divergence_kill_ring_yank() {
 fn divergence_comment_region_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq comment-start \";; \")
   (setq comment-end \"\")
@@ -137,7 +137,7 @@ fn divergence_comment_region_behavior() {
 fn divergence_indent_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq indent-line-function #'indent-to-left-margin)
   (insert \"  hello\\n    world\\nfoo\")
@@ -156,7 +156,7 @@ fn divergence_indent_line() {
 fn divergence_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello   \\nworld  \\nfoo bar\")
   (let ((before (buffer-string)))

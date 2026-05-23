@@ -1,13 +1,13 @@
 //! Divergence tests: process communication, pipe, shell-command stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_start_process_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((proc (start-process "test-echo" "*test-echo-output*" "echo" "hello")))
   (list (processp proc)
         (process-name proc)
@@ -20,7 +20,7 @@ fn divergence_start_process_basic() {
 fn divergence_call_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (call-process "echo" nil t nil "test-output")
   (buffer-string))"#,
@@ -31,7 +31,7 @@ fn divergence_call_process_output() {
 fn divergence_process_exit_status() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((status (call-process "true" nil nil)))
   (list status (numberp status)))"#,
     );
@@ -41,7 +41,7 @@ fn divergence_process_exit_status() {
 fn divergence_process_exit_failure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((status (call-process "false" nil nil)))
   (list status (numberp status)))"#,
     );
@@ -51,7 +51,7 @@ fn divergence_process_exit_failure() {
 fn divergence_shell_command_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((output (shell-command-to-string "echo hello")))
   (list output (string-match "hello" output)))"#,
     );
@@ -61,7 +61,7 @@ fn divergence_shell_command_to_string() {
 fn divergence_process_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp process-environment)
   (member "HOME" (mapcar (lambda (e) (and (stringp e)
@@ -75,7 +75,7 @@ fn divergence_process_environment() {
 fn divergence_setenv_getenv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setenv "NEOVM_TEST_VAR" "testval")
   (let ((val (getenv "NEOVM_TEST_VAR")))
@@ -89,7 +89,7 @@ fn divergence_setenv_getenv() {
 fn divergence_exec_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp exec-path)
   (> (length exec-path) 0)
@@ -101,7 +101,7 @@ fn divergence_exec_path() {
 fn divergence_process_send_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'process-send-string)
   (fboundp 'process-send-region)
@@ -115,7 +115,7 @@ fn divergence_process_send_string() {
 fn divergence_process_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'process-buffer)
   (fboundp 'process-get)

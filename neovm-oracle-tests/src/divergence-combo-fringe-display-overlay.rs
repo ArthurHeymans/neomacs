@@ -1,13 +1,13 @@
 //! Divergence tests: fringe + display property + overlay + text-property + buffer combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_fringe_display_prop_with_margin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (setq left-margin-width 4)
@@ -51,7 +51,7 @@ fn divergence_fringe_display_prop_with_margin() {
 fn divergence_fringe_bitmap_face_per_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (generate-new-buffer " test-fbfpb1-xxx"))
         (buf2 (generate-new-buffer " test-fbfpb2-xxx")))
@@ -97,7 +97,7 @@ fn divergence_fringe_bitmap_face_per_buffer() {
 fn divergence_fringe_overlay_chain_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH")
   (let ((ov1 (make-overlay 1 3))
@@ -136,7 +136,7 @@ fn divergence_fringe_overlay_chain_multiple() {
 fn divergence_fringe_with_narrow_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG")
   (let ((ov (make-overlay 4 6)))
@@ -173,7 +173,7 @@ fn divergence_fringe_with_narrow_and_undo() {
 fn divergence_display_space_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "BEFORE-AFTER")
   (let ((ov (make-overlay 7 7)))
@@ -206,7 +206,7 @@ fn divergence_display_space_spec() {
 fn divergence_fringe_with_text_property_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "XXXXXXXXXXXXXXXX")
   (put-text-property 1 5 'display '(left-fringe right-triangle))
@@ -229,7 +229,7 @@ fn divergence_fringe_with_text_property_display() {
 fn divergence_window_margins_with_fringes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((w (selected-window)))
     (set-window-margins w 10 5)
@@ -253,7 +253,7 @@ fn divergence_window_margins_with_fringes() {
 fn divergence_truncate_lines_with_fringe_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq truncate-lines t)
   (insert (make-string 200 ?X))
@@ -285,7 +285,7 @@ fn divergence_truncate_lines_with_fringe_overlay() {
 fn divergence_word_wrap_fringe_indicators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq word-wrap t)
   (setq truncate-lines nil)
@@ -313,7 +313,7 @@ fn divergence_word_wrap_fringe_indicators() {
 fn divergence_visual_line_fringe_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (require 'fringe)
   (let ((orig-vlfi visual-line-fringe-indicators)

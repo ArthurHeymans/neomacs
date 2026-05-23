@@ -1,13 +1,13 @@
 //! Divergence tests: rx macro + pcase + thread-first/last combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_pcase_destructuring_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '((:user "Alice" :age 30 :roles (admin editor))
                 (:user "Bob" :age 25 :roles (viewer))
@@ -30,7 +30,7 @@ fn divergence_pcase_destructuring_nested() {
 fn divergence_pcase_guard_and_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((classify (lambda (x)
                     (pcase x
@@ -56,7 +56,7 @@ fn divergence_pcase_guard_and_pattern() {
 fn divergence_thread_first_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (thread-first 5
           (* 2)
@@ -86,7 +86,7 @@ fn divergence_thread_first_last() {
 fn divergence_pcase_with_app_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((process (lambda (data)
                    (pcase data
@@ -109,7 +109,7 @@ fn divergence_pcase_with_app_pattern() {
 fn divergence_cl_typep_with_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-typep 42 'integer)
         (cl-typep 3.14 'float)
@@ -130,7 +130,7 @@ fn divergence_cl_typep_with_various_types() {
 fn divergence_pcase_lexical_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '(:result (ok "success" 42) :status done)))
     (pcase data
@@ -147,7 +147,7 @@ fn divergence_pcase_lexical_binding() {
 fn divergence_thread_with_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (thread-first ht
@@ -171,7 +171,7 @@ fn divergence_thread_with_hash_table() {
 fn divergence_pcase_recursive_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-depth-xxx (tree)
     (pcase tree
@@ -197,7 +197,7 @@ fn divergence_pcase_recursive_pattern() {
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-destructuring-bind (a (b c) &rest rest)
       '(1 (2 3) 4 5 6)
@@ -214,7 +214,7 @@ fn divergence_cl_destructuring_bind() {
 fn rx_pattern_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo123bar456baz789")
   (goto-char 1)

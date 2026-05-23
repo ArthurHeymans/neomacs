@@ -3,10 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // 2-level: caar, cadr, cdar, cddr
@@ -16,35 +13,35 @@ use super::common::{
 fn oracle_prop_caar_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(caar '((a b) (c d)))");
-    assert_oracle_parity_with_bootstrap("(caar '((1 . 2) . (3 . 4)))");
-    assert_oracle_parity_with_bootstrap("(caar '((nil)))");
+    assert_oracle_parity("(caar '((a b) (c d)))");
+    assert_oracle_parity("(caar '((1 . 2) . (3 . 4)))");
+    assert_oracle_parity("(caar '((nil)))");
 }
 
 #[test]
 fn oracle_prop_cadr_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(cadr '(a b c))");
-    assert_oracle_parity_with_bootstrap("(cadr '(1 2))");
-    assert_oracle_parity_with_bootstrap("(cadr '(x))");
+    assert_oracle_parity("(cadr '(a b c))");
+    assert_oracle_parity("(cadr '(1 2))");
+    assert_oracle_parity("(cadr '(x))");
 }
 
 #[test]
 fn oracle_prop_cdar_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(cdar '((a b c) d))");
-    assert_oracle_parity_with_bootstrap("(cdar '((1 . 2) 3))");
+    assert_oracle_parity("(cdar '((a b c) d))");
+    assert_oracle_parity("(cdar '((1 . 2) 3))");
 }
 
 #[test]
 fn oracle_prop_cddr_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(cddr '(a b c d))");
-    assert_oracle_parity_with_bootstrap("(cddr '(1 2))");
-    assert_oracle_parity_with_bootstrap("(cddr '(a b . c))");
+    assert_oracle_parity("(cddr '(a b c d))");
+    assert_oracle_parity("(cddr '(1 2))");
+    assert_oracle_parity("(cddr '(a b . c))");
 }
 
 // ---------------------------------------------------------------------------
@@ -55,11 +52,11 @@ fn oracle_prop_cddr_basic() {
 fn oracle_prop_cdr_safe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(cdr-safe '(1 2 3))");
-    assert_oracle_parity_with_bootstrap("(cdr-safe nil)");
-    assert_oracle_parity_with_bootstrap("(cdr-safe 42)");
-    assert_oracle_parity_with_bootstrap(r#"(cdr-safe "hello")"#);
-    assert_oracle_parity_with_bootstrap("(cdr-safe '(a . b))");
+    assert_oracle_parity("(cdr-safe '(1 2 3))");
+    assert_oracle_parity("(cdr-safe nil)");
+    assert_oracle_parity("(cdr-safe 42)");
+    assert_oracle_parity(r#"(cdr-safe "hello")"#);
+    assert_oracle_parity("(cdr-safe '(a . b))");
 }
 
 // ---------------------------------------------------------------------------
@@ -70,14 +67,14 @@ fn oracle_prop_cdr_safe() {
 fn oracle_prop_caaar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(caaar '(((deep) mid) top))");
+    assert_oracle_parity("(caaar '(((deep) mid) top))");
 }
 
 #[test]
 fn oracle_prop_caadr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(caadr '(first (second-car rest) third))");
+    assert_oracle_parity("(caadr '(first (second-car rest) third))");
 }
 
 #[test]
@@ -85,8 +82,8 @@ fn oracle_prop_caddr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // caddr = third element
-    assert_oracle_parity_with_bootstrap("(caddr '(a b c d e))");
-    assert_oracle_parity_with_bootstrap("(caddr '(1 2 3))");
+    assert_oracle_parity("(caddr '(a b c d e))");
+    assert_oracle_parity("(caddr '(1 2 3))");
 }
 
 #[test]
@@ -94,7 +91,7 @@ fn oracle_prop_cadddr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // cadddr = fourth element
-    assert_oracle_parity_with_bootstrap("(cadddr '(a b c d e))");
+    assert_oracle_parity("(cadddr '(a b c d e))");
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +112,7 @@ fn oracle_prop_destructure_alist() {
                         (cdadr entries)
                         (car (caddr entries))
                         (cdr (caddr entries))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -133,7 +130,7 @@ fn oracle_prop_car_cdr_tree_navigation() {
                     (caadr tree)
                     ;; Third subtree
                     (caaddr tree)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -147,7 +144,7 @@ fn oracle_prop_car_cdr_safe_chain() {
                         (cdr-safe (car data))
                         (cdr-safe (cadr data))
                         (car-safe (caddr data))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -164,7 +161,7 @@ fn oracle_prop_car_cdr_build_and_navigate() {
                         (caadr s)
                         (cddr s)
                         (cdar s)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -179,7 +176,7 @@ fn oracle_prop_nth_via_car_cdr() {
                         (eq (nth 3 lst) (cadddr lst))
                         (equal (nthcdr 2 lst) (cddr lst))
                         (equal (nthcdr 3 lst) (cdddr lst))))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(t t t t t t)", &o, &n);
 }
 
@@ -214,5 +211,5 @@ fn oracle_prop_car_cdr_lambda_list_parsing() {
                            found)))
                     (list name required-args optional-args
                           (length body))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

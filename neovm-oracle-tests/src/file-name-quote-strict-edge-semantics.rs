@@ -5,7 +5,7 @@
 //! exact string operations around the `/:` prefix, including the special
 //! unquote result for the bare `/:` name.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -38,5 +38,5 @@ fn oracle_file_name_quote_unquote_and_quoted_p_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

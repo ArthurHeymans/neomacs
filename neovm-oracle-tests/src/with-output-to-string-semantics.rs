@@ -5,7 +5,7 @@
 //! buffer contents, and killing the buffer in `unwind-protect`.  These tests
 //! pin that contract beyond simple `princ`/`prin1` output cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_prop_with_output_to_string_dynamic_output_buffer_contract() {
    (eq (current-buffer) outer-buffer)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_prop_with_output_to_string_kills_temp_buffer_on_error() {
            (get-buffer captured-name)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,5 +94,5 @@ fn oracle_prop_with_output_to_string_nested_capture_isolated() {
    (get-buffer inner-buffer-name)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

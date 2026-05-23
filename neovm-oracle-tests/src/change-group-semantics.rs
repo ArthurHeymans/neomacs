@@ -8,9 +8,7 @@
 //! contract rather than approximating it.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_atomic_change_group_success_keeps_changes() {
@@ -30,7 +28,7 @@ fn oracle_prop_atomic_change_group_success_keeps_changes() {
           (consp buffer-undo-list))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +52,7 @@ fn oracle_prop_atomic_change_group_error_rolls_back_changes() {
      (consp buffer-undo-list))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +80,7 @@ fn oracle_prop_manual_change_group_cancel_and_accept() {
               (consp buffer-undo-list))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,7 +102,7 @@ fn oracle_with_undo_amalgamate_removes_inner_undo_boundaries() {
     (insert "c"))
   (list (buffer-string) buffer-undo-list))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         r#"("abc" ((3 . 4) (2 . 3) (1 . 2) (t . 0)))"#,
         &oracle,
@@ -124,7 +122,7 @@ fn oracle_with_undo_amalgamate_keeps_disabled_undo_disabled() {
                   (buffer-string))))
     (list result (buffer-string) buffer-undo-list)))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(r#"("x" "x" t)"#, &oracle, &neovm);
 }
 
@@ -157,7 +155,7 @@ fn oracle_prop_with_silent_modifications_restores_modified_state() {
           (consp buffer-undo-list))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -181,7 +179,7 @@ fn oracle_prop_combine_after_change_calls_coalesces_without_before_hooks() {
           (nreverse after-log))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -211,7 +209,7 @@ fn oracle_prop_combine_after_change_calls_disabled_by_before_hooks() {
           (nreverse after-log))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -237,7 +235,7 @@ fn oracle_prop_combine_after_change_calls_flushes_during_unwind() {
      (nreverse after-log))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -273,7 +271,7 @@ fn oracle_prop_nested_combine_after_change_calls_defers_until_outer_exit() {
      (nreverse after-log))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -318,7 +316,7 @@ fn oracle_prop_combine_change_calls_runs_hooks_once_and_suppresses_body_hooks() 
             (local-variable-p 'after-change-functions)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -350,5 +348,5 @@ fn oracle_prop_combine_change_calls_records_single_undo_apply_entry() {
                 buffer-undo-list)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

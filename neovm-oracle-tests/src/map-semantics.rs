@@ -4,7 +4,7 @@
 //! through `mapcar1`.  `mapcar1` computes sequence length up front, but for
 //! lists it stops early if the list is shortened as a side effect.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_mapcar_mapc_sequence_types_and_char_table_error() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn oracle_map_functions_accept_byte_code_sequence_like_gnu() {
    (mapconcat (lambda (x) (symbol-name (type-of x))) bc ",")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_mapcar_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn oracle_mapcar_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn oracle_mapc_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn oracle_mapc_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn oracle_mapconcat_separator_and_return_validation() {
    (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn oracle_mapconcat_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -219,7 +219,7 @@ fn oracle_mapcan_destructive_nconc_semantics() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn oracle_mapcan_stops_when_list_shortened_by_callback() {
    seq))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn oracle_mapcan_follows_callback_rewritten_cdr() {
    replacement))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -293,5 +293,5 @@ fn oracle_mapping_dotted_and_circular_input_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 //! These tests focus on constant write protection and void/default value
 //! behavior around the value cell.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_symbol_value_void_and_default_void_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_set_and_set_default_protect_nil_and_t() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn oracle_keyword_value_cell_can_only_be_set_to_self() {
      (t (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn oracle_set_default_uses_default_cell_not_current_let_binding() {
    (default-value sym)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn oracle_default_toplevel_value_ignores_active_let_binding() {
    (default-toplevel-value 'neomacs--oracle-top-default)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn oracle_default_toplevel_value_errors_and_constant_protection() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -242,5 +242,5 @@ fn oracle_variable_binding_locus_default_let_local_and_alias_edges() {
       (kill-buffer buf))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

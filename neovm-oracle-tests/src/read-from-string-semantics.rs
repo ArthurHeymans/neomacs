@@ -5,7 +5,7 @@
 //! These tests pin exact error payloads because callers can observe them with
 //! `condition-case`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_read_from_string_start_end_positions() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_read_from_string_malformed_error_payloads() {
    cases))
 "###;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn oracle_read_from_string_hash_skip_lazy_string_semantics() {
    (read-from-string zero-zero)))
 "###;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn oracle_read_from_string_read_circle_and_radix_precedence() {
    inputs))
 "###;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn oracle_read_from_string_empty_and_whitespace_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn oracle_read_from_string_reader_macro_positions() {
    (list (car r) (cdr r) (eq (car r) (car (read-from-string "#:same"))))))
 "###;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -145,5 +145,5 @@ fn oracle_read_from_string_preserves_text_properties_on_read_strings() {
           (substring-no-properties (car r)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

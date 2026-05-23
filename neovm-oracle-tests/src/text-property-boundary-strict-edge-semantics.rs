@@ -5,7 +5,7 @@
 //! `next-property-change` has a special LIMIT=t mode that the single-property
 //! variants do not share.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -40,5 +40,5 @@ fn oracle_text_property_plain_string_boundaries_and_limit_t() {
    (previous-property-change 6 s)
    (previous-property-change 6 s 4)))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

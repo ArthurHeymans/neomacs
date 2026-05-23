@@ -3,7 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // length on various types
@@ -17,7 +17,7 @@ fn oracle_prop_length_list() {
                         (length '(a))
                         (length '(a b c))
                         (length '(1 2 3 4 5 6 7 8 9 10)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_prop_length_string() {
                         (length "hello")
                         (length "café")
                         (length "日本語"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn oracle_prop_length_vector() {
     let form = r#"(list (length [])
                         (length [1 2 3])
                         (length (make-vector 100 0)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_length_and_sequencep_vectorlike_boundaries() {
    (sequencep bv)
    (length bv)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn oracle_length_comparison_vectorlike_and_error_boundaries() {
      (length> '(a b . c) 1)
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ fn oracle_prop_safe_length_normal() {
                         (safe-length '(1 2 3 4 5))
                         (safe-length "not a list")
                         (safe-length 42))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn oracle_prop_safe_length_dotted() {
     let form = r#"(list (safe-length '(a . b))
                         (safe-length '(a b . c))
                         (safe-length '(1 2 3 . 4)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ fn oracle_prop_proper_list_p() {
                         (proper-list-p 42)
                         (proper-list-p "string")
                         (proper-list-p [vector]))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ fn oracle_prop_string_bytes() {
                         (string-bytes "café")
                         (string-bytes "日本語")
                         (string-bytes "\x00\x01\x02"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn oracle_prop_string_bytes_vs_length() {
                           (> (string-bytes cjk) (length cjk))
                           (- (string-bytes multi) (length multi))
                           (- (string-bytes cjk) (length cjk))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +184,7 @@ fn oracle_prop_string_width_basic() {
     let form = r#"(list (string-width "")
                         (string-width "hello")
                         (string-width "café"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -195,7 +195,7 @@ fn oracle_prop_string_width_cjk() {
     let form = r#"(list (string-width "日本語")
                         (string-width "Abc")
                         (string-width "A日B本C語"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ fn oracle_prop_length_string_statistics() {
                       (list total-chars total-bytes total-width
                             max-len min-len
                             (length strings))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ fn oracle_prop_length_group_by() {
                       ;; Sort by length
                       (sort groups
                             (lambda (a b) (< (car a) (car b))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ fn oracle_prop_proper_list_filter_pipeline() {
                       (list (nreverse proper)
                             (nreverse improper)
                             (nreverse non-list))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,5 +332,5 @@ fn oracle_prop_string_width_column_format() {
                              (setq i (1+ i)))
                            (mapconcat #'identity (nreverse parts) " | ")))
                        entries)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

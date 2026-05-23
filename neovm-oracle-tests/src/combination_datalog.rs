@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Datalog engine: facts, simple queries, and ground queries
@@ -101,7 +101,7 @@ fn oracle_prop_datalog_facts_and_ground_queries() {
     (fmakunbound 'neovm--dl-var-p)
     (fmakunbound 'neovm--dl-unify)
     (fmakunbound 'neovm--dl-query)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ fn oracle_prop_datalog_rules_with_join() {
     (fmakunbound 'neovm--dl-subst)
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ fn oracle_prop_datalog_transitive_closure_ancestor() {
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)
     (fmakunbound 'neovm--dl-fixpoint)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -469,7 +469,7 @@ fn oracle_prop_datalog_graph_path_finding() {
     (fmakunbound 'neovm--dl-eval-body)
     (fmakunbound 'neovm--dl-apply-rule)
     (fmakunbound 'neovm--dl-fixpoint)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -576,7 +576,7 @@ fn oracle_prop_datalog_negation_as_failure() {
     (fmakunbound 'neovm--dl-query-1)
     (fmakunbound 'neovm--dl-subst)
     (fmakunbound 'neovm--dl-fact-exists)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,5 +676,5 @@ fn oracle_prop_datalog_multi_predicate_aggregation() {
     (fmakunbound 'neovm--dl-var-p)
     (fmakunbound 'neovm--dl-unify)
     (fmakunbound 'neovm--dl-query-1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

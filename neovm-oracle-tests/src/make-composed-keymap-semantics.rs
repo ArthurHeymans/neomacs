@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `make-composed-keymap'.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_make_composed_keymap_lookup_order_and_nil_bindings() {
@@ -28,7 +28,7 @@ fn oracle_make_composed_keymap_lookup_order_and_nil_bindings() {
      (lookup-key empty-maps [?a])
      (lookup-key empty-maps [?c])
      (keymapp composed))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,5 +47,5 @@ fn oracle_make_composed_keymap_single_map_and_parent_shape() {
      (keymapp (cadr composed))
      (eq (caddr composed) 'keymap)
      (equal (cdddr composed) (cdr parent))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

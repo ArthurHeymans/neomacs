@@ -1,13 +1,13 @@
 //! Divergence tests: dired, file management, directory operations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_dired_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired)
   (fboundp 'dired-other-window)
@@ -22,7 +22,7 @@ fn divergence_dired_functions() {
 fn divergence_dired_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired-next-line)
   (fboundp 'dired-previous-line)
@@ -35,7 +35,7 @@ fn divergence_dired_navigation() {
 fn divergence_dired_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired-do-copy)
   (fboundp 'dired-do-rename)
@@ -49,7 +49,7 @@ fn divergence_dired_operations() {
 fn divergence_dired_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired-sort-toggle-or-edit)
   (fboundp 'dired-toggle-marks)
@@ -63,7 +63,7 @@ fn divergence_dired_sort() {
 fn divergence_dired_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'insert-directory)
   (fboundp 'dired-insert-set-properties)
@@ -75,7 +75,7 @@ fn divergence_dired_insert() {
 fn divergence_dired_revert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired-revert)
   (fboundp 'revert-buffer)
@@ -88,7 +88,7 @@ fn divergence_dired_revert() {
 fn divergence_find_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'find-file)
   (fboundp 'find-file-other-window)
@@ -103,7 +103,7 @@ fn divergence_find_file() {
 fn divergence_auto_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'auto-save-mode)
   (boundp 'auto-save-default)
@@ -118,7 +118,7 @@ fn divergence_auto_save() {
 fn divergence_backup_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'make-backup-files)
   (boundp 'backup-by-copying)
@@ -132,7 +132,7 @@ fn divergence_backup_files() {
 fn divergence_file_locks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'lock-file)
   (fboundp 'unlock-file)
@@ -145,7 +145,7 @@ fn divergence_file_locks() {
 fn divergence_recentf_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'recentf-cleanup)
   (fboundp 'recentf-add-file)

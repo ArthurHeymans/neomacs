@@ -5,7 +5,7 @@
 //! URL-safe decoding is selected by the second argument and invalid input is
 //! ignored only when the third argument is non-nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -22,7 +22,7 @@ fn oracle_base64_decode_string_url_and_ignore_invalid_args() {
  (base64-decode-string "!!!!" nil t))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -40,5 +40,5 @@ fn oracle_base64_encode_string_rejects_multibyte_non_ascii_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

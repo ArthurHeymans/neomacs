@@ -4,7 +4,7 @@
 //! copied, string bytes and intervals are copied, empty objects may be shared,
 //! and non-sequences signal `wrong-type-argument` for `sequencep`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_copy_sequence_shallow_list_spine_and_dotted_error() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_copy_sequence_circular_list_error_payload() {
     (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_copy_sequence_string_intervals_are_copied() {
         (text-properties-at 4 copy)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn oracle_copy_sequence_vector_record_bool_vector_identity() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -105,5 +105,5 @@ fn oracle_copy_sequence_empty_object_identity_observable() {
  (let ((b (make-bool-vector 0 nil))) (eq b (copy-sequence b))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

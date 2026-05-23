@@ -5,7 +5,7 @@
 //! table stored on the list symbol's `list-order` property, and non-numeric
 //! ORDER removes an element's numeric priority.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_add_to_ordered_list_orders_by_symbol_property_table() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn oracle_add_to_ordered_list_nil_and_nonnumeric_order_rules() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn oracle_add_to_ordered_list_membership_is_eq_not_equal() {
     (put 'xs 'list-order nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -99,5 +99,5 @@ fn oracle_add_to_ordered_list_requires_symbol_value_and_not_lexical() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

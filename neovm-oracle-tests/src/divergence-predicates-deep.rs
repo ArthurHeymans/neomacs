@@ -1,13 +1,13 @@
 //! Divergence tests: misc predicates, type-checking, equality edge.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (type-of 42)
   (type-of "hello")
@@ -22,7 +22,7 @@ fn divergence_type_predicates() {
 fn divergence_equality_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (equal '(1 2 3) '(1 2 3))
   (equal [1 2 3] [1 2 3])
@@ -36,7 +36,7 @@ fn divergence_equality_deep() {
 fn divergence_number_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (numberp 42)
   (numberp 3.14)
@@ -54,7 +54,7 @@ fn divergence_number_predicates() {
 fn divergence_sequence_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (sequencep '(1 2 3))
   (sequencep [1 2 3])
@@ -72,7 +72,7 @@ fn divergence_sequence_predicates() {
 fn divergence_nil_t_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (null nil)
   (null t)
@@ -88,7 +88,7 @@ fn divergence_nil_t_predicates() {
 fn divergence_char_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (characterp ?A)
   (characterp 128)
@@ -103,7 +103,7 @@ fn divergence_char_predicates() {
 fn divergence_function_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (functionp 'car)
   (functionp 'lambda)
@@ -118,7 +118,7 @@ fn divergence_function_predicates() {
 fn divergence_buffer_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (bufferp (current-buffer))
   (bufferp nil)
@@ -132,7 +132,7 @@ fn divergence_buffer_predicates() {
 fn divergence_marker_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((m (make-marker)))
   (list (markerp m)
         (marker-position m)
@@ -147,7 +147,7 @@ fn divergence_marker_predicates() {
 fn divergence_window_frame_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (windowp (selected-window))
   (window-live-p (selected-window))
@@ -161,7 +161,7 @@ fn divergence_window_frame_predicates() {
 fn divergence_process_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'processp)
   (processp nil)

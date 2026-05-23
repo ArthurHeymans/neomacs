@@ -3,7 +3,7 @@
 //! GNU implements this in `src/decompress.c`: it calls `validate_region`
 //! before checking whether the current buffer is unibyte.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,5 +28,5 @@ fn oracle_zlib_decompress_region_validates_region_before_unibyte_buffer() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

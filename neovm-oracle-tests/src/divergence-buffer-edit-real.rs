@@ -1,13 +1,13 @@
 //! Divergence tests: real buffer editing behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_insert_delete_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"The quick brown fox\")
   (goto-char 5)
@@ -25,7 +25,7 @@ fn divergence_insert_delete_replacement() {
 fn divergence_buffer_substring_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 5 'face 'bold)
@@ -43,7 +43,7 @@ fn divergence_buffer_substring_props() {
 fn divergence_replace_match_backref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello world\")
   (goto-char 1)
@@ -61,7 +61,7 @@ fn divergence_replace_match_backref() {
 fn divergence_narrow_edit_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (narrow-to-region 3 7)
@@ -77,7 +77,7 @@ fn divergence_narrow_edit_widen() {
 fn divergence_overlay_layered_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 11 'face 'default)
@@ -99,7 +99,7 @@ fn divergence_overlay_layered_props() {
 fn divergence_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA\")
   (undo-boundary)
@@ -118,7 +118,7 @@ fn divergence_undo_chain() {
 fn divergence_marker_after_multiple_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (make-marker)))
@@ -139,7 +139,7 @@ fn divergence_marker_after_multiple_edits() {
 fn divergence_textprop_after_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"foo bar baz\")
   (put-text-property 1 12 'test-prop 'original)
@@ -158,7 +158,7 @@ fn divergence_textprop_after_replace() {
 fn divergence_case_change_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello WORLD\")
   (narrow-to-region 1 5)
@@ -175,7 +175,7 @@ fn divergence_case_change_operations() {
 fn divergence_rectangle_extract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGH\\nIJKLMNOP\\nQRSTUVWX\")
   (list (extract-rectangle 2 4)

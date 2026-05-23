@@ -1,13 +1,13 @@
 //! Divergence tests: buffer manipulation edge cases, kill-region, rectangles.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_insert_before_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDE")
   (let ((m (point-marker)))
@@ -22,7 +22,7 @@ fn divergence_insert_before_markers() {
 fn divergence_insert_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert-char ?X 5)
   (insert-char ?- 3)
@@ -37,7 +37,7 @@ fn divergence_insert_char() {
 fn divergence_buffer_substring_vs_buffer_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World!")
   (list (buffer-substring 1 6)
@@ -50,7 +50,7 @@ fn divergence_buffer_substring_vs_buffer_string() {
 fn divergence_delete_region_vs_delete_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (delete-region 3 6)
@@ -66,7 +66,7 @@ fn divergence_delete_region_vs_delete_chars() {
 fn divergence_delete_duplicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABBCCCDDDDEEEEE")
   (goto-char 1)
@@ -81,7 +81,7 @@ fn divergence_delete_duplicates() {
 fn divergence_kill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (kill-region 1 6)
@@ -94,7 +94,7 @@ fn divergence_kill_region_basic() {
 fn divergence_yank_after_kill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (kill-region 1 6)
@@ -109,7 +109,7 @@ fn divergence_yank_after_kill() {
 fn divergence_kill_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3")
   (goto-char 1)
@@ -127,7 +127,7 @@ fn divergence_kill_line() {
 fn divergence_kill_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world foo bar")
   (goto-char 1)
@@ -142,7 +142,7 @@ fn divergence_kill_word() {
 fn divergence_transpose_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abcdef")
   (goto-char 3)
@@ -159,7 +159,7 @@ fn divergence_transpose_chars() {
 fn divergence_transpose_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world")
   (goto-char 6)
@@ -172,7 +172,7 @@ fn divergence_transpose_words() {
 fn divergence_extract_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ\nKLMNOPQRST\nUVWXYZ1234")
   (list (extract-rectangle 2 5)
@@ -184,7 +184,7 @@ fn divergence_extract_rectangle() {
 fn divergence_delete_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ\nKLMNOPQRST\nUVWXYZ1234")
   (delete-rectangle 2 5)

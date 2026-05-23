@@ -4,7 +4,7 @@
 //! a liberal token/rule parser.  These tests pin returned decoded-time fields,
 //! tokenization, two-digit year rules, timezone parsing, and malformed input.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -22,7 +22,7 @@ fn oracle_prop_parse_time_tokenize_and_rfc_dates() {
    (parse-time-string "21 Nov 97 09:55 EST")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn oracle_prop_parse_time_iso8601_variants_and_encoding() {
                        (parse-iso8601-time-string "2020-01-15T16:12:21-08:00") t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_prop_parse_time_two_digit_years_times_and_zones() {
    (parse-time-string "Jan 2 2020 01:02:03 -0330")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,5 +87,5 @@ fn oracle_prop_parse_time_malformed_and_partial_inputs() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // :filter-args and :filter-return advice combinators
@@ -55,7 +55,7 @@ fn oracle_prop_advice_patterns_filter_args_and_return() {
     (fmakunbound 'neovm--ap-add)
     (fmakunbound 'neovm--ap-double-args)
     (fmakunbound 'neovm--ap-square-return)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ fn oracle_prop_advice_patterns_multiple_around_nesting() {
     (fmakunbound 'neovm--ap-around-b)
     (fmakunbound 'neovm--ap-around-c)
     (makunbound 'neovm--ap-order)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ fn oracle_prop_advice_patterns_selective_removal() {
     (fmakunbound 'neovm--ap-sel-b2)
     (fmakunbound 'neovm--ap-sel-b3)
     (makunbound 'neovm--ap-sel-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ fn oracle_prop_advice_patterns_stateful_closures() {
     (fmakunbound 'neovm--ap-st-get-count)
     (fmakunbound 'neovm--ap-st-accum)
     (fmakunbound 'neovm--ap-st-get-results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +277,7 @@ fn oracle_prop_advice_patterns_override_conditional() {
     (fmakunbound 'neovm--ap-ov-fn)
     (fmakunbound 'neovm--ap-ov-replace)
     (fmakunbound 'neovm--ap-ov-conditional)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ fn oracle_prop_advice_patterns_retry_wrapper() {
     (fmakunbound 'neovm--ap-retry-advice)
     (makunbound 'neovm--ap-retry-fail-count)
     (makunbound 'neovm--ap-retry-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,5 +439,5 @@ fn oracle_prop_advice_patterns_access_control() {
     (fmakunbound 'neovm--ap-ac-dg)
     (makunbound 'neovm--ap-ac-current-user)
     (makunbound 'neovm--ap-ac-permissions)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

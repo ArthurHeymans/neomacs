@@ -1,13 +1,13 @@
 //! Divergence tests: display-table, glyphless-char, composition.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_display_table_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((dt (standard-display-table)))
   (list (or (null dt) (char-table-p dt))
         (char-table-p (make-display-table))
@@ -19,7 +19,7 @@ fn divergence_display_table_basic() {
 fn divergence_display_table_set_glyph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((dt (make-display-table)))
   (aset dt ?\t (vector ?\xBB ?\t))
   (list (aref dt ?\t)
@@ -31,7 +31,7 @@ fn divergence_display_table_set_glyph() {
 fn divergence_glyphless_char_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'glyphless-char-display)
   (char-table-p glyphless-char-display)
@@ -43,7 +43,7 @@ fn divergence_glyphless_char_display() {
 fn divergence_glyphless_char_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'glyphless-char-display)
   (member 'zero-width (list 'zero-width 'thin-space 'empty-box 'acronym 'text))
@@ -55,7 +55,7 @@ fn divergence_glyphless_char_method() {
 fn divergence_composition_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compose-region-internal)
   (fboundp 'find-composition)
@@ -69,7 +69,7 @@ fn divergence_composition_functions() {
 fn divergence_display_pixels_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'display-pixel-width)
   (fboundp 'display-pixel-height)
@@ -84,7 +84,7 @@ fn divergence_display_pixels_functions() {
 fn divergence_face_color() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list\n  (consp (color-values \"red\"))\n  (consp (color-values \"#FF0000\"))\n  (color-defined-p \"red\")\n  (color-defined-p \"nonexistent-color-xyz\"))",
     );
 }
@@ -93,7 +93,7 @@ fn divergence_face_color() {
 fn divergence_face_fonts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'x-list-fonts)
   (fboundp 'font-family-list)

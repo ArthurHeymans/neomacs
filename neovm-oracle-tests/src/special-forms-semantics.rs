@@ -3,7 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap};
+use super::common::eval_oracle_and_neovm;
 
 #[test]
 fn oracle_prop_special_forms_semantics_quote() {
@@ -16,7 +16,7 @@ fn oracle_prop_special_forms_semantics_quote() {
   (equal '(1 (2 3) "x") (quote (1 (2 3) "x")))
   (quote nil)
   (quote t))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -30,7 +30,7 @@ fn oracle_prop_special_forms_semantics_function() {
   (functionp (function car))
   (function 1)
   (function '(1 2 3)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -49,7 +49,7 @@ fn oracle_prop_special_forms_semantics_defconst() {
         (is-bound (boundp 'neovm--oracle-special-defconst)))
     (makunbound 'neovm--oracle-special-defconst)
     (list first second is-bound)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -81,7 +81,7 @@ fn oracle_prop_special_forms_semantics_save_current_buffer() {
          (eq (current-buffer) orig)))
     (kill-buffer a)
     (kill-buffer b)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -101,7 +101,7 @@ fn oracle_prop_special_forms_semantics_interactive() {
           (funcall 'neovm--oracle-interactive-cmd 7))))
     (fmakunbound 'neovm--oracle-interactive-cmd)
     result))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -118,7 +118,7 @@ fn oracle_prop_special_forms_semantics_inline() {
     (defvar foo 1)
     (inline foo)
     'ok))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -141,7 +141,7 @@ fn oracle_prop_special_forms_semantics_progn_prog1_eval_order() {
        (eval '(prog1))
      (error (list (car err) (cdr err))))))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -164,7 +164,7 @@ fn oracle_prop_special_forms_semantics_quote_function_arity_errors() {
      (eval '(function))
    (error (list (car err) (cdr err)))))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -189,7 +189,7 @@ fn oracle_prop_eval_lexical_environment_semantics() {
               (funcall f))))
        nil))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
@@ -206,6 +206,6 @@ fn oracle_prop_eval_invalid_function_position_does_not_evaluate_args() {
      (error (list (car err) (cdr err))))
    log))
 "#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }

@@ -4,7 +4,7 @@
 //! LIST unchanged for N <= 0, while `nbutlast` computes `length` first and then
 //! destructively truncates only when N is smaller than the list length.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -21,7 +21,7 @@ fn oracle_butlast_negative_zero_and_identity() {
         lst))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn oracle_butlast_positive_copy_and_improper_errors() {
           (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn oracle_nbutlast_negative_zero_and_large_n() {
         rc c))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,5 +90,5 @@ fn oracle_nbutlast_destructive_identity_and_improper_errors() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

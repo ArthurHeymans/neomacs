@@ -1,13 +1,13 @@
 //! Divergence tests: buffer local variables, frame parameters deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buffer_local_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (set (make-local-variable 'test-blocal-xxx) 42)
   (list test-blocal-xxx
@@ -20,7 +20,7 @@ fn divergence_buffer_local_set() {
 fn divergence_buffer_local_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-blocal-default-xxx 10)
   (set (make-local-variable 'test-blocal-default-xxx) 20)
@@ -34,7 +34,7 @@ fn divergence_buffer_local_default() {
 fn divergence_buffer_local_kill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-blocal-kill-xxx 100)
   (set (make-local-variable 'test-blocal-kill-xxx) 200)
@@ -48,7 +48,7 @@ fn divergence_buffer_local_kill() {
 fn divergence_buffer_locals_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'buffer-local-variables)
   (listp (buffer-local-variables))
@@ -62,7 +62,7 @@ fn divergence_buffer_locals_list() {
 fn divergence_make_variable_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'make-variable-buffer-local)
   (fboundp 'make-local-variable)
@@ -77,7 +77,7 @@ fn divergence_make_variable_buffer_local() {
 fn divergence_frame_params_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((params (frame-parameters)))
   (list (listp params)
         (assq 'name params)
@@ -91,7 +91,7 @@ fn divergence_frame_params_deep() {
 fn divergence_frame_terminal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'frame-terminal)
   (fboundp 'terminal-name)
@@ -104,7 +104,7 @@ fn divergence_frame_terminal() {
 fn divergence_frame_focus() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'select-frame)
   (fboundp 'selected-frame)
@@ -117,7 +117,7 @@ fn divergence_frame_focus() {
 fn divergence_frame_management() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'make-frame)
   (fboundp 'make-frame-on-display)
@@ -131,7 +131,7 @@ fn divergence_frame_management() {
 fn divergence_frame_parameters_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (fboundp 'modify-frame-parameters)
   (fboundp 'set-frame-parameter)

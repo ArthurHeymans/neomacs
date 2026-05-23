@@ -1,13 +1,13 @@
 //! Divergence tests: timer + idle + time function combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_time_add_subtract_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((t1 (current-time))
         (t2 (time-add t1 100))
         (t3 (time-subtract t2 100)))
@@ -23,7 +23,7 @@ fn divergence_time_add_subtract_equal() {
 fn divergence_format_time_string_specifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((time (encode-time 30 45 14 15 6 2024 nil)))
   (list (format-time-string "%Y-%m-%d %H:%M:%S" time)
         (format-time-string "%A %B %d" time)
@@ -39,7 +39,7 @@ fn divergence_format_time_string_specifiers() {
 fn divergence_encode_decode_time_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((time (encode-time 0 0 12 25 12 2023 nil))
         (decoded (decode-time time)))
   (list (nth 0 decoded)  ;; seconds
@@ -60,7 +60,7 @@ fn divergence_encode_decode_time_roundtrip() {
 fn divergence_float_time_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((now (current-time))
         (ft (float-time now))
         (back (seconds-to-time ft)))
@@ -75,7 +75,7 @@ fn divergence_float_time_precision() {
 fn divergence_timer_create_cancel_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((timers nil))
   (dotimes (i 5)
     (push (run-at-time 3600 nil (lambda ())) timers))
@@ -89,7 +89,7 @@ fn divergence_timer_create_cancel_list() {
 fn divergence_idle_timer_cancel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((timer (run-with-idle-timer 600 t (lambda ()))))
   (let ((result (timerp timer)))
     (cancel-timer timer)
@@ -101,7 +101,7 @@ fn divergence_idle_timer_cancel() {
 fn divergence_with_timeout_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (with-timeout (1 'timed-out) (+ 1 2))
   (= (with-timeout (1 'timed-out) (+ 1 2)) 3)) "#,
@@ -112,7 +112,7 @@ fn divergence_with_timeout_macro() {
 fn divergence_time_less_p_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((t1 '(26154 32144 123456 789000))
         (t2 '(26154 32144 123456 789001))
         (t3 '(26154 32145 0 0)))
@@ -128,7 +128,7 @@ fn divergence_time_less_p_various() {
 fn divergence_current_time_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ts (current-time-string)))
   (list (stringp ts)
         (= (length ts) 24)
@@ -141,7 +141,7 @@ fn divergence_current_time_string() {
 fn divergence_format_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format-seconds "%Y %D %H:%M:%S" (* 3661 1.0))
   (format-seconds "%H:%M:%S" 3661)

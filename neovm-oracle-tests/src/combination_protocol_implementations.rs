@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // MIME header parser
@@ -82,7 +82,7 @@ fn oracle_prop_protocol_mime_header_parser() {
    accept-parsed
    (cdr (assoc "Content-Length" headers))
    (cdr (assoc "X-Custom-Header" headers))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ fn oracle_prop_protocol_url_parser() {
    (funcall parse-url "https://search.example.com/search?q=hello+world")
    (funcall parse-url "https://example.com#top")
    (funcall parse-url "https://example.com:443/path/to/resource?key=value&foo=bar&baz=")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ fn oracle_prop_protocol_sexp_pretty_printer() {
    (funcall pp-sexp '(42) 0)
    ;; Nested with indent
    (funcall pp-sexp '(if (> x 0) (print x) (print y)) 1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +295,7 @@ fn oracle_prop_protocol_kv_command_parser() {
       (let ((parsed (funcall parse-command cmd)))
         (setq results (cons (funcall execute-command parsed) results))))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +359,7 @@ fn oracle_prop_protocol_email_parser() {
                           "From: Test <test@test.com>\nTo: user@test.com\nSubject: Hello\n\nWorld"))
           (from-pair (cdr (assoc 'from email))))
      (list (car from-pair) (cdr from-pair)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,5 +440,5 @@ fn oracle_prop_protocol_http_response_builder() {
           (numberp starts-301)
           (numberp has-cl)
           (numberp has-sep))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

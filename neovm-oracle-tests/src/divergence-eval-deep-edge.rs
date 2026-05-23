@@ -1,13 +1,13 @@
 //! Divergence tests: deep eval edge cases, throw/catch, save-excursion, match data.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_catch_throw_with_nested_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (catch 'done
     (unwind-protect
@@ -21,7 +21,7 @@ fn divergence_catch_throw_with_nested_unwind() {
 fn divergence_throw_across_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(catch 'outer
   (condition-case err
       (throw 'outer 99)
@@ -33,7 +33,7 @@ fn divergence_throw_across_condition_case() {
 fn divergence_save_excursion_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf1 (current-buffer)))
   (save-excursion
     (set-buffer (get-buffer-create " *se-test*"))
@@ -49,7 +49,7 @@ fn divergence_save_excursion_buffer() {
 fn divergence_save_restriction_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 7)
@@ -65,7 +65,7 @@ fn divergence_save_restriction_nested() {
 fn divergence_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (string-match "\\([0-9]+\\)\\.[0-9]+" "version 28.2")
   (let ((m (match-data)))
@@ -81,7 +81,7 @@ fn divergence_save_match_data() {
 fn divergence_match_data_across_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abc123def")
   (goto-char 1)
@@ -98,7 +98,7 @@ fn divergence_match_data_across_replace() {
 fn divergence_dynamic_binding_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dyn-cross 0)
   (let ((my-dyn-cross 42))
@@ -112,7 +112,7 @@ fn divergence_dynamic_binding_across_buffers() {
 fn divergence_deep_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun my-recurse (n)
     (if (<= n 0) 'done (my-recurse (1- n))))
@@ -125,7 +125,7 @@ fn divergence_deep_recursion() {
 fn divergence_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun my-even? (n) (if (= n 0) t (my-odd? (1- n))))
   (defun my-odd? (n) (if (= n 0) nil (my-even? (1- n))))
@@ -138,7 +138,7 @@ fn divergence_mutual_recursion() {
 fn divergence_defmacro_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro my-when (cond &rest body)
     (list 'if cond (cons 'progn body)))
@@ -150,7 +150,7 @@ fn divergence_defmacro_expansion() {
 fn divergence_apply_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((add3 (apply-partially #'+ 3)))
   (list (funcall add3 4)
         (funcall add3 10)
@@ -162,7 +162,7 @@ fn divergence_apply_partial() {
 fn divergence_compose_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((double (lambda (x) (* x 2)))
         (inc (lambda (x) (1+ x)))
         (compose (lambda (f g) (lambda (x) (funcall f (funcall g x))))))

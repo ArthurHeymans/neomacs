@@ -5,7 +5,7 @@
 //! combinations of all three, interaction with let/let*, interaction with
 //! condition-case, complex multi-expression body forms, and edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ fn oracle_prop_progn_comprehensive_return_patterns() {
   ;; Deeply nested progn — 5 levels
   (progn (progn (progn (progn (progn 'deep))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ fn oracle_prop_prog1_comprehensive_return_semantics() {
     ;; Trace proves body forms ran
     (nreverse trace)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ fn oracle_prop_prog2_comprehensive_return_semantics() {
     ;; Complete log
     (nreverse log)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ fn oracle_prop_prog_forms_with_let_binding() {
             (setq opened nil)))
     (list result opened)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ fn oracle_prop_prog_forms_with_condition_case() {
     (arith-error
      (prog1 'error-captured 'handler-cleanup))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ fn oracle_prop_prog_complex_accumulation() {
           (nreverse acc)           ;; (1 2 3 4 5 marker done)
           result)))))              ;; 6 (length at time of prog2's second form)
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +291,7 @@ fn oracle_prop_prog_as_function_arguments() {
       ((progn t)   'branch-t)
       (t           'fallthrough))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ fn oracle_prop_prog1_swap_idiom() {
       ;; After: a=alpha, b=gamma, c=beta, tmp=beta
       (list after-swap (list a b c) tmp))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ fn oracle_prop_prog_forms_with_catch_throw() {
             (setq cleaned t))))
       cleaned)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,7 +415,7 @@ fn oracle_prop_prog_forms_in_defun_bodies() {
     (fmakunbound 'neovm--test-pppc-logged-compute)
     (fmakunbound 'neovm--test-pppc-transform)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ fn oracle_prop_progn_implicit_in_special_forms() {
                n)
              10)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,5 +491,5 @@ fn oracle_prop_prog_evaluation_order_guarantees() {
                   (setq order (cons 'p2-body2 order)))))
         (list r1 r2 r3 (nreverse order))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

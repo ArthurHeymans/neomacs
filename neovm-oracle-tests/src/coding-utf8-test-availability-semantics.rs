@@ -3,7 +3,7 @@
 //! GNU implements these in `src/coding.c`, but registers them only when
 //! `ENABLE_UTF_8_CONVERTER_TEST` is defined.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -22,5 +22,5 @@ fn oracle_utf8_converter_test_primitives_follow_gnu_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

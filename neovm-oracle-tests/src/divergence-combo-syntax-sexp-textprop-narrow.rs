@@ -1,13 +1,13 @@
 //! Divergence tests: syntax + sexp nav + text property syntax + narrow combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_forward_sexp_across_syntax_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo bar|baz quux)")
   (put-text-property 9 10 'syntax-table '(1))
@@ -29,7 +29,7 @@ fn divergence_forward_sexp_across_syntax_property() {
 fn divergence_scan_lists_with_textprop_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(a (b (c) d) e)")
   (put-text-property 5 6 'syntax-table '(15))
@@ -46,7 +46,7 @@ fn divergence_scan_lists_with_textprop_syntax() {
 fn divergence_narrowed_forward_sexp_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(alpha (beta gamma) delta)")
   (let ((ov (make-overlay 8 12)))
@@ -70,7 +70,7 @@ fn divergence_narrowed_forward_sexp_with_overlays() {
 fn divergence_backward_sexp_from_mid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo bar baz quux)")
   (goto-char 14)
@@ -90,7 +90,7 @@ fn divergence_backward_sexp_from_mid() {
 fn divergence_kill_sexp_with_undo_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(alpha beta gamma delta)")
   (let ((m1 (copy-marker 2 t))
@@ -114,7 +114,7 @@ fn divergence_kill_sexp_with_undo_markers() {
 fn divergence_transpose_sexps_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(aaa bbb ccc ddd)")
   (let ((ov (make-overlay 6 9)))
@@ -137,7 +137,7 @@ fn divergence_transpose_sexps_with_overlays() {
 fn divergence_mark_sexp_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(one two three four five)")
   (let ((m (copy-marker 6 t)))
@@ -161,7 +161,7 @@ fn divergence_mark_sexp_narrow_undo() {
 fn divergence_parse_partial_sexp_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(a (b (c (d) e) f) g)")
   (let ((p1 (parse-partial-sexp 1 5))
@@ -179,7 +179,7 @@ fn divergence_parse_partial_sexp_depth() {
 fn divergence_syntax_property_string_fence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "before\"quoted text\"after")
   (put-text-property 7 19 'syntax-table '(15))
@@ -199,7 +199,7 @@ fn divergence_syntax_property_string_fence() {
 fn divergence_insert_parentheses_balancing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "alpha beta gamma")
   (goto-char 7)

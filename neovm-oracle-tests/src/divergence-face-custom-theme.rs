@@ -1,13 +1,13 @@
 //! Divergence tests: faces deep - face remapping, face inheritance, theme.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_face_all_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (consp (face-all-attributes 'default))
   (consp (face-all-attributes 'bold))
@@ -19,7 +19,7 @@ fn divergence_face_all_attributes() {
 fn divergence_face_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-remap-add-relative)
   (fboundp 'face-remap-remove-relative)
@@ -31,7 +31,7 @@ fn divergence_face_remapping() {
 fn divergence_face_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (member 'default (face-list))
   (member 'bold (face-list))
@@ -43,7 +43,7 @@ fn divergence_face_list() {
 fn divergence_face_underline_colors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (face-attribute 'underline :underline)
   (face-attribute 'highlight :background))"#,
@@ -54,7 +54,7 @@ fn divergence_face_underline_colors() {
 fn divergence_face_realized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-spec-recalc)
   (fboundp 'face-spec-set)
@@ -66,7 +66,7 @@ fn divergence_face_realized() {
 fn divergence_make_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'my-test-face-123)
   (list (facep 'my-test-face-123)
@@ -78,7 +78,7 @@ fn divergence_make_face() {
 fn divergence_face_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defface my-inherited-face '((t :inherit bold)) "test")
   (list (facep 'my-inherited-face)
@@ -90,7 +90,7 @@ fn divergence_face_inheritance() {
 fn divergence_custom_theme_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'custom-set-faces)
   (fboundp 'custom-set-variables)
@@ -105,7 +105,7 @@ fn divergence_custom_theme_functions() {
 fn divergence_custom_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'customize-set-variable)
   (fboundp 'customize-save-variable)
@@ -119,7 +119,7 @@ fn divergence_custom_variables() {
 fn divergence_defcustom_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defcustom my-custom-var-xyz 42 "A test variable" :type 'integer)
   (list (custom-variable-p 'my-custom-var-xyz)

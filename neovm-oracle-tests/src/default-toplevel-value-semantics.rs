@@ -5,7 +5,7 @@
 //! specpdl for an exact `SPECPDL_LET` or `SPECPDL_LET_DEFAULT` entry, and
 //! otherwise fall back to `default-value` / `set-default`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -79,5 +79,5 @@ fn oracle_default_toplevel_value_let_default_and_alias_edges() {
     (ignore-errors (makunbound plain))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

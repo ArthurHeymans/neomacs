@@ -1,13 +1,13 @@
 //! Divergence tests: format + string manipulation + char property combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_format_complex_specs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (format "%d + %d = %d" 1 2 3)
         (format "%05d" 42)
@@ -26,7 +26,7 @@ fn divergence_format_complex_specs() {
 fn divergence_string_props_after_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((s1 "hello world")
          (s2 (format "%s %d" s1 42))
@@ -46,7 +46,7 @@ fn divergence_string_props_after_format() {
 fn divergence_string_multibyte_concat_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((a "abc")
         (b "\xc3\xa9\xc3\xa0"))
@@ -69,7 +69,7 @@ fn divergence_string_multibyte_concat_props() {
 fn divergence_replace_regex_in_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (replace-regexp-in-string "[0-9]+" "NUM" "abc123def456")
         (string= (replace-regexp-in-string "[0-9]+" "NUM" "abc123def456")
@@ -90,7 +90,7 @@ fn divergence_replace_regex_in_string() {
 fn divergence_string_search_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (string-match "world" "hello world")
         (= (string-match "world" "hello world") 6)
@@ -109,7 +109,7 @@ fn divergence_string_search_various() {
 fn divergence_split_string_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (split-string "  a  b  c  " " +" t)
         (equal (split-string "  a  b  c  " " +" t) '("a" "b" "c"))
@@ -126,7 +126,7 @@ fn divergence_split_string_boundary() {
 fn divergence_string_case_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (upcase "hello World")
         (string= (upcase "hello World") "HELLO WORLD")
@@ -143,7 +143,7 @@ fn divergence_string_case_operations() {
 fn divergence_string_pad_trim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (string-pad "hello" 10)
         (string= (string-pad "hello" 10) "hello     ")
@@ -162,7 +162,7 @@ fn divergence_string_pad_trim() {
 fn divergence_string_reverse_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (string-reverse "abc")
         (string= (string-reverse "abc") "cba")
@@ -179,7 +179,7 @@ fn divergence_string_reverse_multibyte() {
 fn divergence_string_bytes_vs_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((s "\xc3\xa9\xc3\xa0\xc3\xb9"))
     (list (length s)

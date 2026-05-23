@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // move-to-column with tabs: column landing inside tab stops
@@ -44,7 +44,7 @@ fn oracle_prop_move_to_column_tab_stop_interactions() {
                         force-results)))))
       (setq results (cons (cons 'force-split (nreverse force-results)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ fn oracle_prop_move_to_column_force_pad_short_lines() {
                                                              (line-end-position))))
                             results)))))
   (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ fn oracle_prop_move_to_column_col_vs_char_position() {
           (forward-char 1))
         (setq results (cons (list 'plain-ascii-match all-match) results))))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ fn oracle_prop_move_to_column_different_tab_widths() {
             (setq mtc-results (cons (list i ret (current-column)) mtc-results))))
         (setq results (cons (list 'mtc tw (nreverse mtc-results)) results)))))
   (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ fn oracle_prop_move_to_column_rectangle_extract() {
           ;; Extract beyond line end (should get partial/empty strings)
           (funcall 'neovm--test-extract-rect 20 40)))
     (fmakunbound 'neovm--test-extract-rect)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ fn oracle_prop_move_to_column_force_then_insert() {
     (insert "*")
     (setq results (cons (list 'tab-split-2 (buffer-string)) results))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +343,7 @@ fn oracle_prop_move_to_column_track_through_edits() {
                               col-chars)))
       (setq results (cons (cons 'final-map (nreverse col-chars)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,5 +404,5 @@ fn oracle_prop_move_to_column_return_value_semantics() {
       (setq results (cons (list 'col-zero ret (current-column) (point))
                           results))))
   (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

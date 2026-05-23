@@ -5,7 +5,7 @@
 //! exist, follows GNU's ID-FORMAT rule for uid/gid representation, and
 //! `file-attributes-lessp` compares the car strings of directory entries.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -64,7 +64,7 @@ fn oracle_file_attributes_shape_id_format_missing_bad_filename_and_lessp_edges()
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn oracle_file_attributes_symlink_type_and_dangling_link_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -166,5 +166,5 @@ fn oracle_file_attributes_handler_and_expand_error_edges() {
     (makunbound 'neomacs--oracle-fileattrs-calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

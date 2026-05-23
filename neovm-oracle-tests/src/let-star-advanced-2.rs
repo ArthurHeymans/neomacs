@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Deep sequential dependency chain with mixed arithmetic
@@ -30,7 +30,7 @@ fn oracle_prop_let_star2_deep_dependency_chain() {
                           (= d (- (* c b) a))
                           (= e (/ (+ d c) (- b a)))
                           (= f (mod d (+ a b)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ fn oracle_prop_let_star2_destructure_nested_alists() {
                     (list name street city zip
                           top-score avg-score passing
                           (format "%s, %s %d" street city zip)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ fn oracle_prop_let_star2_shadow_restore() {
                        (list (= after-x 100)
                              (= after-y 200)
                              (= after-z 300)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ fn oracle_prop_let_star2_computed_bindings() {
                                                    (lambda (x) (+ x 1))))
                          (composed-results (mapcar inc-then-double nums)))
                     (list pair doubled total composed-results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ fn oracle_prop_let_star2_accumulator_pipeline() {
                           (mapcar #'car top3)
                           formatted
                           above-mean))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ fn oracle_prop_let_star2_side_effects_in_bindings() {
                             pos1 pos2 pos3
                             total-len
                             line-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +238,7 @@ fn oracle_prop_let_star2_nested_cross_scope_closures() {
                             (funcall combine)
                             ;; Verify add-x still works
                             (funcall add-x 100))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,5 +282,5 @@ fn oracle_prop_let_star2_condition_case_in_bindings() {
                     (list r1 r2 r3
                           n1 n2 total
                           nested-result))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

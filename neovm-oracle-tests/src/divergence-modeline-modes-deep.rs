@@ -1,13 +1,13 @@
 //! Divergence tests: mode-line, header-line, mode hooks deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_mode_line_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'mode-line-format)
   (listp mode-line-format)
@@ -22,7 +22,7 @@ fn divergence_mode_line_vars() {
 fn divergence_header_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'header-line-format)
   (boundp 'mode-line-front-space)
@@ -37,7 +37,7 @@ fn divergence_header_line() {
 fn divergence_mode_line_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'mode-line-position)
   (listp mode-line-position)
@@ -50,7 +50,7 @@ fn divergence_mode_line_position() {
 fn divergence_mode_line_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'mode-line-modes)
   (listp mode-line-modes)
@@ -65,7 +65,7 @@ fn divergence_mode_line_modes() {
 fn divergence_mode_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'after-change-major-mode-hook)
   (boundp 'change-major-mode-hook)
@@ -79,7 +79,7 @@ fn divergence_mode_hooks() {
 fn divergence_delayed_mode_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'delay-mode-hooks)
   (booleanp delay-mode-hooks)
@@ -91,7 +91,7 @@ fn divergence_delayed_mode_hooks() {
 fn divergence_global_mode_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'global-mode-string)
   (listp global-mode-string)
@@ -104,7 +104,7 @@ fn divergence_global_mode_string() {
 fn divergence_minor_mode_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'minor-mode-alist)
   (listp minor-mode-alist)
@@ -117,7 +117,7 @@ fn divergence_minor_mode_alist() {
 fn divergence_special_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'special-mode)
   (fboundp 'fundamental-mode)
@@ -131,7 +131,7 @@ fn divergence_special_mode() {
 fn derivation_mode_derive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'derived-mode-p)
   (fboundp 'provided-mode-derived-p)

@@ -1,13 +1,13 @@
 //! Divergence tests: float arithmetic, bignum operations, math deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_float_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (floatp 3.14)
   (floatp 42)
@@ -22,7 +22,7 @@ fn divergence_float_basic() {
 fn divergence_float_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (< 1.5 2.5)
   (> 3.5 2.5)
@@ -37,7 +37,7 @@ fn divergence_float_comparison() {
 fn divergence_float_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'isnan)
   (fboundp 'frexp)
@@ -54,7 +54,7 @@ fn divergence_float_special() {
 fn divergence_trig_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'sin)
   (fboundp 'cos)
@@ -71,7 +71,7 @@ fn divergence_trig_functions() {
 fn divergence_math_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'sqrt)
   (fboundp 'exp)
@@ -87,7 +87,7 @@ fn divergence_math_functions() {
 fn divergence_abs_floor_ceil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (abs -5)
   (abs -3.14)
@@ -102,7 +102,7 @@ fn divergence_abs_floor_ceil() {
 fn divergence_mod_rem() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mod 10 3)
   (mod -10 3)
@@ -116,7 +116,7 @@ fn divergence_mod_rem() {
 fn divergence_bignum_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp (expt 2 64))
   (> (expt 2 64) 0)
@@ -130,7 +130,7 @@ fn divergence_bignum_basic() {
 fn divergence_bignum_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((a (expt 2 64))
         (b (expt 2 64)))
   (list (= a b)
@@ -144,7 +144,7 @@ fn divergence_bignum_eq() {
 fn divergence_random() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'random)
   (integerp (random))

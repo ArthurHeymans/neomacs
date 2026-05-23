@@ -3,10 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // save-excursion
@@ -23,7 +20,7 @@ fn oracle_prop_save_excursion_restores_point() {
                       (goto-char (point-max))
                       (point)))"#;
     // save-excursion returns body value but restores point
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -38,7 +35,7 @@ fn oracle_prop_save_excursion_point_restored_after() {
                              (goto-char (point-max))
                              (point))))
                       (list inside (point))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +51,7 @@ fn oracle_prop_save_excursion_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -70,7 +67,7 @@ fn oracle_prop_save_excursion_restores_buffer() {
                         (set-buffer (get-buffer-create "neovm--test-buf-B"))
                         (current-buffer))
                       (eq orig (current-buffer))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,7 +82,7 @@ fn oracle_prop_save_excursion_nested() {
                       (save-excursion
                         (goto-char 8)))
                     (point))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("2", &o, &n);
 }
 
@@ -101,7 +98,7 @@ fn oracle_prop_narrow_to_region_basic() {
                     (insert "hello world")
                     (narrow-to-region 1 6)
                     (list (point-min) (point-max) (buffer-string)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -113,7 +110,7 @@ fn oracle_prop_narrow_restricts_movement() {
                     (narrow-to-region 1 6)
                     (goto-char (point-min))
                     (list (point) (point-min) (point-max)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -126,7 +123,7 @@ fn oracle_prop_widen_restores() {
                     (let ((narrow-max (point-max)))
                       (widen)
                       (list narrow-max (point-max))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -140,7 +137,7 @@ fn oracle_prop_save_restriction_restores_narrowing() {
                       (widen)
                       (point-max))
                     (list (point-min) (point-max)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -156,7 +153,7 @@ fn oracle_prop_save_restriction_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point-max))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -172,7 +169,7 @@ fn oracle_prop_save_restriction_nested() {
                         (narrow-to-region 2 4)
                         (list (point-min) (point-max)))
                       ))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -189,7 +186,7 @@ fn oracle_prop_narrow_search_pattern() {
                         (when (re-search-forward "\\([a-z]+\\)" nil t)
                           (setq found (match-string 1)))
                         found)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,5 +215,5 @@ fn oracle_prop_save_excursion_restriction_combo() {
                                        (point-min) (point-max))))))
                       (list results (point)
                             (point-min) (point-max))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

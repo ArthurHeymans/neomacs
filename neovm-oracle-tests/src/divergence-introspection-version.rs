@@ -1,13 +1,13 @@
 //! Divergence tests: subr argument introspection, backtrace, profiling stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_subr_arity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (subr-arity (symbol-function 'car))
   (subr-arity (symbol-function 'list))
@@ -20,7 +20,7 @@ fn divergence_subr_arity() {
 fn divergence_subr_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (subrp (symbol-function 'car))
   (subrp (symbol-function 'list))
@@ -34,7 +34,7 @@ fn divergence_subr_type() {
 fn divergence_interactive_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (commandp 'forward-char)
   (commandp 'car)
@@ -47,7 +47,7 @@ fn divergence_interactive_spec() {
 fn divergence_function_documentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (documentation 'car)
   (documentation 'list)
@@ -59,7 +59,7 @@ fn divergence_function_documentation() {
 fn divergence_backtrace_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((backtrace-on-error-interactive t))
   (list backtrace-on-error-interactive
         (booleanp backtrace-on-error-interactive)))"#,
@@ -70,7 +70,7 @@ fn divergence_backtrace_on_error() {
 fn divergence_profiler_supported() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list (featurep 'profiler)
               (functionp 'profiler-start))"#,
     );
@@ -80,7 +80,7 @@ fn divergence_profiler_supported() {
 fn divergence_core_emacs_version() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp emacs-version)
   (stringp (emacs-version))
@@ -94,7 +94,7 @@ fn divergence_core_emacs_version() {
 fn divergence_system_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp system-type)
   (stringp system-name)
@@ -109,7 +109,7 @@ fn divergence_system_info() {
 fn divergence_caret_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((x (list 1 2 3)))
   (list (eq x x)
         (eq (car x) (car x))
@@ -123,7 +123,7 @@ fn divergence_caret_identity() {
 fn divergence_noreorder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (number-or-marker-p 42)
   (number-or-marker-p (point-marker))

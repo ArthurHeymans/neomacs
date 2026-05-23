@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // delete-region at various boundary positions (beginning, middle, end)
@@ -68,7 +68,7 @@ fn oracle_prop_delete_region_boundary_positions() {
                                (buffer-size))
                         results)))
   (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ fn oracle_prop_delete_region_narrowed_buffer() {
               new-pmin new-pmax
               full-after
               (buffer-size))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ fn oracle_prop_delete_region_marker_adjustment() {
       (set-marker m-after nil)
       (set-marker m-end nil)
       result)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ fn oracle_prop_delete_and_extract_region_complex() {
     (list (nreverse fragments)
           (buffer-string)
           (buffer-size))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ fn oracle_prop_delete_region_progressive_shrink() {
                     snapshots))
         (setq iteration (1+ iteration))))
     (nreverse snapshots)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ fn oracle_prop_delete_region_selective_pattern() {
           (nreverse deleted-lines)
           (buffer-string)
           (buffer-size))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ fn oracle_prop_delete_region_reverse_order() {
             (while (search-forward "-" nil t)
               (setq dash-count (1+ dash-count)))
             dash-count))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +324,5 @@ fn oracle_prop_delete_region_cut_paste_simulation() {
                 (setq count (1+ count))
                 (forward-line 1))
               count)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

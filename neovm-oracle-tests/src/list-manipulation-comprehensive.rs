@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // nconc with 0, 1, 2, 3+ lists, nil at various positions
@@ -57,7 +57,7 @@ fn oracle_prop_nconc_comprehensive_arg_patterns() {
                               ;; a's cdr chain now extends through b and c
                               (length a)
                               (nthcdr 1 a)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ fn oracle_prop_nreverse_vs_reverse_semantics() {
                     (reverse '((1 2) (3 4) (5 6)))
                     ;; Bool vectors
                     (reverse (bool-vector t nil t nil t)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -144,7 +144,7 @@ fn oracle_reverse_nreverse_sequence_boundaries() {
        (reverse (record 'neovm--test-record 'a 'b))
      (error (list (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +193,7 @@ fn oracle_prop_append_comprehensive() {
                     (append [4 5] '(6 7))
                     ;; Mixed: list + vector + string
                     (append '(a) [b] "c" nil))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn oracle_append_bool_vector_and_final_tail_semantics() {
        (append (cons 'a 'bad-tail) nil)
      (error (list (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ fn oracle_prop_last_with_n_parameter() {
                      ;; last on dotted list
                      (last '(a b . c))
                      (last '(a b . c) 2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +308,7 @@ fn oracle_prop_butlast_nbutlast_comprehensive() {
                     ;; Combining butlast and last should reconstruct
                     (let ((lst '(1 2 3 4 5)))
                       (equal lst (append (butlast lst 2) (last lst 2)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ fn oracle_prop_take_comprehensive() {
                     ;; take on dotted list
                     (take 2 '(a b . c))
                     (take 3 '(a b . c)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +397,7 @@ fn oracle_prop_member_memq_comprehensive() {
                         (unless (memq x result)
                           (setq result (cons x result))))
                       (nreverse result)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -444,7 +444,7 @@ fn oracle_prop_delete_delq_destructive_behavior() {
                     (delete 3 (vector 1 2 3 4 3 5))
                     ;; delete on strings
                     (delete ?a "abacada"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -482,7 +482,7 @@ fn oracle_delete_sequence_identity_and_string_properties() {
        (delete 'x 42)
      (error (list (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -527,5 +527,5 @@ fn oracle_prop_sort_complex_comparators() {
                     ;; Sort by multiple criteria using :key
                     (sort (list "banana" "Apple" "cherry" "avocado" "Blueberry")
                           :key #'downcase :lessp #'string<))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Polynomial representation and arithmetic (add, multiply, divide)
@@ -121,7 +121,7 @@ fn oracle_prop_cas_polynomial_arithmetic() {
     (fmakunbound 'neovm--cas-sub)
     (fmakunbound 'neovm--cas-mul)
     (fmakunbound 'neovm--cas-divmod)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ fn oracle_prop_cas_polynomial_gcd() {
     (fmakunbound 'neovm--cas-igcd)
     (fmakunbound 'neovm--cas-primitive)
     (fmakunbound 'neovm--cas-gcd)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +342,7 @@ fn oracle_prop_cas_symbolic_differentiation() {
     (fmakunbound 'neovm--cas-diff)
     (fmakunbound 'neovm--cas-simp)
     (fmakunbound 'neovm--cas-simp-fix)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +422,7 @@ fn oracle_prop_cas_symbolic_integration() {
     (fmakunbound 'neovm--cas-integrate-poly)
     (fmakunbound 'neovm--cas-definite-integral)
     (fmakunbound 'neovm--cas-eval-poly)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -535,7 +535,7 @@ fn oracle_prop_cas_rational_expressions() {
     (fmakunbound 'neovm--cas-rat-div)
     (fmakunbound 'neovm--cas-to-cf)
     (fmakunbound 'neovm--cas-from-cf)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +627,7 @@ fn oracle_prop_cas_matrix_determinant_bareiss() {
     (fmakunbound 'neovm--cas-mat-set)
     (fmakunbound 'neovm--cas-mat-copy)
     (fmakunbound 'neovm--cas-det-bareiss)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,5 +731,5 @@ fn oracle_prop_cas_characteristic_polynomial() {
     (fmakunbound 'neovm--cas-mat-trace)
     (fmakunbound 'neovm--cas-mat-pow)
     (fmakunbound 'neovm--cas-char-poly)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

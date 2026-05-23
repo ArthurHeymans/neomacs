@@ -1,13 +1,13 @@
 //! Divergence tests: keymap + command + advice + error recovery combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_keymap_lookup_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-kla-xxx () (interactive) "original")
   (advice-add 'test-kla-xxx :filter-return
@@ -28,7 +28,7 @@ fn divergence_keymap_lookup_with_advice() {
 fn divergence_command_error_recovery_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-cer-xxx () (interactive) (error "command error"))
   (advice-add 'test-cer-xxx :around
@@ -57,7 +57,7 @@ fn divergence_command_error_recovery_keymap() {
 fn divergence_keymap_parent_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-kp1-xxx () "parent")
   (defun test-kp2-xxx () "child")
@@ -84,7 +84,7 @@ fn divergence_keymap_parent_override() {
 fn divergence_keymap_prefix_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-pm1-xxx () "cmd1")
   (defun test-pm2-xxx () "cmd2")
@@ -107,7 +107,7 @@ fn divergence_keymap_prefix_map() {
 fn divergence_where_is_internal_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-wi-xxx () (interactive) "test")
   (let ((map (make-sparse-keymap)))
@@ -124,7 +124,7 @@ fn divergence_where_is_internal_with_advice() {
 fn divergence_keymap_menu_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-mi-cmd-xxx () (interactive) "menu")
   (let ((map (make-sparse-keymap)))
@@ -140,7 +140,7 @@ fn divergence_keymap_menu_item() {
 fn divergence_commandp_with_lambda_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((cmd1 (lambda () (interactive) "lambda-cmd"))
         (cmd2 (lambda () "non-interactive")))
@@ -160,7 +160,7 @@ fn divergence_commandp_with_lambda_keymap() {
 fn divergence_accessible_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-ak1-xxx () "1")
   (defun test-ak2-xxx () "2")
@@ -183,7 +183,7 @@ fn divergence_accessible_keymaps() {
 fn divergence_keymap_unbind_rebind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-ur1-xxx () "first")
   (defun test-ur2-xxx () "second")
@@ -206,7 +206,7 @@ fn divergence_keymap_unbind_rebind() {
 fn divergence_keymap_copy_and_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-cm1-xxx () "orig")
   (defun test-cm2-xxx () "copy")

@@ -1,13 +1,13 @@
 //! Divergence tests: buffer + overlay + text-property + EIEIO + advice mega combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_buffer_undo_with_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-ebut-xxx ()
     ((buffer :initarg :buffer :accessor test-ebut-buffer)
@@ -63,7 +63,7 @@ fn divergence_eieio_buffer_undo_with_tracking() {
 fn divergence_overlay_textprop_advice_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE")
   (let ((ov1 (make-overlay 1 3))
@@ -116,7 +116,7 @@ fn divergence_overlay_textprop_advice_chain() {
 fn divergence_multi_buffer_overlay_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((buf1 (generate-new-buffer " test-mbos1-xxx"))
          (buf2 (generate-new-buffer " test-mbos2-xxx"))
@@ -175,7 +175,7 @@ fn divergence_multi_buffer_overlay_sync() {
 fn divergence_prop_change_undo_with_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 1 17)))
@@ -210,7 +210,7 @@ fn divergence_prop_change_undo_with_face() {
 fn divergence_eieio_polymorphic_buffer_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-pbe-editor-xxx ()
     ((buf :accessor test-pbe-buf)

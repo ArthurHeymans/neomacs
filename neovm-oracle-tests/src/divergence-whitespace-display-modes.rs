@@ -1,13 +1,13 @@
 //! Divergence tests: whitespace mode, trailing whitespace, tab settings.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_whitespace_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'whitespace-mode)
   (fboundp 'global-whitespace-mode)
@@ -19,7 +19,7 @@ fn divergence_whitespace_mode() {
 fn whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'whitespace-cleanup)
   (fboundp 'whitespace-buffer)
@@ -32,7 +32,7 @@ fn whitespace_cleanup() {
 fn divergence_tab_settings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'tab-width)
   (integerp tab-width)
@@ -47,7 +47,7 @@ fn divergence_tab_settings() {
 fn divergence_line_endings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'require-final-newline)
   (boundp 'mode-require-final-newline)
@@ -59,7 +59,7 @@ fn divergence_line_endings() {
 fn divergence_electric_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'electric-indent-mode)
   (boundp 'electric-indent-chars)
@@ -73,7 +73,7 @@ fn divergence_electric_indent() {
 fn divergence_paren_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'show-paren-mode)
   (boundp 'show-paren-style)
@@ -87,7 +87,7 @@ fn divergence_paren_mode() {
 fn divergence_electric_pair() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'electric-pair-mode)
   (boundp 'electric-pair-pairs)
@@ -101,7 +101,7 @@ fn divergence_electric_pair() {
 fn divergence_line_number_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'display-line-numbers-mode)
   (fboundp 'global-display-line-numbers-mode)
@@ -114,7 +114,7 @@ fn divergence_line_number_mode() {
 fn divergence_line_number_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'line-number-mode)
   (boundp 'column-number-mode)
@@ -129,7 +129,7 @@ fn divergence_line_number_vars() {
 fn divergence_delete_selection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'delete-selection-mode)
   (boundp 'delete-selection-mode)

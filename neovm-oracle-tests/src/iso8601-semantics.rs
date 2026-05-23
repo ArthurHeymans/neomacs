@@ -4,7 +4,7 @@
 //! dates, fractional times, zones, durations, and intervals.  These tests pin
 //! the public parser entry points against GNU Emacs for valid and invalid input.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -32,7 +32,7 @@ fn oracle_prop_iso8601_parse_date_variants() {
        (iso8601-parse-date 42)
      (error (list (car err) (cadr err))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_prop_iso8601_parse_time_zone_and_fraction() {
        (iso8601-parse-zone "UTC")
      (error (list (car err) (cadr err))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn oracle_prop_iso8601_parse_combined_and_validity() {
        (iso8601-valid-p 42)
      (error (list (car err) (cadr err))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -111,5 +111,5 @@ fn oracle_prop_iso8601_duration_and_interval() {
        (iso8601-parse-interval "not/an/interval")
      (error (list (car err) (cadr err))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

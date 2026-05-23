@@ -1,13 +1,13 @@
 //! Divergence tests: abbrev + completion + syntax + text-property + buffer combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_abbrev_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-abbrev-table 'test-ato-xxx nil)
   (define-abbrev 'test-ato-xxx "tst1" "test-one" nil)
@@ -30,7 +30,7 @@ fn divergence_abbrev_table_operations() {
 fn divergence_syntax_table_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((st (copy-syntax-table (standard-syntax-table))))
     (modify-syntax-entry ?$ "'" st)
@@ -52,7 +52,7 @@ fn divergence_syntax_table_manipulation() {
 fn divergence_syntax_class_with_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(defun foo (bar)\n  \"docstring\"\n  (list bar 'baz))")
   (let ((ppss (syntax-ppss 1))
@@ -79,7 +79,7 @@ fn divergence_syntax_class_with_parse() {
 fn divergence_completion_try_completion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((coll '("alpha" "alphabet" "alpine" "beta" "gamma")))
     (list (try-completion "al" coll)
@@ -104,7 +104,7 @@ fn divergence_completion_try_completion() {
 fn divergence_completion_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (intern "test-co-alpha-xxx")
   (intern "test-co-beta-xxx")
@@ -127,7 +127,7 @@ fn divergence_completion_obarray() {
 fn divergence_abbrev_expand_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-abbrev-table 'test-aeb-xxx nil)
   (define-abbrev 'test-aeb-xxx "hw" "Hello World" nil)
@@ -151,7 +151,7 @@ fn divergence_abbrev_expand_in_buffer() {
 fn divergence_syntax_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(alpha (beta (gamma delta) epsilon) zeta)")
   (let ((len (buffer-size)))
@@ -173,7 +173,7 @@ fn divergence_syntax_forward_backward() {
 fn divergence_syntax_properties_with_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA.BBB.CCC.DDD")
   (put-text-property 4 5 'syntax-table '(1))
@@ -196,7 +196,7 @@ fn divergence_syntax_properties_with_text() {
 fn divergence_completion_regexps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((coll '("apple" "application" "apricot" "banana" "cherry")))
     (list (try-completion "ap" coll)
@@ -219,7 +219,7 @@ fn divergence_completion_regexps() {
 fn divergence_syntax_comment_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert ";; This is a comment\n(defvar x 1)\n;; Another comment\n(setq x 2)")
   (let ((ppss1 (syntax-ppss 1))

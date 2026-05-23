@@ -4,9 +4,7 @@
 //! The ordinary cases are broadly covered elsewhere; these tests focus on
 //! negative/zero N, improper-list errors, and destructive return behavior.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_last_butlast_nbutlast_n_edge_cases() {
@@ -35,7 +33,7 @@ fn oracle_prop_gnu_last_butlast_nbutlast_n_edge_cases() {
      (list (nbutlast copy 5) copy))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +51,7 @@ fn oracle_prop_gnu_list_tail_helpers_improper_list_errors() {
    (condition-case err (nbutlast (copy-sequence dotted) 0) (error err))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -66,5 +64,5 @@ fn oracle_prop_gnu_nbutlast_destructive_identity_edges() {
     (list ret lst (eq ret lst) (cdr (cdr lst)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

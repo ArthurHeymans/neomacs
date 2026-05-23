@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // 1. Caesar cipher with arbitrary shift and roundtrip
@@ -63,7 +63,7 @@ fn oracle_prop_crypto_adv_caesar_cipher() {
      (dotimes (s 5)
        (setq results (cons (funcall caesar-encrypt "abc" (1+ s)) results)))
      (nreverse results))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ fn oracle_prop_crypto_adv_vigenere() {
        (list (not (equal c1 c2)) c1 c2))
      ;; Preserves spaces and punctuation
      (funcall encrypt "Hello, World!" "secret"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ fn oracle_prop_crypto_adv_substitution_cipher() {
        (let ((alpha2 (funcall make-cipher-alphabet "python")))
          (not (equal (funcall sub-encrypt "test" alpha)
                      (funcall sub-encrypt "test" alpha2))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ fn oracle_prop_crypto_adv_xor_stream() {
       (length "abcdefgh"))
    ;; Encrypt empty string
    (funcall xor-crypt "" "key")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ fn oracle_prop_crypto_adv_hash_functions() {
        ;; Actual hash values for exact parity
        djb2-hashes
        fnv1a-hashes))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ fn oracle_prop_crypto_adv_hmac_construction() {
      (funcall hmac "secret" "hello world")
      (funcall hmac "another-key" "hello world")
      (funcall hmac "secret" "different message"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ fn oracle_prop_crypto_adv_base64() {
   (length (base64-encode-string "a"))
   (length (base64-encode-string "ab"))
   (length (base64-encode-string "abc")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ fn oracle_prop_crypto_adv_hex_codec() {
    ;; Decode specific hex values
    (funcall hex-decode "48656c6c6f")  ;; "Hello"
    (funcall hex-decode "00ff7f80")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,5 +461,5 @@ fn oracle_prop_crypto_adv_stream_cipher_lcg() {
    (let ((c1 (funcall stream-cipher "aaa" 5))
          (c2 (funcall stream-cipher "bbb" 5)))
      (not (equal c1 c2)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

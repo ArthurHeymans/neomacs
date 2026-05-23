@@ -5,7 +5,7 @@
 //! iteration, skip non-cons alist entries, and optimize some `equal` lookups to
 //! `eq` paths for symbols and fixnums.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_member_family_dotted_tail_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_member_family_returns_tail_before_bad_tail() {
         '(1 1000000000000000000000001 . c)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn oracle_member_family_float_bignum_and_equal_edges() {
    (memql nan-a (list nan-b))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn oracle_member_family_circular_lists() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn oracle_alist_lookup_skips_non_cons_but_checks_tail() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -140,7 +140,7 @@ fn oracle_alist_lookup_leading_non_cons_improper_tail_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn oracle_assoc_testfn_argument_order_and_tail_validation() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -182,5 +182,5 @@ fn oracle_alist_lookup_circular_lists() {
    (rassoc 2 alist)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

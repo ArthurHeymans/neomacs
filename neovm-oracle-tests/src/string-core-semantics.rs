@@ -5,7 +5,7 @@
 //! These tests focus on symbol coercion, text-property behavior, negative
 //! subarray validation, vector substrings, and character-sequence validation.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_string_comparison_symbol_coercion_and_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn oracle_substring_properties_and_no_properties() {
    (string= sub plain)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_substring_vector_negative_and_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn oracle_substring_rejects_record_without_crashing_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn oracle_substring_rejects_bool_vector_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn oracle_substring_rejects_char_table_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn oracle_substring_no_properties_rejects_vectorlike_objects_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn oracle_concat_and_vconcat_character_sequence_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn oracle_copy_sequence_text_properties_and_shallow_copy() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn oracle_copy_sequence_vectorlike_type_boundaries() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn oracle_copy_sequence_char_table_deep_subtables_shallow_slots() {
            (char-table-extra-slot copy 0)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn oracle_copy_sequence_record_allocates_shallow_slot_copy() {
    (equal rec copy)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -325,5 +325,5 @@ fn oracle_copy_sequence_circular_and_improper_list_errors() {
             (car (cadr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

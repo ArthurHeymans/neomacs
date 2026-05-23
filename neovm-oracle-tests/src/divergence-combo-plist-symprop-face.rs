@@ -1,13 +1,13 @@
 //! Divergence tests: plist + symbol property + face + font-lock combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_plist_put_get_remove_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pl nil))
     (setq pl (plist-put pl :a 1))
@@ -34,7 +34,7 @@ fn divergence_plist_put_get_remove_cycle() {
 fn divergence_symbol_plist_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((sym (make-symbol "test-sym-pl-xxx")))
     (put sym 'prop1 'val1)
@@ -57,7 +57,7 @@ fn divergence_symbol_plist_operations() {
 fn divergence_face_attribute_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defface test-face-attr-xxx '((t :foreground "red" :weight bold))
     "Test face.")
@@ -76,7 +76,7 @@ fn divergence_face_attribute_operations() {
 fn divergence_plist_member_vs_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pl '(:a 1 :b nil :c 3)))
     (list (plist-get pl :a)
@@ -96,7 +96,7 @@ fn divergence_plist_member_vs_get() {
 fn divergence_symbol_function_plist_interplay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-sfpi-xxx (x) (+ x 1))
   (put 'test-sfpi-xxx 'doc-string "test function")
@@ -118,7 +118,7 @@ fn divergence_symbol_function_plist_interplay() {
 fn divergence_face_remap_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (facep 'default)
         (facep 'bold)
@@ -137,7 +137,7 @@ fn divergence_face_remap_alist() {
 fn divergence_set_plist_with_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((sym (intern "test-sph-xxx"))
         (ht (make-hash-table :test 'equal)))
@@ -166,7 +166,7 @@ fn divergence_set_plist_with_hash() {
 fn divergence_plist_to_alist_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pl '(:name "Alice" :age 30 :roles (admin editor))))
     (let ((al (cl-loop for (k v) on pl by 'cddr collect (cons k v))))
@@ -185,7 +185,7 @@ fn divergence_plist_to_alist_conversion() {
 fn divergence_face_all_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defface test-comp-xxx '((t :foreground "blue" :background "yellow" :underline t))
     "Composite face.")
@@ -204,7 +204,7 @@ fn divergence_face_all_attributes() {
 fn divergence_symbol_name_intern_plist_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((names '("test-chain-a-xxx" "test-chain-b-xxx" "test-chain-c-xxx"))
         (result nil))

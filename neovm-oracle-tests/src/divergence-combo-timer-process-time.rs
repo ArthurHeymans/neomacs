@@ -1,13 +1,13 @@
 //! Divergence tests: timer + process + buffer + callback combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_timer_idle_create_cancel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-timer-result-xxx nil)
   (let ((timer (run-with-idle-timer 1 nil
@@ -24,7 +24,7 @@ fn divergence_timer_idle_create_cancel() {
 fn divergence_current_time_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((time (current-time)))
     (list (listp time)
@@ -43,7 +43,7 @@ fn divergence_current_time_format() {
 fn divergence_time_subtract_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((t1 (current-time))
          (t2 (time-add t1 60)))
@@ -61,7 +61,7 @@ fn divergence_time_subtract_add() {
 fn divergence_process_connection_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((proc (start-process "test-conn-xxx" nil "echo" "test")))
     (set-process-query-on-exit-flag proc nil)
@@ -78,7 +78,7 @@ fn divergence_process_connection_type() {
 fn divergence_encode_time_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((encoded (encode-time 30 15 12 1 1 2024 nil))
          (decoded (decode-time encoded)))
@@ -102,7 +102,7 @@ fn divergence_encode_time_functions() {
 fn divergence_process_buffer_live() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf (generate-new-buffer " test-pbl-xxx")))
     (with-current-buffer buf
@@ -125,7 +125,7 @@ fn divergence_process_buffer_live() {
 fn divergence_format_time_string_zones() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((fixed-time '(26150 29968)))
     (list (stringp (format-time-string "%H:%M:%S" fixed-time))
@@ -140,7 +140,7 @@ fn divergence_format_time_string_zones() {
 fn divergence_timer_duration_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (seconds-to-time 60)
         (equal (seconds-to-time 60) (list 0 60))
@@ -156,7 +156,7 @@ fn divergence_timer_duration_functions() {
 fn divergence_process_list_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((before (length (process-list))))
     (let ((p1 (start-process "test-pl1-xxx" nil "sleep" "0.1"))
@@ -178,7 +178,7 @@ fn divergence_process_list_length() {
 fn divergence_decode_time_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((now (decode-time)))
     (list (>= (nth 0 now) 0)

@@ -1,13 +1,13 @@
 //! Divergence tests: weak hash tables, finalizers, and object lifecycle.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_weak_hash_table_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :weakness 'key)))
   (list (hash-table-weakness ht)
         (eq (hash-table-weakness ht) 'key)))"#,
@@ -18,7 +18,7 @@ fn divergence_weak_hash_table_key() {
 fn divergence_weak_hash_table_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :weakness 'value)))
   (list (hash-table-weakness ht)
         (eq (hash-table-weakness ht) 'value)))"#,
@@ -29,7 +29,7 @@ fn divergence_weak_hash_table_value() {
 fn divergence_weak_hash_table_kv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :weakness 'key-or-value)))
   (list (hash-table-weakness ht)
         (memq (hash-table-weakness ht) '(key value key-or-value key-and-value))))"#,
@@ -40,7 +40,7 @@ fn divergence_weak_hash_table_kv() {
 fn divergence_hash_table_equality() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht1 (make-hash-table :test 'eq))
         (ht2 (make-hash-table :test 'equal)))
   (list (hash-table-test ht1)
@@ -54,7 +54,7 @@ fn divergence_hash_table_equality() {
 fn divergence_finalizer_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-finalizer)
   (fboundp 'finalizerp)
@@ -66,7 +66,7 @@ fn divergence_finalizer_functions() {
 fn divergence_cons_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((x (list 1 2 3)))
   (list (consp x)
         (car-safe x)
@@ -80,7 +80,7 @@ fn divergence_cons_indirect() {
 fn divergence_list_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((lst '(a b c d e)))
   (list (nth 0 lst)
         (nth 2 lst)
@@ -96,7 +96,7 @@ fn divergence_list_accessors() {
 fn divergence_number_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (max 1 2 3 4 5)
   (min 1 2 3 4 5)
@@ -113,7 +113,7 @@ fn divergence_number_operations() {
 fn divergence_string_make_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((us (string ?a ?b ?c))
          (ms (string-to-multibyte us)))
   (list (multibyte-string-p us)
@@ -127,7 +127,7 @@ fn divergence_string_make_multibyte() {
 fn divergence_string_make_unibyte_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((ms "abc")
          (us (string-make-unibyte ms)))
   (list (multibyte-string-p ms)

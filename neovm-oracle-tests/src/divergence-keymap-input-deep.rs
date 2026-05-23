@@ -1,13 +1,13 @@
 //! Divergence tests: keyboard macros, input decoding, keymaps deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_keymap_parent_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((parent (make-sparse-keymap))
         (child (make-sparse-keymap)))
   (define-key parent "a" 'parent-cmd)
@@ -24,7 +24,7 @@ fn divergence_keymap_parent_lookup() {
 fn divergence_keymap_prefix_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map "C-c" (make-sparse-keymap))
   (define-key map "C-c a" 'cmd-a)
@@ -41,7 +41,7 @@ fn divergence_keymap_prefix_keys() {
 fn divergence_keymap_where_is() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp (key-description (where-is-internal 'forward-char nil t)))
   (consp (where-is-internal 'forward-char))
@@ -53,7 +53,7 @@ fn divergence_keymap_where_is() {
 fn divergence_command_execute_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (commandp 'forward-char)
   (commandp (lambda () (interactive) nil))
@@ -66,7 +66,7 @@ fn divergence_command_execute_p() {
 fn divergence_this_command_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'this-command-keys)
   (fboundp 'this-command-keys-vector)
@@ -79,7 +79,7 @@ fn divergence_this_command_keys() {
 fn divergence_input_methods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'activate-input-method)
   (fboundp 'deactivate-input-method)
@@ -93,7 +93,7 @@ fn divergence_input_methods() {
 fn divergence_key_translation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'keyboard-translate)
   (boundp 'keyboard-translate-table)
@@ -105,7 +105,7 @@ fn divergence_key_translation() {
 fn divergence_read_key_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'read-key-sequence)
   (fboundp 'read-key-sequence-vector)
@@ -118,7 +118,7 @@ fn divergence_read_key_sequence() {
 fn divergence_accessed_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (keymapp (current-global-map))
   (keymapp (current-local-map))
@@ -131,7 +131,7 @@ fn divergence_accessed_keymaps() {
 fn divergence_minor_mode_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp minor-mode-map-alist)
   (listp minor-mode-overriding-map-alist)

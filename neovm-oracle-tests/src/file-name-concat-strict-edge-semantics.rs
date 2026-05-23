@@ -5,7 +5,7 @@
 //! and absolute-looking later components are concatenated syntactically rather
 //! than normalized.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_file_name_concat_filters_and_separator_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -64,5 +64,5 @@ fn oracle_file_name_concat_unibyte_multibyte_conversion_edges() {
           cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

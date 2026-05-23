@@ -3,7 +3,7 @@
 //! GNU implements `debug-timer-check` in `src/atimer.c`, but both the DEFUN
 //! body and `defsubr` registration are guarded by `ENABLE_CHECKING`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -18,5 +18,5 @@ fn oracle_debug_timer_check_follows_gnu_checking_build_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

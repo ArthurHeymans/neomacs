@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Fact assertion and basic query evaluation
@@ -102,7 +102,7 @@ fn oracle_prop_deductive_db_fact_assertion_query() {
     (fmakunbound 'neovm--ddb-unify)
     (fmakunbound 'neovm--ddb-query)
     (fmakunbound 'neovm--ddb-binding-val)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ fn oracle_prop_deductive_db_rules_forward_chaining() {
     (fmakunbound 'neovm--ddb2-eval-body)
     (fmakunbound 'neovm--ddb2-apply-rule)
     (fmakunbound 'neovm--ddb2-forward-chain)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +345,7 @@ fn oracle_prop_deductive_db_recursive_transitive_closure() {
     (fmakunbound 'neovm--ddb3-eval-body)
     (fmakunbound 'neovm--ddb3-apply-rule)
     (fmakunbound 'neovm--ddb3-fixpoint)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +470,7 @@ fn oracle_prop_deductive_db_stratified_negation() {
     (fmakunbound 'neovm--ddb4-query-1)
     (fmakunbound 'neovm--ddb4-subst)
     (fmakunbound 'neovm--ddb4-exists-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -585,7 +585,7 @@ fn oracle_prop_deductive_db_magic_sets() {
     (fmakunbound 'neovm--ddb5-query-1)
     (fmakunbound 'neovm--ddb5-subst)
     (fmakunbound 'neovm--ddb5-magic-ancestor)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -720,7 +720,7 @@ fn oracle_prop_deductive_db_complex_query_bindings() {
     (fmakunbound 'neovm--ddb6-query-1)
     (fmakunbound 'neovm--ddb6-subst)
     (fmakunbound 'neovm--ddb6-join-query)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -813,5 +813,5 @@ fn oracle_prop_deductive_db_aggregation_grouping() {
     (fmakunbound 'neovm--ddb7-unify)
     (fmakunbound 'neovm--ddb7-query-1)
     (fmakunbound 'neovm--ddb7-group-by)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -4,9 +4,7 @@
 //! and calling `shell-command`, so it must honor Lisp-level `shell-file-name`
 //! and `shell-command-switch` dynamic bindings.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_shell_command_to_string_basic_output_and_status() {
@@ -21,7 +19,7 @@ fn oracle_prop_shell_command_to_string_basic_output_and_status() {
    (error err)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -34,7 +32,7 @@ fn oracle_prop_shell_command_to_string_respects_shell_variables() {
   (shell-command-to-string "abc"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,5 +46,5 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
    (shell-command-to-string "pwd")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

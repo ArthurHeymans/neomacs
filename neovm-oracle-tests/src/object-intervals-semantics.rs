@@ -4,7 +4,7 @@
 //! return a copied interval list, including explicit nil-property runs around
 //! non-empty property intervals; plain objects without intervals return nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_object_intervals_string_and_buffer_interval_shape() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_object_intervals_preserves_adjacent_equal_property_runs() {
    (equal-including-properties split merged)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn oracle_object_intervals_set_text_properties_merges_replaced_runs() {
    (object-intervals without-props)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn oracle_object_intervals_after_insert_and_delete() {
           (object-intervals (current-buffer)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -131,5 +131,5 @@ fn oracle_object_intervals_multibyte_positions_and_edit_shape() {
         after-insert
         (object-intervals (current-buffer)))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

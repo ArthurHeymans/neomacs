@@ -5,7 +5,7 @@
 //! always receive the expanded name plus both optional arguments, with omitted
 //! optionals passed as nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -41,5 +41,5 @@ fn oracle_set_file_times_handler_and_timestamp_order() {
     (fmakunbound 'neomacs--oracle-times-handler)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

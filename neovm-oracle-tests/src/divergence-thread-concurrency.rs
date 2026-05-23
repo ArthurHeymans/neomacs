@@ -1,13 +1,13 @@
 //! Divergence tests: thread, concurrency, mutex, async deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_thread_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-thread)
   (fboundp 'thread-name)
@@ -24,7 +24,7 @@ fn divergence_thread_functions() {
 fn divergence_mutex_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-mutex)
   (fboundp 'mutex-lock)
@@ -37,7 +37,7 @@ fn divergence_mutex_functions() {
 fn divergence_condition_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-condition-variable)
   (fboundp 'condition-wait)
@@ -50,7 +50,7 @@ fn divergence_condition_variable() {
 fn divergence_async_processes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-process)
   (fboundp 'async-shell-command)
@@ -63,7 +63,7 @@ fn divergence_async_processes() {
 fn divergence_idle_timers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'run-with-idle-timer)
   (fboundp 'run-at-time)
@@ -81,7 +81,7 @@ fn divergence_idle_timers() {
 fn divergence_process_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'processp)
   (fboundp 'process-type)
@@ -95,7 +95,7 @@ fn divergence_process_types() {
 fn divergence_process_connection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'process-send-string)
   (fboundp 'process-send-region)
@@ -108,7 +108,7 @@ fn divergence_process_connection() {
 fn divergence_network_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'network-security-level)
   (stringp network-security-level)
@@ -121,7 +121,7 @@ fn divergence_network_options() {
 fn divergence_connection_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'connection-local-set-profile-variables)
   (fboundp 'connection-local-set-profiles)
@@ -134,7 +134,7 @@ fn divergence_connection_local() {
 fn divergence_concurrency_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'inhibit-changing-match-data)
   (booleanp inhibit-changing-match-data)

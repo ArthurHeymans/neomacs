@@ -1,13 +1,13 @@
 //! Divergence tests: Elisp stdlib function interaction combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_string_props_with_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (let ((s (propertize \"TODO: fix bug #123\" 'face 'bold)))
     (insert s)
@@ -28,7 +28,7 @@ fn divergence_string_props_with_replace_chain() {
 fn deficiency_map_with_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((result nil))
   (mapc (lambda (x) (push (* x x) result)) '(1 2 3 4 5))
   (list (nreverse result)
@@ -41,7 +41,7 @@ fn deficiency_map_with_side_effects() {
 fn deficiency_cl_loop_with_into_and_finally() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-loop for x from 1 to 10
            sum x into total
@@ -60,7 +60,7 @@ fn deficiency_cl_loop_with_into_and_finally() {
 fn divergence_rx_pcase_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((re (rx bos (group (one-or-more digit)) \".\"
                      (group (one-or-more digit)) \".\"
                      (group (one-or-more digit)) eos)))
@@ -75,7 +75,7 @@ fn divergence_rx_pcase_combo() {
 fn deficiency_pcase_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (pcase '(1 2 3)
     ((pred listp) (list 'list))
@@ -97,7 +97,7 @@ fn deficiency_pcase_destructuring() {
 fn deficiency_thread_first_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (thread-first 5
     (+ 3)
@@ -114,7 +114,7 @@ fn deficiency_thread_first_last() {
 fn divergence_string_properties_manipulation_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s (copy-sequence \"ABCDEFGHIJ\")))
   (put-text-property 0 5 'face 'bold s)
   (put-text-property 5 10 'face 'italic s)
@@ -134,7 +134,7 @@ fn divergence_string_properties_manipulation_chain() {
 fn deficiency_seq_group_by() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((data '((a 1) (b 2) (a 3) (c 4) (b 5)))
         (grouped (seq-group-by #'car data)))
   (list (length grouped)
@@ -149,7 +149,7 @@ fn deficiency_seq_group_by() {
 fn deficiency_cl_values_multiple_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-divmod-xxx (a b)
     (cl-values (floor a b) (mod a b)))
@@ -163,7 +163,7 @@ fn deficiency_cl_values_multiple_values() {
 fn divergence_combine_and_eval_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((exprs (list '(+ 1 2) '(* 3 4) '(- 10 3) '(/ 20 4)))
         (results (mapcar #'eval exprs))
         (expr-str (mapconcat (lambda (e) (format \"%S\" e)) exprs \", \"))

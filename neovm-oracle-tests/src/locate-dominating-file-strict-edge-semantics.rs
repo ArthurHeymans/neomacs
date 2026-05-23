@@ -5,7 +5,7 @@
 //! directories, returns a directory name with trailing slash, and accepts either
 //! a witness filename or a predicate function.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -59,5 +59,5 @@ fn oracle_locate_dominating_file_parent_predicate_and_error_edges() {
     (delete-directory root t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

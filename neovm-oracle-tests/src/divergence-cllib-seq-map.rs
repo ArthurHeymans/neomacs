@@ -1,13 +1,13 @@
 //! Divergence tests: cl-lib deep, seq, map functions.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_loop_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-loop for i from 1 to 5 collect (* i i))"#,
     );
@@ -17,7 +17,7 @@ fn divergence_cl_loop_collect() {
 fn divergence_cl_loop_sum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-loop for i from 1 to 10 sum i)"#,
     );
@@ -27,7 +27,7 @@ fn divergence_cl_loop_sum() {
 fn divergence_cl_loop_with_hashtable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (let ((ht (make-hash-table)))
   (puthash 'a 1 ht)
@@ -42,7 +42,7 @@ fn divergence_cl_loop_with_hashtable() {
 fn divergence_cl_loop_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-loop for (a b) in '((1 2) (3 4) (5 6))
          collect (+ a b))"#,
@@ -53,7 +53,7 @@ fn divergence_cl_loop_destructuring() {
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-labels ((fact (n) (if (<= n 1) 1 (* n (fact (1- n))))))
   (list (fact 5) (fact 10)))"#,
@@ -64,7 +64,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_macrolet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-macrolet ((my-inc (x) (list '+ x 1)))
   (list (my-inc 5) (my-inc 10)))"#,
@@ -75,7 +75,7 @@ fn divergence_cl_macrolet() {
 fn divergence_cl_values_mv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (multiple-value-bind (a b c) (values 1 2 3)
   (list a b c))"#,
@@ -86,7 +86,7 @@ fn divergence_cl_values_mv() {
 fn divergence_cl_case_ecase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-case 3 (1 'one) (2 'two) (3 'three) (t 'other))
@@ -98,7 +98,7 @@ fn divergence_cl_case_ecase() {
 fn divergence_cl_typecase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-typecase 42 (string 'str) (integer 'int) (t 'other))
@@ -111,7 +111,7 @@ fn divergence_cl_typecase() {
 fn divergence_seq_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'seq)
 (list
   (seq-map #'1+ '(1 2 3))
@@ -127,7 +127,7 @@ fn divergence_seq_functions() {
 fn divergence_seq_sort_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'seq)
 (list
   (seq-sort #'< '(3 1 4 1 5 9))
@@ -141,7 +141,7 @@ fn divergence_seq_sort_group() {
 fn divergence_map_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'map)
 (let ((ht (make-hash-table)))
   (puthash 'x 1 ht)

@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Abstract domain: sign lattice and lattice operations
@@ -84,7 +84,7 @@ fn oracle_prop_abstract_interp_sign_domain() {
     (funcall 'neovm--abs-leq 'top 'pos)
     (funcall 'neovm--abs-leq 'bot 'bot)
     (funcall 'neovm--abs-leq 'top 'top)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ fn oracle_prop_abstract_interp_arithmetic() {
     (funcall 'neovm--abs-neg 'zero)
     (funcall 'neovm--abs-neg 'top)
     (funcall 'neovm--abs-neg 'bot)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ fn oracle_prop_abstract_interp_comparison() {
     (funcall 'neovm--abs-eq 'neg 'neg)      ;; maybe
     (funcall 'neovm--abs-eq 'top 'zero)     ;; maybe
     (funcall 'neovm--abs-eq 'bot 'zero)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +398,7 @@ fn oracle_prop_abstract_interp_transfer_functions() {
           (funcall 'neovm--abs-state-get joined 'x)   ;; top (pos join neg)
           (funcall 'neovm--abs-state-get joined 'y)   ;; neg (neg join neg)
           (funcall 'neovm--abs-state-get joined 'z))))))"#; // pos (bot join pos)
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +547,7 @@ fn oracle_prop_abstract_interp_loop_widening() {
           (funcall 'neovm--ai-state-get loop2 'y)
           conv2
           iter2)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -703,7 +703,7 @@ fn oracle_prop_abstract_interp_reaching_defs() {
                    (B3 ((def x d4) (use z)) (B2 B4))
                    (B4 ((use x) (use z)) ()))))
     (funcall 'neovm--rd-analyze program)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -837,5 +837,5 @@ fn oracle_prop_abstract_interp_multi_var_program() {
       (funcall 'neovm--ai2-get final 'm)   ;; top
       ;; Unbound
       (funcall 'neovm--ai2-get final 'z))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: stress — 1000 overlay + regex + undo + marker combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_mass_overlay_insert_undo_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 100 ?A))
   (let ((ovs nil)
@@ -41,7 +41,7 @@ fn divergence_mass_overlay_insert_undo_consistency() {
 fn divergence_regex_replace_preserves_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aa-bb-cc-dd-ee-ff-gg-hh-ii-jj")
   (let ((ovs nil))
@@ -72,7 +72,7 @@ fn divergence_regex_replace_preserves_overlays() {
 fn divergence_marker_ring_regex_jump() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3\nLINE4\nLINE5\n")
   (let ((ring nil))
@@ -97,7 +97,7 @@ fn divergence_marker_ring_regex_jump() {
 fn divergence_overlay_priority_sort_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   (let ((ovs nil))
@@ -125,7 +125,7 @@ fn divergence_overlay_priority_sort_regex() {
 fn divergence_500_overlays_delete_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 500 ?X))
   (let ((ovs nil))
@@ -154,7 +154,7 @@ fn divergence_500_overlays_delete_region_undo() {
 fn divergence_replace_match_preserves_marker_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "alpha bravo charlie delta echo")
   (let ((m1 (copy-marker 1))
@@ -184,7 +184,7 @@ fn divergence_replace_match_preserves_marker_inserts() {
 fn divergence_overlay_evaporate_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov1 (make-overlay 1 3))
@@ -214,7 +214,7 @@ fn divergence_overlay_evaporate_replace() {
 fn divergence_mass_marker_insert_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA")
   (let ((m-insert (copy-marker 2 t))
@@ -236,7 +236,7 @@ fn divergence_mass_marker_insert_type() {
 fn divergence_textprop_face_overlay_face_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 3 7 'face 'italic)
@@ -259,7 +259,7 @@ fn divergence_textprop_face_overlay_face_merge() {
 fn divergence_undo_after_multiple_overlays_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "START")
   (let ((ov (make-overlay 1 6)))

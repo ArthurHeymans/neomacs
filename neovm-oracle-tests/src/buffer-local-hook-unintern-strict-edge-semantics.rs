@@ -2,38 +2,36 @@
 //! GNU src/buffer.c, src/lread.c, src/eval.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- other-buffer ---
 
 #[test]
 fn oracle_other_buffer_no_args_returns_live_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(r#"(buffer-live-p (other-buffer))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(buffer-live-p (other-buffer))"#);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_other_buffer_no_args_returns_bufferp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(r#"(bufferp (other-buffer))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(bufferp (other-buffer))"#);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_other_buffer_exclude_current() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) =
-        eval_oracle_and_neovm_with_bootstrap(r#"(buffer-live-p (other-buffer (current-buffer)))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(buffer-live-p (other-buffer (current-buffer)))"#);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_other_buffer_returns_different_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(
-        r#"(not (eq (current-buffer) (other-buffer (current-buffer))))"#,
-    );
+    let (o, n) =
+        eval_oracle_and_neovm(r#"(not (eq (current-buffer) (other-buffer (current-buffer))))"#);
     assert_ok_eq("t", &o, &n);
 }
 

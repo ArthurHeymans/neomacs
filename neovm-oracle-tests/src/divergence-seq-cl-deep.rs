@@ -1,13 +1,13 @@
 //! Divergence tests: cl-lib sequence operations, reduce, every, some.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-reduce '+ '(1 2 3 4))
   (cl-reduce '* '(1 2 3 4))
@@ -20,7 +20,7 @@ fn divergence_cl_reduce() {
 fn divergence_cl_every_some() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-every 'integerp '(1 2 3))
   (cl-every 'integerp '(1 "a" 3))
@@ -35,7 +35,7 @@ fn divergence_cl_every_some() {
 fn divergence_cl_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-position 3 '(1 2 3 4 5))
   (cl-position 6 '(1 2 3 4 5))
@@ -48,7 +48,7 @@ fn divergence_cl_position() {
 fn divergence_cl_remove_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-remove 3 '(1 2 3 4 3 5))
   (cl-remove-duplicates '(1 2 3 2 1))
@@ -61,7 +61,7 @@ fn divergence_cl_remove_delete() {
 fn divergence_cl_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-sort (copy-sequence '(3 1 4 1 5 9)) '<)
   (fboundp 'cl-stable-sort)
@@ -73,7 +73,7 @@ fn divergence_cl_sort_stable() {
 fn divergence_cl_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-merge 'list '(1 3 5) '(2 4 6) '<)
   (fboundp 'cl-merge)) "#,
@@ -84,7 +84,7 @@ fn divergence_cl_merge() {
 fn divergence_cl_search_mismatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-search '(2 3) '(1 2 3 4))
   (cl-search "bar" "foobar")
@@ -97,7 +97,7 @@ fn divergence_cl_search_mismatch() {
 fn divergence_cl_subseq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (cl-subseq '(a b c d e) 1 3)
   (cl-subseq '(a b c d e) 2)
@@ -109,7 +109,7 @@ fn divergence_cl_subseq() {
 fn divergence_seq_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'seq-map)
   (fboundp 'seq-filter)
@@ -125,7 +125,7 @@ fn divergence_seq_functions() {
 fn divergence_seq_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (seq-map #'1+ '(1 2 3))
   (seq-filter #'cl-oddp '(1 2 3 4 5))

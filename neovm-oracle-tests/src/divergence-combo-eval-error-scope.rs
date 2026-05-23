@@ -1,13 +1,13 @@
 //! Divergence tests: complex eval + error + dynamic scope combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_nested_condition_unwind_catch_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((log nil)
         (x 0))
   (catch 'done
@@ -30,7 +30,7 @@ fn divergence_nested_condition_unwind_catch_throw() {
 fn divergence_dynamic_rebinding_through_funcall_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-chain-var-xxx 0)
   (defun test-chain-a-xxx ()
@@ -52,7 +52,7 @@ fn divergence_dynamic_rebinding_through_funcall_chain() {
 fn divergence_deeply_nested_unwind_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((log nil))
   (ignore-errors
     (unwind-protect
@@ -75,7 +75,7 @@ fn divergence_deeply_nested_unwind_errors() {
 fn divergence_closure_over_dynamic_vars_with_setq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-clo-var-xxx 'global)
   (let ((fns nil))
@@ -98,7 +98,7 @@ fn divergence_closure_over_dynamic_vars_with_setq() {
 fn divergence_funcall_apply_rest_optional_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-opt-rest-xxx (a &optional b &rest c)
     (condition-case err
@@ -117,7 +117,7 @@ fn divergence_funcall_apply_rest_optional_with_condition_case() {
 fn divergence_catch_from_mapcar_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(catch 'found
   (mapcar (lambda (x)
             (when (> x 5)
@@ -130,7 +130,7 @@ fn divergence_catch_from_mapcar_lambda() {
 fn divergence_dotimes_with_errors_and_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((log nil))
   (ignore-errors
     (dotimes (i 10)
@@ -148,7 +148,7 @@ fn divergence_dotimes_with_errors_and_unwind() {
 fn divergence_advised_function_in_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-adv-fn-xxx (x)
     (if (> x 10) (error \"too big: %d\" x) (* x 2)))
@@ -170,7 +170,7 @@ fn divergence_advised_function_in_condition_case() {
 fn divergence_cl_block_return_from_nested_flet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(cl-flet ((check (x) (when (> x 5) (cl-return-from outer x))))
   (cl-block outer
     (list (check 3)
@@ -183,7 +183,7 @@ fn divergence_cl_block_return_from_nested_flet() {
 fn divergence_buffer_local_with_let_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-blv-xxx 'global)
   (make-variable-buffer-local 'test-blv-xxx)

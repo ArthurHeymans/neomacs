@@ -4,7 +4,7 @@
 //! `src/xml.c`.  Their shared `parse_region` defaults nil bounds, calls
 //! `validate_region`, and only then validates non-nil BASE-URL as a string.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -34,5 +34,5 @@ fn oracle_libxml_parse_region_validates_region_before_base_url_like_gnu() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

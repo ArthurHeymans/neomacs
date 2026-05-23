@@ -3,7 +3,7 @@
 //! These focus on deterministic date parsing/formatting, leap-year and month
 //! length helpers, interval formatting, and readable seconds formatting.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,7 +24,7 @@ fn oracle_prop_time_date_parse_safe_and_day_helpers() {
    (time-to-day-in-year (date-to-time "2020-12-31T00:00:00Z"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn oracle_prop_time_date_leap_month_and_ordinal_helpers() {
    (date-ordinal-to-time 2021 365)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn oracle_prop_time_date_format_seconds_flags_and_errors() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -102,5 +102,5 @@ fn oracle_prop_time_date_seconds_to_string_modes() {
    (seconds-to-string -2.5)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

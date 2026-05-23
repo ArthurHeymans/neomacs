@@ -1,13 +1,13 @@
 //! Divergence tests: case-table, translation-table, character-category deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_case_table_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ct (current-case-table)))
   (list (char-table-p ct)
         (aref ct ?A)
@@ -20,7 +20,7 @@ fn divergence_case_table_access() {
 fn divergence_case_table_set_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ct (copy-case-table (current-case-table))))
   (set-case-table ct)
   (list (eq (downcase ?A) ?a)
@@ -35,7 +35,7 @@ fn divergence_case_table_set_identity() {
 fn divergence_with_case_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-case-table (standard-case-table)
   (list (downcase "HELLO")
         (upcase "hello")
@@ -47,7 +47,7 @@ fn divergence_with_case_table() {
 fn divergence_translation_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-translation-table)
   (fboundp 'make-translation-table-from-vector)
@@ -59,7 +59,7 @@ fn divergence_translation_table() {
 fn divergence_char_category_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ct (standard-category-table)))
   (list (category-table-p ct)
         (category-set-mnemonics (aref ct ?a))
@@ -72,7 +72,7 @@ fn divergence_char_category_set() {
 fn divergence_modify_category_entry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (modify-category-entry ?X ?x)
   (let ((cs (aref (standard-category-table) ?X)))
@@ -84,7 +84,7 @@ fn divergence_modify_category_entry() {
 fn divergence_string_search_case_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((case-fold-search t))
   (list (string-match "hello" "HELLO WORLD")
         (string-match "hello" "Say HELLO")
@@ -97,7 +97,7 @@ fn divergence_string_search_case_fold() {
 fn divergence_string_search_no_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((case-fold-search nil))
   (list (string-match "hello" "HELLO WORLD")
         (string-match "hello" "hello world")
@@ -109,7 +109,7 @@ fn divergence_string_search_no_fold() {
 fn divergence_char_inspect_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (char-name ? )
   (char-name ?\n)
@@ -122,7 +122,7 @@ fn divergence_char_inspect_name() {
 fn divergence_char_general_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (get-char-code-property ?A 'general-category)
   (get-char-code-property ?a 'general-category)

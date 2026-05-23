@@ -12,14 +12,14 @@
 //! also merges backward (existing BEG == new END), causing different undo
 //! granularity.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_marker_position_restored_after_delete_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 5 (current-buffer))))
@@ -33,7 +33,7 @@ fn divergence_undo_marker_position_restored_after_delete_undo() {
 fn divergence_undo_marker_inside_deleted_region_restored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "0123456789")
   (let ((m (set-marker (make-marker) 7 (current-buffer))))
@@ -48,7 +48,7 @@ fn divergence_undo_marker_inside_deleted_region_restored() {
 fn divergence_undo_multiple_markers_in_deleted_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghijklmno")
   (let ((m1 (set-marker (make-marker) 5 (current-buffer)))
@@ -65,7 +65,7 @@ fn divergence_undo_multiple_markers_in_deleted_region() {
 fn divergence_undo_insertion_type_marker_restored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 7 (current-buffer))))
@@ -80,7 +80,7 @@ fn divergence_undo_insertion_type_marker_restored() {
 fn divergence_undo_multibyte_char_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcdef")  ;; ā is 2 bytes, 1 char
   (goto-char 1)
@@ -93,7 +93,7 @@ fn divergence_undo_multibyte_char_positions() {
 fn divergence_undo_multibyte_delete_char_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcdef")  ;; ā is 2 bytes
   (goto-char 3)      ;; after ā (char pos 2), at 'b'
@@ -106,7 +106,7 @@ fn divergence_undo_multibyte_delete_char_positions() {
 fn divergence_undo_multibyte_delete_and_undo_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcdef")
   (goto-char (point-max))
@@ -120,7 +120,7 @@ fn divergence_undo_multibyte_delete_and_undo_point() {
 fn divergence_undo_backward_merge_not_in_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ABCDE")
   (goto-char 3)
@@ -138,7 +138,7 @@ fn divergence_undo_backward_merge_not_in_gnu() {
 fn divergence_undo_first_change_sentinel_not_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "hello")
   (let ((entry (car buffer-undo-list)))
@@ -156,7 +156,7 @@ fn divergence_undo_first_change_sentinel_not_zero() {
 fn divergence_undo_delete_point_at_end_negative_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcd")  ;; ā=2bytes, total 5 bytes, 4 chars
   (goto-char (point-max))
@@ -173,7 +173,7 @@ fn divergence_undo_delete_point_at_end_negative_position() {
 fn divergence_undo_boundary_separates_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "hello")
   (undo-boundary)
@@ -188,7 +188,7 @@ fn divergence_undo_boundary_separates_entries() {
 fn divergence_undo_full_cycle_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ABCDE")
   (goto-char 3)
@@ -202,7 +202,7 @@ fn divergence_undo_full_cycle_insert_delete() {
 fn divergence_undo_marker_after_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcde")
   (let ((m (set-marker (make-marker) 3 (current-buffer))))

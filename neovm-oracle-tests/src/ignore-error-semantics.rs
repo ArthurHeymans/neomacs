@@ -5,7 +5,7 @@
 //! singleton conditions are accepted through GNU's warning macro path, and an
 //! empty body macroexpands to nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -19,7 +19,7 @@ fn oracle_ignore_error_macroexpansion_edges() {
  (macroexpand '(ignore-error arith-error)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -38,5 +38,5 @@ fn oracle_ignore_error_runtime_condition_matching() {
  (ignore-error error (+ 1 2)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

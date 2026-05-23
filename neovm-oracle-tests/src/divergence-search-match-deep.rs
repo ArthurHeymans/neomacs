@@ -1,13 +1,13 @@
 //! Divergence tests: goto-char, search, match-data edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_goto_char_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (goto-char 1)
@@ -23,7 +23,7 @@ fn divergence_goto_char_bounds() {
 fn divergence_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo bar foo baz foo")
   (goto-char 1)
@@ -42,7 +42,7 @@ fn divergence_search_forward_backward() {
 fn divergence_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abc123def456")
   (goto-char 1)
@@ -60,7 +60,7 @@ fn divergence_match_data() {
 fn divergence_match_data_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "2024-01-15")
   (goto-char 1)
@@ -76,7 +76,7 @@ fn divergence_match_data_groups() {
 fn divergence_re_search_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world")
   (goto-char 1)
@@ -90,7 +90,7 @@ fn divergence_re_search_no_match() {
 fn divergence_replace_match_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo bar foo")
   (goto-char 1)
@@ -104,7 +104,7 @@ fn divergence_replace_match_deep() {
 fn divergence_re_search_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aaa bbb aaa bbb aaa")
   (goto-char (point-max))
@@ -119,7 +119,7 @@ fn divergence_re_search_backward() {
 fn divergence_case_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (let ((case-fold-search t))
@@ -137,7 +137,7 @@ fn divergence_case_fold_search() {
 fn divergence_word_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world helloworld")
   (goto-char 1)
@@ -152,7 +152,7 @@ fn divergence_word_search() {
 fn divergence_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abc def ghi")
   (goto-char 1)

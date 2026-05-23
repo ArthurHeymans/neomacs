@@ -2,14 +2,14 @@
 //! GNU src/search.c, src/eval.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- string-match with submatch groups ---
 
 #[test]
 fn oracle_string_match_with_groups_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (string-match "\\([a-z]+\\) \\([0-9]+\\)" "hello 42")
   (list (match-string 0 "hello 42")
@@ -24,7 +24,7 @@ fn oracle_string_match_with_groups_via_binary() {
 #[test]
 fn oracle_macroexpand_defmacro_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defmacro nvm--double (x) (list '* x 2))
   (macroexpand '(nvm--double 5)))"#,
@@ -37,7 +37,7 @@ fn oracle_macroexpand_defmacro_via_binary() {
 #[test]
 fn oracle_macroexpand_when_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(macroexpand '(when t 42))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(macroexpand '(when t 42))"#);
     // when expands to (if t (progn 42))
     assert_ok_eq("(if t (progn 42))", &o, &n);
 }
@@ -45,7 +45,7 @@ fn oracle_macroexpand_when_via_binary() {
 #[test]
 fn oracle_macroexpand_unless_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(macroexpand '(unless nil 42))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(macroexpand '(unless nil 42))"#);
     // unless expands to (if nil nil (progn 42)) — but check real behavior
     assert_ok_eq("(if nil nil 42)", &o, &n);
 }
@@ -55,7 +55,7 @@ fn oracle_macroexpand_unless_via_binary() {
 #[test]
 fn oracle_replace_match_backref_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (set-buffer (get-buffer-create "*rmb*"))
   (erase-buffer)

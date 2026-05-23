@@ -5,7 +5,7 @@
 //! are deterministic for that seed, so oracle comparison can check exact
 //! sequence compatibility instead of only range invariants.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -46,5 +46,5 @@ fn oracle_random_string_seed_exact_sequence_and_error_edges() {
      (random 10 20)
    (error (list (car err) (cdr err)))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

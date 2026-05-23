@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // search-forward: all parameters, edge cases
@@ -56,7 +56,7 @@ fn oracle_prop_search_forward_comprehensive_params() {
       (goto-char 5)
       (let ((r (search-forward "" nil t)))
         (list r (point))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ fn oracle_prop_search_backward_comprehensive_params() {
         (while (search-backward "one" nil t)
           (push (point) positions))
         positions))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ fn oracle_prop_re_search_forward_complex_regexps() {
         (while (re-search-forward "\\(error\\|warn\\)" nil t)
           (push (match-string 1) results))
         (nreverse results)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ fn oracle_prop_re_search_backward_complex() {
       (goto-char (point-max))
       (when (re-search-backward "\"\\([^\"]+\\)\"" nil t)
         (match-string 1)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +260,7 @@ fn oracle_prop_looking_at_various_positions() {
            (list (looking-at "^")         ;; always true at bol
                  (looking-at "^ +")       ;; leading spaces
                  (looking-at "^(")))))"#; // not at ( because spaces first
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +316,7 @@ fn oracle_prop_skip_chars_comprehensive() {
       (goto-char (point-min))
       (let ((n (skip-chars-forward "a-z-")))  ;; letters and hyphens
         (list n (point) (buffer-substring (point-min) (point)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ fn oracle_prop_search_in_narrowed_region() {
     ;; After save-restriction, full buffer visible again
     (progn (goto-char (point-min))
            (search-forward "HEADER" nil t))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +426,7 @@ fn oracle_prop_search_case_fold() {
           (while (search-backward "World" nil t)
             (push (point) positions))
           positions)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,5 +491,5 @@ fn oracle_prop_search_complex_pipeline() {
                      (push (buffer-substring line-start line-end) results))))
                (forward-line 1))
              (nreverse results)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

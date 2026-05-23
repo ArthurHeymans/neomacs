@@ -3,7 +3,7 @@
 //! GNU implements this helper in `lisp/subr.el` by translating the current
 //! match data to the matched substring and then delegating to `replace-match`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -19,7 +19,7 @@ fn oracle_match_substitute_basic_backrefs() {
    (match-substitute-replacement "\\1=\\1;\\2=\\2" nil nil s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn oracle_match_substitute_literal_backslashes() {
    (match-substitute-replacement "x\\\\y" t t s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn oracle_match_substitute_fixedcase_case_conversion() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_match_substitute_subexp_replacement() {
    (match-substitute-replacement "" t t s 3)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn oracle_match_substitute_unmatched_optional_group() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,5 +108,5 @@ fn oracle_match_substitute_preserves_outer_match_data() {
     (list replacement before after (equal before after))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

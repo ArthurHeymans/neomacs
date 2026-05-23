@@ -5,7 +5,7 @@
 //! end-of-sequence payloads, sent values, delegation, `iter-do`, and
 //! cleanup via `iter-close`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_prop_generator_basic_iteration_and_end_value() {
     (nreverse out)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn oracle_prop_generator_sent_values_and_independent_iterators() {
        (iter-end-of-sequence (list 'end-b (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn oracle_prop_generator_yield_from_and_iter_do_return_value() {
       (list (nreverse values) done))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,5 +114,5 @@ fn oracle_prop_generator_close_runs_cleanup_and_then_ends() {
          (iter-end-of-sequence (list 'end (cdr err))))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

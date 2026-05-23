@@ -5,7 +5,7 @@
 //! `lisp/minibuffer.el`.  These tests cover list/alist/hash/function table
 //! behavior without replacing GNU's matching rules with local expectations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_prop_try_completion_list_and_alist_cases() {
    (try-completion "alpha" '((alpha . 1) ("alpine" . 2) ("beta" . 3)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn oracle_prop_all_completions_predicate_and_regexp_filter() {
      (sort (copy-sequence (all-completions "ap" collection)) #'string<))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn oracle_prop_hash_table_completion_predicate_gets_key_and_value() {
    (try-completion "ali" table)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -101,5 +101,5 @@ fn oracle_prop_function_completion_table_actions() {
    (nreverse calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

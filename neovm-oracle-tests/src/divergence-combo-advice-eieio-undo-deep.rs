@@ -1,13 +1,13 @@
 //! Divergence tests: advice + EIEIO + undo + buffer + keymap deep combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_advice_on_buffer_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-aobf-log-xxx nil)
   (advice-add 'insert :before
@@ -35,7 +35,7 @@ fn divergence_advice_on_buffer_functions() {
 fn divergence_keymap_with_eieio_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-kwec-xxx ()
     ((name :initarg :name :accessor test-kwec-name)
@@ -67,7 +67,7 @@ fn divergence_keymap_with_eieio_command() {
 fn divergence_undo_with_advised_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-uwai-count-xxx 0)
   (advice-add 'insert :filter-args
@@ -104,7 +104,7 @@ fn divergence_undo_with_advised_insert() {
 fn divergence_eieio_with_advised_methods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-ewam-xxx ()
     ((value :initarg :value :initform 0 :accessor test-ewam-value)))
@@ -133,7 +133,7 @@ fn divergence_eieio_with_advised_methods() {
 fn divergence_closure_with_buffer_local_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-local-variable 'test-cwblu-xxx)
   (setq test-cwblu-xxx 'initial)
@@ -170,7 +170,7 @@ fn divergence_closure_with_buffer_local_and_undo() {
 fn divergence_keymap_advice_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "EDITABLE-CONTENT-HERE")
   (put-text-property 1 8 'zone 'editable)
@@ -216,7 +216,7 @@ fn divergence_keymap_advice_undo_chain() {
 fn divergence_recursive_edit_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "STATE-BEFORE")
   (put-text-property 1 5 'part 'state)
@@ -248,7 +248,7 @@ fn divergence_recursive_edit_with_state() {
 fn divergence_multibyte_undo_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABC\x03B1\x03B2\x03B3DEF")
   (let ((ov (make-overlay 1 12))
@@ -286,7 +286,7 @@ fn divergence_multibyte_undo_with_overlay_props() {
 fn divergence_edit_session_full_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "SESSION-START")
   (let ((m-start (copy-marker 1 t))
@@ -326,7 +326,7 @@ fn divergence_edit_session_full_lifecycle() {
 fn divergence_propagate_props_through_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aaa-bbb-ccc-ddd-eee-fff-ggg")
   (put-text-property 1 3 'idx 1)

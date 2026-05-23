@@ -1,13 +1,13 @@
 //! Divergence tests: subr + sequence + mapping + record deep combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_sequence_map_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (mapcar '1+ '(1 2 3 4 5))
         (equal (mapcar '1+ '(1 2 3 4 5)) '(2 3 4 5 6))
@@ -29,7 +29,7 @@ fn divergence_sequence_map_functions() {
 fn divergence_sequence_filter_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (seq-filter #'cl-evenp '(1 2 3 4 5 6))
         (equal (seq-filter #'cl-evenp '(1 2 3 4 5 6)) '(2 4 6))
@@ -51,7 +51,7 @@ fn divergence_sequence_filter_reduce() {
 fn divergence_sequence_sort_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (seq-sort #'< '(3 1 4 1 5 9 2 6))
         (equal (seq-sort #'< '(3 1 4 1 5 9 2 6)) '(1 1 2 3 4 5 6 9))
@@ -73,7 +73,7 @@ fn divergence_sequence_sort_merge() {
 fn divergence_record_type_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-rto-xxx (:type list) :named)
     x y z)
@@ -96,7 +96,7 @@ fn divergence_record_type_operations() {
 fn divergence_subr_string_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (string= "hello" "hello")
         (not (string= "hello" "Hello"))
@@ -129,7 +129,7 @@ fn divergence_subr_string_manipulation() {
 fn divergence_sequence_search_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (seq-contains '(1 2 3 4 5) 3)
         (= (seq-contains '(1 2 3 4 5) 3) 3)
@@ -163,7 +163,7 @@ fn divergence_sequence_search_access() {
 fn divergence_subr_list_operations_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((lst '(1 2 3 4 5)))
     (list (car lst) (= (car lst) 1)
@@ -187,7 +187,7 @@ fn divergence_subr_list_operations_deep() {
 fn divergence_subr_alist_plist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((al '((a . 1) (b . 2) (c . 3))))
     (list (assoc 'a al)
@@ -211,7 +211,7 @@ fn divergence_subr_alist_plist_ops() {
 fn divergence_sequence_do_each() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((result nil))
     (seq-do (lambda (x) (push x result)) '(1 2 3 4 5))
@@ -236,7 +236,7 @@ fn divergence_sequence_do_each() {
 fn divergence_subr_number_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (max 1 5 3 2 4) (= (max 1 5 3 2 4) 5)
         (min 1 5 3 2 4) (= (min 1 5 3 2 4) 1)

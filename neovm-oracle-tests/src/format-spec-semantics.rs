@@ -5,7 +5,7 @@
 //! differences in missing-key, split, flag, or lazy substitution behavior are
 //! observable in real configurations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_prop_format_spec_missing_and_quoted_percent_semantics() {
    (format-spec "missing=%z pct=%%" '((?a . "A")) 'keep-percent)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_prop_format_spec_flags_width_precision_and_case() {
    (format-spec "[%<06n]" '((?n . "abcdef")))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_prop_format_spec_split_and_lazy_functions() {
      (format-spec "x%ay%b" '((?a . "A") (?b . "B")) nil t))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -93,5 +93,5 @@ fn oracle_prop_format_spec_make_and_invalid_inputs() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

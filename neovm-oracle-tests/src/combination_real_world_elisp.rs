@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Mode-line format string processing
@@ -71,7 +71,7 @@ fn oracle_prop_rwe_mode_line_format_processing() {
                                                                    (copy-sequence state)
                                                                    :modified nil)
                                                                   :read-only nil)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ fn oracle_prop_rwe_package_dependency_resolver() {
        (funcall 'neovm--test-resolve-deps
                 '((d c) (c b) (b a) (a))))
     (fmakunbound 'neovm--test-resolve-deps)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ fn oracle_prop_rwe_config_generator() {
                               (cdr (assq 'port (cdr (assq 'network config))))
                               (cdr (assq 'debug (cdr (assq 'general config))))
                               (length config)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +291,7 @@ fn oracle_prop_rwe_undo_redo_text_editor() {
                                         after-undo1
                                         after-undo2
                                         after-redo)))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,7 +355,7 @@ fn oracle_prop_rwe_ring_buffer() {
                                       after-rotate-2
                                       after-rotate-back
                                       ring-size))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,5 +418,5 @@ fn oracle_prop_rwe_completion_scoring() {
                                 (setq top (cons entry top))
                                 (setq count (1+ count))))
                             (nreverse top))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

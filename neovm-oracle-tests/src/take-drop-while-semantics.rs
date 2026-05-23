@@ -1,6 +1,6 @@
 //! Oracle parity tests for `take-while', `drop-while', `all', and `any'.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_take_drop_while_preserve_gnu_tail_semantics() {
@@ -13,7 +13,7 @@ fn oracle_take_drop_while_preserve_gnu_tail_semantics() {
         (eq dropped (nthcdr 3 xs))
         dropped
         xs))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_take_drop_while_short_circuit_malformed_tails() {
    (condition-case err
        (drop-while (lambda (x) (push x calls) t) xs)
      (error (car err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -60,5 +60,5 @@ fn oracle_all_any_are_defined_by_drop_while() {
    (condition-case err
        (any (lambda (x) nil) ys)
      (error (car err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

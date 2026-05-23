@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // INI-file parser
@@ -54,7 +54,7 @@ fn oracle_prop_bp_ini_parser() {
                                          (nreverse current-pairs))
                                     sections)))
                       (nreverse sections)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ fn oracle_prop_bp_log_analyzer() {
                             (gethash "WARN" counts 0)
                             (gethash "ERROR" counts 0)
                             (nreverse errors))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ fn oracle_prop_bp_org_heading_tree() {
                           (setq headings
                                 (cons (list level title) headings))))
                       (nreverse headings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ fn oracle_prop_bp_multi_region() {
                                    (* 2 (string-to-number
                                           (caddr r)))))))
                       (buffer-string)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ fn oracle_prop_bp_buffer_line_diff() {
                               lines-b (cdr lines-b)
                               i (1+ i)))
                       (nreverse diffs)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +221,7 @@ fn oracle_prop_bp_indentation_analysis() {
                                             indent-info))))))
                         (forward-line 1))
                       (nreverse indent-info)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,5 +261,5 @@ fn oracle_prop_bp_narrow_accumulate() {
                                         (cons content sections)))))
                             (setq starts (cdr starts)))))
                       (nreverse sections)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

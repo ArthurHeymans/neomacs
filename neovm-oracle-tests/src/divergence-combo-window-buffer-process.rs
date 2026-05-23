@@ -1,13 +1,13 @@
 //! Divergence tests: complex window + buffer + process combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_save_window_excursion_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((orig-buf (current-buffer))
         (orig-point (point))
         (result (save-window-excursion
@@ -29,7 +29,7 @@ fn divergence_save_window_excursion_buffer_switch() {
 fn divergence_temp_buffer_insert_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 6 'face 'bold)
@@ -47,7 +47,7 @@ fn divergence_temp_buffer_insert_substring() {
 fn divergence_buffer_list_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((b1 (generate-new-buffer \"*test-bl-1*\"))
         (b2 (generate-new-buffer \"*test-bl-2*\"))
         (b3 (generate-new-buffer \"*test-bl-3*\")))
@@ -70,7 +70,7 @@ fn divergence_buffer_list_ordering() {
 fn divergence_call_process_to_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((result
         (with-temp-buffer
           (call-process \"echo\" nil t nil \"hello\" \"world\")
@@ -85,7 +85,7 @@ fn divergence_call_process_to_temp_buffer() {
 fn divergence_buffer_local_vars_across_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((b1 (generate-new-buffer \"*test-blv-1*\"))
         (b2 (generate-new-buffer \"*test-blv-2*\")))
   (with-current-buffer b1
@@ -109,7 +109,7 @@ fn divergence_buffer_local_vars_across_switch() {
 fn divergence_get_buffer_create_kill_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((name \"*test-cycle-buf*\")
         (b1 (get-buffer-create name)))
   (with-current-buffer b1 (insert \"data\"))
@@ -130,7 +130,7 @@ fn divergence_get_buffer_create_kill_cycle() {
 fn divergence_window_config_save_restore_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((wc (current-window-configuration)))
   (split-window nil nil 'right)
   (let ((n1 (length (window-list))))
@@ -146,7 +146,7 @@ fn divergence_window_config_save_restore_split() {
 fn divergence_shell_command_parse_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((raw (shell-command-to-string \"echo 'line1'; echo 'line2'; echo 'line3'\"))
         (lines (split-string raw \"\\n\" t)))
   (list (length lines)
@@ -160,7 +160,7 @@ fn divergence_shell_command_parse_output() {
 fn divergence_minibuffer_window_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((mw (minibuffer-window)))
   (list (windowp mw)
         (minibufferp (window-buffer mw))
@@ -174,7 +174,7 @@ fn divergence_minibuffer_window_properties() {
 fn divergence_with_temp_buffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((outer-buf (current-buffer)))
   (with-temp-buffer
     (insert \"temp content\")

@@ -5,9 +5,7 @@
 //! rejection path, and recursive single-line filling controlled by
 //! `fill-column`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_internal_format_docstring_line_fill_column_semantics() {
@@ -25,7 +23,7 @@ fn oracle_prop_gnu_internal_format_docstring_line_fill_column_semantics() {
      (internal--format-docstring-line "alpha beta gamma"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +42,7 @@ fn oracle_prop_gnu_internal_format_docstring_line_rejects_newlines_after_format(
   (lambda () (internal--format-docstring-line "%s" "ok"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -64,5 +62,5 @@ fn oracle_prop_gnu_internal_fill_string_single_line_edge_cases() {
      (internal--fill-string-single-line "ab cd ef"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

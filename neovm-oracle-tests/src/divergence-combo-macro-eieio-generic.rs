@@ -1,13 +1,13 @@
 //! Divergence tests: complex macro + EIEIO + generic function combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_macro_generates_defclass() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-def-entity-xxx (name slots)
     \\`(defclass ,(intern (concat \"test-entity-\" (symbol-name name) \"-xxx\")) ()
@@ -26,7 +26,7 @@ fn divergence_macro_generates_defclass() {
 fn divergence_defclass_with_generic_method_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-vehicle-xxx () ((speed :initarg :speed :initform 0)))
   (defclass test-car-xxx (test-vehicle-xxx) ((doors :initarg :doors :initform 4)))
@@ -49,7 +49,7 @@ fn divergence_defclass_with_generic_method_dispatch() {
 fn divergence_defclass_initform_uses_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-double-xxx (x) \\`(* 2 ,x))
   (defclass test-init-xxx ()
@@ -65,7 +65,7 @@ fn divergence_defclass_initform_uses_macro() {
 fn divergence_eieio_accessor_via_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-rect-xxx ()
     ((width :initarg :width :accessor test-rect-width-xxx :initform 0)
@@ -83,7 +83,7 @@ fn divergence_eieio_accessor_via_setf() {
 fn divergence_multiple_inheritance_dispatch_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-base-a-xxx () ((a-slot :initarg :a-slot)))
   (defclass test-base-b-xxx () ((b-slot :initarg :b-slot)))
@@ -102,7 +102,7 @@ fn divergence_multiple_inheritance_dispatch_order() {
 fn divergence_cl_defmethod_before_after_around() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-baa-log-xxx nil)
   (defclass test-baa-xxx () ((val :initarg :val :initform 0)))
@@ -124,7 +124,7 @@ fn divergence_cl_defmethod_before_after_around() {
 fn divergence_macro_generates_defun_with_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-make-adder-xxx (n)
     \\`(lambda (x) (+ x ,n)))
@@ -141,7 +141,7 @@ fn divergence_macro_generates_defun_with_closure() {
 fn divergence_eieio_slot_default_and_initarg_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-defaults-xxx ()
     ((a :initarg :a :initform 1)
@@ -160,7 +160,7 @@ fn divergence_eieio_slot_default_and_initarg_interaction() {
 fn divergence_defclass_print_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-printable-xxx ()
     ((label :initarg :label :initform \"\"))
@@ -178,7 +178,7 @@ fn divergence_defclass_print_function() {
 fn divergence_defclass_with_type_checking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-typed-xxx ()
     ((name :initarg :name :type string :initform \"default\")

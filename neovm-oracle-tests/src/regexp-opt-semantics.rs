@@ -4,7 +4,7 @@
 //! longest-match behavior, charset construction, empty inputs, and
 //! `regexp-opt-depth`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_prop_regexp_opt_grouping_modes_and_empty_input() {
    (regexp-opt '("if" "in" "while" "when") "\\(?1:")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn oracle_prop_regexp_opt_longest_match_and_equivalence() {
      (string-match-p (concat "\\`" re "\\'") "ac"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn oracle_prop_regexp_opt_charset_and_quoting() {
      (string-match-p (concat "\\`" mixed-re "\\'") "a."))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -93,5 +93,5 @@ fn oracle_prop_regexp_opt_depth_counts_only_capturing_groups() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

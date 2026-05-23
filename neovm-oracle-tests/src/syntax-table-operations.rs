@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Comprehensive modify-syntax-entry with comment flags (1, 2, 3, 4, b, n, p)
@@ -47,7 +47,7 @@ fn oracle_prop_syntax_table_ops_comment_flags() {
                   comment-result
                   after-comment
                   end-word)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ fn oracle_prop_syntax_table_ops_nested_comments() {
         (skip-syntax-forward "w")
         (setq results (cons (buffer-substring s (point)) results)))
       (nreverse results))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ fn oracle_prop_syntax_table_ops_string_to_syntax_flags() {
         (wd (string-to-syntax "w"))
         (sym (string-to-syntax "_")))
     (list (car ws) (car wd) (car sym))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ fn oracle_prop_syntax_table_ops_multi_level_inheritance() {
      ;; % inherited from grandparent through parent to child
      (progn (set-syntax-table child)
             (char-syntax ?%)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +263,7 @@ fn oracle_prop_syntax_table_ops_syntax_after_mixed() {
         (when (<= pos (point-max))
           (setq results (cons (cons pos (syntax-after pos)) results))))
       (nreverse results))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,7 +311,7 @@ fn oracle_prop_syntax_table_ops_forward_comment_directions() {
             (fc4 (forward-comment 1)))
         (setq results (cons (list :no-comment (= (point) pos-before) fc4) results)))
       (nreverse results))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ fn oracle_prop_syntax_table_ops_class_char_roundtrip() {
         (setq all-class-chars (cons (syntax-class-to-char i) all-class-chars)))
       (setq results (cons (list :all-class-chars (nreverse all-class-chars)) results)))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,5 +422,5 @@ fn oracle_prop_syntax_table_ops_sexp_navigation() {
                                 (matching-paren ?\]))
                           results))
       (nreverse results))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

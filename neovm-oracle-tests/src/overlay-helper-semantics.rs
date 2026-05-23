@@ -4,9 +4,7 @@
 //! The exact behavior matters because `remove-overlays` can delete, move, or
 //! split matching overlays while preserving non-targeted properties.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_copy_overlay_preserves_properties_and_deleted_state() {
@@ -37,7 +35,7 @@ fn oracle_prop_gnu_copy_overlay_preserves_properties_and_deleted_state() {
              (overlay-get deleted-copy 'tag))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,5 +71,5 @@ fn oracle_prop_gnu_remove_overlays_deletes_moves_and_splits_matching_overlays() 
      (lambda (a b) (string< (car a) (car b))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

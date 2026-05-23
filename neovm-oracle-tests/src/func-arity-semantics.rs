@@ -5,7 +5,7 @@
 //! parses lambda arglists directly, and signals before trying to load direct
 //! autoload conses whose FUNNAME would not be a symbol.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_func_arity_lambda_and_macro_arglist_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn oracle_func_arity_symbol_indirection_and_subr_dispatch() {
       (fmakunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -83,5 +83,5 @@ fn oracle_func_arity_error_ordering_for_non_functions_and_autoloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

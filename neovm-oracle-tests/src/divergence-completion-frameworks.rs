@@ -1,13 +1,13 @@
 //! Divergence tests: completions, corfu, vertico, ido deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_vertico() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'vertico-mode)
   (featurep 'vertico)
@@ -20,7 +20,7 @@ fn divergence_vertico() {
 fn divergence_consult() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'consult-buffer)
   (fboundp 'consult-line)
@@ -33,7 +33,7 @@ fn divergence_consult() {
 fn divergence_marginalia() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'marginalia-mode)
   (featurep 'marginalia)) "#,
@@ -44,7 +44,7 @@ fn divergence_marginalia() {
 fn divergence_orderless() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'orderless-filter)
   (featurep 'orderless)) "#,
@@ -55,7 +55,7 @@ fn divergence_orderless() {
 fn divergence_embark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'embark-act)
   (fboundp 'embark-dwim)
@@ -67,7 +67,7 @@ fn divergence_embark() {
 fn divergence_ido() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ido-mode)
   (fboundp 'ido-find-file)
@@ -80,7 +80,7 @@ fn divergence_ido() {
 fn divergence_ivy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ivy-mode)
   (fboundp 'counsel-M-x)
@@ -93,7 +93,7 @@ fn divergence_ivy() {
 fn divergence_helm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'helm-M-x)
   (fboundp 'helm-find-files)
@@ -106,7 +106,7 @@ fn divergence_helm() {
 fn divergence_perspective() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'persp-mode)
   (featurep 'perspective)
@@ -119,7 +119,7 @@ fn divergence_perspective() {
 fn divergence_magit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'magit-stage-file)
   (fboundp 'magit-unstage-file)

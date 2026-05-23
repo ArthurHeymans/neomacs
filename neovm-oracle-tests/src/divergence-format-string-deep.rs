@@ -1,13 +1,13 @@
 //! Divergence tests: format edge cases, propertize, and string conversion.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_number_to_string_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (number-to-string 0)
   (number-to-string -0)
@@ -22,7 +22,7 @@ fn divergence_number_to_string_edge() {
 fn divergence_string_to_number_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-to-number "42")
   (string-to-number "0xff")
@@ -37,7 +37,7 @@ fn divergence_string_to_number_edge() {
 fn divergence_format_percent_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%d" 0)
   (format "%d" -1)
@@ -55,7 +55,7 @@ fn divergence_format_percent_edge() {
 fn divergence_format_float_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%f" 0.0)
   (format "%f" -0.0)
@@ -70,7 +70,7 @@ fn divergence_format_float_edge() {
 fn divergence_format_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%10d" 42)
   (format "%-10d" 42)
@@ -84,7 +84,7 @@ fn divergence_format_width() {
 fn divergence_char_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (char-to-string ?A)
   (char-to-string ?中)
@@ -97,7 +97,7 @@ fn divergence_char_to_string() {
 fn divergence_concat_vs_mapconcat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (concat "a" "b" "c")
   (concat)
@@ -110,7 +110,7 @@ fn divergence_concat_vs_mapconcat() {
 fn divergence_string_equals_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string= "" "")
   (string= "abc" "abc")
@@ -126,7 +126,7 @@ fn divergence_string_equals_edge() {
 fn divergence_string_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-reverse "abc")
   (string-reverse "")
@@ -138,7 +138,7 @@ fn divergence_string_reverse() {
 fn divergence_string_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-pad "" 5 ?x)
   (string-chop-newline "hello\n")

@@ -1,13 +1,13 @@
 //! Divergence tests: edit simulation stress — realistic editing session combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_simulate_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(defun my-func (arg)\n  \"Docstring.\"\n  (let ((x 1))\n    (+ x arg)))")
   (let ((ov-doc (make-overlay 22 33))
@@ -60,7 +60,7 @@ fn divergence_simulate_code_edit_session() {
 fn divergence_simulate_text_reformatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq fill-column 15)
   (insert "This is a very long paragraph that needs to be reformatted properly for display.")
@@ -93,7 +93,7 @@ fn divergence_simulate_text_reformatting() {
 fn divergence_simulate_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (put-text-property 1 5 'line-num 1)
@@ -125,7 +125,7 @@ fn divergence_simulate_comment_toggle() {
 fn divergence_simulate_find_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo-bar-foo-baz-foo-qux-foo")
   (put-text-property 1 3 'token 'foo)
@@ -171,7 +171,7 @@ fn divergence_simulate_find_replace_all() {
 fn divergence_simulate_indent_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4")
   (put-text-property 1 5 'line 1)
@@ -202,7 +202,7 @@ fn divergence_simulate_indent_region_undo() {
 fn divergence_simulate_delete_to_kill_ring_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "KEEP1-DELETE1-KEEP2-DELETE2-KEEP3")
   (put-text-property 1 5 'zone 'keep1)
@@ -241,7 +241,7 @@ fn divergence_simulate_delete_to_kill_ring_yank() {
 fn divergence_simulate_multi_step_refactor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(let ((old-var 1))\n  (+ old-var 2))")
   (put-text-property 1 4 'type 'special)
@@ -276,7 +276,7 @@ fn divergence_simulate_multi_step_refactor() {
 fn divergence_simulate_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello   world\n   foo    bar\nbaz   ")
   (put-text-property 1 5 'word 'w1)
@@ -307,7 +307,7 @@ fn divergence_simulate_whitespace_cleanup() {
 fn divergence_simulate_duplicate_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3")
   (put-text-property 1 5 'lnum 1)
@@ -344,7 +344,7 @@ fn divergence_simulate_duplicate_line() {
 fn divergence_simulate_transpose_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "alpha beta gamma delta")
   (put-text-property 1 5 'pos 1)

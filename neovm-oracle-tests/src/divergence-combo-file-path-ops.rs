@@ -1,13 +1,13 @@
 //! Divergence tests: file-name + directory + path + expand combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_file_name_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (file-name-directory "/home/user/file.txt")
         (string= (file-name-directory "/home/user/file.txt") "/home/user/")
@@ -28,7 +28,7 @@ fn divergence_file_name_operations() {
 fn divergence_expand_file_name_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((abs (expand-file-name "foo/bar.txt" "/home/user"))
         (abs2 (expand-file-name "../bar.txt" "/home/user/docs"))
@@ -47,7 +47,7 @@ fn divergence_expand_file_name_relative() {
 fn divergence_directory_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (directory-file-name "/home/user/")
         (string= (directory-file-name "/home/user/") "/home/user")
@@ -64,7 +64,7 @@ fn divergence_directory_file_name() {
 fn divergence_file_name_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (concat (file-name-directory "/a/b/") "file.txt")
         (string= (concat (file-name-directory "/a/b/") "file.txt") "/a/b/file.txt")
@@ -79,7 +79,7 @@ fn divergence_file_name_concat() {
 fn divergence_path_split_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((split (split-string "/home/user/docs/file.txt" "/" t)))
     (list split
@@ -94,7 +94,7 @@ fn divergence_path_split_components() {
 fn divergence_file_truename_tilde() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((expanded (expand-file-name "~")))
     (list (file-name-absolute-p expanded)
@@ -109,7 +109,7 @@ fn divergence_file_truename_tilde() {
 fn divergence_file_attributes_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((attrs (file-attributes "/tmp")))
     (list (car attrs)
@@ -125,7 +125,7 @@ fn divergence_file_attributes_types() {
 fn divergence_make_temp_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((tmp (make-temp-file "test-div-")))
     (unwind-protect
@@ -143,7 +143,7 @@ fn divergence_make_temp_file() {
 fn divergence_make_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((dir (make-temp-name "/tmp/test-dir-div-")))
     (unwind-protect
@@ -160,7 +160,7 @@ fn divergence_make_directory() {
 fn divergence_file_size_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((src (make-temp-file "test-src-"))
         (content "Hello, World!"))

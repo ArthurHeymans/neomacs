@@ -1,27 +1,27 @@
 //! Divergence tests: sort, comparison predicates, type checks deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_sort_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(r#"(sort '(3 1 4 1 5 9 2 6) #'<)"#);
+    assert_oracle_parity(r#"(sort '(3 1 4 1 5 9 2 6) #'<)"#);
 }
 
 #[test]
 fn divergence_sort_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(r#"(sort '("banana" "apple" "cherry" "date") #'string<)"#);
+    assert_oracle_parity(r#"(sort '("banana" "apple" "cherry" "date") #'string<)"#);
 }
 
 #[test]
 fn divergence_type_predicates_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp '(1 2 3))
   (listp '(1 . 2))
@@ -40,7 +40,7 @@ fn divergence_type_predicates_deep() {
 fn divergence_sequence_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (sequencep '(1 2 3))
   (sequencep [1 2 3])
@@ -59,7 +59,7 @@ fn divergence_sequence_predicates() {
 fn divergence_number_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp 42)
   (integerp 1.0)
@@ -78,7 +78,7 @@ fn divergence_number_predicates() {
 fn divergence_comparison_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (eq 'foo 'foo)
   (eq 'foo "foo")
@@ -96,7 +96,7 @@ fn divergence_comparison_deep() {
 fn divergence_max_min() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (max 1 5 3 9 2)
   (min 1 5 3 9 2)
@@ -109,7 +109,7 @@ fn divergence_max_min() {
 fn divergence_arithmetic_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mod 10 3)
   (mod -10 3)
@@ -126,7 +126,7 @@ fn divergence_arithmetic_edge() {
 fn divergence_float_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (floatp most-positive-fixnum)
   (floatp most-negative-fixnum)
@@ -142,7 +142,7 @@ fn divergence_float_special() {
 fn divergence_string_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp "hello")
   (stringp 42)

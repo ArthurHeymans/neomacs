@@ -6,7 +6,7 @@
 //! explicit destination argument returns the destination object only when the
 //! destination changed.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -38,7 +38,7 @@ fn oracle_bool_vector_constructor_truthiness_and_negative_length() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn oracle_bool_vector_binary_ops_signal_wrong_length_argument() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn oracle_bool_vector_destination_return_value_tracks_mutation() {
            (append dest nil)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn oracle_bool_vector_destination_can_alias_inputs() {
          (append e nil))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -152,5 +152,5 @@ fn oracle_bool_vector_count_consecutive_boundaries() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

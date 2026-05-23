@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` `define-error` contracts.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_subr_define_error_parent_and_property_contracts() {
@@ -53,5 +51,5 @@ fn oracle_prop_gnu_subr_define_error_parent_and_property_contracts() {
     (dolist (s syms)
       (put s 'error-conditions nil)
       (put s 'error-message nil))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

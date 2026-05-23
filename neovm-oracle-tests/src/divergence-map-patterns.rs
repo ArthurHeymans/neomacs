@@ -1,13 +1,13 @@
 //! Divergence tests: map, filter, reduce patterns across types.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_mapcar_mapc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapcar '1+ '(1 2 3))
   (mapc 'identity '(a b c))
@@ -19,7 +19,7 @@ fn divergence_mapcar_mapc() {
 fn divergence_mapcar_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapcar '1+ [1 2 3])
   (mapc 'identity [a b c])
@@ -31,7 +31,7 @@ fn divergence_mapcar_vector() {
 fn divergence_map_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapcar 'char-to-string "abc")
   (mapconcat 'char-to-string "xyz" "|")
@@ -43,7 +43,7 @@ fn divergence_map_string() {
 fn divergence_dolist_dotimes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (dolist (x '(1 2 3) result)
     (push x result))) "#,
@@ -54,7 +54,7 @@ fn divergence_dolist_dotimes() {
 fn divergence_dotimes_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (dotimes (i 5 result)
     (push i result))) "#,
@@ -65,7 +65,7 @@ fn divergence_dotimes_accumulate() {
 fn divergence_mapcan_mapconcat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapcan 'list '(1 2 3) '(a b c))
   (mapcan (lambda (x) (list x x)) '(1 2))
@@ -77,7 +77,7 @@ fn divergence_mapcan_mapconcat() {
 fn divergence_map_into() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'map-into)
   (fboundp 'map-do)
@@ -89,7 +89,7 @@ fn divergence_map_into() {
 fn divergence_copy_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((orig '(1 2 3))
         (v-orig [1 2 3])
         (s-orig "abc"))
@@ -104,7 +104,7 @@ fn divergence_copy_sequence() {
 fn divergence_sequence_funcs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (length '(1 2 3))
   (length [1 2 3])
@@ -119,7 +119,7 @@ fn divergence_sequence_funcs() {
 fn divergence_nested_mapcar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapcar (lambda (row) (mapcar '1+ row))
           '((1 2) (3 4) (5 6)))

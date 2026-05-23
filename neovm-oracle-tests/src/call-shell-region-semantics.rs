@@ -5,9 +5,7 @@
 //! `shell-command-switch`, optionally deleting the input region, and routing
 //! stdout/stderr through the same BUFFER contract as `call-process`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_call_shell_region_delete_replaces_region() {
@@ -23,7 +21,7 @@ fn oracle_prop_gnu_call_shell_region_delete_replaces_region() {
    (point)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -42,7 +40,7 @@ fn oracle_prop_gnu_call_shell_region_uses_dynamic_shell_bindings() {
      (point))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -57,5 +55,5 @@ fn oracle_prop_gnu_call_shell_region_mixes_stderr_when_requested() {
    (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

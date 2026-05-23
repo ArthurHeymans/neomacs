@@ -4,7 +4,7 @@
 //! `split-string-and-unquote` in `lisp/subr.el` using `mapconcat`,
 //! `replace-regexp-in-string`, `split-string`, and `read-from-string`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,7 +24,7 @@ fn oracle_combine_and_quote_basic_space_separator() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn oracle_combine_and_quote_custom_literal_separators() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn oracle_split_string_and_unquote_without_quotes() {
  (split-string-and-unquote "alpha::beta::::gamma" "::+"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn oracle_split_string_and_unquote_quoted_segments() {
  (split-string-and-unquote "\"\" middle \"\"" "\\s-+"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn oracle_split_string_and_unquote_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -115,5 +115,5 @@ fn oracle_combine_and_quote_preserves_string_properties_observably() {
           (text-properties-at 14 combined))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

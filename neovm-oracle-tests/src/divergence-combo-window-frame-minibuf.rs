@@ -1,13 +1,13 @@
 //! Divergence tests: window + frame + minibuffer + buffer combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_window_configuration_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((wconf (current-window-configuration))
         (w (selected-window))
@@ -33,7 +33,7 @@ fn divergence_window_configuration_save_restore() {
 fn divergence_window_edges_and_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((w (selected-window)))
     (let ((edges (window-edges w))
@@ -64,7 +64,7 @@ fn divergence_window_edges_and_dimensions() {
 fn divergence_frame_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((f (selected-frame)))
     (let ((params (frame-parameters f)))
@@ -86,7 +86,7 @@ fn divergence_frame_parameters() {
 fn divergence_minibuffer_window_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((mw (minibuffer-window)))
     (list (windowp mw)
@@ -107,7 +107,7 @@ fn divergence_minibuffer_window_properties() {
 fn divergence_window_buffer_relationship() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((buf1 (generate-new-buffer " test-wbr1-xxx"))
          (buf2 (generate-new-buffer " test-wbr2-xxx"))
@@ -142,7 +142,7 @@ fn divergence_window_buffer_relationship() {
 fn divergence_window_point_and_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 500 ?X))
   (let ((w (selected-window)))
@@ -163,7 +163,7 @@ fn divergence_window_point_and_start() {
 fn divergence_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 200 ?Y))
   (let ((w (selected-window)))
@@ -183,7 +183,7 @@ fn divergence_window_hscroll() {
 fn divergence_window_dedicated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((w (selected-window)))
     (list (window-dedicated-p w)
@@ -201,7 +201,7 @@ fn divergence_window_dedicated() {
 fn divergence_buffer_display_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "DISPLAY-TIME-TEST")
   (let ((buf (current-buffer))
@@ -222,7 +222,7 @@ fn divergence_buffer_display_time() {
 fn divergence_frame_list_and_selected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((frames (frame-list))
         (sel (selected-frame)))

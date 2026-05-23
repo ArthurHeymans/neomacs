@@ -1,13 +1,13 @@
 //! Divergence tests: real eval/apply behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eval_defun_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-eval-nested-xxx (x)
     \"Return X plus its square.\"
@@ -24,7 +24,7 @@ fn divergence_eval_defun_nested() {
 fn divergence_apply_with_spread() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (apply '+ 1 2 '(3 4))
   (apply '+ 1 '(2))
@@ -38,7 +38,7 @@ fn divergence_apply_with_spread() {
 fn divergence_funcall_with_lambda_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((make-counter
        (lambda (start)
          (let ((count start))
@@ -57,7 +57,7 @@ fn divergence_funcall_with_lambda_closure() {
 fn divergence_recursive_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((fib
        (lambda (n self)
          (if (< n 2) n
@@ -74,7 +74,7 @@ fn divergence_recursive_lambda() {
 fn divergence_condition_case_signal_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (condition-case err
       (car \"not-a-list\")
@@ -91,7 +91,7 @@ fn divergence_condition_case_signal_data() {
 fn divergence_unwind_protect_cleanup_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((x nil))
   (list
    (unwind-protect
@@ -105,7 +105,7 @@ fn divergence_unwind_protect_cleanup_values() {
 fn divergence_nested_condition_unwind_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((log nil))
   (ignore-errors
     (unwind-protect
@@ -121,7 +121,7 @@ fn divergence_nested_condition_unwind_order() {
 fn divergence_defmacro_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-swap-xxx (a b)
     \\`(let ((tmp ,a)) (setq ,a ,b) (setq ,b tmp)))
@@ -136,7 +136,7 @@ fn divergence_defmacro_expand() {
 fn divergence_backquote_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((a 1) (b '(2 3)))
   (list
    \\`(a ,a ,@b)
@@ -151,7 +151,7 @@ fn divergence_backquote_edge() {
 fn divergence_setf_generalized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v [10 20 30]))
   (setf (aref v 1) 99)
   (list v

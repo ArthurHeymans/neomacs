@@ -1,13 +1,13 @@
 //! Divergence tests: window + buffer + point + marker spatial combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_split_window_point_per_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5")
   (let ((w1 (selected-window))
@@ -27,7 +27,7 @@ fn divergence_split_window_point_per_window() {
 fn divergence_walk_windows_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((windows nil))
   (walk-windows (lambda (w) (push (list (window-buffer w) (window-point w)) windows)))
   (list (length windows)
@@ -40,7 +40,7 @@ fn divergence_walk_windows_consistency() {
 fn divergence_set_window_buffer_then_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((buf (generate-new-buffer "*test-wbuf*"))
        (w (selected-window)))
   (with-current-buffer buf
@@ -59,7 +59,7 @@ fn divergence_set_window_buffer_then_point() {
 fn divergence_save_selected_window_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w1 (selected-window)))
   (save-selected-window
     (let ((w2 (split-window nil nil 'right)))
@@ -77,7 +77,7 @@ fn divergence_save_selected_window_mutation() {
 fn divergence_window_configuration_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((wc1 (current-window-configuration)))
   (split-window nil nil 'right)
   (let ((wc2 (current-window-configuration))
@@ -100,7 +100,7 @@ fn divergence_window_configuration_full_cycle() {
 fn divergence_window_scroll_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (dotimes (i 50) (insert (format "Line %02d\n" i)))
   (goto-char 1)
@@ -119,7 +119,7 @@ fn divergence_window_scroll_positions() {
 fn divergence_buffer_in_two_windows_simultaneously() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((w1 (selected-window))
@@ -142,7 +142,7 @@ fn divergence_buffer_in_two_windows_simultaneously() {
 fn divergence_window_dedicated_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w (selected-window)))
   (list (not (window-dedicated-p w))
         (set-window-dedicated-p w t)
@@ -156,7 +156,7 @@ fn divergence_window_dedicated_p() {
 fn divergence_temp_buffer_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((orig-buf (current-buffer)))
   (with-temp-buffer
     (insert "temp content for display")
@@ -172,7 +172,7 @@ fn divergence_temp_buffer_display() {
 fn divergence_window_margins_fringes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w (selected-window)))
   (list (>= (window-width w) 1)
         (>= (window-height w) 1)

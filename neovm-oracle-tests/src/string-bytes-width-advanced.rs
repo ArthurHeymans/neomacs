@@ -8,7 +8,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // string-bytes for ASCII vs multibyte strings
@@ -44,7 +44,7 @@ fn oracle_prop_string_bytes_width_ascii_vs_multibyte() {
               (list (length s) (string-bytes s)
                     (>= (string-bytes s) (length s))))
             strings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ fn oracle_prop_string_bytes_width_empty_and_edge() {
   (string-bytes (make-string 100 ?A))
   ;; make-string with multibyte
   (string-bytes (make-string 50 #x4e16)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ fn oracle_prop_string_bytes_width_cjk_combining() {
   ;; Mixed: ASCII(1) + CJK(2) + combining(0) + fullwidth(2)
   (let ((s (concat "A" "\u4e16" (string ?e #x0301) "\uff21")))
     (list (length s) (string-width s) (string-bytes s))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ fn oracle_prop_string_bytes_width_vs_length() {
                   ((> (string-width s) (length s)) 'wider)
                   ((< (string-width s) (length s)) 'narrower)))))
           test-cases))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ fn oracle_prop_string_bytes_width_char_classes() {
   ;; Batch: classify width for a range of chars
   (let ((chars (list ?A #x4e16 #x0301 ?\t #xff21 #xff71 #x00e9 #xfe0f)))
     (mapcar (lambda (ch) (list ch (char-width ch))) chars)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ fn oracle_prop_string_bytes_width_fixed_columns() {
     (fmakunbound 'neovm--sbw-pad-to)
     (fmakunbound 'neovm--sbw-format-row)
     (fmakunbound 'neovm--sbw-format-table)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,5 +390,5 @@ fn oracle_prop_string_bytes_width_boundary_truncation() {
                 (string-width (car tw)))))
     (fmakunbound 'neovm--sbw-truncate-bytes)
     (fmakunbound 'neovm--sbw-truncate-width)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

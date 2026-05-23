@@ -5,7 +5,7 @@
 //! and kills the temp buffer in cleanup without running normal kill-buffer
 //! hooks.  These tests pin that contract directly.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_with_temp_file_writes_after_body_and_returns_body_value() {
       (delete-file file))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn oracle_prop_with_temp_file_does_not_write_file_when_body_errors() {
       (delete-file file))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -118,5 +118,5 @@ fn oracle_prop_with_temp_file_cleanup_skips_kill_buffer_hooks() {
       (delete-file file))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

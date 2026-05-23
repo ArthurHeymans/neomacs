@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // concat with 0 args, 1 arg, many args (10+)
@@ -36,7 +36,7 @@ fn oracle_prop_concat_arity_variations() {
       (concat "" "a" "" "b" "" "c" "")
       ;; all empty
       (concat "" "" "" ""))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ fn oracle_prop_concat_mixed_types() {
       (concat '(42))
       ;; empty list/vector
       (concat '() [] "test" '() []))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn oracle_prop_concat_bool_vector_rejected_as_sequence_like_gnu() {
    (vconcat bv)
    (append bv nil)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn oracle_prop_char_table_is_not_sequence_for_concat_vconcat_append_like_gnu() {
        (append table nil)
      (error (list (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ fn oracle_prop_concat_vs_mapconcat() {
           nums-str wrapped
           (string-equal manual via-mapconcat)
           manual via-mapconcat))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ fn oracle_prop_incremental_vs_batch_building() {
              ;; Verify equivalence
              (eq-check (string-equal incremental batch)))
         (list incremental batch via-format char-by-char number-parts eq-check))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn oracle_prop_concat_identity_and_equality() {
           (stringp (concat "a"))
           (stringp (concat '(65)))
           (stringp (concat [65]))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +284,7 @@ fn oracle_prop_string_builder_with_undo() {
     (fmakunbound 'neovm--test-sb-undo)
     (fmakunbound 'neovm--test-sb-value)
     (fmakunbound 'neovm--test-sb-history-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ fn oracle_prop_template_string_expansion() {
           (funcall 'neovm--test-tmpl-expand
             "{{name}} is {{name}} is {{name}}" env)))
     (fmakunbound 'neovm--test-tmpl-expand)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,5 +439,5 @@ fn oracle_prop_csv_builder_and_parser() {
     (fmakunbound 'neovm--test-csv-quote-field)
     (fmakunbound 'neovm--test-csv-row)
     (fmakunbound 'neovm--test-csv-parse-row)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

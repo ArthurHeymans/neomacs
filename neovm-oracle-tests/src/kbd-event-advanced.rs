@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // kbd with all modifier prefixes and combinations
@@ -38,7 +38,7 @@ fn oracle_prop_kbd_event_all_modifiers() {
   (kbd "C-M-H-a")
   ;; All five modifiers
   (kbd "C-M-S-s-H-a"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ fn oracle_prop_kbd_event_multi_key_sequences() {
   (kbd "C-x C-x")
   ;; Sequence with plain keys between modified
   (kbd "C-x a i g"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ fn oracle_prop_kbd_event_function_keys() {
   (kbd "M-<down>")
   (kbd "S-<left>")
   (kbd "C-M-<right>"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ fn oracle_prop_kbd_event_key_description_roundtrip() {
   (equal (key-description (kbd "C-x C-f")) "C-x C-f")
   (equal (key-description (kbd "M-x")) "M-x")
   (equal (key-description (kbd "C-M-a")) "C-M-a"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ fn oracle_prop_kbd_event_convert_list_extended() {
   (event-convert-list '(control meta mouse-3))
   (event-convert-list '(down-mouse-1))
   (event-convert-list '(double-mouse-1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ fn oracle_prop_kbd_event_single_key_description_comprehensive() {
   ;; Verify consistency: single-key of kbd result
   (equal (single-key-description (aref (kbd "C-a") 0)) "C-a")
   (equal (single-key-description (aref (kbd "M-x") 0)) "M-x"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ fn oracle_prop_kbd_event_keymap_integration() {
     (equal (kbd "C-x C-f") (kbd "C-x C-f"))
     ;; Verify different keys produce different vectors
     (not (equal (kbd "C-x C-f") (kbd "C-x C-s")))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,5 +320,5 @@ fn oracle_prop_kbd_event_modifiers_and_basic_type() {
              (event-basic-type event)
              (single-key-description event))))
    events))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

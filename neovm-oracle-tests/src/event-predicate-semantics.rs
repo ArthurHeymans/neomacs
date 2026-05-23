@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' event predicate semantics.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_eventp_accepts_integers_and_non_keyword_symbols() {
@@ -16,7 +16,7 @@ fn oracle_eventp_accepts_integers_and_non_keyword_symbols() {
  (eventp '(:keyword ignored))
  (eventp "mouse-1")
  (eventp '(\"mouse-1\" ignored)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn oracle_mouse_event_predicates_follow_basic_type() {
            (mouse-movement-p event)
            (event-basic-type event)))
    events))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,5 +54,5 @@ fn oracle_mouse_movement_p_only_checks_event_car() {
  (mouse-movement-p nil)
  (mouse-movement-p '(mouse-1))
  (mouse-movement-p '(drag-mouse-1 nil nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

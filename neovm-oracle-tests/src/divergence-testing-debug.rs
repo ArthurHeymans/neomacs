@@ -1,13 +1,13 @@
 //! Divergence tests: ERT testing framework, assertions deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_ert_core() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ert-deftest)
   (fboundp 'should)
@@ -23,7 +23,7 @@ fn divergence_ert_core() {
 fn divergence_ert_selectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ert-select-tests)
   (fboundp 'ert-test-result-type-p)
@@ -37,7 +37,7 @@ fn divergence_ert_selectors() {
 fn divergence_buttercup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'buttercup-define-matcher)
   (fboundp 'buttercup-run)
@@ -49,7 +49,7 @@ fn divergence_buttercup() {
 fn divergence_ert_mock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ert-with-test-buffer)
   (fboundp 'ert-with-global-buffer)
@@ -61,7 +61,7 @@ fn divergence_ert_mock() {
 fn divergence_debugger() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'debug)
   (fboundp 'debug-on-entry)
@@ -77,7 +77,7 @@ fn divergence_debugger() {
 fn divergence_backtrace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'backtrace)
   (fboundp 'backtrace-frame)
@@ -90,7 +90,7 @@ fn divergence_backtrace() {
 fn divergence_trace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'trace-function)
   (fboundp 'trace-function-foreground)
@@ -104,7 +104,7 @@ fn divergence_trace() {
 fn divergence_elisp_demos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'shortdoc-display-groups)
   (fboundp 'shortdoc-display-function)
@@ -116,7 +116,7 @@ fn divergence_elisp_demos() {
 fn divergence_finder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'finder-commentary)
   (fboundp 'finder-by-keyword)
@@ -128,7 +128,7 @@ fn divergence_finder() {
 fn divergence_package_tests() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ert-test)
   (fboundp 'ert-make-test)

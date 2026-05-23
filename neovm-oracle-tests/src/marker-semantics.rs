@@ -4,7 +4,7 @@
 //! clipping, detachment, dead-buffer handling, insertion-type return values, and
 //! copy-marker edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,7 +24,7 @@ fn oracle_marker_set_clips_to_accessible_buffer_bounds() {
      (point-max))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn oracle_marker_detach_and_last_position_semantics() {
      (marker-insertion-type m))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_marker_dead_buffer_becomes_nowhere_but_keeps_last_position() {
    (marker-last-position marker)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn oracle_copy_marker_nil_number_marker_and_insertion_type() {
      (eq (marker-buffer copy) (current-buffer)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn oracle_copy_marker_number_clips_to_buffer_bounds_like_gnu() {
      (point-max))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn oracle_set_marker_insertion_type_returns_requested_type() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -167,5 +167,5 @@ fn oracle_set_marker_from_marker_in_other_buffer_recomputes_target_position() {
     (kill-buffer dst-buf)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

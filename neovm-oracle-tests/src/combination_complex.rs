@@ -8,10 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{
-    ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // State machines and accumulators
@@ -40,7 +37,7 @@ fn oracle_prop_combo_state_machine_via_closures() {
                     (funcall transition 'reset)
                     (funcall transition 'go)
                     (list state (nreverse log))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -58,7 +55,7 @@ fn oracle_prop_combo_accumulator_with_error_recovery() {
                       (error
                        (setq errors (cons (list (car err) (car op)) errors)))))
                   (list result (nreverse errors)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +76,7 @@ fn oracle_prop_combo_pipeline_via_funcall_chain() {
                                  (lambda (x) (* x 2))
                                  (lambda (x) (- x 3)))
                            5))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("27", &o, &n);
 }
 
@@ -98,7 +95,7 @@ fn oracle_prop_combo_reduce_via_closure() {
                         (funcall my-reduce '* 1 '(1 2 3 4 5))
                         (funcall my-reduce 'max 0 '(3 1 4 1 5 9 2 6))
                         (funcall my-reduce (lambda (acc x) (cons x acc)) nil '(a b c))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -115,7 +112,7 @@ fn oracle_prop_combo_filter_map_via_closures() {
                           (funcall my-filter
                                    (lambda (x) (= 0 (% x 2)))
                                    '(1 2 3 4 5 6 7 8 9 10))))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(4 16 36 64 100)", &o, &n);
 }
 
@@ -131,7 +128,7 @@ fn oracle_prop_combo_zip_two_lists() {
                                            b (cdr b)))
                                    (nreverse result)))))
                   (funcall my-zip '(a b c) '(1 2 3)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +147,7 @@ fn oracle_prop_combo_frequency_counter() {
                     (dolist (key '(a b c d))
                       (setq result (cons (cons key (gethash key counts)) result)))
                     (nreverse result)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -171,7 +168,7 @@ fn oracle_prop_combo_memoized_fibonacci() {
                   (unwind-protect
                       (mapcar 'neovm--test-memo-fib '(0 1 2 5 10 15 20))
                     (fmakunbound 'neovm--test-memo-fib)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -185,7 +182,7 @@ fn oracle_prop_combo_hash_table_group_by() {
                       (puthash key (cons x (or (gethash key groups) nil)) groups)))
                   (list (nreverse (gethash 'even groups))
                         (nreverse (gethash 'odd groups))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +205,7 @@ fn oracle_prop_combo_macro_generates_closures() {
                         (funcall (car counter))
                         (funcall (cadr counter)))
                     (fmakunbound 'neovm--test-make-counter)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("13", &o, &n);
 }
 
@@ -230,7 +227,7 @@ fn oracle_prop_combo_macro_with_unwind_protect() {
                           (setq log (cons 'end log)))
                         log)
                     (fmakunbound 'neovm--test-with-log)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -248,7 +245,7 @@ fn oracle_prop_combo_nested_catch_throw_with_closures() {
                                (funcall escape 'inner 'from-inner)
                                (setq log (cons 'unreachable log)))))))
                     (list result (nreverse log))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -274,7 +271,7 @@ fn oracle_prop_combo_recursive_error_collection() {
                       (let ((sum (funcall 'neovm--test-safe-process '(1 (2 bad 3) (4 (5 oops))))))
                         (list sum (length errors)))
                     (fmakunbound 'neovm--test-safe-process)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +286,7 @@ fn oracle_prop_combo_string_builder_pattern() {
                     (dotimes (i 5)
                       (setq parts (cons (format "item-%d" i) parts)))
                     (mapconcat 'identity (nreverse parts) ", "))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -298,7 +295,7 @@ fn oracle_prop_combo_string_repeat_join() {
 
     let form = r#"(let ((words '("hello" "world" "foo" "bar")))
                     (mapconcat 'upcase words " | "))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +312,7 @@ fn oracle_prop_combo_alist_update_pattern() {
                     (list (assq 'x env)
                           (assq 'y env)
                           (assq 'z env))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -331,7 +328,7 @@ fn oracle_prop_combo_alist_to_hash_and_back() {
                     (dolist (key '(a b c))
                       (setq result (cons (cons key (gethash key ht)) result)))
                     (nreverse result)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +345,7 @@ fn oracle_prop_combo_deeply_nested_lets() {
                       (let ((d (+ c 1)))
                         (let ((e (+ d 1)))
                           (list a b c d e (+ a b c d e)))))))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(1 2 3 4 5 15)", &o, &n);
 }
 
@@ -367,7 +364,7 @@ fn oracle_prop_combo_nested_condition_case_layers() {
                     (error
                      (list 'caught-mid (car mid-err) (cadr mid-err))))
                   (error (list 'caught-outer (car outer-err))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -386,7 +383,7 @@ fn oracle_prop_combo_complex_while_with_multiple_exits() {
                         (throw 'done nil))
                       (setq i (1+ i))))
                   (list found sum))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +397,7 @@ fn oracle_prop_combo_setq_multiple_pairs() {
     let form = "(let (a b c)
                   (setq a 1 b 2 c 3)
                   (list a b c))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(1 2 3)", &o, &n);
 }
 
@@ -412,7 +409,7 @@ fn oracle_prop_combo_setq_sequential_dependency() {
     let form = "(let ((x 0))
                   (setq x 5 x (+ x 10))
                   x)";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("15", &o, &n);
 }
 
@@ -429,7 +426,7 @@ fn oracle_prop_combo_vector_map_pattern() {
                   (dotimes (i (length v))
                     (setq result (cons (* 2 (aref v i)) result)))
                   (nreverse result))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(20 40 60 80 100)", &o, &n);
 }
 
@@ -441,7 +438,7 @@ fn oracle_prop_combo_vector_accumulate_with_aset() {
                   (dotimes (i 5)
                     (aset v i (* i i)))
                   (list (aref v 0) (aref v 1) (aref v 2) (aref v 3) (aref v 4)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(0 1 4 9 16)", &o, &n);
 }
 
@@ -456,7 +453,7 @@ fn oracle_prop_combo_sort_with_custom_predicate() {
     // Sort by absolute value
     let form = "(let ((lst (list 3 -1 4 -1 5 -9 2 -6)))
                   (sort lst (lambda (a b) (< (abs a) (abs b)))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -465,7 +462,7 @@ fn oracle_prop_combo_sort_alist_by_value() {
 
     let form = "(let ((al (list (cons 'b 2) (cons 'a 1) (cons 'c 3) (cons 'd 0))))
                   (sort al (lambda (x y) (< (cdr x) (cdr y)))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -481,7 +478,7 @@ fn oracle_prop_combo_mapcar_chain() {
                   (mapcar 'number-to-string
                           (mapcar (lambda (x) (* x x))
                                   (mapcar '1+ data))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -494,7 +491,7 @@ fn oracle_prop_combo_mapcar_with_index_via_counter() {
                             (prog1 (list idx x)
                               (setq idx (1+ idx))))
                           '(a b c d)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +508,7 @@ fn oracle_prop_combo_plist_based_config() {
                         (plist-get config :color)
                         (plist-get config :name)
                         (plist-get config :missing)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,7 +548,7 @@ fn oracle_prop_combo_build_binary_tree() {
                         (funcall 'neovm--test-tree-inorder tree))
                     (fmakunbound 'neovm--test-tree-insert)
                     (fmakunbound 'neovm--test-tree-inorder)))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(1 2 3 4 5 6 7 8)", &o, &n);
 }
 
@@ -577,7 +574,7 @@ fn oracle_prop_combo_retry_pattern() {
                             (throw 'done nil))
                         (error nil))))
                   (list success attempts))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -598,7 +595,7 @@ fn oracle_prop_combo_unwind_protect_chain() {
                         (setq log (cons 'cleanup-3 log)))
                     (error nil))
                   (nreverse log))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(body cleanup-1 cleanup-2 cleanup-3)", &o, &n);
 }
 
@@ -617,7 +614,7 @@ fn oracle_prop_combo_let_star_computation_chain() {
                        (e (length d))
                        (f (apply '+ d)))
                   (list a b c d e f))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -645,7 +642,7 @@ proptest! {
                    (setq sum (+ sum x)))))",
             a, b, c, d
         );
-        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
         prop_assert_eq!(neovm.as_str(), oracle.as_str());
     }
 
@@ -663,7 +660,7 @@ proptest! {
                  (list (funcall f) (funcall g) (+ (funcall f) (funcall g)))))",
             x, y
         );
-        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
         prop_assert_eq!(neovm.as_str(), oracle.as_str());
     }
 
@@ -686,7 +683,7 @@ proptest! {
                  (fmakunbound 'neovm--test-rsum)))",
             a, b, c, d, e
         );
-        let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(&form);
+        let (oracle, neovm) = eval_oracle_and_neovm(&form);
         prop_assert_eq!(neovm.as_str(), oracle.as_str());
     }
 }

@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `accessible-keymaps`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_accessible_keymaps_breadth_first_prefixes_and_filtering() {
@@ -44,7 +42,7 @@ fn oracle_accessible_keymaps_breadth_first_prefixes_and_filtering() {
            (accessible-keymaps root (string ?\C-x)))
    (accessible-keymaps root [?z])))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,5 +68,5 @@ fn oracle_accessible_keymaps_type_errors() {
        (accessible-keymaps root [] nil)
      (error (list (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

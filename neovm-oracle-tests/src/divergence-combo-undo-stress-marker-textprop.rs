@@ -1,13 +1,13 @@
 //! Divergence tests: undo stress + marker + textprop + overlay deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_chain_50_edits_markers_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 50 ?A))
   (let ((ovs nil) (mks nil))
@@ -38,7 +38,7 @@ fn divergence_undo_chain_50_edits_markers_overlays() {
 fn divergence_undo_after_textprop_overlay_rearrange() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((ov1 (make-overlay 1 3))
@@ -71,7 +71,7 @@ fn divergence_undo_after_textprop_overlay_rearrange() {
 fn divergence_undo_with_narrow_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((m1 (copy-marker 5 t))
@@ -102,7 +102,7 @@ fn divergence_undo_with_narrow_marker_tracking() {
 fn divergence_undo_with_overlay_evaporate_and_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -130,7 +130,7 @@ fn divergence_undo_with_overlay_evaporate_and_reinsert() {
 fn divergence_undo_after_kill_rectangle_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1-AAA\nline2-BBB\nline3-CCC\nline4-DDD\n")
   (let ((m1 (copy-marker 1))
@@ -162,7 +162,7 @@ fn divergence_undo_after_kill_rectangle_insert() {
 fn divergence_undo_preserves_overlay_priority_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov1 (make-overlay 1 25))
@@ -202,7 +202,7 @@ fn divergence_undo_preserves_overlay_priority_order() {
 fn divergence_undo_with_insert_behind_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "START-END")
   (let ((m-insert (copy-marker 6 t))
@@ -233,7 +233,7 @@ fn divergence_undo_with_insert_behind_marker() {
 fn divergence_undo_with_textprop_intervention() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 5 9)))
@@ -267,7 +267,7 @@ fn divergence_undo_with_textprop_intervention() {
 fn divergence_multiple_undo_boundaries_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ORIGINAL")
   (let ((ov (make-overlay 1 8))
@@ -301,7 +301,7 @@ fn divergence_multiple_undo_boundaries_interleaved() {
 fn divergence_undo_with_prop_change_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((ov (make-overlay 1 8)))

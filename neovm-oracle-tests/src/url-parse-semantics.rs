@@ -4,7 +4,7 @@
 //! schemes and hosts, has special `data:` URI handling, and recreates URLs
 //! with default ports omitted.  These tests pin the public accessor behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -30,7 +30,7 @@ fn oracle_prop_url_parse_full_authority_components() {
      (url-recreate-url u))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn oracle_prop_url_parse_default_ports_and_ipv6() {
      (list (url-host ipv6) (url-portspec ipv6) (url-recreate-url ipv6)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn oracle_prop_url_parse_relative_data_and_file_paths() {
            (url-recreate-url file)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -103,5 +103,5 @@ fn oracle_prop_url_parse_nil_empty_ports_and_host_unhex() {
      (list (url-host escaped-host) (url-recreate-url escaped-host)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

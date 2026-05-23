@@ -1,13 +1,13 @@
 //! Divergence tests: subprocess + temp buffer + encoding + multibyte combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_process_multibyte_to_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf (generate-new-buffer " test-mb-proc-xxx")))
     (with-current-buffer buf
@@ -28,7 +28,7 @@ fn divergence_process_multibyte_to_temp_buffer() {
 fn divergence_temp_file_write_read_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((tmp (make-temp-file "test-mb-"))
         (content "Hello \xc3\xa9 World \xc3\xa0 End"))
@@ -52,7 +52,7 @@ fn divergence_temp_file_write_read_multibyte() {
 fn divergence_encode_decode_in_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (with-temp-buffer
     (insert "\xc3\xa9\xc3\xa0\xc3\xb9")
@@ -73,7 +73,7 @@ fn divergence_encode_decode_in_temp_buffer() {
 fn divergence_shell_command_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((out (shell-command-to-string "printf 'caf\\xc3\\xa9'")))
     (list (length out)
@@ -89,7 +89,7 @@ fn divergence_shell_command_multibyte() {
 fn divergence_call_process_with_multibyte_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Input: \xc3\xa9\xc3\xa0\xc3\xb9 data")
   (let ((buf (generate-new-buffer " test-cpm-xxx")))
@@ -106,7 +106,7 @@ fn divergence_call_process_with_multibyte_input() {
 fn divergence_temp_buffer_with_overlays_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((result nil))
     (with-temp-buffer
@@ -134,7 +134,7 @@ fn divergence_temp_buffer_with_overlays_markers() {
 fn divergence_process_coding_system_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf (generate-new-buffer " test-coding-xxx")))
     (with-current-buffer buf
@@ -154,7 +154,7 @@ fn divergence_process_coding_system_conversion() {
 fn divergence_temp_file_with_rename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((tmp1 (make-temp-file "test-rn1-"))
         (tmp2 (make-temp-name "/tmp/test-rn2-")))
@@ -180,7 +180,7 @@ fn divergence_temp_file_with_rename() {
 fn divergence_buffer_file_name_temp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf (generate-new-buffer " test-bfn-xxx")))
     (with-current-buffer buf
@@ -202,7 +202,7 @@ fn divergence_buffer_file_name_temp() {
 fn divergence_process_sentinel_with_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-sentinel-log-xxx nil)
   (let ((buf (generate-new-buffer " test-sent-xxx")))

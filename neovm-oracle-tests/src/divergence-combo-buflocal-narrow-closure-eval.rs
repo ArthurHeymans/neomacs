@@ -1,13 +1,13 @@
 //! Divergence tests: buflocal + narrowing + closure + eval deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buflocal_narrow_eval_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-blne-xxx 0)
   (make-variable-buffer-local 'test-blne-xxx)
@@ -37,7 +37,7 @@ fn divergence_buflocal_narrow_eval_closure() {
 fn divergence_let_shadow_buflocal_eval_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-lsb-xxx 0)
   (make-variable-buffer-local 'test-lsb-xxx)
@@ -60,7 +60,7 @@ fn divergence_let_shadow_buflocal_eval_sequence() {
 fn divergence_buflocal_kill_buffer_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-bkr-xxx 0)
   (make-variable-buffer-local 'test-bkr-xxx)
@@ -83,7 +83,7 @@ fn divergence_buflocal_kill_buffer_restore() {
 fn divergence_closure_over_buflocal_with_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-cbm-xxx 0)
   (make-variable-buffer-local 'test-cbm-xxx)
@@ -111,7 +111,7 @@ fn divergence_closure_over_buflocal_with_marker() {
 fn divergence_default_value_vs_buflocal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-dvb-xxx 42)
   (make-variable-buffer-local 'test-dvb-xxx)
@@ -135,7 +135,7 @@ fn divergence_default_value_vs_buflocal() {
 fn divergence_narrowed_eval_with_closures_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-nen-xxx 'outer)
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
@@ -160,7 +160,7 @@ fn divergence_narrowed_eval_with_closures_nested() {
 fn divergence_buflocal_with_set_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-sd-xxx 0)
   (make-variable-buffer-local 'test-sd-xxx)
@@ -184,7 +184,7 @@ fn divergence_buflocal_with_set_default() {
 fn divergence_closure_capture_with_eval_redefinition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-cer-xxx 1)
   (let ((closure (let ((test-cer-xxx 50))
@@ -205,7 +205,7 @@ fn divergence_closure_capture_with_eval_redefinition() {
 fn divergence_buflocal_with_undo_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-bui-xxx 0)
   (make-variable-buffer-local 'test-bui-xxx)
@@ -234,7 +234,7 @@ fn divergence_buflocal_with_undo_insert() {
 fn divergence_multiple_buflocal_vars_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-mbi-a-xxx 0)
   (defvar test-mbi-b-xxx 0)

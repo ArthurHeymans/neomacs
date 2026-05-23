@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Nested save-excursion preserving point independently at different depths
@@ -39,7 +39,7 @@ fn oracle_prop_save_excursion_nested_independent_point_preservation() {
             (list (point) (= (point) p1))))
         ;; after outermost restore, back to 5
         (list (point) (= (point) p0))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ fn oracle_prop_save_excursion_buffer_switch_set_buffer() {
         (kill-buffer buf-a)
         (kill-buffer buf-b)
         (kill-buffer buf-c)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ fn oracle_prop_save_excursion_with_save_restriction_interleaved() {
         (list (point) (= (point) outer-pt)
               (point-min) (= (point-min) outer-min)
               (point-max) (= (point-max) outer-max))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ fn oracle_prop_save_excursion_insert_point_adjustment() {
                           result-before after-before
                           result-after after-after
                           result-at after-at)))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +215,7 @@ fn oracle_prop_save_excursion_delete_region_clamp() {
                         (buffer-string))
                       (point))))
             (list r1 r2 r3)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +258,7 @@ fn oracle_prop_save_excursion_marker_interaction() {
                   (marker-position m4)
                   (marker-buffer m4)
                   (= (marker-position m4) 8))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ fn oracle_prop_save_excursion_error_recovery() {
                        ;; outer save-excursion body continues
                        (list (point)))))
                 (list r1 pt1 r2 pt2 r3 (point))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,7 @@ fn oracle_prop_save_excursion_multi_buffer_complex() {
         (kill-buffer buf-src)
         (kill-buffer buf-dst)
         (kill-buffer buf-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -403,7 +403,7 @@ fn oracle_prop_save_excursion_loop_repeated_entry() {
               count
               (nreverse positions)
               (buffer-string))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,5 +439,5 @@ fn oracle_prop_save_excursion_widen_inside_narrow() {
               (point-min) (= (point-min) narrow-min)
               (point-max) (= (point-max) narrow-max)
               (buffer-substring (point-min) (point-max)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

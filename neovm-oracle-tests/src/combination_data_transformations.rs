@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // JSON-to-XML-like conversion (nested alist to tagged string)
@@ -56,7 +56,7 @@ fn oracle_prop_dt_alist_to_xml_like() {
                                    (hobby . "reading")
                                    (hobby . "chess")))))
                       (funcall to-xml data 0)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ fn oracle_prop_dt_table_pivot() {
                         cols
                         ;; Round-trip should give back original
                         (equal back rows))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ fn oracle_prop_dt_normalization_pipeline() {
                                 (funcall normalize-record r
                                          trim-whitespace validate-email-like))
                               records)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn oracle_prop_dt_merge_join_data_sources() {
                         (length (nth 2 (car joined)))
                         ;; Group-by result for user 1
                         (gethash 1 grouped))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ fn oracle_prop_dt_hierarchical_flatten_reconstruct() {
                           (cdr (assoc "root/data/name" flat))
                           (cdr (assoc "root/data/items/count" flat))
                           (cdr (assoc "root/data/items/total" flat))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,5 +359,5 @@ fn oracle_prop_dt_etl_pipeline() {
                           ;; Summary sorted by department name
                           (sort summary
                                 (lambda (a b) (string< (car a) (car b))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

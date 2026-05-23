@@ -1,13 +1,13 @@
 //! Divergence tests: milestone batch 100 — comprehensive integration stress tests.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_full_text_editing_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-pipe-log-xxx nil)
   (insert "The quick brown fox jumps over the lazy dog")
@@ -47,7 +47,7 @@ fn divergence_full_text_editing_pipeline() {
 fn divergence_eieio_lifecycle_with_closures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-life-xxx ()
     ((name :initarg :name :accessor test-life-name-xxx)
@@ -83,7 +83,7 @@ fn divergence_eieio_lifecycle_with_closures() {
 fn divergence_buffer_churn_with_overlays_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 200 ?X))
   (let ((ovs nil) (mks nil))
@@ -114,7 +114,7 @@ fn divergence_buffer_churn_with_overlays_markers() {
 fn divergence_nested_macro_eval_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-gen-fn-xxx (name base)
     (let ((fn-name (intern (format "test-%s-fn-xxx" name))))
@@ -139,7 +139,7 @@ fn divergence_nested_macro_eval_apply() {
 fn divergence_error_recovery_full_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-err-log-xxx nil)
   (defun test-safe-run-xxx (fn)
@@ -167,7 +167,7 @@ fn divergence_error_recovery_full_stack() {
 fn divergence_keymap_hierarchy_command_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-cmd-a-xxx () (interactive) "cmd-a")
   (defun test-cmd-b-xxx () (interactive) "cmd-b")
@@ -197,7 +197,7 @@ fn divergence_keymap_hierarchy_command_lookup() {
 fn divergence_textprop_overlay_undo_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov (make-overlay 5 9)))
@@ -230,7 +230,7 @@ fn divergence_textprop_overlay_undo_full_cycle() {
 fn divergence_closure_eval_obarray_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-clo-xxx 0)
   (let ((closures nil))
@@ -257,7 +257,7 @@ fn divergence_closure_eval_obarray_deep() {
 fn divergence_multibyte_regex_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "caf\xc3\xa9 na\xc3\xafve r\xc3\xa9sum\xc3\xa9")
   (let ((m1 (copy-marker 1))
@@ -285,7 +285,7 @@ fn divergence_multibyte_regex_replace_undo() {
 fn divergence_condition_case_with_overlays_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "START-ERROR-MARKER-END")
   (let ((ov (make-overlay 1 25))

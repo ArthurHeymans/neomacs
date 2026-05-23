@@ -1,13 +1,13 @@
 //! Divergence tests: real file & directory behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_file_name_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (file-name-directory \"/foo/bar/baz.txt\")
   (file-name-nondirectory \"/foo/bar/baz.txt\")
@@ -22,7 +22,7 @@ fn divergence_file_name_ops() {
 fn divergence_expand_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((default-directory \"/tmp/\"))
   (list (expand-file-name \"foo.txt\")
         (expand-file-name \"foo.txt\" \"/var\")
@@ -35,7 +35,7 @@ fn divergence_expand_file_name() {
 fn divergence_file_attributes_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (file-exists-p \"/tmp\")
   (file-directory-p \"/tmp\")
@@ -48,7 +48,7 @@ fn divergence_file_attributes_check() {
 fn divergence_path_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (concat (file-name-as-directory \"/foo\") \"bar\")
   (file-name-as-directory \"/foo\")
@@ -61,7 +61,7 @@ fn divergence_path_concat() {
 fn divergence_file_truename_tilde() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((h1 (expand-file-name \"~\"))
         (h2 (expand-file-name \"~/\")))
   (list (string= h1 h2)
@@ -75,7 +75,7 @@ fn divergence_file_truename_tilde() {
 fn divergence_make_temp_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp1 (make-temp-file \"test-neovm-\")))
   (let ((exists (file-exists-p tmp1)))
     (write-region \"hello\" nil tmp1 nil 'silent)
@@ -93,7 +93,7 @@ fn divergence_make_temp_files() {
 fn divergence_directory_listing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-dir-\")))
   (delete-file tmp)
   (make-directory tmp)
@@ -113,7 +113,7 @@ fn divergence_directory_listing() {
 fn divergence_insert_file_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-read-\")))
   (write-region \"Hello World\" nil tmp nil 'silent)
   (let ((result (insert-file-contents tmp)))
@@ -126,7 +126,7 @@ fn divergence_insert_file_contents() {
 fn divergence_write_region_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-append-\")))
   (write-region \"line1\\n\" nil tmp nil 'silent)
   (write-region \"line2\\n\" nil tmp 'append 'silent)
@@ -143,7 +143,7 @@ fn divergence_write_region_append() {
 fn divergence_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp1 (make-temp-file \"test-link-target-\")))
   (write-region \"data\" nil tmp1 nil 'silent)
   (let ((tmp2 (make-temp-name \"/tmp/test-link-\")))

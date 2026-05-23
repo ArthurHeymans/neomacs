@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // make-local-variable: create a buffer-local binding in one buffer
@@ -44,7 +44,7 @@ fn oracle_prop_buffer_local_make_local_basic() {
           (kill-buffer buf1)
           (kill-buffer buf2)))
     (makunbound 'neovm--blv-test-1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ fn oracle_prop_buffer_local_make_variable_buffer_local() {
             (kill-buffer buf2)
             (kill-buffer buf3))))
     (makunbound 'neovm--blv-test-2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ fn oracle_prop_buffer_local_value_reads() {
              (buffer-local-value 'neovm--blv-test-3 (nth 4 bufs)))
           (dolist (b bufs) (kill-buffer b))))
     (makunbound 'neovm--blv-test-3)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ fn oracle_prop_buffer_local_kill_local() {
                      (local-variable-p 'neovm--blv-test-4))))))
           (kill-buffer buf)))
     (makunbound 'neovm--blv-test-4)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ fn oracle_prop_buffer_local_variable_p_types() {
             (kill-buffer buf))))
     (makunbound 'neovm--blv-test-5)
     (makunbound 'neovm--blv-test-5b)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ fn oracle_prop_buffer_local_settings_system() {
     (fmakunbound 'neovm--blv-set-setting)
     (fmakunbound 'neovm--blv-reset-setting)
     (fmakunbound 'neovm--blv-get-all-settings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +363,7 @@ fn oracle_prop_buffer_local_default_interaction() {
           (kill-buffer buf-local)
           (kill-buffer buf-default)))
     (makunbound 'neovm--blv-test-6)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,5 +399,5 @@ fn oracle_prop_buffer_local_let_binding() {
                 neovm--blv-test-7))
           (kill-buffer buf)))
     (makunbound 'neovm--blv-test-7)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

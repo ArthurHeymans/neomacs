@@ -1,13 +1,13 @@
 //! Divergence tests: pixel vs char positions, window edges, buffer display.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_window_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-edges)
   (fboundp 'window-inside-edges)
@@ -20,7 +20,7 @@ fn divergence_window_edges() {
 fn divergence_window_body_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-body-height)
   (fboundp 'window-body-width)
@@ -33,7 +33,7 @@ fn divergence_window_body_height() {
 fn divergence_window_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-pixel-height)
   (fboundp 'window-pixel-width)
@@ -46,7 +46,7 @@ fn divergence_window_pixel_dimensions() {
 fn divergence_window_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'scroll-up)
   (fboundp 'scroll-down)
@@ -60,7 +60,7 @@ fn divergence_window_scroll() {
 fn divergence_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-hscroll)
   (fboundp 'set-window-hscroll)
@@ -73,7 +73,7 @@ fn divergence_window_hscroll() {
 fn divergence_window_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-start)
   (fboundp 'window-end)
@@ -87,7 +87,7 @@ fn divergence_window_start_end() {
 fn divergence_window_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-buffer)
   (fboundp 'window-point)
@@ -100,7 +100,7 @@ fn divergence_window_buffer() {
 fn divergence_window_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-parameters)
   (fboundp 'window-parameter)
@@ -112,7 +112,7 @@ fn divergence_window_parameters() {
 fn divergence_window_display_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-display-table)
   (fboundp 'set-window-display-table))"#,
@@ -123,7 +123,7 @@ fn divergence_window_display_table() {
 fn divergence_window_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'window-combination-limit)
   (fboundp 'set-window-combination-limit)

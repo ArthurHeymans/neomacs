@@ -5,7 +5,7 @@
 //! The important compatibility points are predicate interpretation, returned
 //! `prop-match` structure fields, `not-current`, and point movement.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_text_property_search_forward_distinct_regions() {
       (nreverse out))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_prop_text_property_search_value_and_predicate_semantics() {
              (prop-match-value member-token))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn oracle_prop_text_property_search_backward_and_not_current() {
                   (point)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -126,5 +126,5 @@ fn oracle_prop_text_property_search_miss_restores_point() {
       (list forward after-forward backward after-backward))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

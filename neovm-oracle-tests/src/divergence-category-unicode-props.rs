@@ -1,13 +1,13 @@
 //! Divergence tests: category table, category set operations deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_category_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'category-table)
   (fboundp 'category-table-p)
@@ -21,7 +21,7 @@ fn divergence_category_table() {
 fn divergence_category_define() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-category)
   (fboundp 'category-docstring)
@@ -34,7 +34,7 @@ fn divergence_category_define() {
 fn divergence_char_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'char-category-set)
   (fboundp 'category-set-mnemonics)
@@ -46,7 +46,7 @@ fn divergence_char_category() {
 fn divergence_category_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'copy-category-table)
   (fboundp 'category-table-parent)
@@ -59,7 +59,7 @@ fn divergence_category_inheritance() {
 fn divergence_category_table_standard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'standard-category-table)
   (category-table-p (standard-category-table))
@@ -71,7 +71,7 @@ fn divergence_category_table_standard() {
 fn divergence_unicode_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (get-char-code-property ?A 'general-category)
   (get-char-code-property ?a 'general-category)
@@ -84,7 +84,7 @@ fn divergence_unicode_category() {
 fn divergence_char_script() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'char-script-table)
   (fboundp 'script-representative-chars)
@@ -96,7 +96,7 @@ fn divergence_char_script() {
 fn divergence_char_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'get-char-code-property)
   (fboundp 'char-code-property-description)
@@ -108,7 +108,7 @@ fn divergence_char_name() {
 fn divergence_unicode_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'char-code-property-alist)
   (listp (char-code-property-alist))
@@ -121,7 +121,7 @@ fn divergence_unicode_properties() {
 fn divergence_unicode_combining() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (get-char-code-property ?A 'canonical-combining-class)
   (get-char-code-property ?a 'canonical-combining-class)

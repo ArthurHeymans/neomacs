@@ -4,7 +4,7 @@
 //! `equal`, preserves the first element in each run, and optionally treats the
 //! first and last elements as adjacent.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_prop_delete_consecutive_dups_basic_runs() {
  (delete-consecutive-dups (list 'solo)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_delete_consecutive_dups_is_destructive_and_keeps_first() {
         xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn oracle_prop_delete_consecutive_dups_only_removes_adjacent_equal_values() {
         xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn oracle_prop_delete_consecutive_dups_circular_option() {
    same))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -105,5 +105,5 @@ fn oracle_delete_consecutive_dups_improper_tail_errors_like_gnu() {
     xs)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

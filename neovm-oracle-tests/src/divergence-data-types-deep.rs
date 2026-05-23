@@ -1,13 +1,13 @@
 //! Divergence tests: lisp data types edge - bool-vector, char-table, record.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_bool_vector_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((a (make-bool-vector 16 t))
         (b (make-bool-vector 16 nil)))
   (aset b 0 t)
@@ -27,7 +27,7 @@ fn divergence_bool_vector_operations() {
 fn divergence_bool_vector_union_intersection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((a (make-bool-vector 8 nil))
         (b (make-bool-vector 8 nil)))
   (aset a 0 t) (aset a 2 t) (aset a 4 t)
@@ -43,7 +43,7 @@ fn divergence_bool_vector_union_intersection() {
 fn divergence_char_table_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ct (make-char-table 'syntax-table 'default-val)))
   (list (char-table-default ct)
         (aref ct ?A)
@@ -58,7 +58,7 @@ fn divergence_char_table_default() {
 fn divergence_record_vs_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((v [1 2 3])
         (r (record 'tag 1 2 3)))
   (list (vectorp v)
@@ -77,7 +77,7 @@ fn divergence_record_vs_vector() {
 fn divergence_record_type_descriptor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-record-type)
   (fboundp 'record-type-name)
@@ -90,7 +90,7 @@ fn divergence_record_type_descriptor() {
 fn divergence_string_byte_vs_char_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s "Héllo"))
   (list (length s)
         (string-bytes s)
@@ -105,7 +105,7 @@ fn divergence_string_byte_vs_char_index() {
 fn divergence_string_eq_vs_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s1 "hello")
         (s2 "hello"))
   (list (eq s1 s2)
@@ -119,7 +119,7 @@ fn divergence_string_eq_vs_equal() {
 fn divergence_multibyte_string_char_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s "中文测试"))
   (list (length s)
         (string-bytes s)
@@ -133,7 +133,7 @@ fn divergence_multibyte_string_char_index() {
 fn divergence_unibyte_string_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((us (string ?a ?b ?c)))
   (list (multibyte-string-p us)
         (length us)
@@ -146,7 +146,7 @@ fn divergence_unibyte_string_operations() {
 fn divergence_string_as_unibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ms "abc"))
   (list (multibyte-string-p ms)
         (string-as-unibyte ms)

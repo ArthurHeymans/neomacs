@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // assoc with different test functions: eq, equal, string=, custom lambda
@@ -39,7 +39,7 @@ fn oracle_prop_assoc_alist_testfn_variants() {
   (assoc 42 '((10 . "ten") (42 . "forty-two") (99 . "ninety-nine")))
   ;; assoc with list keys (equal does deep structural comparison)
   (assoc '(1 2 3) '(((1 2) . "pair") ((1 2 3) . "triple") ((4) . "single"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ fn oracle_prop_assoc_alist_assq_identity() {
   (assq 'a '((a . 1) (b . 2) (a . 3)))
   ;; nested symbol alists
   (assq 'inner (cdr (assq 'outer '((outer (inner . deep-val) (other . xx)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ fn oracle_prop_assoc_alist_rassoc_rassq() {
   (rassoc '(1 2) '((a . (1 2)) (b . (3 4))))
   ;; rassq with list values does NOT match (different cons cells)
   (rassq '(1 2) '((a . (1 2)) (b . (3 4)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ fn oracle_prop_assoc_alist_assoc_default_params() {
                  (lambda (key elt) (string-prefix-p key elt)))
   ;; assoc-default with vector keys
   (assoc-default [1 2] '(([1 2] . "match") ([3 4] . "no"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn oracle_assoc_default_pseudo_alist_and_tail_errors() {
      (assoc-default 'loose '((a . 1) loose . bad-tail) nil 'fallback)
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +197,7 @@ fn oracle_prop_assoc_alist_alist_get_comprehensive() {
   (alist-get 42 '((10 . "ten") (42 . "forty-two")))
   ;; alist-get with nil key
   (alist-get nil '((nil . "nil-value") (t . "t-value"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +234,7 @@ fn oracle_prop_assoc_alist_copy_alist_semantics() {
      ;; copy-alist preserves order
      (let ((al '((z . 26) (a . 1) (m . 13))))
        (equal al (copy-alist al))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ fn oracle_prop_assoc_alist_copy_alist_deep_values() {
        (setcar (cdr (assq 'b original)) 999)
        (list (cdr (assq 'b original))
              (cdr (assq 'b copied)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ fn oracle_prop_assoc_alist_multi_level_build_query() {
          (mapcar #'car org)))
     (fmakunbound 'neovm--deep-get)
     (fmakunbound 'neovm--deep-set)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ fn oracle_prop_assoc_alist_ordered_map_ops() {
     (fmakunbound 'neovm--alist-to-plist)
     (fmakunbound 'neovm--plist-to-alist)
     (fmakunbound 'neovm--alist-filter)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,5 +465,5 @@ fn oracle_prop_assoc_alist_lru_cache() {
     (fmakunbound 'neovm--lru-get)
     (fmakunbound 'neovm--lru-put)
     (fmakunbound 'neovm--lru-keys)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

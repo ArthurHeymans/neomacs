@@ -5,9 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_err_kind, assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_current_global_map_returns_keymap() {
@@ -19,8 +17,7 @@ fn oracle_current_global_map_returns_keymap() {
 #[test]
 fn oracle_current_local_map_nil_by_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) =
-        eval_oracle_and_neovm_with_bootstrap("(with-temp-buffer (current-local-map))");
+    let (oracle, neovm) = eval_oracle_and_neovm("(with-temp-buffer (current-local-map))");
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -42,7 +39,7 @@ fn oracle_use_local_map_returns_keymap() {
 #[test]
 fn oracle_global_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(
+    let (oracle, neovm) = eval_oracle_and_neovm(
         r#"(progn
   (global-set-key (kbd "C-c C-x") 'ignore)
   t)"#,
@@ -53,7 +50,7 @@ fn oracle_global_set_key_no_error() {
 #[test]
 fn oracle_local_set_key_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(
+    let (oracle, neovm) = eval_oracle_and_neovm(
         r#"(progn
   (local-set-key (kbd "C-c C-y") 'ignore)
   t)"#,
@@ -76,7 +73,7 @@ fn oracle_global_key_binding_and_unset_semantics() {
               (global-unset-key (kbd "C-c x"))
               (global-key-binding (kbd "C-c x"))))
     (use-global-map old-global-map)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq("(ignore nil nil nil)", &oracle, &neovm);
 }
 
@@ -93,7 +90,7 @@ fn oracle_local_key_binding_and_unset_semantics() {
           (local-key-binding (kbd "C-c z"))
           (local-unset-key (kbd "C-c y"))
           (local-key-binding (kbd "C-c y")))))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq("(ignore nil nil nil)", &oracle, &neovm);
 }
 

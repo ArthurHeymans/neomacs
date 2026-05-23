@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // All six advice types on the same function
@@ -100,7 +100,7 @@ fn oracle_prop_advice_comp_all_six_types() {
     (fmakunbound 'neovm--acp-fa)
     (fmakunbound 'neovm--acp-fr)
     (makunbound 'neovm--acp-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ fn oracle_prop_advice_comp_stacking_order_four_before() {
     (fmakunbound 'neovm--acp-stack-c)
     (fmakunbound 'neovm--acp-stack-d)
     (makunbound 'neovm--acp-stack-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ fn oracle_prop_advice_comp_remove_and_member_p_lifecycle() {
     (fmakunbound 'neovm--acp-rm-aft)
     (fmakunbound 'neovm--acp-rm-arn)
     (fmakunbound 'neovm--acp-rm-fr)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ fn oracle_prop_advice_comp_filter_args_return_chaining() {
     (fmakunbound 'neovm--acp-ch-fa2)
     (fmakunbound 'neovm--acp-ch-fr1)
     (fmakunbound 'neovm--acp-ch-fr2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ fn oracle_prop_advice_comp_around_modify_args_and_return() {
     (fmakunbound 'neovm--acp-mod-rev)
     (fmakunbound 'neovm--acp-mod-str)
     (fmakunbound 'neovm--acp-mod-wrap)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +418,7 @@ fn oracle_prop_advice_comp_unwind_protect_cleanup() {
     (fmakunbound 'neovm--acp-up-resource-mgr)
     (makunbound 'neovm--acp-up-cleanup-ran)
     (makunbound 'neovm--acp-up-resource)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +462,7 @@ fn oracle_prop_advice_comp_advice_on_named_lambda() {
     (advice-remove 'neovm--acp-lam 'neovm--acp-lam-adv)
     (fmakunbound 'neovm--acp-lam)
     (fmakunbound 'neovm--acp-lam-adv)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -516,7 +516,7 @@ fn oracle_prop_advice_comp_input_validation() {
     (advice-remove 'neovm--acp-val-fn 'neovm--acp-val-check)
     (fmakunbound 'neovm--acp-val-fn)
     (fmakunbound 'neovm--acp-val-check)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -590,5 +590,5 @@ fn oracle_prop_advice_comp_mixed_types_composition() {
     (fmakunbound 'neovm--acp-mix-aft)
     (fmakunbound 'neovm--acp-mix-fr)
     (makunbound 'neovm--acp-mix-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

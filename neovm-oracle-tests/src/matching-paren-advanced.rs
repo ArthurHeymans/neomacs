@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // matching-paren for all standard bracket types
@@ -38,7 +38,7 @@ fn oracle_prop_matching_paren_all_standard_brackets() {
    (= ?\( (matching-paren (matching-paren ?\()))
    (= ?\[ (matching-paren (matching-paren ?\[)))
    (= ?{ (matching-paren (matching-paren ?{)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ fn oracle_prop_matching_paren_nil_for_non_brackets() {
    (null (matching-paren ?a))
    (null (matching-paren ?.))
    (null (matching-paren ?\"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ fn oracle_prop_matching_paren_custom_brackets_via_modify_syntax() {
      ;; Verify types
      (characterp (matching-paren ?<))
      (null (matching-paren ?@)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ fn oracle_prop_matching_paren_combined_with_char_syntax() {
          (= (char-syntax ?>) ?\))
          ;; Full result list for deterministic comparison
          verification)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ fn oracle_prop_matching_paren_buffer_local_syntax_tables() {
      ;; Standard parens work in both
      (characterp (nth 2 result-with))
      (characterp (nth 2 result-without)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +271,7 @@ fn oracle_prop_matching_paren_unicode_brackets() {
      (= (matching-paren 12301) 12300)
      (= (matching-paren 65288) 65289)
      (= (matching-paren 65289) 65288))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,5 +335,5 @@ fn oracle_prop_matching_paren_bracket_matcher() {
        (funcall 'neovm--test-brackets-balanced-p "<{>}")
        (funcall 'neovm--test-brackets-balanced-p "}{"))
     (fmakunbound 'neovm--test-brackets-balanced-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

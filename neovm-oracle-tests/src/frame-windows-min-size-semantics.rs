@@ -3,7 +3,7 @@
 //! GNU's C definition in `src/frame.c` is a temacs placeholder; after loadup,
 //! `lisp/window.el` computes the minimum size from root and minibuffer windows.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -21,5 +21,5 @@ fn oracle_frame_windows_min_size_matches_loaded_window_el() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_ngettext_returns_singular_for_1() {
@@ -37,7 +37,7 @@ fn oracle_process_id_rejects_integer_pid_like_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     // GNU src/process.c:Fprocess_id CHECK_PROCESS validates that the argument
     // is a process object; an OS PID integer is not accepted.
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
                (process-id (emacs-pid))
              (error (list (car err)

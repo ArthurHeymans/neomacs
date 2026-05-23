@@ -1,13 +1,13 @@
 //! Divergence tests: syntax + parsing + sexp navigation combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_parse_partial_sexp_multi_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(defun foo (x y)\n  (list (+ x 1)\n        (* y 2)))")
   (let ((states nil))
@@ -23,7 +23,7 @@ fn divergence_parse_partial_sexp_multi_position() {
 fn divergence_scan_lists_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(a (b (c)) d) (e f) (g)")
   (goto-char 1)
@@ -40,7 +40,7 @@ fn divergence_scan_lists_forward_backward() {
 fn divergence_forward_kill_sexp_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(aaa bbb ccc ddd eee)")
   (let ((m1 (set-marker (make-marker) 2))
@@ -58,7 +58,7 @@ fn divergence_forward_kill_sexp_with_markers() {
 fn divergence_syntax_ppss_comment_string_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo \"string here\" bar ; comment\n  baz)")
   (let ((states nil))
@@ -78,7 +78,7 @@ fn divergence_syntax_ppss_comment_string_state() {
 fn divergence_narrowed_forward_sexp_across_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(aaa (bbb (ccc) ddd) eee)")
   (narrow-to-region 6 21)
@@ -96,7 +96,7 @@ fn divergence_narrowed_forward_sexp_across_boundary() {
 fn divergence_unbalanced_parens_scan_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo (bar baz)")
   (goto-char 1)
@@ -114,7 +114,7 @@ fn divergence_unbalanced_parens_scan_error() {
 fn divergence_beginning_end_of_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(defun a () \"doc\" body)\n(defun b (x) body2)\n(defun c () body3)")
   (goto-char 30)
@@ -131,7 +131,7 @@ fn divergence_beginning_end_of_defun() {
 fn divergence_thing_at_point_sexp_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo bar (baz quux)) hello-world 42")
   (goto-char 1)
@@ -153,7 +153,7 @@ fn divergence_thing_at_point_sexp_types() {
 fn divergence_insert_balanced_undo_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "MIDDLE")
   (let ((m (set-marker (make-marker) 3)))
@@ -174,7 +174,7 @@ fn divergence_insert_balanced_undo_markers() {
 fn divergence_check_parens_via_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo (bar))\n(baz quux)\n(unbalanced (open")
   (condition-case err

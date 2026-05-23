@@ -1,13 +1,13 @@
 //! Divergence tests: read/write objects, obarray operations, symbol shorthands.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_read_syntax_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list\n  (read-from-string \"42\")\n  (read-from-string \"-3\")\n  (read-from-string \"1.5\")\n  (read-from-string \"#xFF\"))",
     );
 }
@@ -16,16 +16,14 @@ fn divergence_read_syntax_numbers() {
 fn divergence_read_syntax_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
-        "(list\n  (read-from-string \"#b1010\")\n  (read-from-string \"#o77\"))",
-    );
+    assert_oracle_parity("(list\n  (read-from-string \"#b1010\")\n  (read-from-string \"#o77\"))");
 }
 
 #[test]
 fn divergence_read_syntax_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (read-from-string "?A")
   (read-from-string "?\\\\")
@@ -39,7 +37,7 @@ fn divergence_read_syntax_char() {
 fn divergence_obarray_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ob (make-obarray 511)))
   (list (intern-soft "foo" ob)
         (intern "bar" ob)
@@ -53,7 +51,7 @@ fn divergence_obarray_size() {
 fn divergence_obarray_count_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ob (make-obarray 31))
         count)
   (dotimes (i 5)
@@ -67,7 +65,7 @@ fn divergence_obarray_count_symbols() {
 fn divergence_symbol_function_interactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (commandp 'forward-char)
   (subrp (symbol-function 'forward-char))
@@ -80,7 +78,7 @@ fn divergence_symbol_function_interactive() {
 fn divergence_symbol_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((sym (intern "my-accessor-test")))
   (set sym 42)
   (put sym 'prop 'value)
@@ -97,7 +95,7 @@ fn divergence_symbol_accessors() {
 fn divergence_kill_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (set (intern "my-kill-sym") 99)
   (makunbound (intern "my-kill-sym"))
@@ -111,7 +109,7 @@ fn divergence_kill_symbol() {
 fn divergence_fmakunbound() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun my-fmakunbound-test () 42)
   (list (fboundp 'my-fmakunbound-test)
@@ -125,7 +123,7 @@ fn divergence_fmakunbound() {
 fn divergence_special_form_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (special-form-p (symbol-function 'if))
   (special-form-p (symbol-function 'let))

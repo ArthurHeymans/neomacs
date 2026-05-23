@@ -1,13 +1,13 @@
 //! Divergence tests: funcall, apply, mapcar with various arg types.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_funcall_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (funcall '+ 1 2)
   (funcall 'list 1 2 3)
@@ -20,7 +20,7 @@ fn divergence_funcall_basic() {
 fn divergence_apply_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (apply '+ '(1 2 3))
   (apply '+ 1 2 '(3 4))
@@ -33,7 +33,7 @@ fn divergence_apply_basic() {
 fn divergence_funcall_composed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (funcall (apply-partially '+ 1) 2)
   (funcall (apply-partially 'list 'a) 'b 'c)
@@ -45,7 +45,7 @@ fn divergence_funcall_composed() {
 fn divergence_higher_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((fns (list #'car #'cdr #'cadr)))
   (list (funcall (nth 0 fns) '(a b c))
         (funcall (nth 1 fns) '(a b c))
@@ -57,7 +57,7 @@ fn divergence_higher_order() {
 fn divergence_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((make-adder
        (lambda (n)
          (lambda (x) (+ x n)))))
@@ -73,7 +73,7 @@ fn divergence_closure_capture() {
 fn divergence_lambda_varargs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (funcall (lambda (&rest args) args) 1 2 3)
   (funcall (lambda (x &rest args) (cons x args)) 1 2 3)
@@ -85,7 +85,7 @@ fn divergence_lambda_varargs() {
 fn divergence_funcall_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (funcall (lambda (x) (list x (* x x) (* x x x))) 3)
   (funcall (lambda (s) (upcase s)) "hello")
@@ -97,7 +97,7 @@ fn divergence_funcall_inline() {
 fn divergence_recursive_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(letrec ((fact (lambda (n)
                        (if (<= n 1) 1 (* n (funcall fact (1- n)))))))
   (list (funcall fact 1)
@@ -110,7 +110,7 @@ fn divergence_recursive_funcall() {
 fn divergence_function_quote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (functionp (lambda (x) x))
   (functionp 'car)
@@ -123,7 +123,7 @@ fn divergence_function_quote() {
 fn divergence_advice_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-fn-adv-xxx (x) (* x 2))
   (let ((orig (symbol-function 'test-fn-adv-xxx)))

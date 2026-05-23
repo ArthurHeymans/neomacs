@@ -3,7 +3,7 @@
 //! These cover URL argument parsing, entity escaping, normalization, URL-style
 //! filename splitting, extension handling, and display truncation.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_prop_url_parse_args_case_quotes_and_missing_values() {
    (url-parse-args "broken=\"unterminated tail; next=ok")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn oracle_prop_url_entities_and_normalize_url() {
    (url-normalize-url "www.example.com/path#keep")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn oracle_prop_url_file_directory_nondirectory_and_extension() {
    (url-basepath "/root/file.el")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,5 +82,5 @@ fn oracle_prop_url_truncate_url_for_viewing() {
    (url-truncate-url-for-viewing "http://example.com/a/b/c/d/e/file.txt" 18)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

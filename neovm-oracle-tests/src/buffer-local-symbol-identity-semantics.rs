@@ -5,7 +5,7 @@
 //! Uninterned symbols with the same print name as interned symbols must not
 //! share buffer-local bindings.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -37,7 +37,7 @@ fn oracle_make_local_variable_keeps_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn oracle_buffer_local_value_uses_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,5 +114,5 @@ fn oracle_make_variable_buffer_local_keeps_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

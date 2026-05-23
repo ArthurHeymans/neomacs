@@ -1,13 +1,13 @@
 //! Divergence tests: complex read/print + eval + circular structure combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_circular_list_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((print-circle t)
         (print-gensym t)
         (obj (list 'a 'b 'c)))
@@ -23,7 +23,7 @@ fn divergence_circular_list_print_read_roundtrip() {
 fn divergence_shared_substructure_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((print-circle t)
         (shared (list 1 2 3)))
   (let ((obj (list shared shared (list shared))))
@@ -38,7 +38,7 @@ fn divergence_shared_substructure_print_read() {
 fn divergence_eval_defun_closure_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((lexical-binding t))
   (eval '(defun test-clo-fn-xxx (x)
            (let ((captured x))
@@ -55,7 +55,7 @@ fn divergence_eval_defun_closure_print_read() {
 fn divergence_record_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((r (record 'cl-struct-tag 1 \"two\" (list 3) [4 5])))
   (let* ((printed (prin1-to-string r))
          (r2 (car (read-from-string printed))))
@@ -71,7 +71,7 @@ fn divergence_record_print_read_roundtrip() {
 fn divergence_print_length_level_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((data '(((a b) (c d)) ((e f) (g h))))
         (print-length 3)
         (print-level 2))
@@ -85,7 +85,7 @@ fn divergence_print_length_level_nested() {
 fn divergence_string_with_special_chars_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((strings (list \"hello\\nworld\"
                             \"tab\\there\"
                             \"quote\\\"inside\"
@@ -105,7 +105,7 @@ fn divergence_string_with_special_chars_roundtrip() {
 fn divergence_hash_table_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ht (make-hash-table :test 'equal)))
   (puthash \"key1\" '(1 2 3) ht)
   (puthash \"key2\" '(a b c) ht)
@@ -120,7 +120,7 @@ fn divergence_hash_table_print_read() {
 fn divergence_eval_nested_quote_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((x 42)
         (items '(a b c)))
   (list (eval '\\`(+ 1 2))
@@ -135,7 +135,7 @@ fn divergence_eval_nested_quote_backquote() {
 fn divergence_print_read_multibyte_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((syms (list 'hello 'world 'test-sym-xxx))
         (printed (prin1-to-string syms))
         (read-back (car (read-from-string printed))))
@@ -149,7 +149,7 @@ fn divergence_print_read_multibyte_symbols() {
 fn divergence_format_spec_with_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((data '((name . \"Alice\") (age . 30) (score . 95.5))))
   (list (format \"Name: %s, Age: %d\" (cdr (assoc 'name data)) (cdr (assoc 'age data)))
         (format \"Score: %.1f%%\" (cdr (assoc 'score data)))

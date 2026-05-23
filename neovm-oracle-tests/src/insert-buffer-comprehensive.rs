@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // insert with multiple args of different types
@@ -22,7 +22,7 @@ fn oracle_prop_insert_buffer_comp_multi_arg_types() {
       ;; Mix strings and character codes
       (insert "Hello" ?  "World" ?! ?\n "Line2" 65 66 67)
       (buffer-string))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_insert_buffer_comp_empty_and_edge_cases() {
             ;; Many string args
             (insert "a" "b" "c" "d" "e" "f" "g" "h" "i" "j")
             (list r1 r2 r3 (buffer-string))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ fn oracle_prop_insert_buffer_comp_insert_char_count_inherit() {
               (let ((r5 (buffer-string))
                     (r5-props (text-properties-at 4)))
                 (list r1 r2 r3 r4 r5 r5-props)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ fn oracle_prop_insert_buffer_comp_insert_before_markers() {
           (let ((pos-after-ibm (marker-position m)))
             (list pos-after-insert pos-after-ibm
                   (buffer-string) (point))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +151,7 @@ fn oracle_prop_insert_buffer_comp_buffer_substring() {
                     (let ((r4 (buffer-string)))
                       (list r1 r2 r3 r4)))))))
         (kill-buffer src-buf)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ fn oracle_prop_insert_buffer_comp_no_properties() {
                       (r2-props (text-properties-at 1)))
                   (list r1 r1-props r2 r2-props)))))
         (kill-buffer src-buf)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ fn oracle_prop_insert_buffer_comp_point_movement() {
               (let ((p5 (point))
                     (s5 (buffer-string)))
                 (list p1 p2 s2 p3 s3 p4 s4 p5 s5)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ fn oracle_prop_insert_buffer_comp_marker_behavior() {
                             (point)
                             (buffer-string))))
               (list r1 r2))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ fn oracle_prop_insert_buffer_comp_insert_and_inherit() {
             (p4 (get-text-property 4 'face))
             (p7 (get-text-property 7 'face)))
         (list s (length s) p1 p4 p7)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ fn oracle_prop_insert_buffer_comp_insert_for_yank() {
                   (r4-face (get-text-property 1 'face))
                   (r4-help (get-text-property 1 'help-echo)))
               (list r1 r1-point r2 r2-props r3 r4 r4-face r4-help))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,5 +347,5 @@ fn oracle_prop_insert_buffer_comp_narrow_interaction() {
             (let ((r4 (buffer-string)))
               (widen)
               (list r1 r1-pmin r1-pmax r2 r2-point r3 r4 (buffer-string)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

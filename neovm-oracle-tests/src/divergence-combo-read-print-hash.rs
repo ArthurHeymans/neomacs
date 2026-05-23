@@ -1,13 +1,13 @@
 //! Divergence tests: read + print + circular + hash table combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_read_print_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash 'a 1 ht)
@@ -30,7 +30,7 @@ fn divergence_read_print_hash_table() {
 fn divergence_hash_table_weak_references() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :weakness t :test 'equal)))
     (puthash 'key1 (list 1 2 3) ht)
@@ -50,7 +50,7 @@ fn divergence_hash_table_weak_references() {
 fn divergence_read_backquote_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((x 10)
         (y '(a b c)))
@@ -67,7 +67,7 @@ fn divergence_read_backquote_complex() {
 fn divergence_print_circle_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((x (list 1 2 3)))
     (nconc x x)
@@ -84,7 +84,7 @@ fn divergence_print_circle_objects() {
 fn divergence_hash_table_as_obarray_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((cache (make-hash-table :test 'eq :size 100)))
     (dolist (name '("alpha" "beta" "gamma" "delta" "epsilon"))
@@ -103,7 +103,7 @@ fn divergence_hash_table_as_obarray_cache() {
 fn divergence_print_read_consistency_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((values (list 0 1 -1 42 most-positive-fixnum
                        1.5 -2.7 0.0 -0.0
@@ -123,7 +123,7 @@ fn divergence_print_read_consistency_numbers() {
 fn divergence_read_vector_array() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v1 (read "[1 2 3]"))
         (v2 (read "[a b c]"))
@@ -143,7 +143,7 @@ fn divergence_read_vector_array() {
 fn divergence_hash_table_iterate_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (dotimes (i 10) (puthash i (* i i) ht))
@@ -167,7 +167,7 @@ fn divergence_hash_table_iterate_modify() {
 fn divergence_print_length_depth_truncation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((deep (list 'a (list 'b (list 'c (list 'd (list 'e))))))
         (long (number-sequence 1 100)))
@@ -186,7 +186,7 @@ fn divergence_print_length_depth_truncation() {
 fn divergence_read_special_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((forms (mapcar 'read
                        '("(quote foo)" "'foo"

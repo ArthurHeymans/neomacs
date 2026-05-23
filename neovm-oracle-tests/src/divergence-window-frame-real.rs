@@ -1,13 +1,13 @@
 //! Divergence tests: real window/frame behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_window_sizes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((w (selected-window)))
   (list (windowp w)
         (window-live-p w)
@@ -23,7 +23,7 @@ fn divergence_window_sizes() {
 fn divergence_window_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((w (selected-window))
         (edges (window-edges w))
         (body-edges (window-body-edges w)))
@@ -38,7 +38,7 @@ fn divergence_window_edges() {
 fn divergence_window_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((w (selected-window)))
   (list (bufferp (window-buffer w))
         (eq (window-buffer w) (current-buffer))
@@ -51,7 +51,7 @@ fn divergence_window_buffer() {
 fn divergence_window_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert (make-string 500 ?x))
   (let ((w (selected-window)))
@@ -65,7 +65,7 @@ fn divergence_window_start_end() {
 fn divergence_frame_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((f (selected-frame)))
   (list (framep f)
         (frame-live-p f)
@@ -79,7 +79,7 @@ fn divergence_frame_parameters() {
 fn divergence_window_configuration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((wc (current-window-configuration)))
   (list (window-configuration-p wc)
         (set-window-configuration wc)
@@ -91,7 +91,7 @@ fn divergence_window_configuration() {
 fn divergence_minibuffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((mw (minibuffer-window)))
   (list (windowp mw)
         (bufferp (window-buffer mw))
@@ -104,7 +104,7 @@ fn divergence_minibuffer_window() {
 fn divergence_window_parent_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((root (frame-root-window))
         (children (window-children root)))
   (list (windowp root)
@@ -118,7 +118,7 @@ fn divergence_window_parent_child() {
 fn divergence_split_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((w1 (selected-window))
         (w2 (split-window nil nil 'right)))
   (list (windowp w2)
@@ -133,7 +133,7 @@ fn divergence_split_window() {
 fn divergence_focused_frame() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((f (selected-frame)))
   (list (eq f (terminal-live-p (frame-terminal f)))
         (framep f)

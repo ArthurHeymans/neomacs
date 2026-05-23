@@ -1,13 +1,13 @@
 //! Divergence tests: complex text editing combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_kill_yank_rectangle_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"line1-A\\nline1-B\\nline1-C\")
   (goto-char 1)
@@ -27,7 +27,7 @@ fn divergence_kill_yank_rectangle_undo() {
 fn divergence_transpose_regions_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD\")
   (transpose-regions 1 4 14 18)
@@ -39,7 +39,7 @@ fn divergence_transpose_regions_combo() {
 fn divergence_format_region_insert_delete_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (dotimes (i 5) (insert (format \"item-%03d\\n\" i)))
   (goto-char 1)
@@ -57,7 +57,7 @@ fn divergence_format_region_insert_delete_cycle() {
 fn divergence_kill_ring_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"FIRST PART SECOND PART THIRD PART\")
   (let ((p1 (save-excursion
@@ -78,7 +78,7 @@ fn divergence_kill_ring_save_excursion() {
 fn divergence_replace_regex_with_backref_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"name:Alice age:30 city:NYC\\nname:Bob age:25 city:LA\")
   (goto-char 1)
@@ -93,7 +93,7 @@ fn divergence_replace_regex_with_backref_transform() {
 fn divergence_fill_region_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq fill-column 20)
   (insert \"This is a very long line that should be filled at the fill column boundary.\")
@@ -110,7 +110,7 @@ fn divergence_fill_region_paragraphs() {
 fn divergence_sort_lines_in_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"cherry\\napple\\nbanana\\ndate\\nelm\")
   (sort-lines nil 1 (point-max))
@@ -123,7 +123,7 @@ fn divergence_sort_lines_in_region() {
 fn divergence_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"aaa\\nbbb\\naaa\\nccc\\nbbb\\nddd\")
   (delete-duplicate-lines 1 (point-max))
@@ -136,7 +136,7 @@ fn divergence_delete_duplicate_lines() {
 fn divergence_align_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"name:Alice\\nage:30\\ncity:NYC\")
   (align-regexp 1 (point-max) \":\" 1 1 t)
@@ -149,7 +149,7 @@ fn divergence_align_regex() {
 fn divergence_indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"line1\\n  line2\\n    line3\")
   (indent-rigidly 1 (point-max) 4)

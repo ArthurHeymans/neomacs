@@ -4,7 +4,7 @@
 //! functions used by `read-file-modes` and expose exact parsing, bit-mask, and
 //! error semantics that Neomacs must preserve.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -69,5 +69,5 @@ fn oracle_file_mode_symbolic_conversion_helpers() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: list manipulation + sequence + map + assoc combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_dolist_accumulate_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((input '(1 2 3 4 5))
         (result nil))
@@ -20,7 +20,7 @@ fn divergence_dolist_accumulate_modify() {
 fn divergence_mapcar_mapconcat_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let* ((lists '((1 2 3) (4 5 6) (7 8 9)))
          (sums (mapcar (lambda (lst) (apply '+ lst)) lists))
@@ -37,7 +37,7 @@ fn divergence_mapcar_mapconcat_nested() {
 fn divergence_assoc_rassq_delq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((alist '((a . 1) (b . 2) (c . 3) (d . 2))))
     (list (assoc 'b alist)
@@ -58,7 +58,7 @@ fn divergence_assoc_rassq_delq() {
 fn divergence_nreverse_safe_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((l1 (list 1 2 3 4 5))
         (l2 (list 'a 'b 'c)))
@@ -77,7 +77,7 @@ fn divergence_nreverse_safe_reverse() {
 fn divergence_sort_stable_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pairs '((3 . "c") (1 . "a") (2 . "b") (1 . "d") (3 . "e"))))
     (let ((sorted (sort (copy-alist pairs)
@@ -94,7 +94,7 @@ fn divergence_sort_stable_predicate() {
 fn divergence_sequence_map_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v [10 20 30 40 50]))
     (list (seq-map #'1+ v)
@@ -114,7 +114,7 @@ fn divergence_sequence_map_reduce() {
 fn divergence_list_circular_shared_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((shared (list 1 2 3)))
     (let ((tree (list shared shared)))
@@ -132,7 +132,7 @@ fn divergence_list_circular_shared_structure() {
 fn divergence_plist_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pl '(:a 1 :b 2 :c 3)))
     (list (plist-get pl :a)
@@ -152,7 +152,7 @@ fn divergence_plist_operations() {
 fn divergence_push_pop_nthcdr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((stack nil))
     (push 1 stack)
@@ -173,7 +173,7 @@ fn divergence_push_pop_nthcdr() {
 fn divergence_number_sequence_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((seq (number-sequence 1 10)))
     (list seq

@@ -1,13 +1,13 @@
 //! Divergence tests: stress - nested eval, deep recursion, large data.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_deep_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((x 0))
   (dotimes (_ 100)
     (setq x (1+ x)))
@@ -19,7 +19,7 @@ fn divergence_deep_nesting() {
 fn divergence_nested_condition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (condition-case err
       (condition-case err2
@@ -34,7 +34,7 @@ fn divergence_nested_condition() {
 fn divergence_nested_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (unwind-protect
       (unwind-protect
@@ -49,7 +49,7 @@ fn divergence_nested_unwind() {
 fn divergence_large_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((lst (number-sequence 1 100)))
   (list (length lst)
         (= (car lst) 1)
@@ -62,7 +62,7 @@ fn divergence_large_list_ops() {
 fn divergence_large_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s (make-string 1000 ?x)))
   (list (length s)
         (= (length s) 1000)
@@ -75,7 +75,7 @@ fn divergence_large_string_ops() {
 fn divergence_deep_let_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((a 1) (b 2) (c 3) (d 4) (e 5) (f 6) (g 7) (h 8) (i 9) (j 10))
   (list (+ a b c d e) (+ f g h i j) (+ a b c d e f g h i j))) "#,
     );
@@ -85,7 +85,7 @@ fn divergence_deep_let_bindings() {
 fn divergence_interleaved_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (goto-char 1)
@@ -100,7 +100,7 @@ fn divergence_interleaved_ops() {
 fn divergence_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (dotimes (i 5)
@@ -114,7 +114,7 @@ fn divergence_many_overlays() {
 fn divergence_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (dotimes (i 5)
@@ -131,7 +131,7 @@ fn divergence_many_text_props() {
 fn divergence_stress_combo_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)

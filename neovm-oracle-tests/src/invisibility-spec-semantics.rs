@@ -5,9 +5,7 @@
 //! buffer-local `buffer-invisibility-spec` using exact `t`/list conversion and
 //! `delete` semantics.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_invisibility_spec_helpers_preserve_exact_state() {
@@ -35,7 +33,7 @@ fn oracle_prop_gnu_invisibility_spec_helpers_preserve_exact_state() {
   (nreverse results))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -52,5 +50,5 @@ fn oracle_prop_gnu_remove_from_invisibility_spec_converts_non_lists_to_t_list() 
   (nreverse results))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -4,7 +4,7 @@
 //! not to signal for invalid plists, while `plist-member` and `plist-put`
 //! validate malformed tails with `plistp`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_plistp_matches_gnu_proper_even_length_contract() {
    (plistp circle)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn oracle_plist_get_tolerates_malformed_plists() {
          (plist-get x 'missing))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn oracle_plist_member_and_put_validate_malformed_tails() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn oracle_plist_member_matches_key_before_tail_validation() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn oracle_plist_put_preserves_tail_and_mutates_existing_pair() {
    (plist-member extended 'b)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -136,5 +136,5 @@ fn oracle_plist_predicate_argument_uses_call_result() {
    plist))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

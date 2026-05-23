@@ -4,7 +4,7 @@
 //! and `put` are in `src/fns.c`.  These tests cover the symbol-specific layer
 //! on top of plist handling, including `overriding-plist-environment`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_symbol_plist_returns_live_property_list() {
      (symbol-plist sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_setplist_accepts_malformed_plist_and_put_validates_when_needed() {
    (symbol-plist sym)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn oracle_get_uses_overriding_plist_environment_only_for_non_nil_values() {
      (symbol-plist sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn oracle_symbol_property_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn oracle_define_symbol_prop_updates_load_list_and_symbol_plist() {
     (setplist 'neomacs-oracle-define-symbol-prop-b nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -149,5 +149,5 @@ fn oracle_define_symbol_prop_preserves_existing_load_list_entries() {
     (setplist 'neomacs-oracle-define-symbol-prop-new nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `get-buffer`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_get_buffer_ignores_text_properties_in_name_argument() {
@@ -25,5 +23,5 @@ fn oracle_get_buffer_ignores_text_properties_in_name_argument() {
     (when (buffer-live-p buf)
       (kill-buffer buf))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: package system, ELPA, package management deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_package_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-initialize)
   (fboundp 'package-refresh-contents)
@@ -22,7 +22,7 @@ fn divergence_package_functions() {
 fn divergence_package_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'package-archives)
   (listp package-archives)
@@ -37,7 +37,7 @@ fn divergence_package_vars() {
 fn divergence_package_desc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-desc-p)
   (fboundp 'package-desc-name)
@@ -50,7 +50,7 @@ fn divergence_package_desc() {
 fn divergence_package_activation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-activate)
   (fboundp 'package-built-in-p)
@@ -63,7 +63,7 @@ fn divergence_package_activation() {
 fn divergence_use_package() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'use-package)
   (featurep 'use-package)
@@ -76,7 +76,7 @@ fn divergence_use_package() {
 fn divergence_package_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-menu-mark-install)
   (fboundp 'package-menu-mark-delete)
@@ -90,7 +90,7 @@ fn divergence_package_gnu() {
 fn divergence_elpa_melpa() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (assoc "gnu" package-archives)
   (assoc "melpa" package-archives)
@@ -103,7 +103,7 @@ fn divergence_elpa_melpa() {
 fn divergence_package_vc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-vc-install)
   (fboundp 'package-vc-install-from-checkout)
@@ -116,7 +116,7 @@ fn divergence_package_vc() {
 fn divergence_package_quick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-install-selected-packages)
   (fboundp 'package-autoremove)
@@ -129,7 +129,7 @@ fn divergence_package_quick() {
 fn divergence_ensure_packages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package--ensure-init-file)
   (fboundp 'package--save-selected-packages)

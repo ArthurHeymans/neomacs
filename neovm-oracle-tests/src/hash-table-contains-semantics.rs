@@ -3,9 +3,7 @@
 //! GNU implements this helper with a private sentinel around `gethash`, so it
 //! observes key presence independently of whether the stored value is nil.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_hash_table_contains_p_distinguishes_nil_values() {
@@ -37,7 +35,7 @@ fn oracle_prop_gnu_hash_table_contains_p_distinguishes_nil_values() {
    (hash-table-count equal-table)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -56,5 +54,5 @@ fn oracle_prop_gnu_hash_table_contains_p_argument_errors() {
   (lambda () (hash-table-contains-p))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

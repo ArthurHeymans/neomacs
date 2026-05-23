@@ -1,16 +1,16 @@
 //! Oracle parity for Lisp-level constructs via binary execution.
-//! Uses eval_oracle_and_neovm_via_binary to test defun, push/pop,
+//! Uses eval_oracle_and_neovm to test defun, push/pop,
 //! dotimes/dolist, with-temp-buffer, setq-default, add-hook/run-hooks.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- defun ---
 
 #[test]
 fn oracle_defun_and_funcall_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defun neovm--test-binary-fn (x) (+ x 1))
   (neovm--test-binary-fn 41))"#,
@@ -23,7 +23,7 @@ fn oracle_defun_and_funcall_via_binary() {
 #[test]
 fn oracle_push_pop_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq neovm--test-stack nil)
   (push 'a neovm--test-stack)
@@ -39,7 +39,7 @@ fn oracle_push_pop_via_binary() {
 #[test]
 fn oracle_dotimes_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq neovm--test-sum 0)
   (dotimes (i 5 neovm--test-sum)
@@ -53,7 +53,7 @@ fn oracle_dotimes_via_binary() {
 #[test]
 fn oracle_dolist_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq neovm--test-collect nil)
   (dolist (elt '(a b c) (nreverse neovm--test-collect))
@@ -67,7 +67,7 @@ fn oracle_dolist_via_binary() {
 #[test]
 fn oracle_with_temp_buffer_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (with-temp-buffer
     (insert "hello")
@@ -81,7 +81,7 @@ fn oracle_with_temp_buffer_via_binary() {
 #[test]
 fn oracle_setq_default_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq-default neovm--test-default-var 999)
   neovm--test-default-var)"#,
@@ -94,7 +94,7 @@ fn oracle_setq_default_via_binary() {
 #[test]
 fn oracle_add_hook_and_run_hooks_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq neovm--test-hook-result nil)
   (add-hook 'neovm--test-binary-hook (lambda () (push 'ran neovm--test-hook-result)))

@@ -360,10 +360,6 @@ pub(crate) fn run_oracle_eval_with_load_raw(
     run_oracle_eval_inner_raw(form, load_files)
 }
 
-pub(crate) fn run_oracle_eval_with_bootstrap(form: &str) -> Result<String, String> {
-    run_oracle_eval(form)
-}
-
 // ---------------------------------------------------------------------------
 // Neomacs binary subprocess evaluation
 // ---------------------------------------------------------------------------
@@ -470,18 +466,7 @@ pub(crate) fn run_neovm_eval_with_load(form: &str, load_files: &[&str]) -> Resul
     run_neomacs_binary_eval_inner(form, load_files)
 }
 
-pub(crate) fn run_neovm_eval_with_bootstrap(form: &str) -> Result<String, String> {
-    run_neomacs_binary_eval_inner(form, &[])
-}
-
-pub(crate) fn run_neovm_eval_with_bootstrap_and_load(
-    form: &str,
-    load_files: &[&str],
-) -> Result<String, String> {
-    run_neomacs_binary_eval_inner(form, load_files)
-}
-
-pub(crate) fn run_neovm_eval_with_bootstrap_and_load_raw(
+pub(crate) fn run_neovm_eval_with_load_raw(
     form: &str,
     load_files: &[&str],
 ) -> Result<String, String> {
@@ -492,7 +477,7 @@ pub(crate) fn run_neovm_eval_with_bootstrap_and_load_raw(
 // Public parity assertions
 // ---------------------------------------------------------------------------
 
-pub(crate) fn assert_oracle_parity_with_bootstrap(form: &str) {
+pub(crate) fn assert_oracle_parity(form: &str) {
     let t0 = std::time::Instant::now();
     let log_timing = oracle_timing_enabled();
 
@@ -511,7 +496,7 @@ pub(crate) fn assert_oracle_parity_with_bootstrap(form: &str) {
         eprintln!("oracle-timing: oracle-start");
     }
     let oracle_t0 = std::time::Instant::now();
-    let oracle = run_oracle_eval_with_bootstrap(form).expect("oracle eval should run");
+    let oracle = run_oracle_eval(form).expect("oracle eval should run");
     if log_timing {
         eprintln!("oracle-timing: oracle-done {:.3?}", oracle_t0.elapsed());
     }
@@ -526,14 +511,7 @@ pub(crate) fn assert_oracle_parity_with_load(form: &str, load_files: &[&str]) {
     assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
 }
 
-pub(crate) fn assert_oracle_parity_with_bootstrap_and_load(form: &str, load_files: &[&str]) {
-    let neovm =
-        run_neomacs_binary_eval_inner(form, load_files).expect("neomacs binary eval should run");
-    let oracle = run_oracle_eval_with_load(form, load_files).expect("oracle eval should run");
-    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
-}
-
-pub(crate) fn assert_oracle_parity_with_bootstrap_and_load_raw(form: &str, load_files: &[&str]) {
+pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]) {
     let neovm = run_neomacs_binary_eval_inner_raw(form, load_files)
         .expect("neomacs binary eval should run");
     let oracle = run_oracle_eval_with_load_raw(form, load_files).expect("oracle eval should run");
@@ -543,18 +521,6 @@ pub(crate) fn assert_oracle_parity_with_bootstrap_and_load_raw(form: &str, load_
 pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
     let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
     let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    (oracle, neovm)
-}
-
-pub(crate) fn eval_oracle_and_neovm_via_binary(form: &str) -> (String, String) {
-    let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
-    let oracle = run_oracle_eval(form).expect("oracle eval should run");
-    (oracle, neovm)
-}
-
-pub(crate) fn eval_oracle_and_neovm_with_bootstrap(form: &str) -> (String, String) {
-    let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
-    let oracle = run_oracle_eval_with_bootstrap(form).expect("oracle eval should run");
     (oracle, neovm)
 }
 

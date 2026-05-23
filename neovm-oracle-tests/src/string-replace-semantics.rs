@@ -4,7 +4,7 @@
 //! `wrong-length-argument`, no-match returns the original string object, and
 //! successful replacement rebuilds the string from substring pieces.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_string_replace_empty_from_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_string_replace_no_match_returns_same_object() {
           (text-properties-at 6 r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn oracle_string_replace_success_property_shape() {
           (text-properties-at 7 r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn oracle_string_replace_non_overlapping_matches() {
  (string-replace "a" "aa" "aaa"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -101,5 +101,5 @@ fn oracle_string_replace_type_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

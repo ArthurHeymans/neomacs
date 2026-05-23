@@ -5,8 +5,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 use proptest::prelude::*;
 
 use super::common::{
-    ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity_with_bootstrap,
-    eval_oracle_and_neovm,
+    ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm,
 };
 
 #[test]
@@ -47,7 +46,7 @@ fn oracle_member_ignore_case_ignores_non_strings_and_returns_tail() {
      (member-ignore-case 'foo '("foo"))
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -75,7 +74,7 @@ fn oracle_member_ignore_case_strict_edge_semantics() {
    (funcall capture '(member-ignore-case))
    (funcall capture '(member-ignore-case "x" nil 'extra))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 proptest! {

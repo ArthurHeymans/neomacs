@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` buffer matching helpers.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_subr_buffer_match_p_contracts() {
@@ -46,5 +44,5 @@ fn oracle_prop_gnu_subr_buffer_match_p_contracts() {
                    (match-buffers '(or . ("alpha" "beta")) (list b1 b2))))))
     (kill-buffer b1)
     (kill-buffer b2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

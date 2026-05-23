@@ -2,7 +2,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_with_bootstrap};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_bootstrap_library_require_surface() {
@@ -25,7 +25,7 @@ fn oracle_prop_bootstrap_library_require_surface() {
   (featurep 'cl-generic)
   (condition-case err (require 'cl-generic) (error err))
   (featurep 'cl-generic))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         "(nil cl-lib t t t nil gv t t t t seq t t cl-generic t)",
         &oracle,

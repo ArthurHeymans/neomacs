@@ -3,7 +3,7 @@
 //! GNU implements these in `src/dbusbind.c`: the inhibitor-lock registry starts
 //! empty, and argument type checks run before DBus side effects.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_dbus_inhibitor_lock_argument_checks_and_initial_registry() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -55,5 +55,5 @@ fn oracle_dbus_inhibitor_lock_registry_and_call_arguments() {
     (list lock1 lock2 calls reg1 reg2 copy-mutability close1 reg3 close2)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

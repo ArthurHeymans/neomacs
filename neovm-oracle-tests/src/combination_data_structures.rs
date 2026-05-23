@@ -6,10 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Set operations via hash tables
@@ -65,7 +62,7 @@ fn oracle_prop_ds_set_operations() {
                                (funcall set-intersection a b))
                       (funcall set-to-sorted-list
                                (funcall set-difference a b)))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +103,7 @@ fn oracle_prop_ds_ring_buffer() {
                       (funcall ring-push r 'd)
                       (let ((after-4 (funcall ring-contents r)))
                         (list after-3 after-4)))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +146,7 @@ fn oracle_prop_ds_priority_queue() {
                           (setq results (cons (car r) results)
                                 q (cadr r))))
                       (nreverse results))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +181,7 @@ fn oracle_prop_ds_graph_bfs() {
                                   (append queue
                                           (list neighbor)))))))
                     (nreverse order)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +229,7 @@ fn oracle_prop_ds_stack_calculator() {
                     (funcall rpn-eval '(3 4 + 2 *))
                     ;; 5 + ((1 + 2) * 4) - 3
                     (funcall rpn-eval '(5 1 2 + 4 * + 3 -))))";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(7 14 14)", &o, &n);
 }
 
@@ -288,7 +285,7 @@ fn oracle_prop_ds_trie() {
                       (funcall trie-prefix-p t1 "hel")
                       (funcall trie-prefix-p t1 "wor")
                       (funcall trie-prefix-p t1 "xyz"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,5 +339,5 @@ fn oracle_prop_ds_lru_cache() {
                               cache-order
                               (gethash 'b cache-table)
                               (gethash 'a cache-table))))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: accessibility, mouse, drag-n-drop, menu deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_accessibility_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'window-min-height)
   (boundp 'window-min-width)
@@ -20,7 +20,7 @@ fn divergence_accessibility_vars() {
 fn divergence_mouse_event_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'mouse-set-point)
   (fboundp 'mouse-set-region)
@@ -33,7 +33,7 @@ fn divergence_mouse_event_functions() {
 fn divergence_drag_n_drop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'x-dnd-handle-drag-n-drop-event)
   (fboundp 'x-begin-drag)
@@ -45,7 +45,7 @@ fn divergence_drag_n_drop() {
 fn divergence_menu_bar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'menu-bar-open)
   (fboundp 'popup-menu)
@@ -58,7 +58,7 @@ fn divergence_menu_bar() {
 fn divergence_tool_bar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'tool-bar-add-item)
   (fboundp 'tool-bar-local-item)
@@ -70,7 +70,7 @@ fn divergence_tool_bar() {
 fn divergence_tab_bar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'tab-bar-mode)
   (fboundp 'tab-new)
@@ -83,7 +83,7 @@ fn divergence_tab_bar() {
 fn divergence_scroll_bar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'scroll-bar-mode)
   (fboundp 'scroll-bar-toolkit-scroll)
@@ -95,7 +95,7 @@ fn divergence_scroll_bar() {
 fn divergence_tooltip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'tooltip-mode)
   (boundp 'tooltip-delay)
@@ -107,7 +107,7 @@ fn divergence_tooltip() {
 fn divergence_notification_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'notifications-notify)
   (fboundp 'alerts-add-alert)
@@ -119,7 +119,7 @@ fn divergence_notification_functions() {
 fn divergence_sound_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'play-sound)
   (boundp 'ring-bell-function)

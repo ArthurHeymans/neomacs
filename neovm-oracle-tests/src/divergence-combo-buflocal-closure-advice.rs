@@ -1,13 +1,13 @@
 //! Divergence tests: buffer-local + closure + advice + keymap + command combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buflocal_closure_advice_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-bcav-xxx nil)
   (make-local-variable 'test-bcav-xxx)
@@ -37,7 +37,7 @@ fn divergence_buflocal_closure_advice_chain() {
 fn divergence_buflocal_marker_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-local-variable 'test-bmu-xxx)
   (setq test-bmu-xxx "original")
@@ -71,7 +71,7 @@ fn divergence_buflocal_marker_undo_chain() {
 fn divergence_keymap_closure_advice_interact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-kca-result-xxx nil)
   (let ((counter 0))
@@ -99,7 +99,7 @@ fn divergence_keymap_closure_advice_interact() {
 fn divergence_buflocal_overlay_textprop_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-local-variable 'test-boat-state-xxx)
   (setq test-boat-state-xxx 'ready)
@@ -133,7 +133,7 @@ fn divergence_buflocal_overlay_textprop_advice() {
 fn divergence_closure_overwrite_with_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((val 'alpha))
     (defun test-cowf-xxx () val)
@@ -158,7 +158,7 @@ fn divergence_closure_overwrite_with_advice() {
 fn divergence_buflocal_regex_match_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-local-variable 'test-brmo-pattern-xxx)
   (setq test-brmo-pattern-xxx "KEY[0-9]+")
@@ -191,7 +191,7 @@ fn divergence_buflocal_regex_match_overlay() {
 fn divergence_undo_buflocal_marker_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-local-variable 'test-ubmc-data-xxx)
   (setq test-ubmc-data-xxx "PREFIX-MIDDLE-SUFFIX")
@@ -238,7 +238,7 @@ fn divergence_undo_buflocal_marker_complex() {
 fn divergence_advice_let_binding_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-albs-xxx 'global)
   (defun test-albsf-xxx () test-albs-xxx)
@@ -261,7 +261,7 @@ fn divergence_advice_let_binding_scope() {
 fn divergence_keymap_inheritance_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-kia-result-xxx nil)
   (defun test-kiaf-xxx () (setq test-kia-result-xxx 'parent-called))
@@ -289,7 +289,7 @@ fn divergence_keymap_inheritance_advice() {
 fn divergence_buflocal_kill_buffer_preserve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (generate-new-buffer " test-bkbp1-xxx"))
         (buf2 (generate-new-buffer " test-bkbp2-xxx")))

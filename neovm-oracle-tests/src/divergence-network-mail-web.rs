@@ -1,13 +1,13 @@
 //! Divergence tests: auth-source, gnus, message, mail deep stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_auth_source() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'auth-source-search)
   (fboundp 'auth-source-forget)
@@ -19,7 +19,7 @@ fn divergence_auth_source() {
 fn divergence_gnus_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'gnus)
   (fboundp 'gnus-group-list)
@@ -32,7 +32,7 @@ fn divergence_gnus_functions() {
 fn divergence_message_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'message-mail)
   (fboundp 'message-reply)
@@ -44,7 +44,7 @@ fn divergence_message_mode() {
 fn divergence_sendmail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'sendmail-send-it)
   (boundp 'send-mail-function)
@@ -56,7 +56,7 @@ fn divergence_sendmail() {
 fn divergence_smtpmail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'smtpmail-send-it)
   (featurep 'smtpmail))"#,
@@ -67,7 +67,7 @@ fn divergence_smtpmail() {
 fn divergence_epa_gpg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'epa-encrypt-file)
   (fboundp 'epa-decrypt-file)
@@ -81,7 +81,7 @@ fn divergence_epa_gpg() {
 fn divergence_erc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'erc)
   (fboundp 'erc-select)
@@ -93,7 +93,7 @@ fn divergence_erc() {
 fn divergence_rcirc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'rcirc)
   (featurep 'rcirc))"#,
@@ -104,7 +104,7 @@ fn divergence_rcirc() {
 fn divergence_eww_shr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eww)
   (fboundp 'eww-open-file)
@@ -117,7 +117,7 @@ fn divergence_eww_shr() {
 fn divergence_url_library() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'url-retrieve)
   (fboundp 'url-retrieve-synchronously)

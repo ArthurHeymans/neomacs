@@ -4,7 +4,7 @@
 //! the error hierarchy match GNU Emacs exactly.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn divergence_error_conditions_for_wrong_type_argument() {
@@ -82,7 +82,7 @@ fn divergence_error_conditions_for_range_error() {
 fn divergence_condition_case_error_data_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (signal 'wrong-type-argument '(listp 42))
   (wrong-type-argument err))"#,
@@ -93,7 +93,7 @@ fn divergence_condition_case_error_data_format() {
 fn divergence_condition_case_nested_handlers_first_match_wins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (signal 'args-out-of-range '(1 2 3))
   (error (list 'error-handler err))
@@ -105,7 +105,7 @@ fn divergence_condition_case_nested_handlers_first_match_wins() {
 fn divergence_condition_case_with_no_catch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (progn
       (condition-case inner
@@ -120,7 +120,7 @@ fn divergence_condition_case_with_no_catch() {
 fn divergence_unwind_protect_runs_during_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (condition-case err
       (unwind-protect
@@ -135,7 +135,7 @@ fn divergence_unwind_protect_runs_during_signal() {
 fn divergence_condition_case_success_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case val
     (+ 1 2)
   (:success (list 'success val))
@@ -147,7 +147,7 @@ fn divergence_condition_case_success_handler() {
 fn divergence_condition_case_error_message_string_for_quit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (signal 'quit nil)
   (quit (error-message-string err)))"#,
@@ -158,7 +158,7 @@ fn divergence_condition_case_error_message_string_for_quit() {
 fn divergence_define_error_custom_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-error 'test-error-parent "Test parent error")
   (define-error 'test-error-child "Test child error" 'test-error-parent)
@@ -176,7 +176,7 @@ fn divergence_define_error_custom_hierarchy() {
 fn divergence_signal_with_nil_uses_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (signal nil '(error-msg "data"))
   (error (list 'error-caught err)))"#,
@@ -187,7 +187,7 @@ fn divergence_signal_with_nil_uses_error() {
 fn divergence_user_error_not_quit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (condition-case err
       (signal 'user-error "test")

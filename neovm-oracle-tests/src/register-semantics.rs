@@ -3,7 +3,7 @@
 //! These tests cover programmatic register storage, text collection,
 //! insertion, numeric updates, marker swap-out, and descriptions.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_register_set_get_numbers_and_text_collection() {
        deactivate-mark))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -57,7 +57,7 @@ fn oracle_prop_register_copy_delete_region_and_number_at_point() {
          deactivate-mark)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn oracle_prop_register_insert_string_number_marker_and_rectangle() {
        (list (buffer-string) (point) (mark))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -134,5 +134,5 @@ fn oracle_prop_register_point_jump_swap_out_and_descriptions() {
         (register-describe-oneline ?r))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

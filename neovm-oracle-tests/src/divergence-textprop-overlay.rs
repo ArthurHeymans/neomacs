@@ -3,14 +3,14 @@
 //! Tests for text property stickiness, overlay evaporate,
 //! property boundary semantics, and char-property precedence.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_text_prop_empty_range_noop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdef")
   (put-text-property 3 3 'face 'bold)
@@ -24,7 +24,7 @@ fn divergence_text_prop_empty_range_noop() {
 fn divergence_text_prop_at_buffer_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abc")
   (put-text-property 1 3 'face 'bold)
@@ -39,7 +39,7 @@ fn divergence_text_prop_at_buffer_boundaries() {
 fn divergence_next_property_change_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (put-text-property 1 4 'face 'bold)
@@ -58,7 +58,7 @@ fn divergence_next_property_change_at_boundary() {
 fn divergence_next_single_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (put-text-property 1 4 'face 'bold)
@@ -73,7 +73,7 @@ fn divergence_next_single_property_change() {
 fn divergence_remove_text_properties_middle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (put-text-property 1 8 'face 'bold)
@@ -88,7 +88,7 @@ fn divergence_remove_text_properties_middle() {
 fn divergence_set_text_properties_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (put-text-property 1 5 'face 'bold)
@@ -104,7 +104,7 @@ fn divergence_set_text_properties_replace_all() {
 fn divergence_overlay_evaporate_on_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((ov (make-overlay 3 6)))
@@ -120,7 +120,7 @@ fn divergence_overlay_evaporate_on_delete() {
 fn divergence_overlay_evaporate_after_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((ov (make-overlay 3 6)))
@@ -135,7 +135,7 @@ fn divergence_overlay_evaporate_after_move() {
 fn divergence_overlay_front_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((ov (make-overlay 3 6 nil t nil)))
@@ -149,7 +149,7 @@ fn divergence_overlay_front_advance() {
 fn divergence_overlay_rear_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((ov (make-overlay 3 6 nil nil t)))
@@ -163,7 +163,7 @@ fn divergence_overlay_rear_advance() {
 fn divergence_get_char_property_overlay_vs_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (put-text-property 1 8 'face 'text-face)
@@ -180,7 +180,7 @@ fn divergence_get_char_property_overlay_vs_textprop() {
 fn divergence_overlay_priority_with_same_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((a (make-overlay 2 7))
@@ -197,7 +197,7 @@ fn divergence_overlay_priority_with_same_start() {
 fn divergence_overlay_cross_buffer_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf-a (get-buffer-create " *test-ov-a*"))
         (buf-b (get-buffer-create " *test-ov-b*")))
   (unwind-protect
@@ -220,7 +220,7 @@ fn divergence_overlay_cross_buffer_move() {
 fn divergence_object_intervals_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s (copy-sequence "abcdefgh")))
   (put-text-property 0 3 'face 'bold s)
   (put-text-property 3 6 'face 'italic s)

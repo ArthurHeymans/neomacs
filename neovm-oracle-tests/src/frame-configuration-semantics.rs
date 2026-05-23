@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` `frame-configuration-p`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_frame_configuration_p_shape_contract() {
@@ -18,5 +16,5 @@ fn oracle_prop_frame_configuration_p_shape_contract() {
               '(frame-configuration . payload)
               '(x frame-configuration)
               [frame-configuration]))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

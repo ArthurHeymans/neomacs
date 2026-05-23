@@ -5,7 +5,7 @@
 //! scanning, includes dot entries from the directory stream, and sorts the
 //! final list with `string-lessp` unless NOSORT is non-nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -44,5 +44,5 @@ fn oracle_directory_files_listing_filter_full_count_and_errors() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

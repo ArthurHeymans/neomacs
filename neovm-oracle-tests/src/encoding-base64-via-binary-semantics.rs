@@ -2,14 +2,14 @@
 //! GNU src/fns.c, src/coding.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- base64 roundtrip ---
 
 #[test]
 fn oracle_base64_encode_decode_roundtrip_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq encoded (base64-encode-string "hello"))
   (base64-decode-string encoded))"#,
@@ -20,7 +20,7 @@ fn oracle_base64_encode_decode_roundtrip_via_binary() {
 #[test]
 fn oracle_base64_encode_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(base64-encode-string "hello")"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(base64-encode-string "hello")"#);
     assert_ok_eq("\"aGVsbG8=\"", &o, &n);
 }
 
@@ -29,7 +29,7 @@ fn oracle_base64_encode_via_binary() {
 #[test]
 fn oracle_decode_coding_string_utf8_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(decode-coding-string "hello" 'utf-8)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(decode-coding-string "hello" 'utf-8)"#);
     assert_ok_eq("\"hello\"", &o, &n);
 }
 
@@ -38,7 +38,7 @@ fn oracle_decode_coding_string_utf8_via_binary() {
 #[test]
 fn oracle_encode_coding_string_utf8_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(encode-coding-string "hello" 'utf-8)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(encode-coding-string "hello" 'utf-8)"#);
     assert_ok_eq("\"hello\"", &o, &n);
 }
 
@@ -47,7 +47,7 @@ fn oracle_encode_coding_string_utf8_via_binary() {
 #[test]
 fn oracle_string_bytes_ascii_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(string-bytes "hello")"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(string-bytes "hello")"#);
     assert_ok_eq("5", &o, &n);
 }
 
@@ -56,7 +56,7 @@ fn oracle_string_bytes_ascii_via_binary() {
 #[test]
 fn oracle_string_make_multibyte_unibyte_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (setq s (string-make-unibyte "abc"))
   (string-make-multibyte s))"#,

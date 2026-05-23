@@ -1,13 +1,13 @@
 //! Divergence tests: Edebug stubs, bytecomp, compiler macros, load-history.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_edebug_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'edebug)
   (featurep 'edebug)
@@ -20,7 +20,7 @@ fn divergence_edebug_functions() {
 fn divergence_debugger_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (booleanp debug-on-error)
   (booleanp debug-on-quit)
@@ -33,7 +33,7 @@ fn divergence_debugger_variables() {
 fn divergence_bytecomp_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'byte-compile)
   (fboundp 'byte-compile-file)
@@ -46,7 +46,7 @@ fn divergence_bytecomp_functions() {
 fn divergence_compiler_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-inline)
   (fboundp 'comp--function-type)
@@ -59,7 +59,7 @@ fn divergence_compiler_macros() {
 fn divergence_load_history() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (consp load-history)
   (listp (car load-history))
@@ -71,7 +71,7 @@ fn divergence_load_history() {
 fn divergence_after_load_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eval-after-load)
   (fboundp 'with-eval-after-load)
@@ -83,7 +83,7 @@ fn divergence_after_load_functions() {
 fn divergence_find_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp (symbol-file 'car))
   (stringp (symbol-file 'find-file))
@@ -95,7 +95,7 @@ fn divergence_find_function() {
 fn divergence_finder_known() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'finder-known)
   (fboundp 'package-initialize)
@@ -108,7 +108,7 @@ fn divergence_finder_known() {
 fn divergence_native_comp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'native-compile)
   (featurep 'comp)

@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` string conversion helpers.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_string_to_list_vector_byte_and_property_edges() {
@@ -27,7 +25,7 @@ fn oracle_prop_gnu_string_to_list_vector_byte_and_property_edges() {
    (string-to-list nul)
    (string-to-vector nul)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -76,7 +74,7 @@ fn oracle_string_make_multibyte_unibyte_identity_copy_and_low_byte_edges() {
        (string-make-unibyte nil)
      (error err))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -119,7 +117,7 @@ fn oracle_byte_to_string_unibyte_boundaries_and_errors() {
      (byte-to-string nil)
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -167,5 +165,5 @@ fn oracle_string_as_vs_to_multibyte_utf8_byte_sequence_edges() {
    (let ((s (unibyte-string 65 66)))
      (eq s (string-as-unibyte s)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 //! returns fresh sequence storage and uses a different non-sequence error
 //! predicate from `nreverse`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,7 +26,7 @@ fn oracle_nreverse_mutates_list_spine_and_vector_storage() {
         (eq vec same-vec)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn oracle_nreverse_bool_vector_mutates_and_string_does_not() {
         (eq s rs)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_reverse_is_shallow_and_does_not_mutate_inputs() {
         (eq (aref vec 0) (aref rev-vec 2))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn oracle_reverse_string_properties_and_multibyte_order() {
         (text-properties-at 2 r)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn oracle_reverse_and_nreverse_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -145,5 +145,5 @@ fn oracle_reverse_and_nreverse_circular_list_errors() {
                     (car arg)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

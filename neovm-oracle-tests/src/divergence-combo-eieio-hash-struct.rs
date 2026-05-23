@@ -1,13 +1,13 @@
 //! Divergence tests: EIEIO + buffer local + advice + cl-struct + hash deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_buffer_local_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-bl-slot ()
     ((name :initarg :name :accessor test-bl-name)
@@ -32,7 +32,7 @@ fn divergence_eieio_buffer_local_slot() {
 fn divergence_cl_struct_with_textprops_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-sp (:constructor test-sp-make))
     label start end)
@@ -71,7 +71,7 @@ fn divergence_cl_struct_with_textprops_and_undo() {
 fn divergence_hash_table_as_text_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE")
   (let ((h (make-hash-table :test 'equal)))
@@ -93,7 +93,7 @@ fn divergence_hash_table_as_text_prop() {
 fn divergence_advice_around_text_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world foo bar baz")
   (put-text-property 1 5 'word 'w1)
@@ -132,7 +132,7 @@ fn divergence_advice_around_text_edit() {
 fn divergence_buffer_local_closure_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq-local 'my-test-counter 0)
   (setq-local 'my-test-trace nil)
@@ -151,7 +151,7 @@ fn divergence_buffer_local_closure_chain() {
 fn divergence_eieio_polymorphic_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-poly-base ()
     ((tag :initarg :tag :reader test-poly-tag)))
@@ -178,7 +178,7 @@ fn divergence_eieio_polymorphic_dispatch() {
 fn divergence_cl_loop_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "one two three four five six seven eight nine ten")
   (let ((words (split-string (buffer-string))))
@@ -205,7 +205,7 @@ fn divergence_cl_loop_with_buffer_ops() {
 fn divergence_nested_undo_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA BBBB CCCC DDDD EEEE")
   (put-text-property 1 4 'g 1)
@@ -248,7 +248,7 @@ fn divergence_nested_undo_groups() {
 fn divergence_hash_table_eieio_interop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-hash-obj ()
     ((key :initarg :key :accessor test-hash-key)
@@ -277,7 +277,7 @@ fn divergence_hash_table_eieio_interop() {
 fn divergence_multi_buffer_undo_with_shared_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (generate-new-buffer "test-mb1"))
         (buf2 (generate-new-buffer "test-mb2")))

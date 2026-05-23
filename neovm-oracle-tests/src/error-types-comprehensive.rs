@@ -9,7 +9,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // error function with format strings and multiple arguments
@@ -42,7 +42,7 @@ fn oracle_prop_error_types_error_function_format_args() {
   (condition-case err
       (error "test %d" 99)
     (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ fn oracle_prop_error_types_user_error_inheritance() {
       (signal 'user-error '("specific wins"))
     (user-error 'specific-handler)
     (error 'generic-handler)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ fn oracle_prop_error_types_wrong_type_argument() {
   (condition-case err
       (car 42)
     (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn oracle_prop_error_types_wrong_number_of_arguments() {
   (condition-case err
       (signal 'wrong-number-of-arguments '(foo 0))
     (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn oracle_prop_error_types_void_variable_and_void_function() {
   (condition-case err
       (neovm--missing-fn-xyz-999 1 2 3)
     (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn oracle_prop_error_types_setting_constant() {
       (set ':my-keyword 42)
     (setting-constant (list (car err) (cadr err)))
     (error (list 'generic (car err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -207,7 +207,7 @@ fn oracle_prop_error_types_invalid_function() {
   (condition-case err
       (signal 'invalid-function '(42))
     (invalid-function (list (car err) (cadr err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -238,7 +238,7 @@ fn oracle_prop_error_types_args_out_of_range() {
   (condition-case err
       (aref [1 2 3] 100)
     (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -281,7 +281,7 @@ fn oracle_prop_error_types_arith_error_variants() {
   (condition-case err
       (signal 'domain-error '("bad domain"))
     (arith-error (list 'caught-by-arith (car err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +338,7 @@ fn oracle_prop_error_types_define_error_custom_hierarchy() {
     (put 'neovm-test-child-err 'error-message nil)
     (put 'neovm-test-grandchild-err 'error-conditions nil)
     (put 'neovm-test-grandchild-err 'error-message nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ fn oracle_prop_error_types_define_error_multiple_parents() {
     (put 'neovm-test-mp-b 'error-message nil)
     (put 'neovm-test-mp-ab 'error-conditions nil)
     (put 'neovm-test-mp-ab 'error-message nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -419,7 +419,7 @@ fn oracle_prop_error_types_error_message_string() {
   (condition-case err
       (error "test")
     (error (stringp (error-message-string err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,5 +445,5 @@ fn oracle_prop_error_types_error_catches_all_standard() {
   (condition-case err (signal 'domain-error nil) (error (car err)))
   (condition-case err (signal 'user-error '("x")) (error (car err)))
   (condition-case err (signal 'setting-constant '(nil)) (error (car err))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

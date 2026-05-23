@@ -1,13 +1,13 @@
 //! Divergence tests: treesit, tree-sitter integration deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_treesit_available() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'treesit)
   (fboundp 'treesit-available-p)
@@ -19,7 +19,7 @@ fn divergence_treesit_available() {
 fn divergence_treesit_parser() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-parser-create)
   (fboundp 'treesit-parser-delete)
@@ -32,7 +32,7 @@ fn divergence_treesit_parser() {
 fn divergence_treesit_node() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-node-type)
   (fboundp 'treesit-node-text)
@@ -46,7 +46,7 @@ fn divergence_treesit_node() {
 fn divergence_treesit_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-query-compile)
   (fboundp 'treesit-query-capture)
@@ -58,7 +58,7 @@ fn divergence_treesit_query() {
 fn divergence_treesit_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-simple-indent-rules)
   (fboundp 'treesit-indent)
@@ -70,7 +70,7 @@ fn divergence_treesit_indent() {
 fn divergence_treesit_fontify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-font-lock-rules)
   (fboundp 'treesit-font-lock-feature-list))"#,
@@ -81,7 +81,7 @@ fn divergence_treesit_fontify() {
 fn divergence_treesit_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-search-subtree)
   (fboundp 'treesit-search-forward)
@@ -93,7 +93,7 @@ fn divergence_treesit_search() {
 fn divergence_treesit_thing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-thing-at-point)
   (fboundp 'treesit-nav-start-of-name)
@@ -105,7 +105,7 @@ fn divergence_treesit_thing() {
 fn divergence_treesit_transpose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-transpose-sexps)
   (fboundp 'treesit-forward-sexp)
@@ -117,7 +117,7 @@ fn divergence_treesit_transpose() {
 fn divergence_treesit_inspect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'treesit-explore-mode)
   (fboundp 'treesit-inspect-mode)

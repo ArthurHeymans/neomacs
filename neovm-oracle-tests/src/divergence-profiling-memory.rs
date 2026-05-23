@@ -1,13 +1,13 @@
 //! Divergence tests: profiling, benchmarking, memory info deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_profiler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'profiler-start)
   (fboundp 'profiler-stop)
@@ -20,7 +20,7 @@ fn divergence_profiler() {
 fn divergence_elp_profiling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'elp-instrument-function)
   (fboundp 'elp-instrument-package)
@@ -33,7 +33,7 @@ fn divergence_elp_profiling() {
 fn divergence_benchmark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'benchmark-run)
   (fboundp 'benchmark-run-compiled)
@@ -46,7 +46,7 @@ fn divergence_benchmark() {
 fn divergence_memory_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'memory-use-counts)
   (fboundp 'memory-limit)
@@ -59,7 +59,7 @@ fn divergence_memory_info() {
 fn divergence_gc_stats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'gc-cons-threshold)
   (boundp 'gc-cons-percentage)
@@ -73,7 +73,7 @@ fn divergence_gc_stats() {
 fn divergence_memory_limits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp gc-cons-threshold)
   (> gc-cons-threshold 0)
@@ -87,7 +87,7 @@ fn divergence_memory_limits() {
 fn divergence_pure_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'purecopy)
   (boundp 'pure-bytes-used)
@@ -99,7 +99,7 @@ fn divergence_pure_space() {
 fn divergence_data_bytes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'buffer-has-markers-at)
   (fboundp 'object-intervals)
@@ -111,7 +111,7 @@ fn divergence_data_bytes() {
 fn divergence_list_internals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'length)
   (fboundp 'safe-length)
@@ -125,7 +125,7 @@ fn divergence_list_internals() {
 fn divergence_bytecode_stats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'byte-code-meter)
   (fboundp 'internal-interpreter-environment)

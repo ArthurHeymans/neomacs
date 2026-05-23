@@ -1,13 +1,13 @@
 //! Divergence tests: defstruct + cl-defstruct + accessor + print combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_defstruct_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-ds-xxx (:constructor test-ds-make-xxx))
     (name "unknown")
@@ -32,7 +32,7 @@ fn divergence_cl_defstruct_basic() {
 fn divergence_cl_defstruct_setf_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-mut-xxx (val 0) (items nil))
   (let ((obj (make-test-mut-xxx :val 10 :items '(a b))))
@@ -49,7 +49,7 @@ fn divergence_cl_defstruct_setf_accessor() {
 fn divergence_cl_defstruct_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-pred-xxx x y)
   (let ((obj (make-test-pred-xxx :x 1 :y 2)))
@@ -65,7 +65,7 @@ fn divergence_cl_defstruct_predicate() {
 fn divergence_cl_defstruct_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-copy-xxx (a 1) (b 2))
   (let ((orig (make-test-copy-xxx :a 10 :b 20))
@@ -87,7 +87,7 @@ fn divergence_cl_defstruct_copy() {
 fn divergence_cl_defstruct_named_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-np-xxx (:constructor test-np-new-xxx))
     x y z)
@@ -107,7 +107,7 @@ fn divergence_cl_defstruct_named_print() {
 fn divergence_defstruct_included() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-base-xxx a b)
   (cl-defstruct (test-child-xxx (:include test-base-xxx))
@@ -130,7 +130,7 @@ fn divergence_defstruct_included() {
 fn divergence_defstruct_vector_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-vec-xxx (:type vector))
     (x 0) (y 0) (z 0))
@@ -151,7 +151,7 @@ fn divergence_defstruct_vector_type() {
 fn divergence_defstruct_list_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-lst-xxx (:type list))
     (name "default") (value 0))
@@ -170,7 +170,7 @@ fn divergence_defstruct_list_type() {
 fn divergence_defstruct_boa_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct (test-boa-xxx
                  (:constructor test-boa-make-xxx (a &optional b)))
@@ -194,7 +194,7 @@ fn divergence_defstruct_boa_constructor() {
 fn divergence_defstruct_equal_and_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-teq-xxx (v 0))
   (let ((o1 (make-test-teq-xxx :v 42))

@@ -1,13 +1,13 @@
 //! Divergence tests: overlay + textprop + narrowing + undo deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_textprop_overlay_narrow_edit_undo_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 25 'category 'test)
@@ -34,7 +34,7 @@ fn divergence_textprop_overlay_narrow_edit_undo_widen() {
 fn divergence_overlay_spanning_narrow_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 5 15)))
@@ -58,7 +58,7 @@ fn divergence_overlay_spanning_narrow_replace_undo() {
 fn divergence_invisible_overlay_narrow_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "VIS1-HIDDEN-VIS2-MORE")
   (let ((ov (make-overlay 5 11)))
@@ -79,7 +79,7 @@ fn divergence_invisible_overlay_narrow_search() {
 fn divergence_modification_hooks_narrow_overlap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-mh-log-xxx nil)
   (insert "ABCDEFGHIJ")
@@ -107,7 +107,7 @@ fn divergence_modification_hooks_narrow_overlap() {
 fn divergence_rear_nonsticky_narrow_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC")
   (put-text-property 4 7 'sticky 'yes)
@@ -129,7 +129,7 @@ fn divergence_rear_nonsticky_narrow_insert() {
 fn divergence_overlay_hook_modifies_buflocal_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-bh-var-xxx 0)
   (make-variable-buffer-local 'test-bh-var-xxx)
@@ -151,7 +151,7 @@ fn divergence_overlay_hook_modifies_buflocal_undo() {
 fn divergence_next_single_property_change_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 4 'group 'a)
@@ -173,7 +173,7 @@ fn divergence_next_single_property_change_narrowed() {
 fn divergence_erase_buffer_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD")
   (let ((ov1 (make-overlay 1 4))
@@ -198,7 +198,7 @@ fn divergence_erase_buffer_with_overlays() {
 fn divergence_atomic_change_group_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ORIGINAL")
   (let ((ov (make-overlay 1 9)))
@@ -222,7 +222,7 @@ fn divergence_atomic_change_group_combo() {
 fn divergence_table_overlays_sort_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "z-line\na-line\nm-line\nb-line")
   (let ((ovs nil))

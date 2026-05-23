@@ -3,7 +3,7 @@
 //! GNU `tty-frame-at` checks `FIXNUMP` for both coordinates and returns nil
 //! for non-fixnum values instead of signaling a type error.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,5 +26,5 @@ fn oracle_tty_frame_at_non_fixnum_coordinates_return_nil() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

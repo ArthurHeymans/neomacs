@@ -5,9 +5,7 @@
 //! `shell-file-name` and `shell-command-switch`, then passing the command plus
 //! legacy rest args joined with spaces to `call-process` / `process-file`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_call_process_shell_command_contracts() {
@@ -25,7 +23,7 @@ fn oracle_prop_gnu_call_process_shell_command_contracts() {
      (point))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -42,7 +40,7 @@ fn oracle_prop_gnu_process_file_shell_command_contracts() {
      (point))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -56,5 +54,5 @@ fn oracle_prop_gnu_call_process_shell_command_mixes_stderr_when_requested() {
    (buffer-string)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // safe-length on proper lists of many sizes
@@ -26,7 +26,7 @@ fn oracle_prop_safe_length_patterns_proper_list_range() {
             results)))
   (nreverse results))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ fn oracle_prop_safe_length_patterns_dotted_lists() {
  ;; Deeply nested dotted
  (safe-length (cons 'a (cons 'b (cons 'c (cons 'd 'e))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ fn oracle_prop_safe_length_patterns_circular_various() {
     (push (list 'cycle-10 (safe-length c10)) results))
   (nreverse results))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ fn oracle_prop_safe_length_patterns_atoms() {
  ;; Hash-table
  (safe-length (make-hash-table)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ fn oracle_prop_safe_length_patterns_detect_circular() {
         (nreverse results))
     (fmakunbound 'neovm--sl-classify)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ fn oracle_prop_safe_length_patterns_validation() {
     (fmakunbound 'neovm--sl-validate-record)
     (fmakunbound 'neovm--sl-validate-table)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ fn oracle_prop_safe_length_patterns_tree_size() {
        (car (funcall 'neovm--sl-tree-size (make-list 50 'x) 10)))
     (fmakunbound 'neovm--sl-tree-size)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,5 +381,5 @@ fn oracle_prop_safe_length_patterns_mutation_tracking() {
           results))
   (nreverse results))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

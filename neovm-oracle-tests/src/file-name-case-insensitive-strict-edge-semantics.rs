@@ -4,7 +4,7 @@
 //! paths are not immediate errors: GNU walks upward to an existing parent and
 //! reports that filesystem's case behavior, returning nil if it cannot decide.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -46,7 +46,7 @@ fn oracle_file_name_case_insensitive_existing_and_missing_paths() {
     (ignore-errors (delete-directory root t))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,5 +108,5 @@ fn oracle_file_name_case_insensitive_handler_and_argument_order_edges() {
     (makunbound 'neomacs--oracle-case-fold-calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

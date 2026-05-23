@@ -4,7 +4,7 @@
 //! and numeric string conversion in `src/data.c`. These tests focus on exact
 //! edge behavior and error payloads rather than broad formatting examples.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_char_string_conversion_edges_and_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn oracle_string_to_number_base_and_error_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn oracle_number_to_string_float_and_type_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn oracle_format_numbered_and_unnumbered_arguments() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn oracle_format_precision_properties_and_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -164,5 +164,5 @@ fn oracle_format_argument_text_property_propagation() {
                  (number-sequence 0 (1- (length s)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

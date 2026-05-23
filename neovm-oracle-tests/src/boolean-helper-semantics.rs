@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` boolean helper contracts.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_xor_ignore_always_gnu_subr_contracts() {
@@ -29,5 +27,5 @@ fn oracle_prop_xor_ignore_always_gnu_subr_contracts() {
    (list (always (push 'a trace)
                  (push 'b trace))
          (nreverse trace))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

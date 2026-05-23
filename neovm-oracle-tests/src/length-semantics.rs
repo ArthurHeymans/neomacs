@@ -4,7 +4,7 @@
 //! and `proper-list-p` in `src/fns.c`.  The comparison functions use a bounded
 //! fast path for list inputs, which makes circular and dotted inputs observable.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_length_dotted_and_type_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn oracle_length_comparisons_on_dotted_lists() {
  (length= '(a b . c) 2))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_length_comparisons_on_circular_lists() {
    (integerp (safe-length x))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn oracle_length_circular_list_error_payloads() {
                     (car arg)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn oracle_safe_length_and_proper_list_exact_edges() {
    (proper-list-p lasso)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -147,5 +147,5 @@ fn oracle_length_on_non_list_sequences() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

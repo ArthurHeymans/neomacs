@@ -1,13 +1,13 @@
 //! Divergence tests: keymap + command + mode interaction combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_keymap_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((grandparent (make-sparse-keymap))
         (parent (make-sparse-keymap))
         (child (make-sparse-keymap)))
@@ -32,7 +32,7 @@ fn divergence_keymap_inheritance_chain() {
 fn divergence_remapped_commands() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map [remap self-insert-command] 'ignore)
   (list (command-remapping 'self-insert-command)
@@ -46,7 +46,7 @@ fn divergence_remapped_commands() {
 fn divergence_minor_mode_keymap_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map1 (make-sparse-keymap))
         (map2 (make-sparse-keymap)))
   (define-key map1 "x" 'cmd-from-map1)
@@ -66,7 +66,7 @@ fn divergence_minor_mode_keymap_priority() {
 fn divergence_active_keymaps_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((maps (current-active-maps)))
   (list (>= (length maps) 1)
         (cl-every #'keymapp maps)
@@ -78,7 +78,7 @@ fn divergence_active_keymaps_lookup() {
 fn divergence_keymap_prompt_and_binding_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap "Test Menu")))
   (define-key map "a" 'cmd-a)
   (define-key map "b" 'cmd-b)
@@ -95,7 +95,7 @@ fn divergence_keymap_prompt_and_binding_access() {
 fn divergence_command_loop_with_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-interp-cmd-xxx ()
     (interactive)
@@ -111,7 +111,7 @@ fn divergence_command_loop_with_defun() {
 fn divergence_describe_bindings_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map "x" 'exchange-point-and-mark)
   (define-key map "s" 'save-buffer)
@@ -130,7 +130,7 @@ fn divergence_describe_bindings_check() {
 fn divergence_key_translation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((events (listify-key-sequence "\C-x\C-f")))
   (list events
         (length events)
@@ -145,7 +145,7 @@ fn divergence_key_translation() {
 fn divergence_accessed_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-keymap)))
   (define-key map "\C-c\C-a" 'cmd-a)
   (define-key map "\C-c\C-b" 'cmd-b)
@@ -160,7 +160,7 @@ fn divergence_accessed_keymaps() {
 fn divergence_substitute_key_definitions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map "a" 'old-cmd-xxx)
   (define-key map "b" 'old-cmd-xxx)

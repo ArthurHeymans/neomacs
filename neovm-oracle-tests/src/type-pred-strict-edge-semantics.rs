@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_arrayp_vector() {
@@ -95,7 +95,7 @@ fn oracle_keywordp_initial_obarray_strict_edges() {
        (keywordp :x :y)
      (error (cons (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -141,5 +141,5 @@ fn oracle_data_c_sequence_array_vector_predicate_matrix() {
        (sequencep nil nil)
      (error (cons (car err) (cdr err))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

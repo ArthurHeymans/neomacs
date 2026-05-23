@@ -5,7 +5,7 @@
 //! newline handling, key normalization, empty values, and per-URI-component
 //! allowed character masks.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,7 +24,7 @@ fn oracle_prop_url_unhex_string_newlines_plus_and_invalid_escapes() {
    (url-unhex-string "%zz%4G%")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_prop_url_hexify_string_default_utf8_and_allowed_masks() {
    (url-hexify-string "%already" url--query-key-value-preserved-chars)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_prop_url_parse_query_string_grouping_and_downcase() {
    (url-parse-query-string "line=x%0Ay" nil t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -89,5 +89,5 @@ fn oracle_prop_url_build_query_string_empty_values_and_separators() {
    (url-build-query-string '((percent "%already") (slash "a/b")))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

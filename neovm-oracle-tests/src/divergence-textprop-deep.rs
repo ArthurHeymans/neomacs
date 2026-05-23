@@ -1,13 +1,13 @@
 //! Divergence tests: deep text property interval splitting/merging/inheritance.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_text_prop_insert_in_middle_splits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "AAAA" 'face 'bold))
   (goto-char 3)
@@ -23,7 +23,7 @@ fn divergence_text_prop_insert_in_middle_splits() {
 fn divergence_text_prop_rear_nonsticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "ABC" 'rear-nonsticky t 'face 'bold))
   (goto-char (point-max))
@@ -37,7 +37,7 @@ fn divergence_text_prop_rear_nonsticky() {
 fn divergence_text_prop_front_sticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "XX")
   (goto-char 1)
@@ -52,7 +52,7 @@ fn divergence_text_prop_front_sticky() {
 fn divergence_text_prop_remove_text_property_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAAAA")
   (put-text-property 1 4 'face 'bold (current-buffer))
@@ -70,7 +70,7 @@ fn divergence_text_prop_remove_text_property_merge() {
 fn divergence_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 4 'face 'bold (current-buffer))
@@ -87,7 +87,7 @@ fn divergence_next_property_change() {
 fn divergence_previous_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 4 'face 'bold (current-buffer))
@@ -102,7 +102,7 @@ fn divergence_previous_property_change() {
 fn divergence_text_prop_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold (current-buffer))
@@ -117,7 +117,7 @@ fn divergence_text_prop_inheritance() {
 fn divergence_add_text_properties_appends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (put-text-property 1 5 'face 'bold (current-buffer))
@@ -133,7 +133,7 @@ fn divergence_add_text_properties_appends() {
 fn divergence_erase_buffer_keeps_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (put-text-property 1 6 'face 'bold (current-buffer))
@@ -150,7 +150,7 @@ fn divergence_erase_buffer_keeps_props() {
 fn divergence_set_text_properties_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (put-text-property 1 9 'face 'bold (current-buffer))

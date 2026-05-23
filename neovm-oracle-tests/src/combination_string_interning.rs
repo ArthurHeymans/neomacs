@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // intern / intern-soft: comprehensive behavior with default obarray
@@ -51,7 +51,7 @@ fn oracle_prop_string_interning_intern_soft_comprehensive() {
                                  (equal (symbol-name s4) (nth 3 names))
                                  ;; All found after interning
                                  all-found))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ fn oracle_prop_string_interning_symbol_properties_metadata() {
                         (put s 'type nil)
                         (put s 'doc nil)
                         (put s 'range nil))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn oracle_prop_string_interning_roundtrip_name_value_plist() {
                                                    ;; plist still present
                                                    (get sym 'version))))
                             (list initial after-set after-modify after-makunbound))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn oracle_prop_string_interning_gensym_pattern() {
                                  (symbol-value (nth 7 syms))))
                          ;; Counter advanced
                          counter))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ fn oracle_prop_string_interning_mini_language_symtab() {
     (fmakunbound 'neovm--si-symtab-declare)
     (fmakunbound 'neovm--si-symtab-lookup)
     (fmakunbound 'neovm--si-symtab-leave-scope)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ fn oracle_prop_string_interning_uninterned_independent_namespaces() {
                               (list (symbol-value s1)
                                     (symbol-value s2)
                                     (symbol-value s3))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,7 +430,7 @@ fn oracle_prop_string_interning_type_registry() {
                                        (put v 'coerce nil)
                                        (put v 'registered nil))
                                      type-table))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,5 +477,5 @@ fn oracle_prop_string_interning_custom_obarray() {
                        (let ((count 0))
                          (mapatoms (lambda (s) (setq count (1+ count))) my-obarray)
                          count))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

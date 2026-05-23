@@ -5,7 +5,7 @@
 //! same 12-element list returned by `file-attributes`; this test normalizes
 //! volatile inode/time/device values while preserving the semantic shape.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -75,5 +75,5 @@ fn oracle_directory_files_and_attributes_shape_id_format_count_and_errors() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

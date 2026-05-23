@@ -4,7 +4,7 @@
 //! buffer bytes for `\n`.  Line lengths are byte counts, so a preceding `\r`
 //! in CRLF text is counted as part of the line.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,5 +28,5 @@ fn oracle_buffer_line_statistics_counts_raw_crlf_bytes_like_gnu() {
        (buffer-line-statistics)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

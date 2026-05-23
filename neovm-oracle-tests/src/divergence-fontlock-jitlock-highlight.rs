@@ -1,13 +1,13 @@
 //! Divergence tests: jit-lock, font-lock, syntax highlighting stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_jit_lock_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'jit-lock-register)
   (fboundp 'jit-lock-unregister)
@@ -21,7 +21,7 @@ fn divergence_jit_lock_functions() {
 fn divergence_font_lock_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'font-lock-mode)
   (fboundp 'font-lock-add-keywords)
@@ -35,7 +35,7 @@ fn divergence_font_lock_functions() {
 fn divergence_font_lock_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'font-lock-keywords)
   (listp font-lock-keywords)
@@ -48,7 +48,7 @@ fn divergence_font_lock_keywords() {
 fn divergence_font_lock_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'font-lock-defaults)
   (fboundp 'font-lock-set-defaults)
@@ -60,7 +60,7 @@ fn divergence_font_lock_defaults() {
 fn divergence_syntax_highlight_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'global-font-lock-mode)
   (booleanp global-font-lock-mode)
@@ -73,7 +73,7 @@ fn divergence_syntax_highlight_vars() {
 fn divergence_pretty_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'prettify-symbols-mode)
   (boundp 'prettify-symbols-unprettify-at-point)
@@ -85,7 +85,7 @@ fn divergence_pretty_symbols() {
 fn derivation_whitespace_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'whitespace-mode)
   (fboundp 'global-whitespace-mode)
@@ -98,7 +98,7 @@ fn derivation_whitespace_mode() {
 fn divergence_line_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'display-line-numbers-mode)
   (boundp 'display-line-numbers)
@@ -111,7 +111,7 @@ fn divergence_line_numbers() {
 fn divergence_highlight_indentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'highlight-indentation-mode)
   (fboundp 'highlight-indentation-current-column-mode)
@@ -123,7 +123,7 @@ fn divergence_highlight_indentation() {
 fn divergence_rainbow_delimiters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'rainbow-delimiters-mode)
   (featurep 'rainbow-delimiters))"#,

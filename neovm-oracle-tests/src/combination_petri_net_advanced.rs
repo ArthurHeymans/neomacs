@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Infrastructure: shared Petri net helpers used across tests
@@ -108,7 +108,7 @@ fn oracle_prop_petri_net_adv_firing_sequence_deterministic() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ fn oracle_prop_petri_net_adv_reachability_bfs() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ fn oracle_prop_petri_net_adv_deadlock_detection_comprehensive() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ fn oracle_prop_petri_net_adv_p_invariant_verification() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +459,7 @@ fn oracle_prop_petri_net_adv_conflict_detection() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -543,7 +543,7 @@ fn oracle_prop_petri_net_adv_coverability_check() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +624,7 @@ fn oracle_prop_petri_net_adv_boundedness_check() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -703,7 +703,7 @@ fn oracle_prop_petri_net_adv_chemical_reaction_network() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -776,7 +776,7 @@ fn oracle_prop_petri_net_adv_liveness_analysis() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -845,7 +845,7 @@ fn oracle_prop_petri_net_adv_concurrent_interleaving() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -904,5 +904,5 @@ fn oracle_prop_petri_net_adv_state_space_statistics() {
         defs = pn_defs(),
         cleanup = pn_cleanup()
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }

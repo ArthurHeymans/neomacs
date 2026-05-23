@@ -6,7 +6,7 @@
 //! encodes absolute backup names by replacing directory separators with `!`
 //! while doubling literal `!` characters.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -85,5 +85,5 @@ fn oracle_backup_file_name_default_and_directory_alist_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

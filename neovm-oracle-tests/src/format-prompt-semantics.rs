@@ -3,7 +3,7 @@
 //! `format-prompt` composes prompt text, optional format arguments, list
 //! defaults, empty defaults, and `minibuffer-default-prompt-format`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_prop_format_prompt_default_presence() {
    (format-prompt "Name" '(first second third))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -35,7 +35,7 @@ fn oracle_prop_format_prompt_prompt_format_arguments() {
    (format-prompt "%s/%s" '("main" "ignored") "branch" "remote")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn oracle_prop_format_prompt_custom_default_prompt_format() {
    (format-prompt "No suffix" "x")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -66,5 +66,5 @@ fn oracle_prop_format_prompt_substitute_command_keys() {
    (format-prompt "Command `%s'" "M-x" "compile")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

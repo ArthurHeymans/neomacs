@@ -1,13 +1,13 @@
 //! Divergence tests: cl-macs + pcase + rx + thread combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-destructuring-bind (a (b c) &rest rest) '(1 (2 3) 4 5 6)
     (list a (= a 1)
@@ -25,7 +25,7 @@ fn divergence_cl_destructuring_bind() {
 fn divergence_pcase_complex_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (pcase '(1 2 3)
           ((or `(,a ,b ,c) (list a b c)) (+ a b c)))
@@ -66,7 +66,7 @@ fn divergence_pcase_complex_patterns() {
 fn divergence_pcase_guard_and_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (pcase 42
           ((and x (guard (> x 10))) 'big)
@@ -109,7 +109,7 @@ fn divergence_pcase_guard_and_let() {
 fn divergence_rx_macro_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((r1 (rx bos (+ (any "a-zA-Z")) eos))
         (r2 (rx "hello" (zero-or-more space) "world"))
@@ -137,7 +137,7 @@ fn divergence_rx_macro_patterns() {
 fn divergence_rx_with_substitution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((word "test")
         (count 3))
@@ -155,7 +155,7 @@ fn divergence_rx_with_substitution() {
 fn divergence_cl_typep_and_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-typep 42 'integer)
         (cl-typep "hello" 'string)
@@ -184,7 +184,7 @@ fn divergence_cl_typep_and_check() {
 fn divergence_cl_loop_with_accumulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x in '(1 2 3 4 5) sum (* x x))
         (= (cl-loop for x in '(1 2 3 4 5) sum (* x x)) 55)
@@ -220,7 +220,7 @@ fn divergence_cl_loop_with_accumulation() {
 fn divergence_cl_loop_with_conditions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x in '(1 2 3 4 5 6 7 8 9)
                  when (cl-evenp x) collect x)
@@ -260,7 +260,7 @@ fn divergence_cl_loop_with_conditions() {
 fn divergence_thread_last_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (thread-last 5 (+ 1) (* 2) (- 3))
         (= (thread-last 5 (+ 1) (* 2) (- 3)) 9)
@@ -307,7 +307,7 @@ fn divergence_thread_last_first() {
 fn divergence_cl_defmacro_with_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defmacro test-dmd-xxx ((a b) &key (c 10) (d 20))
     `(list ,a ,b ,c ,d))

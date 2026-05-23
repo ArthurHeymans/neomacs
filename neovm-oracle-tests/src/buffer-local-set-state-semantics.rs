@@ -5,9 +5,7 @@
 //! small, but they combine macro expansion, buffer-local bindings, void
 //! variables, and restoration via `kill-local-variable`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_buffer_local_boundp_uses_buffer_local_value_contract() {
@@ -42,7 +40,7 @@ fn oracle_prop_gnu_buffer_local_boundp_uses_buffer_local_value_contract() {
       (when (buffer-live-p buf-b) (kill-buffer buf-b)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -78,7 +76,7 @@ fn oracle_prop_gnu_buffer_local_set_state_restores_local_global_and_void_vars() 
                (local-variable-p 'neomacs--oracle-blss-c)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -105,7 +103,7 @@ fn oracle_prop_gnu_buffer_local_set_state_get_records_current_buffer_only() {
       (kill-buffer other))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -118,5 +116,5 @@ fn oracle_prop_gnu_buffer_local_set_state_rejects_odd_pairs_at_macroexpand() {
   (error err))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

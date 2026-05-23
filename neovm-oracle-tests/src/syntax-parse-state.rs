@@ -6,7 +6,7 @@
 //! full parser state values against GNU rather than asserting simplified
 //! expectations locally.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -39,7 +39,7 @@ fn oracle_prop_parse_partial_sexp_lisp_string_comment_state() {
        (point)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn oracle_prop_parse_partial_sexp_targetdepth_stopbefore_commentstop() {
        (point)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn oracle_prop_syntax_ppss_cache_flush_after_buffer_mutation() {
               (syntax-ppss (point-max)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -119,5 +119,5 @@ fn oracle_prop_scan_sexps_comments_and_unbalanced_errors() {
          (error (list (car err) (cadr err))))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

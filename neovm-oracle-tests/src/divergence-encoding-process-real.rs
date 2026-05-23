@@ -1,13 +1,13 @@
 //! Divergence tests: real encoding/decoding behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_encode_decode_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"Hello World\")
   (encode-coding-region 1 12 'utf-8)
@@ -20,7 +20,7 @@ fn divergence_encode_decode_region() {
 fn divergence_coding_system_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (coding-system-base 'utf-8)
   (coding-system-base 'utf-8-dos)
@@ -35,7 +35,7 @@ fn divergence_coding_system_base() {
 fn divergence_coding_system_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((cs (coding-system-priority-list)))
   (list (car cs)
         (>= (length cs) 1)
@@ -47,7 +47,7 @@ fn divergence_coding_system_priority() {
 fn divergence_charset_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (charsetp 'ascii)
   (charsetp 'unicode)
@@ -61,7 +61,7 @@ fn divergence_charset_operations() {
 fn divergence_string_encode_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"caf\\u00e9\"))
   (list (encode-coding-string s 'utf-8)
         (decode-coding-string (encode-coding-string s 'utf-8) 'utf-8)
@@ -74,7 +74,7 @@ fn divergence_string_encode_decode() {
 fn divergence_process_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (stringp (getenv \"HOME\"))
   (stringp (getenv \"PATH\"))
@@ -88,7 +88,7 @@ fn divergence_process_environment() {
 fn divergence_shell_command_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((out (shell-command-to-string \"echo hello\")))
   (list (string-trim out)
         (string= (string-trim out) \"hello\"))) ",
@@ -99,7 +99,7 @@ fn divergence_shell_command_output() {
 fn divergence_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((result (with-temp-buffer
                  (insert \"hello\")
                  (call-process-region (point-min) (point-max)
@@ -114,7 +114,7 @@ fn divergence_call_process_region() {
 fn divergence_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (listp (process-list))
   (<= (length (process-list)) 0)
@@ -126,7 +126,7 @@ fn divergence_process_list() {
 fn divergence_system_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (stringp system-name)
   (stringp system-configuration)

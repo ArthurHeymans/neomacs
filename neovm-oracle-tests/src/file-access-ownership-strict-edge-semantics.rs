@@ -4,7 +4,7 @@
 //! `src/fileio.c`, while `file-ownership-preserved-p` is Lisp in
 //! `lisp/files.el` layered on `file-attributes`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_file_accessible_access_file_and_ownership_edges() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -95,5 +95,5 @@ fn oracle_access_file_handler_and_argument_order_edges() {
     (makunbound 'neomacs--oracle-access-file-calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

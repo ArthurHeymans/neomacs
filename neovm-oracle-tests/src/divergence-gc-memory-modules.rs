@@ -1,13 +1,13 @@
 //! Divergence tests: gc, memory info, dump-emacs, dynamic-modules.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_gc_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'garbage-collect)
   (fboundp 'memory-info)
@@ -21,7 +21,7 @@ fn divergence_gc_functions() {
 fn divergence_gc_cons_threshold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp gc-cons-threshold)
   (> gc-cons-threshold 0)
@@ -34,7 +34,7 @@ fn divergence_gc_cons_threshold() {
 fn divergence_gc_elapsed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp gcs-done)
   (>= gcs-done 0)
@@ -47,7 +47,7 @@ fn divergence_gc_elapsed() {
 fn divergence_dynamic_modules() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'dynamic-modules)
   (fboundp 'module-load)
@@ -59,7 +59,7 @@ fn divergence_dynamic_modules() {
 fn divergence_dump_emacs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dump-emacs)
   (fboundp 'dump-mode)
@@ -71,7 +71,7 @@ fn divergence_dump_emacs() {
 fn divergence_pure_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'purecopy)
   (fboundp 'make-pure-string)
@@ -84,7 +84,7 @@ fn divergence_pure_functions() {
 fn divergence_memory_limits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp most-positive-fixnum)
   (integerp most-negative-fixnum)
@@ -98,7 +98,7 @@ fn divergence_memory_limits() {
 fn divergence_bool_vector_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((a (make-bool-vector 8 t))
         (b (make-bool-vector 8 nil)))
   (aset b 0 t)
@@ -115,7 +115,7 @@ fn divergence_bool_vector_ops() {
 fn divergence_record_type_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((r (record 'cl-struct-tag 1 2 3)))
   (list (recordp r)
         (length r)
@@ -130,7 +130,7 @@ fn divergence_record_type_p() {
 fn divergence_compiled_function_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (compiled-function-p (symbol-function 'car))
   (compiled-function-p (lambda (x) x))

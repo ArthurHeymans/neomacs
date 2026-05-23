@@ -1,13 +1,13 @@
 //! Divergence tests: keyboard input, key translation, input methods deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_key_translation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'keyboard-translate)
   (fboundp 'local-set-key)
@@ -20,7 +20,7 @@ fn divergence_key_translation() {
 fn divergence_input_methods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'activate-input-method)
   (fboundp 'deactivate-input-method)
@@ -34,7 +34,7 @@ fn divergence_input_methods() {
 fn divergence_quail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'quail-select-package)
   (fboundp 'quail-set-keyboard-layout)
@@ -46,7 +46,7 @@ fn divergence_quail() {
 fn divergence_input_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'input-decode-map)
   (fboundp 'local-function-key-map)
@@ -59,7 +59,7 @@ fn divergence_input_decode() {
 fn divergence_key_maps_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map "a" 'foo)
   (set-keymap-parent map (make-sparse-keymap))
@@ -73,7 +73,7 @@ fn divergence_key_maps_parent() {
 fn divergence_event_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eventp)
   (fboundp 'event-start)
@@ -89,7 +89,7 @@ fn divergence_event_types() {
 fn divergence_recent_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'recent-keys)
   (fboundp 'this-command-keys)
@@ -102,7 +102,7 @@ fn divergence_recent_keys() {
 fn divergence_key_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'key-description)
   (fboundp 'describe-buffer-bindings)
@@ -115,7 +115,7 @@ fn divergence_key_description() {
 fn divergence_parse_modifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'event-convert-list)
   (fboundp 'event-apply-modifier)
@@ -127,7 +127,7 @@ fn divergence_parse_modifiers() {
 fn divergence_keyboard_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'set-keyboard-coding-system)
   (fboundp 'keyboard-coding-system)

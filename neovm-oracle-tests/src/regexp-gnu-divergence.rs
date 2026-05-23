@@ -3,9 +3,7 @@
 //! These tests document behavior confirmed against local GNU Emacs source and
 //! oracle runs.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_regexp_gnu_mid_pattern_anchors_are_literals() {
@@ -21,7 +19,7 @@ fn oracle_prop_regexp_gnu_mid_pattern_anchors_are_literals() {
        (funcall probe "a$b" "a$b")
        (funcall probe "a$b" "ab")
        (funcall probe "\\(a\\|b^c\\)" "b^c")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -39,7 +37,7 @@ fn oracle_prop_regexp_gnu_backslash_d_is_literal() {
        (funcall probe "\\D" "D")
        (funcall probe "a\\db" "adb")
        (funcall probe "a\\db" "a5b")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +61,7 @@ fn oracle_prop_regexp_gnu_escaped_control_letters_are_literals() {
        (funcall probe "\\a" (string 7))
        (funcall probe "\\e" "e")
        (funcall probe "\\e" (string 27))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -79,7 +77,7 @@ fn oracle_prop_regexp_gnu_at_point_anchor_is_not_for_string_match() {
        (funcall probe "\\=" "abc")
        (funcall probe "a\\=b" "ab")
        (funcall probe "\\=b" "ab" 1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,7 +92,7 @@ fn oracle_prop_regexp_gnu_bare_intervals_are_literals() {
        (funcall probe "\\{1\\}" "{1}")
        (funcall probe "\\{1,2\\}" "{1,2}")
        (funcall probe "\\{,2\\}" "{,2}")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,7 +106,7 @@ fn oracle_prop_regexp_gnu_malformed_symbol_boundary_errors() {
       (condition-case err
           (string-match "\\_" "_")
         (error (list :error (car err) (cadr err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -128,7 +126,7 @@ fn oracle_prop_regexp_gnu_invalid_syntax_class_designators() {
        (funcall probe "\\s0" "0")
        (funcall probe "\\S0" "0")
        (funcall probe "\\S0" "a")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -145,7 +143,7 @@ fn oracle_prop_regexp_gnu_unknown_group_extension_errors() {
       (condition-case err
           (string-match "\\(?-1:a\\)" "(?-1:a)")
         (error (list :error (car err) (cadr err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -162,7 +160,7 @@ fn oracle_prop_regexp_gnu_category_tables() {
        (funcall probe "\\ca" "A")
        (funcall probe "\\c|" (string #x4e2d))
        (funcall probe "\\c6" (string #x0664))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -180,7 +178,7 @@ fn oracle_prop_regexp_gnu_unicode_case_folding() {
    (funcall probe (string #x00e9) (string #x00c9))
    (funcall probe "[[:upper:]]+" "abc")
    (funcall probe "[[:lower:]]+" "ABC")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -203,5 +201,5 @@ fn oracle_prop_regexp_gnu_custom_case_table_folding() {
      (string-match-p "X" "q"))
    (let ((case-fold-search t))
      (posix-string-match "X" "q"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // WAM heap representation: store terms in a flat vector
@@ -102,7 +102,7 @@ fn oracle_prop_wam_heap_representation() {
     (fmakunbound 'neovm--wam-put-const)
     (fmakunbound 'neovm--wam-put-var)
     (fmakunbound 'neovm--wam-put-structure)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ fn oracle_prop_wam_unification() {
     (fmakunbound 'neovm--wam-bind)
     (fmakunbound 'neovm--wam-unify)
     (fmakunbound 'neovm--wam-read-term)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +358,7 @@ fn oracle_prop_wam_register_allocation() {
     (fmakunbound 'neovm--wamr-set-variable)
     (fmakunbound 'neovm--wamr-set-value)
     (fmakunbound 'neovm--wamr-set-constant)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +484,7 @@ fn oracle_prop_wam_knowledge_base_query() {
     (fmakunbound 'neovm--wkb-unify)
     (fmakunbound 'neovm--wkb-query)
     (fmakunbound 'neovm--wkb-extract-vars)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ fn oracle_prop_wam_list_predicates() {
     (fmakunbound 'neovm--wlp-length)
     (fmakunbound 'neovm--wlp-remove-one)
     (fmakunbound 'neovm--wlp-permutations)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -730,5 +730,5 @@ fn oracle_prop_wam_rule_inference() {
     (fmakunbound 'neovm--wri-query-facts)
     (fmakunbound 'neovm--wri-grandparents)
     (fmakunbound 'neovm--wri-ancestors)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

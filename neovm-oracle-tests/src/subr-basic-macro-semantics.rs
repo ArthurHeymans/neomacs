@@ -4,9 +4,7 @@
 //! unchanged.  Its arity and macro predicate behavior matter for Testcover and
 //! libraries that inspect macro definitions.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_1value_macro_expands_to_single_form_unchanged() {
@@ -27,5 +25,5 @@ fn oracle_1value_macro_expands_to_single_form_unchanged() {
      (macroexpand '(1value 1 2))
    (error (list (car err) (cdr err)))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Macros with &rest and &body (treated identically, but test both)
@@ -49,7 +49,7 @@ fn oracle_prop_defmacro_comp_rest_vs_body() {
             (setq neovm--dcp-log (cons inner-result neovm--dcp-log))))
     (fmakunbound 'neovm--dcp-with-rest)
     (fmakunbound 'neovm--dcp-with-body)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ fn oracle_prop_defmacro_comp_optional_complex() {
         (neovm--dcp-wrap-call #'* 6 7))
     (fmakunbound 'neovm--dcp-make-alist)
     (fmakunbound 'neovm--dcp-wrap-call)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +131,7 @@ fn oracle_prop_defmacro_comp_backquote_nested() {
     (fmakunbound 'neovm--dcp-build-cond)
     (fmakunbound 'neovm--dcp-sandwich)
     (fmakunbound 'neovm--dcp-make-let)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +164,7 @@ fn oracle_prop_defmacro_comp_nested_definitions() {
     (fmakunbound 'neovm--dcp-get-name)
     (fmakunbound 'neovm--dcp-get-age)
     (fmakunbound 'neovm--dcp-get-role)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ fn oracle_prop_defmacro_comp_chain_expansion() {
     (fmakunbound 'neovm--dcp-a)
     (fmakunbound 'neovm--dcp-b)
     (fmakunbound 'neovm--dcp-c)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ fn oracle_prop_defmacro_comp_recursive_expansion() {
         (neovm--dcp-let-chain ((x 5) (y (* x 2)) (z (+ x y)))
           (list x y z)))
     (fmakunbound 'neovm--dcp-let-chain)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +274,7 @@ fn oracle_prop_defmacro_comp_gensym_hygiene() {
             (list val once))))
     (fmakunbound 'neovm--dcp-once-only)
     (fmakunbound 'neovm--dcp-safe-incf)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ fn oracle_prop_defmacro_comp_expand_vs_expand1() {
           (equal (macroexpand-1 '(+ 1 2)) '(+ 1 2))))
     (fmakunbound 'neovm--dcp-outer)
     (fmakunbound 'neovm--dcp-inner)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +346,7 @@ fn oracle_prop_defmacro_comp_generate_defun() {
     (fmakunbound 'neovm--dcp-sum)
     (fmakunbound 'neovm--dcp-prod)
     (fmakunbound 'neovm--dcp-max-val)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +388,7 @@ fn oracle_prop_defmacro_comp_destructuring() {
             (list a b c d (+ a b c d)))))
     (fmakunbound 'neovm--dcp-with-pair)
     (fmakunbound 'neovm--dcp-bind-pair)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +441,7 @@ fn oracle_prop_defmacro_comp_pattern_match() {
           ('nil "nil")
           (_ "catchall")))
     (fmakunbound 'neovm--dcp-match)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,7 +491,7 @@ fn oracle_prop_defmacro_comp_anaphoric() {
     (fmakunbound 'neovm--dcp-aif)
     (fmakunbound 'neovm--dcp-awhen)
     (fmakunbound 'neovm--dcp-aand)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +544,7 @@ fn oracle_prop_defmacro_comp_loop_constructs() {
           executed))
     (fmakunbound 'neovm--dcp-for-range)
     (fmakunbound 'neovm--dcp-do-while)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +578,7 @@ fn oracle_prop_defmacro_comp_declare_forms() {
         (macroexpand '(neovm--dcp-with-doc 5)))
     (fmakunbound 'neovm--dcp-with-doc)
     (fmakunbound 'neovm--dcp-with-debug)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -635,7 +635,7 @@ fn oracle_prop_defmacro_comp_struct_macro() {
     (fmakunbound 'neovm--dcp-point-p)
     (fmakunbound 'neovm--dcp-make-person)
     (fmakunbound 'neovm--dcp-person-p)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -663,5 +663,5 @@ fn oracle_prop_defmacro_comp_load_file_with_declare() {
               (macroexpand '(test-file-macro! foo (+ 1 2)))))
     (delete-file tmpfile)
     (fmakunbound 'test-file-macro!)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

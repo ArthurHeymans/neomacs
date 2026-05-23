@@ -1,13 +1,13 @@
 //! Divergence tests: real string/regex behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_re_search_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"2024-01-15 and 2025-12-31\")
   (goto-char 1)
@@ -25,7 +25,7 @@ fn divergence_re_search_groups() {
 fn divergence_string_multibyte_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"Hello \\u4e16\\u754c\"))
   (list (length s)
         (string-bytes s)
@@ -42,7 +42,7 @@ fn divergence_string_multibyte_operations() {
 fn divergence_regex_anchored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"abc\\ndef\\nghi\")
   (goto-char 1)
@@ -57,7 +57,7 @@ fn divergence_regex_anchored() {
 fn divergence_case_fold_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((case-fold-search t))
   (list (string-match \"HELLO\" \"hello world\")
         (string-match \"hello\" \"HELLO WORLD\")
@@ -69,7 +69,7 @@ fn divergence_case_fold_replacement() {
 fn divergence_string_split_join_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((parts '(\"foo\" \"bar\" \"baz\"))
         (joined (string-join parts \", \"))
         (split (split-string joined \", \")))
@@ -84,7 +84,7 @@ fn divergence_string_split_join_roundtrip() {
 fn divergence_unicode_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"caf\\u00e9\"))
   (list (length s)
         (string-bytes s)
@@ -100,7 +100,7 @@ fn divergence_unicode_string_ops() {
 fn divergence_regex_word_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"foo-bar baz\"))
   (list (string-match \"\\\\bfoo\\\\b\" text)
         (string-match \"\\\\bbar\\\\b\" text)
@@ -113,7 +113,7 @@ fn divergence_regex_word_boundary() {
 fn divergence_string_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (replace-regexp-in-string \"o\" \"0\" \"foo boo moo\")
   (replace-regexp-in-string \"[0-9]+\" \"NUM\" \"abc 123 def 456 ghi\")
@@ -126,7 +126,7 @@ fn divergence_string_replace_all() {
 fn divergence_string_format_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((obj '(1 \"two\" three (nested)))
         (str (format \"%S\" obj)))
   (list str
@@ -142,7 +142,7 @@ fn divergence_string_format_roundtrip() {
 fn divergence_rx_composition_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((re (rx bos (group (one-or-more (any \"a-z\")))
               \"-\" (group (one-or-more digit)) eos)))
   (list re

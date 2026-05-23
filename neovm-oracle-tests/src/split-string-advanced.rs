@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // split-string with regex separator
@@ -29,7 +29,7 @@ fn oracle_prop_split_string_regex_separator() {
   (split-string "a, b; c ,d;e" "[ \t]*[,;][ \t]*")
   ;; Split on word boundary approximation: transition from letter to non-letter
   (split-string "camelCaseWord" "\\(?:[a-z]\\)\\(\\)" ))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ fn oracle_prop_split_string_omit_nulls() {
   ;; No matches for separator: entire string as single element
   (split-string "noseparator" "," t)
   (split-string "noseparator" "," nil))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ fn oracle_prop_split_string_trim() {
   (split-string "  ,  ,hello,  ,world,  " "," t "[ \t]+")
   ;; Trim that removes everything from some pieces
   (split-string "123,456,abc,789" "," nil "[0-9]+"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ fn oracle_prop_split_string_multi_char_delimiters() {
   (split-string "start...middle...end" "\\.\\.\\.")
   ;; Split on HTML-like tag
   (split-string "hello<br>world<br>again" "<br>"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ fn oracle_prop_split_string_edge_cases() {
   (split-string "alpha,beta,gamma" "," t)
   ;; Default separator (split-string with just one arg uses whitespace)
   (split-string "  hello   world   "))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ fn oracle_prop_split_string_csv_parser() {
         (funcall 'neovm--test-parse-csv-row "single"))
     (fmakunbound 'neovm--test-parse-csv-field)
     (fmakunbound 'neovm--test-parse-csv-row)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,5 +224,5 @@ fn oracle_prop_split_string_tokenizer() {
         (funcall 'neovm--test-tokenize "if x > 0 then y = x * 2 else y = 0"))
     (fmakunbound 'neovm--test-classify-token)
     (fmakunbound 'neovm--test-tokenize)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

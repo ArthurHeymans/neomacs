@@ -52,7 +52,7 @@ fn oracle_string_rejects_character_above_gnu_max_char() {
      (string #x400000)
    (error (list (car err) (cdr err)))))
 "#;
-    super::common::assert_oracle_parity_with_bootstrap(form);
+    super::common::assert_oracle_parity(form);
 }
 
 proptest! {

@@ -2,7 +2,7 @@
 //! GNU src/fns.c, src/lread.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- vconcat ---
 
@@ -100,21 +100,21 @@ fn oracle_make_symbol_name() {
 #[test]
 fn oracle_gensym_returns_symbol_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(symbolp (gensym))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (gensym))"#);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_gensym_with_prefix_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(symbolp (gensym "pre"))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(symbolp (gensym "pre"))"#);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_gensym_unique_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(not (eq (gensym "x") (gensym "x")))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(not (eq (gensym "x") (gensym "x")))"#);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -123,14 +123,14 @@ fn oracle_gensym_unique_via_binary() {
 #[test]
 fn oracle_plist_member_found_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(plist-member '(a 1 b 2) 'a)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2) 'a)"#);
     assert_ok_eq("(a 1 b 2)", &o, &n);
 }
 
 #[test]
 fn oracle_plist_member_missing_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(plist-member '(a 1 b 2) 'c)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(plist-member '(a 1 b 2) 'c)"#);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -139,20 +139,20 @@ fn oracle_plist_member_missing_via_binary() {
 #[test]
 fn oracle_read_from_string_integer_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(read-from-string "42")"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "42")"#);
     assert_ok_eq("(42 . 2)", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_list_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(read-from-string "(a b c)")"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "(a b c)")"#);
     assert_ok_eq("((a b c) . 7)", &o, &n);
 }
 
 #[test]
 fn oracle_read_from_string_nil_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(read-from-string "nil")"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(read-from-string "nil")"#);
     assert_ok_eq("(nil . 3)", &o, &n);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: cl-loop + seq + generator + lazy sequence combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_loop_for_across_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v [10 20 30 40 50]))
     (list (cl-loop for x across v sum x)
@@ -25,7 +25,7 @@ fn divergence_cl_loop_for_across_vector() {
 fn divergence_cl_loop_with_hash_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
     (puthash 'a 1 ht)
@@ -48,7 +48,7 @@ fn divergence_cl_loop_with_hash_tables() {
 fn divergence_cl_loop_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '((1 2) (3 4) (5 6) (7 8))))
     (list (cl-loop for (a b) in data sum (+ a b))
@@ -66,7 +66,7 @@ fn divergence_cl_loop_destructuring() {
 fn divergence_cl_loop_accumulation_into() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x from 1 to 10
                  sum x into total
@@ -88,7 +88,7 @@ fn divergence_cl_loop_accumulation_into() {
 fn divergence_cl_loop_while_until() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x from 1
                  while (< x 100)
@@ -116,7 +116,7 @@ fn divergence_cl_loop_while_until() {
 fn divergence_seq_group_by_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '(1 2 3 4 5 6 7 8 9 10)))
     (let ((by-even (seq-group-by (lambda (x) (cl-evenp x)) data))
@@ -138,7 +138,7 @@ fn divergence_seq_group_by_partition() {
 fn divergence_seq_sort_unique_contains() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((data '(3 1 4 1 5 9 2 6 5 3)))
     (let ((sorted (seq-sort #'< data))
@@ -160,7 +160,7 @@ fn divergence_seq_sort_unique_contains() {
 fn divergence_cl_loop_for_on_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((lst '(a b c d e)))
     (list (cl-loop for sublist on lst collect (car sublist))
@@ -181,7 +181,7 @@ fn divergence_cl_loop_for_on_list() {
 fn divergence_seq_map_indexed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((v [10 20 30 40]))
     (list (seq-map-indexed (lambda (elt idx) (list idx elt)) v)
@@ -201,7 +201,7 @@ fn divergence_seq_map_indexed() {
 fn divergence_cl_loop_nested_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for x from 1 to 3
                  append (cl-loop for y from 1 to 3

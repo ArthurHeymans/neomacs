@@ -5,7 +5,7 @@
 //! `XSYMBOL`; an uninterned symbol and an interned symbol with the same print
 //! name must never share a plist.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -34,7 +34,7 @@ fn oracle_put_get_keep_uninterned_symbol_plists_separate() {
     (setplist interned nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_setplist_is_verbatim_and_identity_based() {
     (setplist interned nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn oracle_get_honors_non_nil_overriding_plist_environment() {
     (setplist sym nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn oracle_symbol_plist_malformed_get_put_semantics() {
     (setplist sym nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -141,5 +141,5 @@ fn oracle_symbol_plist_nil_and_t_are_mutable() {
     (setplist t t-old)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

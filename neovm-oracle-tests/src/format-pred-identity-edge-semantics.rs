@@ -2,7 +2,7 @@
 //! GNU src/editfns.c, src/data.c, src/fns.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_with_bootstrap};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- format ---
 
@@ -167,7 +167,7 @@ fn oracle_identity_ignore_always_strict_runtime_contract() {
    (condition-case err
        (identity 1 2)
      (error (list (car err) (cdr err))))))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         "(t t t nil nil t t (wrong-number-of-arguments (identity 0)) (wrong-number-of-arguments (identity 2)))",
         &o,

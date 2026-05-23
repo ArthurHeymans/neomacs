@@ -3,7 +3,7 @@
 //! GNU implements `font-drive-otf` and `font-otf-alternates` in `src/font.c`,
 //! but the studied registration block keeps both `defsubr` calls under `#if 0`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -22,5 +22,5 @@ fn oracle_font_otf_helpers_follow_gnu_primitive_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

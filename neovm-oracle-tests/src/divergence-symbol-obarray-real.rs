@@ -1,13 +1,13 @@
 //! Divergence tests: real symbol & obarray behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_intern_unintern_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((sym (intern \"test-sym-cycle-xxx\" obarray)))
   (set sym 42)
   (list (symbol-value sym)
@@ -21,7 +21,7 @@ fn divergence_intern_unintern_cycle() {
 fn divergence_symbol_plist_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (make-symbol \"temp\")))
   (setplist sym '(a 1 b 2 c 3))
   (list (get sym 'a)
@@ -39,7 +39,7 @@ fn divergence_symbol_plist_real() {
 fn divergence_symbol_function_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defalias 'test-alias-xxx 'car)
   (list (symbol-function 'test-alias-xxx)
@@ -56,7 +56,7 @@ fn divergence_symbol_function_indirect() {
 fn divergence_mapatoms_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (intern \"test-mapatoms-a-xxx\" obarray)
   (intern \"test-mapatoms-b-xxx\" obarray)
@@ -74,7 +74,7 @@ fn divergence_mapatoms_obarray() {
 fn divergence_keyword_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (keywordp :hello)
   (keywordp 'hello)
@@ -90,7 +90,7 @@ fn divergence_keyword_symbols() {
 fn deficiency_symbol_circular_naming() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((s1 (intern \"test-circ-1-xxx\"))
         (s2 (intern \"test-circ-2-xxx\")))
   (list (eq s1 s2)
@@ -105,7 +105,7 @@ fn deficiency_symbol_circular_naming() {
 fn divergence_symbol_doctoring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (intern \"test-doctor-xxx\")))
   (set sym 'initial)
   (list (symbol-value sym)
@@ -122,7 +122,7 @@ fn divergence_symbol_doctoring() {
 fn divergence_default_value_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v (make-variable-buffer-local 'case-fold-search)))
   (list v
         (default-value 'case-fold-search)
@@ -136,7 +136,7 @@ fn divergence_default_value_binding() {
 fn divergence_dynamic_binding_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-dyn-var-xxx nil)
   (defun test-dyn-check-xxx () test-dyn-var-xxx)
@@ -151,7 +151,7 @@ fn divergence_dynamic_binding_scope() {
 fn deficiency_special_form_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (special-form-p 'if)
   (special-form-p 'let)

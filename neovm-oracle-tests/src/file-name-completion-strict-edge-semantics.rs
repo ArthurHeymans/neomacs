@@ -6,7 +6,7 @@
 //! `completion-regexp-list` to both APIs, and calls predicates with relative
 //! names while dynamically binding `default-directory` to DIRECTORY.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -66,5 +66,5 @@ fn oracle_file_name_completion_prefix_ignored_case_regex_and_predicate_edges() {
     (delete-directory dir t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: defstruct + EIEIO interop + print + equal combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_with_defstruct_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-ds-slot-xxx name value)
   (defclass test-eio-ds-xxx ()
@@ -39,7 +39,7 @@ fn divergence_eieio_with_defstruct_slot() {
 fn divergence_eieio_equal_nested_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-eq-nested-xxx ()
     ((val :initarg :val :initform 0)
@@ -62,7 +62,7 @@ fn divergence_eieio_equal_nested_objects() {
 fn divergence_eieio_print_read_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-pr-obj-xxx ()
     ((a :initarg :a :initform 0)
@@ -84,7 +84,7 @@ fn divergence_eieio_print_read_object() {
 fn divergence_defstruct_in_eieio_method_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-dm-item-xxx name weight)
   (defclass test-dm-container-xxx ()
@@ -112,7 +112,7 @@ fn divergence_defstruct_in_eieio_method_dispatch() {
 fn divergence_eieio_with_closure_factory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-cf-xxx ()
     ((val :initarg :val :initform 0)))
@@ -137,7 +137,7 @@ fn divergence_eieio_with_closure_factory() {
 fn divergence_eieio_cl_print_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn\n\
   (defclass test-po-xxx ()\n\
     ((x :initarg :x :initform 0)\n\
@@ -160,7 +160,7 @@ fn divergence_eieio_cl_print_object() {
 fn divergence_eieio_class_hierarchy_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-ch-root-xxx () ((id :initarg :id)))
   (defclass test-ch-mid-xxx (test-ch-root-xxx) ((mid :initarg :mid)))
@@ -185,7 +185,7 @@ fn divergence_eieio_class_hierarchy_predicates() {
 fn deficiency_defstruct_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (cl-defstruct test-prr-xxx (x 0) (y 0))
   (let ((obj (make-test-prr-xxx :x 42 :y 99)))
@@ -206,7 +206,7 @@ fn deficiency_defstruct_print_read_roundtrip() {
 fn divergence_eieio_object_with_hash_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-hk-xxx ()
     ((name :initarg :name :initform "")))
@@ -230,7 +230,7 @@ fn divergence_eieio_object_with_hash_key() {
 fn divergence_eieio_slot_type_checking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-tc-xxx ()
     ((num :initarg :num :type number :initform 0)

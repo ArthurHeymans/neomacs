@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Systematic type predicates on every value type
@@ -31,7 +31,7 @@ fn oracle_prop_type_predicates_systematic_matrix() {
                     preds))
           values))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ fn oracle_prop_type_of_exhaustive() {
                     (make-hash-table))))
   (mapcar #'type-of values))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ fn oracle_prop_predicate_algebra_identities() {
         (setq results (cons (list id1 id2 id3 id4 id5) results))))
     (nreverse results)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ fn oracle_prop_null_not_consp_relationships() {
                   (and (atom v) (not (null v)))))
           values))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn oracle_prop_type_safe_generic_dispatch() {
             (funcall 'neovm--td-size 'hello))
     (fmakunbound 'neovm--td-size)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +215,7 @@ fn oracle_prop_value_serializer() {
             (funcall 'neovm--ts-serialize (make-hash-table)))
     (fmakunbound 'neovm--ts-serialize)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ fn oracle_prop_type_coercion_graph() {
     (string-match-p "\\." (number-to-string float-val))
     (not (string-match-p "\\." (number-to-string int-val)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,5 +337,5 @@ fn oracle_prop_type_aware_equality() {
         (funcall 'neovm--te-smart-equal '(1 [2 3.0] "x") '(1.0 [2.0 3] "x")))
     (fmakunbound 'neovm--te-smart-equal)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

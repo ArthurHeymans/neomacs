@@ -1,13 +1,13 @@
 //! Divergence tests: string manipulation, substring, split, join deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_string_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (split-string "foo bar baz" " ")
   (split-string "foo,bar,baz" ",")
@@ -20,7 +20,7 @@ fn divergence_string_split() {
 fn divergence_string_split_omit_nulls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (split-string "foo  bar  baz" " " t)
   (split-string "  foo  bar  " " " t)
@@ -32,7 +32,7 @@ fn divergence_string_split_omit_nulls() {
 fn divergence_string_join_mapconcat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (mapconcat 'identity '("foo" "bar" "baz") ", ")
   (mapconcat (lambda (x) (upcase x)) '("foo" "bar") "-")
@@ -44,7 +44,7 @@ fn divergence_string_join_mapconcat() {
 fn divergence_string_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-replace)
   (string-replace "foo" "bar" "foo baz foo quux foo")
@@ -56,7 +56,7 @@ fn divergence_string_replace() {
 fn divergence_string_truncate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'truncate-string-to-width)
   (truncate-string-to-width "Hello World" 5)
@@ -68,7 +68,7 @@ fn divergence_string_truncate() {
 fn divergence_string_pad() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-pad)
   (string-pad "hello" 10)
@@ -81,7 +81,7 @@ fn divergence_string_pad() {
 fn divergence_string_trim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-trim)
   (fboundp 'string-trim-left)
@@ -96,7 +96,7 @@ fn divergence_string_trim() {
 fn divergence_string_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-lines)
   (fboundp 'string-chop-newline)
@@ -109,7 +109,7 @@ fn divergence_string_lines() {
 fn divergence_case_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (upcase "hello WORLD")
   (downcase "Hello World")
@@ -122,7 +122,7 @@ fn divergence_case_changes() {
 fn divergence_string_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'string-reverse)
   (fboundp 'reverse)

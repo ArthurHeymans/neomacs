@@ -7,7 +7,7 @@
 //! in pure Elisp.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Word boundaries: forward-word, backward-word, word extraction
@@ -47,7 +47,7 @@ fn oracle_prop_thing_word_boundaries() {
                         (forward-word 1)
                         (let ((last-word (buffer-substring bw-start (point))))
                           (list w1 w2 w3a w3b last-word))))))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ fn oracle_prop_thing_symbol_via_skip_chars() {
                 (skip-chars-forward "a-zA-Z0-9_\\-.")
                 (let ((sym3 (buffer-substring s3 (point))))
                   (list sym1 sym2 sym3))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ fn oracle_prop_thing_skip_syntax_word_boundaries() {
           (skip-syntax-forward "w")
           (setq results (cons (buffer-substring s5 (point)) results)))
         (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ fn oracle_prop_thing_line_extraction() {
                     (cur-line-begin (line-beginning-position)))
                 (list line1 line2 line3 line4
                       prev-line-begin cur-line-begin next-line-begin)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ fn oracle_prop_thing_sexp_parsing() {
                       (forward-sexp 1)  ;; skip "(+ x y)"
                       (let ((body (buffer-substring p4 (point))))
                         (list whole-sexp name params body)))))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ fn oracle_prop_thing_backward_sexp() {
           (setq results (cons (buffer-substring p (point)) results))
           (goto-char p))
         results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ fn oracle_prop_thing_number_extraction() {
         (while (re-search-forward "[-+]?[0-9]+\\.?[0-9]*\\(?:e[0-9]+\\)?" nil t)
           (setq numbers (cons (match-string 0) numbers)))
         (nreverse numbers)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ fn oracle_prop_thing_sentence_navigation() {
         (backward-sentence 1)
         (setq positions (cons (point) positions))
         (nreverse positions)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ fn oracle_prop_thing_url_pattern_matching() {
         (while (re-search-forward "https?://[^ \t\n,;)]*" nil t)
           (setq urls (cons (match-string 0) urls)))
         (nreverse urls)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ fn oracle_prop_thing_paragraph_boundaries() {
         (backward-paragraph 1)
         (setq results (cons (list 'back-para-2 (point)) results))
         (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ fn oracle_prop_thing_defun_boundaries() {
         (end-of-defun 1)
         (setq results (cons (list 'foo-end (point)) results))
         (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,7 +386,7 @@ fn oracle_prop_thing_multi_extraction() {
                       first-line
                       line-count
                       word-count)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ fn oracle_prop_thing_email_pattern() {
         (while (re-search-forward "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]\\{2,\\}" nil t)
           (setq emails (cons (match-string 0) emails)))
         (list (nreverse emails) (length emails))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +426,7 @@ fn oracle_prop_thing_whitespace_bounded() {
               (skip-chars-forward "^ \t\n")
               (setq things (cons (buffer-substring start (point)) things)))))
         (list (nreverse things) (length things))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,5 +447,5 @@ fn oracle_prop_thing_balanced_brackets() {
             (forward-sexp 1)
             (setq brackets (cons (buffer-substring start (point)) brackets))))
         (nreverse brackets)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

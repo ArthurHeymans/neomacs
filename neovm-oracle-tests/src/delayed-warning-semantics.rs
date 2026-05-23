@@ -4,9 +4,7 @@
 //! `lisp/subr.el`.  These helpers mutate `delayed-warnings-list`; exact
 //! ordering and duplicate collapse behavior matters during startup.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_delay_warning_pushes_full_warning_records() {
@@ -23,7 +21,7 @@ fn oracle_prop_gnu_delay_warning_pushes_full_warning_records() {
    delayed-warnings-list))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,5 +42,5 @@ fn oracle_prop_gnu_collapse_delayed_warnings_only_merges_adjacent_duplicates() {
    delayed-warnings-list))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

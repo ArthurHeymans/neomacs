@@ -4,9 +4,7 @@
 //! tab/control chars, emoji, variation selectors, and integration with
 //! string-width for alignment and padding calculations.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 // ---------------------------------------------------------------------------
 // char-width across the full ASCII range and special categories
@@ -42,7 +40,7 @@ fn oracle_prop_char_width_ascii_exhaustive() {
         (setq consistent nil)))
     (setq results (cons consistent results)))
   (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +83,7 @@ fn oracle_prop_char_width_cjk_wide() {
     (list (length s)
           (string-width s)
           (= (string-width s) (* 2 (length s))))))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +122,7 @@ fn oracle_prop_char_width_combining_marks() {
   (string-width (string #x4e16 #x0301))
   ;; Multiple combining marks stacked
   (string-width (string ?x #x0300 #x0301 #x0302 #x0303)))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +167,7 @@ fn oracle_prop_char_width_control_and_tab() {
         (setq widths (cons (char-width i) widths))
         (setq i (1+ i))))
     (nreverse widths)))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +201,7 @@ fn oracle_prop_char_width_emoji_variation() {
   ;; String width of emoji sequences
   (string-width (string #x1f600))
   (string-width (string #x1f4a9)))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +293,7 @@ fn oracle_prop_char_width_truncation_algorithm() {
     (fmakunbound 'neovm--cw-truncate)
     (fmakunbound 'neovm--cw-pad-right)
     (fmakunbound 'neovm--cw-format-table)))"#;
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +305,7 @@ fn oracle_prop_char_width_word_wrap_ascii_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "hello world foo bar" 10)"#);
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 fn char_width_word_wrap_form(body: &str) -> String {
@@ -391,7 +389,7 @@ fn oracle_prop_char_width_word_wrap_cjk_case() {
     let form = char_width_word_wrap_form(
         r#"(funcall 'neovm--cw-wrap "\u4e16\u754c\u4f60\u597d\u4e2d\u6587\u6d4b\u8bd5" 6)"#,
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 #[test]
@@ -401,7 +399,7 @@ fn oracle_prop_char_width_word_wrap_mixed_case() {
     let form = char_width_word_wrap_form(
         r#"(funcall 'neovm--cw-wrap "Hi\u4e16\u754cWorld\u4f60\u597d" 8)"#,
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 #[test]
@@ -409,7 +407,7 @@ fn oracle_prop_char_width_word_wrap_long_word_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "abcdefghij" 5)"#);
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 #[test]
@@ -417,7 +415,7 @@ fn oracle_prop_char_width_word_wrap_empty_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = char_width_word_wrap_form(r#"(funcall 'neovm--cw-wrap "" 10)"#);
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 #[test]
@@ -432,7 +430,7 @@ fn oracle_prop_char_width_word_wrap_width_bound_case() {
       (setq all-ok nil)))
   (list lines all-ok))"#,
     );
-    assert_oracle_parity_with_bootstrap(&form);
+    assert_oracle_parity(&form);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,5 +481,5 @@ fn oracle_prop_char_width_halfwidth_fullwidth() {
               (char-width #x00fc)   ;; ü
               (char-width #x00c0))) ;; À
     (fmakunbound 'neovm--cw-classify)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

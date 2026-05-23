@@ -5,7 +5,7 @@
 //! functions receive a continuation and may call it zero, one, or many times;
 //! a local hook containing `t` splices in the global hook tail.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -18,7 +18,7 @@ fn oracle_wrapper_hook_macroexpansion_shape() {
     (list x y)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn oracle_wrapper_hook_order_reentry_and_replacement() {
         (nreverse log))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -97,5 +97,5 @@ fn oracle_wrapper_hook_local_t_splices_global_hook() {
       (makunbound 'neovm--wwh-hook))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

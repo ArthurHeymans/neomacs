@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' event modifier decomposition.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_event_modifiers_and_basic_type_for_symbolic_mouse_events() {
@@ -22,7 +22,7 @@ fn oracle_event_modifiers_and_basic_type_for_symbolic_mouse_events() {
            (event-basic-type event)
            (get event 'event-symbol-elements)))
    events))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_event_modifiers_accept_full_event_lists() {
            (event-modifiers event)
            (event-basic-type event)))
    events))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -50,5 +50,5 @@ fn oracle_event_modifiers_ignore_string_events() {
       (event-basic-type "mouse-1")
       (event-modifiers "")
       (event-basic-type ""))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

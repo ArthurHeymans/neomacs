@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // assoc with custom TEST parameter — numeric, string, and predicate-based
@@ -44,7 +44,7 @@ fn oracle_prop_assoc_test_param_comprehensive() {
                             (lambda (key elt) (eq elt key)))
                      ;; nil testfn falls back to equal
                      (assoc "HELLO" str-alist nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ fn oracle_prop_rassoc_rassq_various_value_types() {
                      (rassq t alist-mixed)
                      (rassoc 0 alist-mixed)
                      (rassoc "" alist-mixed)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ fn oracle_prop_alist_get_all_params() {
                         (alist-get "name" str-al nil nil #'string-equal-ignore-case)
                         (alist-get "age" str-al nil nil #'string-equal-ignore-case)
                         (alist-get "missing" str-al 'nope nil #'equal)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ fn oracle_prop_copy_alist_deep_shallow_semantics() {
                             (mixed-copy (copy-alist mixed)))
                        (list (equal mixed mixed-copy)
                              (eq (nth 1 mixed) (nth 1 mixed-copy))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ fn oracle_prop_nested_alist_construction_and_queries() {
                                   (seq-find (lambda (r)
                                               (= 2 (cdr (assq 'id r))))
                                             db))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ fn oracle_prop_alist_ordered_map_semantics() {
                        (nreverse order))
                      ;; Keys in alist order (with duplicates)
                      (mapcar #'car al)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +342,7 @@ fn oracle_prop_alist_merge_update_diff() {
                                                            (cdr pair))
                                                      changed)))))
                            (nreverse changed))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +388,7 @@ fn oracle_prop_alist_multimap_grouping() {
                              (unless (member (cdr pair) uniq)
                                (setq uniq (cons (cdr pair) uniq))))
                            (sort (nreverse uniq) #'string<))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +440,7 @@ fn oracle_prop_alist_bidirectional_map_inversion() {
                              (setq unique nil))
                            (setq vals (cdr vals)))
                          unique))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,7 +474,7 @@ fn oracle_prop_alist_setf_surgery() {
                              (alist-get 'first al3)
                              (alist-get 'second al3)
                              (alist-get 'third al3)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -515,5 +515,5 @@ fn oracle_prop_assoc_string_case_patterns() {
                         (assoc-string "Key" dupes)
                         (assoc-string "key" dupes t)
                         (assoc-string "KEY" dupes)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

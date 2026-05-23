@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` conditional binding macros.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_subr_conditional_binding_macro_contracts() {
@@ -49,5 +47,5 @@ fn oracle_prop_gnu_subr_conditional_binding_macro_contracts() {
              (if-let* ((x 1) (y 2)) (list x y))
              (and-let* ((x 1)))
              (while-let ((x (pop xs))) x)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // defalias with docstring parameter — verify docstring is stored and accessible
@@ -45,7 +45,7 @@ fn oracle_prop_defalias_fset_docstring_stored() {
     (fmakunbound 'neovm--dfp-doc1)
     (fmakunbound 'neovm--dfp-doc2)
     (fmakunbound 'neovm--dfp-doc3)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ fn oracle_prop_defalias_vs_fset_return_values() {
       (fmakunbound 'neovm--dfp-vs2)
       (fmakunbound 'neovm--dfp-vs3)
       (fmakunbound 'neovm--dfp-vs4))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +150,7 @@ fn oracle_prop_fset_non_function_cycle_and_defalias_hook_edges() {
       (setplist sym nil))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ fn oracle_prop_defalias_fset_symbol_function_types() {
     (fmakunbound 'neovm--dfp-sf2)
     (fmakunbound 'neovm--dfp-sf3)
     (fmakunbound 'neovm--dfp-sf4)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ fn oracle_prop_defalias_fset_fboundp_lifecycle() {
     (fmakunbound 'neovm--dfp-lc1)
     (setq trace (cons (fboundp 'neovm--dfp-lc1) trace))
     (nreverse trace)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ fn oracle_prop_defalias_fset_function_wrapper() {
     (fmakunbound 'neovm--dfp-add)
     (fmakunbound 'neovm--dfp-mul)
     (makunbound 'neovm--dfp-wrap-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +396,7 @@ fn oracle_prop_defalias_fset_dynamic_dispatch() {
     (fmakunbound 'neovm--dfp-dd-dispatch)
     (makunbound 'neovm--dfp-dd-table)
     (makunbound 'neovm--dfp-dd-fallback)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -509,7 +509,7 @@ fn oracle_prop_defalias_fset_method_resolution_order() {
     (fmakunbound 'neovm--dfp-mro-lookup)
     (fmakunbound 'neovm--dfp-mro-call)
     (makunbound 'neovm--dfp-mro-classes)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -547,5 +547,5 @@ fn oracle_prop_defalias_fset_nil_and_rebind() {
         (setq trace (cons (fboundp 'neovm--dfp-nil1) trace))
         (nreverse trace))
     (fmakunbound 'neovm--dfp-nil1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

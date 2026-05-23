@@ -5,9 +5,7 @@
 //! `eval-after-load` path, so their exact file-name regexp behavior matters
 //! during startup and package loading.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_load_history_regexp_matches_suffix_rules() {
@@ -47,7 +45,7 @@ fn oracle_prop_gnu_load_history_regexp_matches_suffix_rules() {
                "/var/tmp/neomacs-oracle-load-history.el")))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -80,5 +78,5 @@ fn oracle_prop_gnu_load_history_filename_element_preserves_match_data() {
        after))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

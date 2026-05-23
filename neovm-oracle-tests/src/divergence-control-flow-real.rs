@@ -1,13 +1,13 @@
 //! Divergence tests: real control flow behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_catch_throw_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (catch 'outer
     (catch 'inner
@@ -24,7 +24,7 @@ fn divergence_catch_throw_nested() {
 fn divergence_catch_throw_across_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-throw-fn-xxx ()
     (throw 'done 'thrown-value))
@@ -41,7 +41,7 @@ fn divergence_catch_throw_across_funcall() {
 fn divergence_dotimes_dolist_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (let ((result nil))
     (dotimes (i 5 result)
@@ -58,7 +58,7 @@ fn divergence_dotimes_dolist_real() {
 fn divergence_loop_macro_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-loop for i from 1 to 5 collect (* i i))
   (cl-loop for x in '(1 2 3 4 5 6) when (cl-oddp x) collect x)
@@ -75,7 +75,7 @@ fn divergence_loop_macro_real() {
 fn divergence_cl_block_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-block done
     (cl-return-from done 42)
@@ -91,7 +91,7 @@ fn divergence_cl_block_return() {
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-flet ((double (x) (* x 2)))
     (list (double 3) (double 7)))
@@ -104,7 +104,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_case_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-case 3
     (1 'one)
@@ -127,7 +127,7 @@ fn divergence_cl_case_match() {
 fn divergence_cl_typecase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-typecase 42
     (string 'str)
@@ -151,7 +151,7 @@ fn divergence_cl_typecase() {
 fn divergence_while_with_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((i 0) (acc nil))
   (while (< i 5)
     (push i acc)
@@ -164,7 +164,7 @@ fn divergence_while_with_mutation() {
 fn divergence_cl_letf_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((x 10))
   (cl-letf (((symbol-value 'x) 99))
     (list x

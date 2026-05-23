@@ -1,13 +1,13 @@
 //! Divergence tests: combinatorial stress - narrow+undo+overlay+marker.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_combo_narrow_undo_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (insert "ABCDEFGHIJ")
@@ -35,7 +35,7 @@ fn divergence_combo_narrow_undo_overlay_marker() {
 fn divergence_combo_insert_delete_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (dotimes (i 10)
@@ -54,7 +54,7 @@ fn divergence_combo_insert_delete_loop() {
 fn divergence_combo_save_excursion_kill_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (save-excursion
@@ -73,7 +73,7 @@ fn divergence_combo_save_excursion_kill_insert() {
 fn divergence_combo_prop_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (insert "ABCDEFGHIJ")
@@ -96,7 +96,7 @@ fn divergence_combo_prop_narrow_undo() {
 fn divergence_combo_many_overlays_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (make-string 20 ?X))
   (let ((ovs (list (make-overlay 2 5)
@@ -117,7 +117,7 @@ fn divergence_combo_many_overlays_insert_delete() {
 fn divergence_combo_marker_insert_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m1 (set-marker (make-marker) 5))
@@ -135,7 +135,7 @@ fn divergence_combo_marker_insert_type() {
 fn divergence_combo_hash_table_lambda_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :test 'eq))
         (counter 0)
         (inc (lambda () (setq counter (1+ counter)))))
@@ -151,7 +151,7 @@ fn divergence_combo_hash_table_lambda_closure() {
 fn divergence_combo_read_eval_print_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((forms '("(+ 1 2)" "(* 3 4)" "(list 'a 'b)"))
         results)
   (dolist (f forms)
@@ -164,7 +164,7 @@ fn divergence_combo_read_eval_print_loop() {
 fn divergence_combo_setq_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let (a b c)
   (setq a 1 b 2 c 3)
   (list a b c
@@ -177,7 +177,7 @@ fn divergence_combo_setq_multiple() {
 fn divergence_combo_condition_case_nested_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case outer
   (condition-case inner
       (error "inner error")

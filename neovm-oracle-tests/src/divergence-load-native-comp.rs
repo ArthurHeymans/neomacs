@@ -1,13 +1,13 @@
 //! Divergence tests: dynamic modules, native-comp, dynamic loading deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_module_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'module-load)
   (fboundp 'load)
@@ -20,7 +20,7 @@ fn divergence_module_functions() {
 fn divergence_native_comp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'native-compile)
   (fboundp 'native-comp-available-p)
@@ -32,7 +32,7 @@ fn divergence_native_comp() {
 fn divergence_comp_el() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'comp-deferred-compilation)
   (boundp 'native-comp-deferred-compilation-deny-list)
@@ -45,7 +45,7 @@ fn divergence_comp_el() {
 fn divergence_load_path_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp load-path)
   (listp load-suffixes)
@@ -60,7 +60,7 @@ fn divergence_load_path_deep() {
 fn divergence_load_history() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'load-history)
   (listp load-history)
@@ -72,7 +72,7 @@ fn divergence_load_history() {
 fn divergence_autoload_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'autoload)
   (fboundp 'autoload-do-load)
@@ -85,7 +85,7 @@ fn divergence_autoload_deep() {
 fn divergence_feature_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'provide)
   (fboundp 'require)
@@ -99,7 +99,7 @@ fn divergence_feature_provide() {
 fn divergence_after_load() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eval-after-load)
   (fboundp 'after-load-functions)
@@ -112,7 +112,7 @@ fn divergence_after_load() {
 fn divergence_obsolete_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-obsolete)
   (fboundp 'define-obsolete-function-alias)
@@ -125,7 +125,7 @@ fn divergence_obsolete_functions() {
 fn divergence_defalias_fset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defalias 'test-div-alias-xxx 'car)
   (list (fboundp 'test-div-alias-xxx)

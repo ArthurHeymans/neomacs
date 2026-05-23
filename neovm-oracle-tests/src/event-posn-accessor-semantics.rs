@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' event and posn accessors.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_event_start_end_click_drag_and_touchscreen_shapes() {
@@ -21,7 +21,7 @@ fn oracle_event_start_end_click_drag_and_touchscreen_shapes() {
    (event-click-count click)
    (event-click-count (list 'double-mouse-1 start 2))
    (event-line-count (list 'wheel-up start nil 4))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn oracle_event_accessors_ignore_touchscreen_update_posn_payloads() {
    (event-line-count nil)
    (event-line-count wheel-with-bad-count)
    (event-line-count wheel-with-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -69,14 +69,14 @@ fn oracle_posn_accessors_prefer_documented_slots() {
    (posn-actual-col-row pos)
    (posn-image pos)
    (posn-object pos)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
 fn oracle_window_print_includes_live_buffer_name() {
     let form = r#"
 (prin1-to-string (selected-window))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn oracle_window_print_in_nested_structures_includes_live_buffer_name() {
    (prin1-to-string (list w))
    (prin1-to-string (vector w))
    (prin1-to-string (cons w w))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -106,5 +106,5 @@ fn oracle_posnp_recognizes_only_current_window_posn_shape() {
    (posnp nil)
    (posn-point (list w '(mode-line . 17) '(1 . 2) 3))
    (posn-point (list w 'vertical-scroll-bar '(1 . 2) 3))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

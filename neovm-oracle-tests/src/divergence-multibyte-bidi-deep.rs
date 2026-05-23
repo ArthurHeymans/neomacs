@@ -1,13 +1,13 @@
 //! Divergence tests: multibyte deep - char composition, bidi, coding conversions.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_bidi_direction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (bidi-direction ?A)
   (bidi-direction ?a)
@@ -21,7 +21,7 @@ fn divergence_bidi_direction() {
 fn divergence_bidi_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s "Hello \x05E9\x05DC\x05D5\x05DD World"))
   (list (string-width s)
         (length s)
@@ -33,7 +33,7 @@ fn divergence_bidi_string() {
 fn divergence_char_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compose-region)
   (fboundp 'compose-string)
@@ -46,7 +46,7 @@ fn divergence_char_composition() {
 fn divergence_normalize_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "café")
   (let ((len (length (buffer-string))))
@@ -61,7 +61,7 @@ fn divergence_normalize_buffer() {
 fn divergence_unicode_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (get-char-code-property ?A 'general-category)
   (get-char-code-property ?a 'general-category)
@@ -74,7 +74,7 @@ fn divergence_unicode_property() {
 fn divergence_char_equivalence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (char-equal ?A ?a)
   (char-equal ?A ?A)
@@ -88,7 +88,7 @@ fn divergence_char_equivalence() {
 fn divergence_string_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s "abc"))
   (list (coding-system-p (find-operation-coding-system 'insert-file-contents (list s)))
         (consp (find-operation-coding-system 'write-region s))))"#,
@@ -99,7 +99,7 @@ fn divergence_string_coding_system() {
 fn divergence_decode_coding_string_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((raw "\xC3\xA9")
          (decoded (decode-coding-string raw 'utf-8)))
   (list decoded
@@ -112,7 +112,7 @@ fn divergence_decode_coding_string_edge() {
 fn divergence_encode_coding_string_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((str "é")
          (encoded (encode-coding-string str 'utf-8)))
   (list (length encoded)
@@ -126,7 +126,7 @@ fn divergence_encode_coding_string_edge() {
 fn divergence_char_codes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (= ?A 65)
   (= ?a 97)

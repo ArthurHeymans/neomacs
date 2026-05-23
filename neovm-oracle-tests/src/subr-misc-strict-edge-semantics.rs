@@ -4,7 +4,7 @@
 //! regex/path handling, dynamic variable dependence, and hash/obarray side
 //! effects that are easy to approximate incorrectly.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -42,7 +42,7 @@ fn oracle_prop_subr_misc_package_unmsys_prefix_apropos_edges() {
          (apropos-internal "\\`nmo-" #'boundp))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -66,7 +66,7 @@ fn oracle_prop_system_type_dynamic_binding_reaches_functions() {
      (fmakunbound 'neomacs--oracle-system-type-reader))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn oracle_prop_defvar_lisp_runtime_variables_are_special() {
          (funcall (lambda () overriding-plist-environment)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn oracle_prop_defvar_bool_int_runtime_variables_are_special() {
          purify-flag)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -187,5 +187,5 @@ fn oracle_prop_defvar_per_buffer_special_and_local_edges() {
          (default-value 'fill-column))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

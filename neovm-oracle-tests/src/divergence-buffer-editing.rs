@@ -3,14 +3,14 @@
 //! Tests for insert/delete point movement, marker behavior, narrowing
 //! interactions, and buffer state management.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_insert_before_markers_moves_non_insertion_type_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefgh")
   (let ((m1 (set-marker (make-marker) 5 (current-buffer)))
@@ -27,7 +27,7 @@ fn divergence_insert_before_markers_moves_non_insertion_type_marker() {
 fn divergence_delete_region_marker_at_exclusive_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 8 (current-buffer))))
@@ -40,7 +40,7 @@ fn divergence_delete_region_marker_at_exclusive_end() {
 fn divergence_delete_region_marker_at_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 3 (current-buffer))))
@@ -53,7 +53,7 @@ fn divergence_delete_region_marker_at_start() {
 fn divergence_delete_region_point_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (goto-char 10)
@@ -66,7 +66,7 @@ fn divergence_delete_region_point_movement() {
 fn divergence_delete_region_point_inside_deleted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (goto-char 5)
@@ -79,7 +79,7 @@ fn divergence_delete_region_point_inside_deleted() {
 fn divergence_insert_point_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcde")
   (goto-char 3)
@@ -92,7 +92,7 @@ fn divergence_insert_point_movement() {
 fn divergence_replace_buffer_contents_preserves_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 5 (current-buffer))))
@@ -108,7 +108,7 @@ fn divergence_replace_buffer_contents_preserves_markers() {
 fn divergence_narrow_marker_outside_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m (set-marker (make-marker) 2 (current-buffer))))
@@ -123,7 +123,7 @@ fn divergence_narrow_marker_outside_visible() {
 fn divergence_save_excursion_restores_point_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf1 (get-buffer-create " *test-buf1*"))
         (buf2 (get-buffer-create " *test-buf2*")))
   (unwind-protect
@@ -147,7 +147,7 @@ fn divergence_save_excursion_restores_point_and_buffer() {
 fn divergence_save_restriction_restores_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (narrow-to-region 4 7)
@@ -162,7 +162,7 @@ fn divergence_save_restriction_restores_narrowing() {
 fn divergence_buffer_modification_tick_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (let ((tick1 (buffer-modified-tick))
         (chars-tick1 (buffer-chars-modified-tick)))
@@ -177,7 +177,7 @@ fn divergence_buffer_modification_tick_after_insert() {
 fn divergence_indirect_buffer_marker_sharing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((base (get-buffer-create " *test-ind-base*")))
   (unwind-protect
       (progn
@@ -199,7 +199,7 @@ fn divergence_indirect_buffer_marker_sharing() {
 fn divergence_delete_region_insertion_type_marker_collapsed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "abcdefghij")
   (let ((m-front (set-marker (make-marker) 7 (current-buffer)))
@@ -217,7 +217,7 @@ fn divergence_delete_region_insertion_type_marker_collapsed() {
 fn divergence_multibyte_insert_char_count_vs_byte_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcd")  ;; ā=2 bytes, 1 char; total 5 bytes, 4 chars
   (list (point) (buffer-size) (position-bytes 1) (position-bytes 2)))"#,
@@ -228,7 +228,7 @@ fn divergence_multibyte_insert_char_count_vs_byte_count() {
 fn divergence_multibyte_delete_and_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "ābcdef")  ;; ā=2bytes
   (goto-char 3)      ;; at 'b', char pos 3

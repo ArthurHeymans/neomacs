@@ -4,7 +4,7 @@
 //! `delete`, so it inherits GNU `delete`'s destructive mutation and tail-check
 //! ordering on malformed input lists.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_delete_dups_small_list_is_destructive_and_keeps_first() {
         (memq fourth result)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_delete_dups_small_list_mutates_before_improper_tail_error() {
    xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn oracle_delete_dups_large_list_uses_hash_path_and_keeps_first() {
    xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,5 +85,5 @@ fn oracle_delete_dups_large_list_rejects_improper_tail_before_hash_walk() {
    xs))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

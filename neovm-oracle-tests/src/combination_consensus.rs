@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Boyer-Moore majority vote algorithm
@@ -73,7 +73,7 @@ fn oracle_prop_consensus_majority_vote() {
     (fmakunbound 'neovm--test-boyer-moore-candidate)
     (fmakunbound 'neovm--test-verify-majority)
     (fmakunbound 'neovm--test-majority-vote)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ fn oracle_prop_consensus_ranked_choice() {
     (fmakunbound 'neovm--test-count-first-choices)
     (fmakunbound 'neovm--test-find-loser)
     (fmakunbound 'neovm--test-instant-runoff)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +256,7 @@ fn oracle_prop_consensus_borda_count() {
                    '((alpha beta) (beta alpha) (alpha beta))
                    '(alpha beta))))
     (fmakunbound 'neovm--test-borda-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +362,7 @@ fn oracle_prop_consensus_plurality_elimination() {
                    '(ann ben))))
     (fmakunbound 'neovm--test-tally-votes)
     (fmakunbound 'neovm--test-plurality-elimination)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -449,7 +449,7 @@ fn oracle_prop_consensus_approval_voting() {
                    '((apple banana cherry date))
                    candidates)))
     (fmakunbound 'neovm--test-approval-vote)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -586,5 +586,5 @@ fn oracle_prop_consensus_election_simulation() {
     (fmakunbound 'neovm--test-sim-borda)
     (fmakunbound 'neovm--test-sim-condorcet)
     (fmakunbound 'neovm--test-sim-anti-plurality)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

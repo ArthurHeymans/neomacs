@@ -4,7 +4,7 @@
 //! tests focus on exact lookup, conversion, pcase binding, and mutation
 //! behavior exposed by the public API.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_prop_map_lookup_contains_and_nested_elt() {
      (map-nested-elt ht '("nested" :missing) 'fallback))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_prop_map_keys_values_pairs_and_apply_order() {
    (map-remove (lambda (k _v) (eq k 'b)) '((a . 1) (b . 2) (c . 3)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_prop_map_into_merge_and_merge_with() {
      summed)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn oracle_prop_map_let_and_mutation_semantics() {
        vec))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn oracle_prop_map_nested_and_inplace_edge_contracts() {
        (error (list (car err) (cadr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -216,5 +216,5 @@ fn oracle_prop_map_predicate_iteration_and_copy_edges() {
        (error (list (car err) (cadr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

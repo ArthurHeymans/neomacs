@@ -1,13 +1,13 @@
 //! Divergence tests: complex error recovery + resource cleanup scenarios.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_temp_buffer_cleanup_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((buf-count-before (length (buffer-list)))
         (result (condition-case err
                     (with-temp-buffer
@@ -23,7 +23,7 @@ fn divergence_temp_buffer_cleanup_on_error() {
 fn divergence_unwind_protect_buffer_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((temp-buf nil)
         (log nil))
   (unwind-protect
@@ -44,7 +44,7 @@ fn divergence_unwind_protect_buffer_cleanup() {
 fn divergence_nested_unwind_with_multiple_cleanups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((log nil))
   (ignore-errors
     (unwind-protect
@@ -62,7 +62,7 @@ fn divergence_nested_unwind_with_multiple_cleanups() {
 fn divergence_condition_case_error_data_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (condition-case err
       (car 42)
@@ -80,7 +80,7 @@ fn divergence_condition_case_error_data_integrity() {
 fn divergence_save_excursion_restore_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((orig-point (point)))
@@ -98,7 +98,7 @@ fn divergence_save_excursion_restore_on_error() {
 fn divergence_save_restriction_restore_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (narrow-to-region 3 7)
@@ -117,7 +117,7 @@ fn divergence_save_restriction_restore_on_error() {
 fn divergence_marker_recovery_after_failed_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (set-marker (make-marker) 5)))
@@ -135,7 +135,7 @@ fn divergence_marker_recovery_after_failed_edit() {
 fn deficiency_error_message_formatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (condition-case err
       (error \"test %s %d\" \"hello\" 42)
@@ -153,7 +153,7 @@ fn deficiency_error_message_formatting() {
 fn divergence_signal_vs_error_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (condition-case err
       (signal 'custom-error-signal-xxx '(\"data\"))
@@ -169,7 +169,7 @@ fn divergence_signal_vs_error_condition_case() {
 fn divergence_user_error_vs_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (condition-case err
       (user-error \"user mistake\")

@@ -1,13 +1,13 @@
 //! Divergence tests: symbol property, obarray, and Lisp reader edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_symbol_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setplist 'my-sym-plist '(a 1 b 2 c 3))
   (list (symbol-plist 'my-sym-plist)
@@ -24,7 +24,7 @@ fn divergence_symbol_plist() {
 fn divergence_symbol_function_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun my-sym-test-fn (x) "docstring" x)
   (list (symbol-function 'my-sym-test-fn)
@@ -37,7 +37,7 @@ fn divergence_symbol_function_props() {
 fn divergence_obarray_iter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ob (make-obarray 127)))
   (intern "alpha" ob)
   (intern "beta" ob)
@@ -54,7 +54,7 @@ fn divergence_obarray_iter() {
 fn divergence_mapatoms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ob (make-obarray 127))
         syms)
   (intern "foo" ob)
@@ -69,7 +69,7 @@ fn divergence_mapatoms() {
 fn divergence_read_special_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (read-from-string "?\\C-a")
   (read-from-string "?\\M-a")
@@ -83,7 +83,7 @@ fn divergence_read_special_escapes() {
 fn divergence_read_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (read-from-string "\"hello world\"")
   (read-from-string "\"hello \\\"world\\\"\"")
@@ -96,7 +96,7 @@ fn divergence_read_strings() {
 fn divergence_read_list_dotted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (read-from-string "(a b c)")
   (read-from-string "(a . b)")
@@ -110,7 +110,7 @@ fn divergence_read_list_dotted() {
 fn divergence_read_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (read-from-string "[1 2 3]")
   (read-from-string "[a \\?b c]")
@@ -122,7 +122,7 @@ fn divergence_read_vector() {
 fn divergence_read_char_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ct (make-char-table 'foo)))
   (aset ct ?a 1)
   (aset ct ?b 2)
@@ -137,7 +137,7 @@ fn divergence_read_char_table() {
 fn divergence_read_bool_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((bv (make-bool-vector 10 t)))
   (aset bv 3 nil)
   (list (bool-vector-p bv)

@@ -1,13 +1,13 @@
 //! Divergence tests: advice, hooks, before/after/around deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_advice_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun test-advice-fn-xxx () 42)
   (advice-add 'test-advice-fn-xxx :around
@@ -24,7 +24,7 @@ fn divergence_advice_add_remove() {
 fn divergence_advice_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'advice-add)
   (fboundp 'advice-remove)
@@ -38,7 +38,7 @@ fn divergence_advice_types() {
 fn divergence_hooks_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-hook-var-xxx nil)
   (add-hook 'test-hook-var-xxx (lambda () 'hook-called))
@@ -53,7 +53,7 @@ fn divergence_hooks_add_remove() {
 fn divergence_hook_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-hook-depth-xxx nil)
   (add-hook 'test-hook-depth-xxx 'append-fn-xxx nil t)
@@ -68,7 +68,7 @@ fn divergence_hook_depth() {
 fn divergence_run_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'run-hooks)
   (fboundp 'run-hook-with-args)
@@ -81,7 +81,7 @@ fn divergence_run_hooks() {
 fn divergence_add_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'add-function)
   (fboundp 'remove-function)
@@ -94,7 +94,7 @@ fn divergence_add_function() {
 fn divergence_narrowed_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'change-major-mode-hook)
   (boundp 'after-change-major-mode-hook)
@@ -107,7 +107,7 @@ fn divergence_narrowed_hook() {
 fn divergence_find_file_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'find-file-hook)
   (listp find-file-hook)
@@ -119,7 +119,7 @@ fn divergence_find_file_hook() {
 fn divergence_post_command_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'post-command-hook)
   (boundp 'pre-command-hook)
@@ -132,7 +132,7 @@ fn divergence_post_command_hook() {
 fn divergence_idle_timer_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'run-with-idle-timer)
   (fboundp 'run-at-time)

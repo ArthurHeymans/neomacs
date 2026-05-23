@@ -1,13 +1,13 @@
 //! Divergence tests: text property stickiness, rear-nonsticky, front-sticky deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_sticky_insert_between_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "AAA" 'face 'bold 'rear-nonsticky t))
   (insert (propertize "BBB" 'face 'italic 'front-sticky t))
@@ -21,7 +21,7 @@ fn divergence_sticky_insert_between_props() {
 fn divergence_sticky_delete_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "AAAA" 'face 'bold))
   (insert (propertize "BBBB" 'face 'italic))
@@ -36,7 +36,7 @@ fn divergence_sticky_delete_at_boundary() {
 fn divergence_sticky_insert_with_default_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "___")
   (goto-char 2)
@@ -53,7 +53,7 @@ fn divergence_sticky_insert_with_default_props() {
 fn divergence_sticky_propagate_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "XXXX" 'face 'bold 'rear-nonsticky '(face)))
   (goto-char 4)
@@ -69,7 +69,7 @@ fn divergence_sticky_propagate_after_insert() {
 fn divergence_text_props_after_replace_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "foo bar baz" 'face 'bold))
   (goto-char 1)
@@ -86,7 +86,7 @@ fn divergence_text_props_after_replace_match() {
 fn divergence_text_props_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "Hello " 'face 'bold))
   (insert (propertize "World" 'face 'italic))
@@ -103,7 +103,7 @@ fn divergence_text_props_after_kill_yank() {
 fn divergence_text_props_substring_no_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((s (propertize "Hello" 'face 'bold))
          (sub (substring-no-properties s 1 4)))
   (list (get-text-property 0 'face s)
@@ -116,7 +116,7 @@ fn divergence_text_props_substring_no_props() {
 fn divergence_sticky_multi_prop_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "XX" 'face 'bold 'mouse-face 'highlight))
   (insert "YY")
@@ -131,7 +131,7 @@ fn divergence_sticky_multi_prop_insert() {
 fn divergence_text_props_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert (propertize "field1" 'field 'f1))
   (insert "nofield")
@@ -148,7 +148,7 @@ fn divergence_text_props_field() {
 fn divergence_text_props_intangibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "before")
   (insert (propertize "intangible" 'intangible t))

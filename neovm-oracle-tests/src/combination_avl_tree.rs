@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // AVL tree core: insert with rotations, height, balance factor
@@ -181,7 +181,7 @@ fn oracle_prop_avl_tree_insert_and_rotations() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-search)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +297,7 @@ fn oracle_prop_avl_tree_reverse_sequential() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +428,7 @@ fn oracle_prop_avl_tree_lr_rl_rotations() {
     (fmakunbound 'neovm--avl-insert)
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ fn oracle_prop_avl_tree_delete() {
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-min)
     (fmakunbound 'neovm--avl-delete)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -749,7 +749,7 @@ fn oracle_prop_avl_tree_pseudorandom_insert() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -922,7 +922,7 @@ fn oracle_prop_avl_tree_insert_delete_interleaved() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-search)
     (fmakunbound 'neovm--avl-all-balanced)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,5 +1083,5 @@ fn oracle_prop_avl_tree_delete_all() {
     (fmakunbound 'neovm--avl-inorder)
     (fmakunbound 'neovm--avl-all-balanced)
     (fmakunbound 'neovm--avl-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

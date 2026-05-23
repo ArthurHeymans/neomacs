@@ -1,13 +1,13 @@
 //! Divergence tests: complex data transformation pipelines.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_map_filter_sort_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((input '(5 3 8 1 9 2 7 4 6 10))
         (squared (mapcar (lambda (x) (* x x)) input))
         (filtered (seq-filter (lambda (x) (> x 25)) squared))
@@ -23,7 +23,7 @@ fn divergence_map_filter_sort_pipeline() {
 fn divergence_alist_to_hash_to_sorted_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((input '((banana . 3) (apple . 5) (cherry . 1) (date . 4)))
         (ht (make-hash-table :test 'equal)))
   (dolist (pair input) (puthash (car pair) (cdr pair) ht))
@@ -39,7 +39,7 @@ fn divergence_alist_to_hash_to_sorted_list() {
 fn divergence_group_by_partition_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((data '((a 1) (b 2) (a 3) (c 4) (b 5) (a 6)))
         (groups (make-hash-table :test 'eq)))
   (dolist (item data)
@@ -59,7 +59,7 @@ fn divergence_group_by_partition_data() {
 fn divergence_string_split_join_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((csv \"alice,30,engineer\\nbob,25,designer\\ncharlie,35,manager\")
         (lines (split-string csv \"\\n\" t))
         (rows (mapcar (lambda (l) (split-string l \",\" t)) lines))
@@ -80,7 +80,7 @@ fn divergence_string_split_join_transform() {
 fn divergence_tree_transform_recursive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-tree-map-xxx (fn tree)
     (cond
@@ -99,7 +99,7 @@ fn divergence_tree_transform_recursive() {
 fn divergence_plist_to_alist_to_sorted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((pl '(:name \"Alice\" :age 30 :score 95))
         (alist nil))
   (let ((rest pl))
@@ -122,7 +122,7 @@ fn divergence_plist_to_alist_to_sorted() {
 fn divergence_nested_map_reduce_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((matrix '((1 2 3) (4 5 6) (7 8 9)))
         (row-sums (mapcar (lambda (row) (seq-reduce #'+ row 0)) matrix))
         (col-sums (dotimes (i 3 nil)
@@ -143,7 +143,7 @@ fn divergence_nested_map_reduce_composition() {
 fn divergence_string_transform_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((input \"  Hello World  FOO bar  \")
         (trimmed (string-trim input))
         (downcased (downcase trimmed))
@@ -159,7 +159,7 @@ fn divergence_string_transform_pipeline() {
 fn divergence_assoc_chain_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((db '((user1 . ((name . \"Alice\") (role . admin) (level . 5)))
                       (user2 . ((name . \"Bob\") (role . user) (level . 3)))
                       (user3 . ((name . \"Carol\") (role . admin) (level . 7)))))
@@ -177,7 +177,7 @@ fn divergence_assoc_chain_lookup() {
 fn divergence_vector_matrix_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v1 [1 2 3])
         (v2 [4 5 6]))
   (let ((dot-product (seq-reduce #'+ (mapcar #'* (append v1 nil) (append v2 nil)) 0))

@@ -5,7 +5,7 @@
 //! stops on the first non-nil wrapper result, supports function-valued hook
 //! variables, and treats `t` in a local hook as a splice of the global hook.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -41,7 +41,7 @@ fn oracle_run_hook_wrapped_function_value_and_stop_result() {
       (nreverse log)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -75,5 +75,5 @@ fn oracle_run_hook_wrapped_local_t_splices_global_and_ignores_global_t() {
       (makunbound 'neovm--rhw-hook))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

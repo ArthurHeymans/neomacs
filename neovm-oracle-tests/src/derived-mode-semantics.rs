@@ -4,7 +4,7 @@
 //! extra parents, generated metadata, hooks, local maps, syntax tables, abbrev
 //! tables, and current-buffer `derived-mode-p` behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_prop_define_derived_mode_metadata_and_hooks() {
                             (documentation 'neomacs-oracle-child-mode))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_prop_derived_mode_maps_syntax_and_abbrev_tables() {
        (get 'neomacs-oracle-table-mode-abbrev-table 'variable-documentation)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -95,7 +95,7 @@ fn oracle_prop_derived_mode_all_parents_aliases_and_extra_parents() {
    (get 'text-mode 'derived-mode--followers)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -122,5 +122,5 @@ fn oracle_prop_derived_mode_no_parent_and_noninteractive() {
        (string-match-p "Uses keymap" (documentation 'neomacs-oracle-plain-mode))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

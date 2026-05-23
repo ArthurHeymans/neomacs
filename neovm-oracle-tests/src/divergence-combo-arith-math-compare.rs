@@ -1,13 +1,13 @@
 //! Divergence tests: arithmetic + number + math + comparison combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_bignum_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((big (expt 2 64)))
     (list big
@@ -28,7 +28,7 @@ fn divergence_bignum_operations() {
 fn divergence_float_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (= 0.0 -0.0)
         (eql 0.0 -0.0)
@@ -51,7 +51,7 @@ fn divergence_float_edge_cases() {
 fn divergence_trig_log_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((pi-val 3.141592653589793))
     (list (> (abs (- (sin 0.0) 0.0)) 1e-10)
@@ -71,7 +71,7 @@ fn divergence_trig_log_functions() {
 fn divergence_bitwise_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (logand 15 6)
         (= (logand 15 6) 6)
@@ -92,7 +92,7 @@ fn divergence_bitwise_operations() {
 fn divergence_number_predicate_combos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (numberp 42)
         (numberp 3.14)
@@ -118,7 +118,7 @@ fn divergence_number_predicate_combos() {
 fn divergence_max_min_clamp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (max 1 5 3 9 2)
         (= (max 1 5 3 9 2) 9)
@@ -137,7 +137,7 @@ fn divergence_max_min_clamp() {
 fn division_modulo_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (/ 10 3)
         (= (/ 10 3) 3)
@@ -158,7 +158,7 @@ fn division_modulo_edge_cases() {
 fn divergence_random_abs_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (abs -5)
         (= (abs -5) 5)
@@ -179,7 +179,7 @@ fn divergence_random_abs_comparison() {
 fn divergence_type_conversion_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (string-to-number "42")
         (= (string-to-number "42") 42)
@@ -200,7 +200,7 @@ fn divergence_type_conversion_numbers() {
 fn divergence_cl_loop_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (cl-loop for i from 1 to 10 sum i)
         (= (cl-loop for i from 1 to 10 sum i) 55)

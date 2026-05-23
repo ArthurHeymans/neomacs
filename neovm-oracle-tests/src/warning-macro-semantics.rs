@@ -7,7 +7,7 @@
 //! `macroexp-warn-and-return` path, while warning wrappers still evaluate like
 //! ordinary progn/last-value forms when interpreted.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_with_demoted_errors_macro_rewrite_edges() {
   (with-demoted-errors)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -51,5 +51,5 @@ fn oracle_warning_wrapper_interpreter_values_and_expansion() {
                    (+ 3 4)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

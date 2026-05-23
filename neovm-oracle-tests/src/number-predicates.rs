@@ -4,10 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // zerop
@@ -23,7 +20,7 @@ fn oracle_prop_zerop() {
                         (zerop -1)
                         (zerop 0.0e0)
                         (zerop -0.0))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -45,7 +42,7 @@ fn oracle_prop_gnu_subr_numeric_sign_and_parity_predicates() {
          (list -3 -2 -1 0 1 2 3 0.0 1.5 nil))
  (condition-case e (plusp nil)
    (error (list 'plusp-error (car e)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,7 +60,7 @@ fn oracle_prop_natnump() {
                         (natnump 0.0)
                         (natnump nil)
                         (natnump 'a))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +79,7 @@ fn oracle_prop_fixnump() {
                         (fixnump 3.14)
                         (fixnump nil)
                         (fixnump "42"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -102,7 +99,7 @@ fn oracle_fixnump_bignump_are_lisp_predicates_with_boundary_contract() {
        (bignump (1+ most-positive-fixnum))
        (fixnump (1- most-negative-fixnum))
        (bignump (1- most-negative-fixnum))))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq("(nil nil t t (t nil nil t nil t))", &oracle, &neovm);
 }
 
@@ -123,7 +120,7 @@ fn oracle_prop_number_type_predicates() {
                              (integerp v)
                              (numberp v)))
                      values))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +137,7 @@ fn oracle_prop_fixnum_bounds() {
                         (< most-negative-fixnum 0)
                         (fixnump most-positive-fixnum)
                         (fixnump most-negative-fixnum))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +165,7 @@ fn oracle_prop_number_predicates_dispatch() {
                     (mapcar format-num
                             (list 0 42 -7 3.14159 0.0
                                   -2.5 0.0e+NaN nil 'sym)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +196,7 @@ fn oracle_prop_number_predicates_safe_stats() {
                               (list 'min mn)
                               (list 'max mx)
                               (list 'rejected (length rejected))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +231,7 @@ fn oracle_prop_number_predicates_base_convert() {
                      (funcall to-base 0 10)
                      (funcall to-base -42 16)
                      (funcall to-base 1000 36)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,5 +277,5 @@ fn oracle_prop_number_predicates_validator() {
                        (funcall validate
                                 '(name 42 age -5
                                   score 150 active "yes")))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

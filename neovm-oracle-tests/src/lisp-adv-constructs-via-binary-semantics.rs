@@ -2,14 +2,14 @@
 //! Tests defmacro, closures, apply, fboundp, symbol-function, macrop.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- defmacro ---
 
 #[test]
 fn oracle_defmacro_basic_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defmacro nvm--test-dm (x) (list '+ x 1))
   (nvm--test-dm 5))"#,
@@ -20,7 +20,7 @@ fn oracle_defmacro_basic_via_binary() {
 #[test]
 fn oracle_defmacro_returns_lambda_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defmacro nvm--test-dm2 (x) (list 'quote x))
   (nvm--test-dm2 42))"#,
@@ -33,7 +33,7 @@ fn oracle_defmacro_returns_lambda_via_binary() {
 #[test]
 fn oracle_closure_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defun nvm--mk-adder (n)
     (lambda (x) (+ x n)))
@@ -47,7 +47,7 @@ fn oracle_closure_via_binary() {
 #[test]
 fn oracle_apply_with_list_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defun nvm--apply-fn (a b c) (list a b c))
   (apply 'nvm--apply-fn '(1 2 3)))"#,
@@ -58,7 +58,7 @@ fn oracle_apply_with_list_via_binary() {
 #[test]
 fn oracle_apply_with_args_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(apply '+ 1 2 '(3 4))"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(apply '+ 1 2 '(3 4))"#);
     assert_ok_eq("10", &o, &n);
 }
 
@@ -67,7 +67,7 @@ fn oracle_apply_with_args_via_binary() {
 #[test]
 fn oracle_fboundp_defined_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defun nvm--fb-fn () 42)
   (fboundp 'nvm--fb-fn))"#,
@@ -78,7 +78,7 @@ fn oracle_fboundp_defined_via_binary() {
 #[test]
 fn oracle_fboundp_undefined_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(fboundp 'nvm--no-such-function-xyz)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(fboundp 'nvm--no-such-function-xyz)"#);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -87,7 +87,7 @@ fn oracle_fboundp_undefined_via_binary() {
 #[test]
 fn oracle_symbol_function_returns_function_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defun nvm--sf-fn (x) x)
   (functionp (symbol-function 'nvm--sf-fn)))"#,
@@ -100,7 +100,7 @@ fn oracle_symbol_function_returns_function_via_binary() {
 #[test]
 fn oracle_macrop_on_symbol_function_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (defmacro nvm--mac-test (x) (list '1+ x))
   (macrop (symbol-function 'nvm--mac-test)))"#,
@@ -113,6 +113,6 @@ fn oracle_macrop_on_symbol_function_via_binary() {
 #[test]
 fn oracle_funcall_lambda_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(r#"(funcall (lambda (x y) (+ x y)) 10 20)"#);
+    let (o, n) = eval_oracle_and_neovm(r#"(funcall (lambda (x y) (+ x y)) 10 20)"#);
     assert_ok_eq("30", &o, &n);
 }

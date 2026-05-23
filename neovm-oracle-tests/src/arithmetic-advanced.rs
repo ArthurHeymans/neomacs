@@ -4,7 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Mixed integer and float promotion rules
@@ -34,7 +34,7 @@ fn oracle_prop_arith_adv_mixed_int_float_promotion() {
                     (setq results (cons (floatp (+ 1 1.0)) results))
                     (setq results (cons (integerp (+ 1 1)) results))
                     (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn oracle_prop_arith_adv_float_integer_division_semantics() {
                   (/ 7.0 2)     ;; 3.5
                   (/ 1 3)       ;; 0
                   (/ 1 3.0))    ;; 0.333...";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ fn oracle_prop_arith_adv_division_by_zero_float() {
                   (/ -1.0 0.0)
                   (> (/ 1.0 0.0) 0)
                   (< (/ -1.0 0.0) 0))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn oracle_prop_arith_adv_mod_vs_percent_negative() {
                   (mod 7 -3)    ;; -2 (different!)
                   (% -7 -3)     ;; -1
                   (mod -7 -3))  ;; -1 (same when both negative)";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn oracle_prop_arith_adv_mod_float_negative() {
                   (mod -7.5 -3.0)
                   (mod 10.0 3.0)
                   (mod -10.0 3.0))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ fn oracle_prop_arith_adv_ash_large_shifts() {
                   (ash -256 -4)      ;; -16
                   (ash -1 -1)        ;; -1 (arithmetic shift of -1 stays -1)
                   (ash -1 -100))     ;; -1";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn oracle_prop_arith_adv_ash_power_of_two() {
                           (cons (= (ash 1 n) (expt 2 n))
                                 results)))
                   (nreverse results))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn oracle_prop_arith_adv_bignum_results_remain_integers_like_gnu() {
  (logcount (ash 1 100))
  (number-to-string (ash 1 100)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ fn oracle_prop_arith_adv_bitwise_combined_operations() {
                      (blend-g (/ (+ (funcall unpack-g color) (funcall unpack-g c2)) 2))
                      (blend-b (/ (+ (funcall unpack-b color) (funcall unpack-b c2)) 2)))
                 (list r g b blend-r blend-g blend-b)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn oracle_prop_arith_adv_expt_combinations() {
                   (expt 2 10.0)     ;; 1024.0
                   (expt 4.0 0.5)    ;; 2.0 (square root)
                   (expt 27.0 (/ 1.0 3.0)))  ;; cube root of 27";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn oracle_prop_arith_adv_expt_negative_exponent() {
                   (expt 2.0 -10)  ;; ~0.000976
                   ;; Verify: expt(x,n) * expt(x,-n) ≈ 1 for floats
                   (< (abs (- (* (expt 3.0 7) (expt 3.0 -7)) 1.0)) 1e-10))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ fn oracle_prop_arith_adv_rounding_comprehensive() {
                                   (round v)
                                   (truncate v)))
                           vals))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn oracle_prop_arith_adv_rounding_with_divisor() {
                   (round 7 2)       ;; 4 (banker's rounding: 3.5 -> 4)
                   (round 9 2)       ;; 4 (4.5 -> 4, rounds to even)
                   (round -7 2))     ;; -4";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -350,7 +350,7 @@ fn oracle_prop_arith_adv_bankers_rounding() {
                   (round -2.5)  ;; -2 (even)
                   (round -3.5)  ;; -4 (even)
                   (round -4.5)) ;; -4 (even)";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +374,7 @@ fn oracle_prop_arith_adv_large_number_operations() {
                     ;; Verify arithmetic still works
                     (= (- (+ big 100) 100) big)
                     (= (/ (* big 7) 7) big)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -394,5 +394,5 @@ fn oracle_prop_arith_adv_complex_expression_tree() {
                     (apply '+ (mapcar (lambda (x) (* x x)) '(1 2 3 4 5)))
                     ;; Chained mod
                     (mod (mod (mod 1000 37) 7) 3)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

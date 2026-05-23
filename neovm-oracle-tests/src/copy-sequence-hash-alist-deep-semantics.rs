@@ -2,7 +2,7 @@
 //! GNU src/fns.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // --- copy-sequence vector independence ---
 
@@ -53,7 +53,7 @@ fn oracle_copy_sequence_string_copies_intervals_shallowly() {
            (get-text-property 2 'payload copy)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]

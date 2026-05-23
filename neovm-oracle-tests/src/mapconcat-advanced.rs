@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // mapconcat with various separator strings
@@ -24,7 +24,7 @@ fn oracle_prop_mapconcat_separators() {
   (mapconcat #'symbol-name '(foo bar baz) " AND ")
   (mapconcat #'number-to-string '(1 2 3 4 5) " + ")
   (mapconcat #'number-to-string '(10 20 30) "---"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ fn oracle_prop_mapconcat_identity() {
   (mapconcat #'identity '("solo") "|||")
   ;; Multi-char strings
   (mapconcat #'identity '("the" "quick" "brown" "fox") " "))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ fn oracle_prop_mapconcat_complex_lambda() {
              ", ")
   ;; Repeat each character
   (mapconcat (lambda (s) (concat s s)) '("ha" "ho" "he") "-"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ fn oracle_prop_mapconcat_vectors() {
   (mapconcat #'identity [] ", ")
   ;; Single-element vector
   (mapconcat #'number-to-string [42] "---"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ fn oracle_prop_mapconcat_empty_separator() {
                  (if (= (% idx 2) 0) (upcase s) (downcase s)))
                '("a" "B" "c" "D" "e")
                "")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ fn oracle_prop_mapconcat_empty_list() {
   ;; Empty result should be empty string
   (string= (mapconcat #'identity nil ", ") "")
   (length (mapconcat #'identity nil "LONG-SEP")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ fn oracle_prop_mapconcat_sql_builder() {
                  nil nil nil))
     (fmakunbound 'neovm--sql-select)
     (fmakunbound 'neovm--sql-insert)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ fn oracle_prop_mapconcat_html_builder() {
     (fmakunbound 'neovm--html-tag)
     (fmakunbound 'neovm--html-table)
     (fmakunbound 'neovm--html-list)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -384,5 +384,5 @@ fn oracle_prop_mapconcat_path_builder() {
     (fmakunbound 'neovm--build-path)
     (fmakunbound 'neovm--build-query)
     (fmakunbound 'neovm--build-csv-row)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

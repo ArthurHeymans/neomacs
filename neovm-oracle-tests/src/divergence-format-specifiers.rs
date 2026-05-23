@@ -1,13 +1,13 @@
 //! Divergence tests: format specifiers, width, precision, padding.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_format_integers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%d" 42)
   (format "%d" -42)
@@ -21,7 +21,7 @@ fn divergence_format_integers() {
 fn divergence_format_hex_octal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%x" 255)
   (format "%X" 255)
@@ -35,7 +35,7 @@ fn divergence_format_hex_octal() {
 fn divergence_format_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%5d" 42)
   (format "%-5d" 42)
@@ -49,7 +49,7 @@ fn divergence_format_width() {
 fn divergence_format_floats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%f" 3.14)
   (format "%.2f" 3.14159)
@@ -63,7 +63,7 @@ fn divergence_format_floats() {
 fn divergence_format_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "Hello %s" "World")
   (format "%S" "hello")
@@ -77,7 +77,7 @@ fn divergence_format_strings() {
 fn divergence_format_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%s is %d years old" "Alice" 30)
   (format "%d + %d = %d" 1 2 3)
@@ -89,7 +89,7 @@ fn divergence_format_multiple() {
 fn divergence_format_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'format-time-string)
   (stringp (format-time-string "%Y-%m-%d"))
@@ -102,7 +102,7 @@ fn divergence_format_time() {
 fn divergence_format_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'format-seconds)
   (fboundp 'seconds-to-string)
@@ -115,7 +115,7 @@ fn divergence_format_seconds() {
 fn divergence_format_spec_padding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (format "%10.3f" 3.14)
   (format "%-10.3f" 3.14)
@@ -128,7 +128,7 @@ fn divergence_format_spec_padding() {
 fn divergence_format_propertized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'format-propertized)
   (fboundp 'format-message)

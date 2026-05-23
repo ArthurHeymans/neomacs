@@ -1,13 +1,13 @@
 //! Divergence tests: regex + match-data + replace + text-property + overlay combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_regex_replace_textprop_overlay_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aaa-FOO-bbb-BAR-ccc-BAZ-ddd")
   (let ((ov1 (make-overlay 1 31))
@@ -47,7 +47,7 @@ fn divergence_regex_replace_textprop_overlay_chain() {
 fn divergence_match_data_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "alpha beta gamma delta epsilon")
   (re-search-forward "beta")
@@ -71,7 +71,7 @@ fn divergence_match_data_save_restore() {
 fn divergence_regex_narrow_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG")
   (put-text-property 1 3 'zone 'z1)
@@ -107,7 +107,7 @@ fn divergence_regex_narrow_replace() {
 fn divergence_regex_groups_backreference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "start-alpha-beta-alpha-beta-end")
   (goto-char 1)
@@ -139,7 +139,7 @@ fn divergence_regex_groups_backreference() {
 fn divergence_replace_preserve_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "XXXX-face1-YYYY-face2-ZZZZ")
   (put-text-property 1 4 'style 'plain)
@@ -174,7 +174,7 @@ fn divergence_replace_preserve_textprops() {
 fn divergence_regex_multiline_anchor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (put-text-property 1 5 'row 1)
@@ -204,7 +204,7 @@ fn divergence_regex_multiline_anchor() {
 fn divergence_match_data_interleaved_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "cat dog bat cat dog bat")
   (let ((matches nil))
@@ -228,7 +228,7 @@ fn divergence_match_data_interleaved_regex() {
 fn divergence_regex_case_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello WORLD foo BAR baz QUX")
   (let ((case-fold-search t)
@@ -259,7 +259,7 @@ fn divergence_regex_case_fold_search() {
 fn divergence_regex_word_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "the theme is theorem and other")
   (put-text-property 1 3 'word 'w1)
@@ -287,7 +287,7 @@ fn divergence_regex_word_boundary() {
 fn divergence_regex_replace_with_fixedcase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World HELLO WORLD hello world")
   (put-text-property 1 5 'case 'title)

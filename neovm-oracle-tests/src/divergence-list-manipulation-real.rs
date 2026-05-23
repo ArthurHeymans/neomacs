@@ -1,13 +1,13 @@
 //! Divergence tests: real list manipulation behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_list_manipulation_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((l '(1 2 3)))
   (list (car l)
         (cdr l)
@@ -26,7 +26,7 @@ fn divergence_list_manipulation_real() {
 fn divergence_push_pop_nreverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((l nil))
   (push 1 l)
   (push 2 l)
@@ -40,7 +40,7 @@ fn divergence_push_pop_nreverse() {
 fn divergence_append_nconc_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((a '(1 2)) (b '(3 4)))
   (list (append a b)
         (append a b '(5))
@@ -56,7 +56,7 @@ fn divergence_append_nconc_concat() {
 fn divergence_mapcar_mapc_mapconcat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (mapcar #'1+ '(1 2 3 4))
   (mapcar #'symbol-name '(a b c))
@@ -70,7 +70,7 @@ fn divergence_mapcar_mapc_mapconcat() {
 fn divergence_member_assoc_assq_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((alist '((a . 1) (b . 2) (c . 3)))
         (lst '(1 2 3 4 5)))
   (list (assoc 'b alist)
@@ -87,7 +87,7 @@ fn divergence_member_assoc_assq_real() {
 fn divergence_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(cl-destructuring-bind (a (b c) &rest d) '(1 (2 3) 4 5)
   (list a b c d)) ",
     );
@@ -97,7 +97,7 @@ fn divergence_destructuring_bind() {
 fn divergence_tree_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tree '(1 (2 (3 4)) (5 6))))
   (list tree
         (copy-tree tree)
@@ -111,7 +111,7 @@ fn divergence_tree_operations() {
 fn divergence_set_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((a '(1 2 3 4))
         (b '(3 4 5 6)))
   (list (cl-intersection a b)
@@ -126,7 +126,7 @@ fn divergence_set_operations() {
 fn deficiency_subseq_butlast() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (cl-subseq '(1 2 3 4 5) 1 3)
   (cl-subseq '(1 2 3 4 5) 2)
@@ -141,7 +141,7 @@ fn deficiency_subseq_butlast() {
 fn divergence_number_sequencing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (number-sequence 1 5)
   (number-sequence 0 10 2)

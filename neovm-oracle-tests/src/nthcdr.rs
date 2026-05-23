@@ -54,7 +54,7 @@ fn oracle_nthcdr_circular_and_improper_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    super::common::assert_oracle_parity_with_bootstrap(form);
+    super::common::assert_oracle_parity(form);
 }
 
 proptest! {

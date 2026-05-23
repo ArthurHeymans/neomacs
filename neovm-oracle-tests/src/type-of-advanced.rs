@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // type-of for all basic types
@@ -52,7 +52,7 @@ fn oracle_prop_type_of_all_basic_types() {
   (unwind-protect
       (funcall 'neovm--test-type-catalog)
     (fmakunbound 'neovm--test-type-catalog)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,7 @@ fn oracle_prop_type_of_nil_t_keywords() {
   (unwind-protect
       (funcall 'neovm--test-special-symbols)
     (fmakunbound 'neovm--test-special-symbols)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ fn oracle_prop_type_of_subrs() {
   (unwind-protect
       (funcall 'neovm--test-subr-types)
     (fmakunbound 'neovm--test-subr-types)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ fn oracle_prop_type_of_lambdas_closures() {
   (unwind-protect
       (funcall 'neovm--test-lambda-types)
     (fmakunbound 'neovm--test-lambda-types)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn oracle_prop_type_of_char_tables_bool_vectors() {
   (unwind-protect
       (funcall 'neovm--test-special-container-types)
     (fmakunbound 'neovm--test-special-container-types)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ fn oracle_prop_type_of_construction_consistency() {
   (unwind-protect
       (funcall 'neovm--test-type-consistency)
     (fmakunbound 'neovm--test-type-consistency)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +373,7 @@ fn oracle_prop_type_of_dispatch_system() {
     (fmakunbound 'neovm--test-serialize)
     (fmakunbound 'neovm--test-deserialize)
     (makunbound 'neovm--test-dispatch-table)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,5 +420,5 @@ fn oracle_prop_type_of_heterogeneous_mapping() {
                (total-items (apply #'+ (mapcar (lambda (g) (nth 1 g)) grouped))))
           (list types-list unique-types grouped total-items)))
     (fmakunbound 'neovm--test-classify-collection)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

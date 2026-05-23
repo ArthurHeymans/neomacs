@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` readability and function aliases.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_subr_function_alias_p_and_readablep_contracts() {
@@ -43,7 +41,7 @@ fn oracle_prop_gnu_subr_function_alias_p_and_readablep_contracts() {
           neovm-function-alias-a
           neovm-function-alias-b
           neovm-function-alias-subr)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -92,5 +90,5 @@ fn oracle_prop_define_obsolete_function_alias_metadata_edges() {
       (setplist sym nil))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

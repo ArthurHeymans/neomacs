@@ -4,7 +4,7 @@
 //! in place, but keyword invocation defaults to a sorted copy unless
 //! `:in-place` is non-nil.  Equal keys retain input order.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_sort_old_style_list_is_destructive() {
    (memq first sorted)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn oracle_sort_keyword_default_copies_list_and_vector() {
    (eq sorted-vec vec)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_sort_keyword_in_place_and_reverse_stability() {
    rev-list))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn oracle_sort_default_value_lessp_and_nil() {
  (sort '("b" "a" "c")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn oracle_sort_keyword_errors_and_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn oracle_sort_rejects_bool_vector_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -159,5 +159,5 @@ fn oracle_sort_validates_list_before_key_or_lessp_calls() {
     (nreverse lessp-calls))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

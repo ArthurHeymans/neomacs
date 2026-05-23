@@ -1,13 +1,13 @@
 //! Divergence tests: buffer naming, get-buffer, buried buffers, buffer-list.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buffer_list_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((bufs (buffer-list)))
   (list (> (length bufs) 0)
         (bufferp (car bufs))
@@ -19,7 +19,7 @@ fn divergence_buffer_list_order() {
 fn divergence_get_buffer_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf (get-buffer-create " *test-gbc*")))
   (list (bufferp buf)
         (buffer-name buf)
@@ -35,7 +35,7 @@ fn divergence_get_buffer_create() {
 fn divergence_generate_new_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((visible1 (generate-new-buffer "*test-gnb*"))
         (visible2 (generate-new-buffer "*test-gnb*"))
         (hidden1 (generate-new-buffer " *test-gnb*"))
@@ -58,7 +58,7 @@ fn divergence_generate_new_buffer() {
 fn divergence_buffer_name_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf (get-buffer-create "test-name-edge")))
   (list (buffer-name buf)
         (string= (buffer-name buf) "test-name-edge")
@@ -74,7 +74,7 @@ fn divergence_buffer_name_edge() {
 fn divergence_buffer_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (null (buffer-file-name))
   (null (buffer-file-name (current-buffer)))
@@ -87,7 +87,7 @@ fn divergence_buffer_file_name() {
 fn divergence_buffer_modified() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (booleanp (buffer-modified-p))
   (buffer-modified-p)
@@ -102,7 +102,7 @@ fn divergence_buffer_modified() {
 fn divergence_buffer_size_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (list (buffer-size)
@@ -117,7 +117,7 @@ fn divergence_buffer_size_chars() {
 fn divergence_buffer_multibyte_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (buffer-live-p (current-buffer))
   (multibyte-string-p (buffer-string))
@@ -130,7 +130,7 @@ fn divergence_buffer_multibyte_p() {
 fn divergence_with_current_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf (generate-new-buffer " *wcb*")))
   (unwind-protect
       (progn
@@ -147,7 +147,7 @@ fn divergence_with_current_buffer() {
 fn divergence_buffer_swap_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf (generate-new-buffer " *swap*")))
   (unwind-protect
       (progn

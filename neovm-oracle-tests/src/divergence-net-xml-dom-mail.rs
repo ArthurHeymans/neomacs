@@ -1,13 +1,13 @@
 //! Divergence tests: shr, eww, url, xml-rpc, network stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_shr_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'shr-render-region)
   (featurep 'shr)
@@ -19,7 +19,7 @@ fn divergence_shr_functions() {
 fn divergence_eww_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eww)
   (fboundp 'eww-browse-url)
@@ -31,7 +31,7 @@ fn divergence_eww_functions() {
 fn divergence_url_encode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'url-util)
 (list
   (url-hexify-string "hello world")
@@ -44,7 +44,7 @@ fn divergence_url_encode() {
 fn divergence_url_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'url-parse)
 (let ((u (url-generic-parse-url "https://example.com/path?q=1#frag")))
   (list (url-type u)
@@ -58,7 +58,7 @@ fn divergence_url_parse() {
 fn divergence_dom_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'dom)
 (let ((tree '(html nil (body nil (p nil "hello")))))
   (list (dom-tag tree)
@@ -72,7 +72,7 @@ fn divergence_dom_functions() {
 fn divergence_svg_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'svg-create)
   (fboundp 'svg-rectangle)
@@ -85,7 +85,7 @@ fn divergence_svg_functions() {
 fn divergence_mail_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'mail-parse)
   (fboundp 'rfc822-addresses)
@@ -98,7 +98,7 @@ fn divergence_mail_functions() {
 fn divergence_message_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'message-mode)
   (featurep 'message)
@@ -110,7 +110,7 @@ fn divergence_message_functions() {
 fn divergence_sendmail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'sendmail-send-it)
   (fboundp 'mail-send)
@@ -122,7 +122,7 @@ fn divergence_sendmail() {
 fn divergence_mml_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'mml-generate-mime)
   (featurep 'mml)

@@ -4,8 +4,7 @@
 //! primitives.  Their return values and edge behavior are visible to Elisp.
 
 use super::common::{
-    assert_ok_eq, eval_oracle_and_neovm_with_bootstrap,
-    return_if_neovm_enable_oracle_proptest_not_set,
+    assert_ok_eq, eval_oracle_and_neovm, return_if_neovm_enable_oracle_proptest_not_set,
 };
 
 #[test]
@@ -41,7 +40,7 @@ fn oracle_subr_motion_helpers_pin_syntax_and_edge_returns() {
    (list (forward-word-strictly 1) (point)
          (backward-word-strictly 1) (point)
          (forward-word-strictly 5) (point))))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         "((3 3 13 13 14 14 21 21) (nil 16 nil 14 nil 3 nil 1) (nil 4 nil 7 nil 9 nil 7) (t 4 t 1 nil 8))",
         &oracle,

@@ -1,13 +1,13 @@
 //! Divergence tests: minibuffer, completion, and ring data structure.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_minibuffer_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (booleanp minibuf-window)
   (windowp minibuf-window)
@@ -20,7 +20,7 @@ fn divergence_minibuffer_variables() {
 fn divergence_minibuffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (windowp (minibuffer-window))
   (window-live-p (minibuffer-window))
@@ -34,7 +34,7 @@ fn divergence_minibuffer_window() {
 fn divergence_minibuffer_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp (minibuffer-prompt-width))
   (fboundp 'minibuffer-contents)
@@ -46,7 +46,7 @@ fn divergence_minibuffer_contents() {
 fn divergence_completion_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'try-completion)
   (fboundp 'all-completions)
@@ -59,7 +59,7 @@ fn divergence_completion_functions() {
 fn divergence_all_completions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((coll '(("alpha") ("beta") ("gamma") ("alphabetic"))))
   (list (sort (all-completions "al" coll) #'string<)
         (try-completion "al" coll)))"#,
@@ -70,7 +70,7 @@ fn divergence_all_completions() {
 fn divergence_completion_regexp_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((completion-regexp-list '("lph")))
   (list (all-completions "" '(("alpha") ("beta") ("gamma")))
         completion-regexp-list))"#,
@@ -81,7 +81,7 @@ fn divergence_completion_regexp_list() {
 fn divergence_ring_create_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
   (ring-insert r 'a)
@@ -99,7 +99,7 @@ fn divergence_ring_create_and_access() {
 fn divergence_ring_overflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'ring)
 (let ((r (make-ring 3)))
   (dotimes (i 5)
@@ -116,7 +116,7 @@ fn divergence_ring_overflow() {
 fn divergence_ring_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
   (ring-insert r 'a)
@@ -133,7 +133,7 @@ fn divergence_ring_remove() {
 fn divergence_ring_elements() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
   (ring-insert r 3)

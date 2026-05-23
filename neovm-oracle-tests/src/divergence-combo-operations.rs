@@ -1,13 +1,13 @@
 //! Divergence tests: property-based combinatorial - random-ish operations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_combo_insert_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq buffer-undo-list nil)
   (insert "ABCDEFGHIJ")
@@ -28,7 +28,7 @@ fn divergence_combo_insert_narrow_undo() {
 fn divergence_combo_overlay_prop_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -49,7 +49,7 @@ fn divergence_combo_overlay_prop_narrow() {
 fn divergence_combo_marker_insert_delete_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m (set-marker (make-marker) 5)))
@@ -70,7 +70,7 @@ fn divergence_combo_marker_insert_delete_narrow() {
 fn divergence_combo_save_excursion_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World Foo Bar")
   (save-excursion
@@ -87,7 +87,7 @@ fn divergence_combo_save_excursion_kill_yank() {
 fn divergence_combo_hash_symbol_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setplist 'my-combo-sym '(a 1 b 2))
   (let ((ht (make-hash-table)))
@@ -103,7 +103,7 @@ fn divergence_combo_hash_symbol_prop() {
 fn divergence_combo_catch_throw_unwind_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 8)
@@ -123,7 +123,7 @@ fn divergence_combo_catch_throw_unwind_narrow() {
 fn divergence_combo_read_print_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((data '(a (b . c) [1 2 3] "hello \"world\"" ?\n)))
   (list data
         (read (prin1-to-string data))
@@ -135,7 +135,7 @@ fn divergence_combo_read_print_roundtrip() {
 fn divergence_combo_condition_case_save_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 8)
@@ -156,7 +156,7 @@ fn divergence_combo_condition_case_save_restriction() {
 fn divergence_combo_multiple_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf1 (generate-new-buffer " *combo1*"))
         (buf2 (generate-new-buffer " *combo2*")))
   (unwind-protect
@@ -179,7 +179,7 @@ fn divergence_combo_multiple_buffers() {
 fn divergence_combo_keymap_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((map (make-sparse-keymap))
         (counter 0)
         (increment (lambda () (interactive) (setq counter (1+ counter)))))

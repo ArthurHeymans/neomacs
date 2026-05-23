@@ -9,9 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{
-    ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-};
+use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_reverse_basic() {
@@ -62,7 +60,7 @@ fn oracle_prop_reverse_mixed_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(reverse (list 1 "two" 'three 4.0 '(five)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -111,7 +109,7 @@ fn oracle_reverse_copies_supported_sequences_without_mutating_originals() {
    boolv rboolv (eq boolv rboolv)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -138,7 +136,7 @@ fn oracle_nreverse_mutates_lists_vectors_and_bool_vectors_but_copies_strings() {
    str rstr (eq str rstr)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -155,7 +153,7 @@ fn oracle_reverse_and_nreverse_improper_list_errors() {
    (error err)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -174,7 +172,7 @@ fn oracle_nreverse_self_circular_list_error() {
                    (car arg))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 proptest! {

@@ -1,13 +1,13 @@
 //! Divergence tests: real-world editing scenario simulations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_json_like_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"{\\\"name\\\": \\\"Alice\\\", \\\"scores\\\": [95, 87, 92], \\\"active\\\": true}\")
   (goto-char 1)
@@ -27,7 +27,7 @@ fn divergence_json_like_parsing() {
 fn divergence_csv_processing_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"name,age,city\\nAlice,30,NYC\\nBob,25,LA\\nCarol,35,Chicago\")
   (goto-char 1)
@@ -50,7 +50,7 @@ fn divergence_csv_processing_edit() {
 fn divergence_refactor_rename_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"function oldName() { return oldName.helper(); }\")
   (goto-char 1)
@@ -68,7 +68,7 @@ fn divergence_refactor_rename_in_buffer() {
 fn divergence_org_like_heading_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"* Heading 1\\nSome text\\n** Heading 2\\nMore text\\n* Heading 3\\nFinal text\")
   (goto-char 1)
@@ -87,7 +87,7 @@ fn divergence_org_like_heading_navigation() {
 fn duplication_code_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"def foo():\\n  return 42\\ndef bar():\\n  return 42\\ndef baz():\\n  return 99\")
   (goto-char 1)
@@ -109,7 +109,7 @@ fn duplication_code_detection() {
 fn divergence_template_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((template \"Hello {{name}}, your order #{{id}} is {{status}}.\")
         (bindings '((name . \"Alice\") (id . \"12345\") (status . \"shipped\"))))
   (let ((result template))
@@ -126,7 +126,7 @@ fn divergence_template_expansion() {
 fn divergence_log_analysis_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"[ERROR] 2024-01-15 Connection failed\\n\")
   (insert \"[INFO] 2024-01-15 Retry succeeded\\n\")
@@ -148,7 +148,7 @@ fn divergence_log_analysis_pattern() {
 fn divergence_extract_and_restructure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"firstName: John\\nlastName: Doe\\nage: 30\\ncity: NYC\")
   (goto-char 1)
@@ -168,7 +168,7 @@ fn divergence_extract_and_restructure() {
 fn divergence_whitespace_normalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"  hello   world   \\n\\n   foo  bar  \\n  baz  \")
   (let ((result
@@ -185,7 +185,7 @@ fn divergence_whitespace_normalization() {
 fn divergence_code_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq comment-start \"// \")
   (setq comment-end \"\")

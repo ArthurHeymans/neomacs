@@ -4,7 +4,7 @@
 //! behavior, point/mark placement, and canonical returned strings.  These tests
 //! pin programmatic rectangle APIs against GNU Emacs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_prop_rectangle_extract_delete_and_bounds() {
       (list extracted bounds deleted after-delete (point)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn oracle_prop_rectangle_fill_open_clear_string_insert() {
        (buffer-string)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn oracle_prop_rectangle_tabs_short_lines_and_dimensions() {
            (buffer-string)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -115,5 +115,5 @@ fn oracle_prop_rectangle_insert_number_and_intersection() {
    (rectangle-intersect-p '(0 . 0) '(2 . 2) '(2 . 0) '(1 . 1))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

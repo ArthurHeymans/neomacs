@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // char-syntax for letters, digits, whitespace, punctuation
@@ -41,7 +41,7 @@ fn oracle_prop_char_syntax_adv_basic_categories() {
                      (char-syntax ?\[) (char-syntax ?\])
                      ;; String delimiter
                      (char-syntax ?\")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ fn oracle_prop_char_syntax_adv_after_modification() {
                                   ;; Verify changes happened
                                   (not (= orig-at mod-at))
                                   (= restored-at (char-to-string ?.))))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ fn oracle_prop_char_syntax_adv_class_to_char_all() {
                             (= (cdr (assq 6 mapping)) ?\")   ;; string -> "
                             (= (cdr (assq 7 mapping)) ?\\))) ;; escape -> \
                     )"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +156,7 @@ fn oracle_prop_char_syntax_adv_matching_paren_extended() {
                        ;; Guillemets
                        (matching-paren 171)
                        (matching-paren 187))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +195,7 @@ fn oracle_prop_char_syntax_adv_string_to_syntax() {
                     ;; Verify they are cons cells
                     (consp (string-to-syntax "w"))
                     (integerp (car (string-to-syntax "w"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn oracle_string_to_syntax_invalid_descriptor_errors_like_gnu() {
      (string-to-syntax "?")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ fn oracle_prop_char_syntax_adv_tokenizer() {
                          (neovm--test-char-syntax-tokenize "  a + b  ")
                          (neovm--test-char-syntax-tokenize "hello"))
                       (fmakunbound 'neovm--test-char-syntax-tokenize)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +324,5 @@ fn oracle_prop_char_syntax_adv_buffer_local_switching() {
                                           (not (= lisp-semi c-semi))
                                           (not (= lisp-under c-under))))))))
                       results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

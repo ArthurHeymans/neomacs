@@ -5,9 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_err_kind, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-};
+use super::common::{assert_err_kind, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // coding-system-p for various coding systems
@@ -31,7 +29,7 @@ fn oracle_prop_coding_advanced_system_p_various() {
   (coding-system-p nil)
   (coding-system-p 42)
   (coding-system-p "utf-8"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +48,7 @@ fn oracle_prop_coding_advanced_check_coding_system() {
   (check-coding-system 'raw-text)
   (check-coding-system 'no-conversion)
   (check-coding-system nil))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -86,7 +84,7 @@ fn oracle_prop_coding_advanced_base_and_eol() {
   (coding-system-eol-type 'utf-8-mac)
   ;; Base coding system returns a vector of eol variants
   (vectorp (coding-system-eol-type 'utf-8)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +110,7 @@ fn oracle_prop_coding_advanced_aliases() {
    ;; latin-1 aliases
    (let ((l1-aliases (coding-system-aliases 'latin-1)))
      (if (memq 'latin-1 l1-aliases) t nil))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +131,7 @@ fn oracle_prop_coding_advanced_plist_put() {
     ;; Clean up the custom property
     (coding-system-put 'utf-8 :neovm-test-prop nil)
     (list name has-mnemonic readback)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +160,7 @@ fn oracle_prop_coding_advanced_priority_list() {
      has-utf8)
    ;; Length should be positive
    (> (length plist) 0)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,5 +199,5 @@ fn oracle_prop_coding_advanced_encode_decode_roundtrip() {
     (string= orig decoded))
   ;; Encoding produces same length for pure ASCII in utf-8
   (= (length (encode-coding-string "abc" 'utf-8)) 3))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

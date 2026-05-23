@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // booleanp
@@ -15,12 +15,12 @@ use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_orac
 fn oracle_prop_booleanp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(booleanp t)");
-    assert_oracle_parity_with_bootstrap("(booleanp nil)");
-    assert_oracle_parity_with_bootstrap("(booleanp 0)");
-    assert_oracle_parity_with_bootstrap("(booleanp 1)");
-    assert_oracle_parity_with_bootstrap("(booleanp 'hello)");
-    assert_oracle_parity_with_bootstrap("(booleanp '())");
+    assert_oracle_parity("(booleanp t)");
+    assert_oracle_parity("(booleanp nil)");
+    assert_oracle_parity("(booleanp 0)");
+    assert_oracle_parity("(booleanp 1)");
+    assert_oracle_parity("(booleanp 'hello)");
+    assert_oracle_parity("(booleanp '())");
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_booleanp_expressions() {
     let form = "(list (booleanp (= 1 1))
                       (booleanp (null nil))
                       (booleanp (not 42)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -42,15 +42,15 @@ fn oracle_prop_booleanp_expressions() {
 fn oracle_prop_characterp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(characterp ?a)");
-    assert_oracle_parity_with_bootstrap("(characterp ?Z)");
-    assert_oracle_parity_with_bootstrap("(characterp ?\\n)");
-    assert_oracle_parity_with_bootstrap("(characterp 65)");
-    assert_oracle_parity_with_bootstrap("(characterp 0)");
-    assert_oracle_parity_with_bootstrap("(characterp -1)");
-    assert_oracle_parity_with_bootstrap("(characterp nil)");
-    assert_oracle_parity_with_bootstrap(r#"(characterp "a")"#);
-    assert_oracle_parity_with_bootstrap("(characterp 'a)");
+    assert_oracle_parity("(characterp ?a)");
+    assert_oracle_parity("(characterp ?Z)");
+    assert_oracle_parity("(characterp ?\\n)");
+    assert_oracle_parity("(characterp 65)");
+    assert_oracle_parity("(characterp 0)");
+    assert_oracle_parity("(characterp -1)");
+    assert_oracle_parity("(characterp nil)");
+    assert_oracle_parity(r#"(characterp "a")"#);
+    assert_oracle_parity("(characterp 'a)");
 }
 
 #[test]
@@ -58,9 +58,9 @@ fn oracle_prop_characterp_large_codepoint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // Max valid Unicode codepoint
-    assert_oracle_parity_with_bootstrap("(characterp #x10ffff)");
+    assert_oracle_parity("(characterp #x10ffff)");
     // Beyond max
-    assert_oracle_parity_with_bootstrap("(characterp #x110000)");
+    assert_oracle_parity("(characterp #x110000)");
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn oracle_prop_char_or_string_p_boundaries_and_arity() {
      (char-or-string-p ?A "A")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,13 +105,13 @@ fn oracle_prop_char_or_string_p_boundaries_and_arity() {
 fn oracle_prop_functionp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(functionp 'car)");
-    assert_oracle_parity_with_bootstrap("(functionp (lambda (x) x))");
-    assert_oracle_parity_with_bootstrap("(functionp #'car)");
-    assert_oracle_parity_with_bootstrap("(functionp nil)");
-    assert_oracle_parity_with_bootstrap("(functionp 42)");
-    assert_oracle_parity_with_bootstrap("(functionp '(1 2 3))");
-    assert_oracle_parity_with_bootstrap(r#"(functionp "hello")"#);
+    assert_oracle_parity("(functionp 'car)");
+    assert_oracle_parity("(functionp (lambda (x) x))");
+    assert_oracle_parity("(functionp #'car)");
+    assert_oracle_parity("(functionp nil)");
+    assert_oracle_parity("(functionp 42)");
+    assert_oracle_parity("(functionp '(1 2 3))");
+    assert_oracle_parity(r#"(functionp "hello")"#);
 }
 
 #[test]
@@ -133,13 +133,13 @@ fn oracle_prop_functionp_closures() {
 fn oracle_prop_keywordp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(keywordp :test)");
-    assert_oracle_parity_with_bootstrap("(keywordp :hello)");
-    assert_oracle_parity_with_bootstrap("(keywordp :)");
-    assert_oracle_parity_with_bootstrap("(keywordp 'test)");
-    assert_oracle_parity_with_bootstrap("(keywordp nil)");
-    assert_oracle_parity_with_bootstrap("(keywordp 42)");
-    assert_oracle_parity_with_bootstrap(r#"(keywordp ":test")"#);
+    assert_oracle_parity("(keywordp :test)");
+    assert_oracle_parity("(keywordp :hello)");
+    assert_oracle_parity("(keywordp :)");
+    assert_oracle_parity("(keywordp 'test)");
+    assert_oracle_parity("(keywordp nil)");
+    assert_oracle_parity("(keywordp 42)");
+    assert_oracle_parity(r#"(keywordp ":test")"#);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,13 +150,13 @@ fn oracle_prop_keywordp_basic() {
 fn oracle_prop_nlistp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(nlistp nil)");
-    assert_oracle_parity_with_bootstrap("(nlistp '(1 2 3))");
-    assert_oracle_parity_with_bootstrap("(nlistp '(a . b))");
-    assert_oracle_parity_with_bootstrap("(nlistp 42)");
-    assert_oracle_parity_with_bootstrap(r#"(nlistp "hello")"#);
-    assert_oracle_parity_with_bootstrap("(nlistp [1 2 3])");
-    assert_oracle_parity_with_bootstrap("(nlistp t)");
+    assert_oracle_parity("(nlistp nil)");
+    assert_oracle_parity("(nlistp '(1 2 3))");
+    assert_oracle_parity("(nlistp '(a . b))");
+    assert_oracle_parity("(nlistp 42)");
+    assert_oracle_parity(r#"(nlistp "hello")"#);
+    assert_oracle_parity("(nlistp [1 2 3])");
+    assert_oracle_parity("(nlistp t)");
 }
 
 // ---------------------------------------------------------------------------
@@ -167,12 +167,12 @@ fn oracle_prop_nlistp_basic() {
 fn oracle_prop_string_or_null_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(r#"(string-or-null-p "hello")"#);
-    assert_oracle_parity_with_bootstrap(r#"(string-or-null-p "")"#);
-    assert_oracle_parity_with_bootstrap("(string-or-null-p nil)");
-    assert_oracle_parity_with_bootstrap("(string-or-null-p 42)");
-    assert_oracle_parity_with_bootstrap("(string-or-null-p 'hello)");
-    assert_oracle_parity_with_bootstrap("(string-or-null-p t)");
+    assert_oracle_parity(r#"(string-or-null-p "hello")"#);
+    assert_oracle_parity(r#"(string-or-null-p "")"#);
+    assert_oracle_parity("(string-or-null-p nil)");
+    assert_oracle_parity("(string-or-null-p 42)");
+    assert_oracle_parity("(string-or-null-p 'hello)");
+    assert_oracle_parity("(string-or-null-p t)");
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ fn oracle_prop_list_of_strings_p_subr_contract() {
    (setcdr x (list 1))
    (list-of-strings-p x)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +211,12 @@ fn oracle_prop_list_of_strings_p_subr_contract() {
 fn oracle_prop_integer_or_null_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(integer-or-null-p 42)");
-    assert_oracle_parity_with_bootstrap("(integer-or-null-p 0)");
-    assert_oracle_parity_with_bootstrap("(integer-or-null-p -7)");
-    assert_oracle_parity_with_bootstrap("(integer-or-null-p nil)");
-    assert_oracle_parity_with_bootstrap("(integer-or-null-p 3.14)");
-    assert_oracle_parity_with_bootstrap(r#"(integer-or-null-p "42")"#);
+    assert_oracle_parity("(integer-or-null-p 42)");
+    assert_oracle_parity("(integer-or-null-p 0)");
+    assert_oracle_parity("(integer-or-null-p -7)");
+    assert_oracle_parity("(integer-or-null-p nil)");
+    assert_oracle_parity("(integer-or-null-p 3.14)");
+    assert_oracle_parity(r#"(integer-or-null-p "42")"#);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ fn oracle_prop_type_dispatch_complex() {
                           (funcall describe (lambda () nil))
                           (funcall describe [1 2 3])
                           (funcall describe '(a b c))))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn oracle_prop_type_coercion_pipeline() {
                          (t (prin1-to-string val))))))
                     (let ((values '(42 3.14 hello nil "already" (1 2) [3 4])))
                       (mapcar to-string values)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -299,5 +299,5 @@ fn oracle_prop_type_predicate_exhaustive() {
                           (funcall classify [1 2])
                           (funcall classify nil)
                           (funcall classify t)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

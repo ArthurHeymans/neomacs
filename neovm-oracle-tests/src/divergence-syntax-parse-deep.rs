@@ -1,13 +1,13 @@
 //! Divergence tests: syntax table, parse-partial, scan-lists deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_syntax_table_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-syntax-table)
   (fboundp 'copy-syntax-table)
@@ -21,7 +21,7 @@ fn divergence_syntax_table_functions() {
 fn divergence_char_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (char-syntax ?a)
   (char-syntax ? )
@@ -36,7 +36,7 @@ fn divergence_char_syntax() {
 fn divergence_parse_partial_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo (bar baz) quux)")
   (list (parse-partial-sexp 1 5)
@@ -50,7 +50,7 @@ fn divergence_parse_partial_sexp() {
 fn divergence_forward_sexps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo bar) (baz quux)")
   (goto-char 1)
@@ -67,7 +67,7 @@ fn divergence_forward_sexps() {
 fn divergence_scan_lists_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(a (b c) d (e (f g) h) i)")
   (list (scan-lists 1 1 0)
@@ -81,7 +81,7 @@ fn divergence_scan_lists_deep() {
 fn divergence_forward_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo ; comment\nbar")
   (list (forward-comment 1)
@@ -95,7 +95,7 @@ fn divergence_forward_comment() {
 fn divergence_syntax_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((st (syntax-table)))
   (list (aref (syntax-table) ?a)
         (aref (syntax-table) ?()
@@ -109,7 +109,7 @@ fn divergence_syntax_class() {
 fn divergence_indent_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(defun foo ()\n  (bar))")
   (list (fboundp 'calculate-lisp-indent)
@@ -122,7 +122,7 @@ fn divergence_indent_parse() {
 fn divergence_matching_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'matching-paren)
   (matching-paren ?()
@@ -136,7 +136,7 @@ fn divergence_matching_paren() {
 fn divergence_syntax_ppss() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "(foo \"bar\\\"baz\" quux)")
   (let ((ppss (parse-partial-sexp 1 21)))

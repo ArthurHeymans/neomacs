@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // message returns formatted string, format-message basics
@@ -45,7 +45,7 @@ fn oracle_prop_message_return_value_and_format_message() {
   ;; format-message with all major format specs
   (format-message "%s %d %x %o %c %%" "str" 42 255 8 65))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ fn oracle_prop_message_complex_formatting_pipelines() {
     (fmakunbound 'neovm--fmp-log-entry)
     (fmakunbound 'neovm--fmp-format-table-row)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ fn oracle_prop_message_in_loops() {
 
   (nreverse results))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ fn oracle_prop_format_message_curly_quotes() {
     (format-message "The function `%s' takes %d args" "cons" 2)
     (format-message "Set `%s' to %S for `%s'" "x" 42 "feature")))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -219,7 +219,7 @@ fn oracle_prop_format_message_quoting_style_branches() {
              (mapcar (lambda (i) (text-properties-at i s))
                      (number-sequence 0 (1- (length s)))))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ fn oracle_prop_message_logging_system() {
     (makunbound 'neovm--fmp-log-buffer)
     (makunbound 'neovm--fmp-log-level)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,7 +385,7 @@ fn oracle_prop_format_message_numeric_presentation() {
     (fmakunbound 'neovm--fmp-hex-dump)
     (fmakunbound 'neovm--fmp-summary-stats)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -450,5 +450,5 @@ fn oracle_prop_message_conditional_error_patterns() {
     (fmakunbound 'neovm--fmp-pluralize)
     (fmakunbound 'neovm--fmp-describe-value)))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

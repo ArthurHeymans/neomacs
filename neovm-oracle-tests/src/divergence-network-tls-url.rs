@@ -1,13 +1,13 @@
 //! Divergence tests: network, socket, TLS, URL deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_network_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'network-interface-list)
   (fboundp 'network-interface-info)
@@ -19,7 +19,7 @@ fn divergence_network_options() {
 fn divergence_socket_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'open-network-stream)
   (fboundp 'gnutls-available-p)
@@ -32,7 +32,7 @@ fn divergence_socket_functions() {
 fn divergence_tls_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'gnutls-trustfiles)
   (listp gnutls-trustfiles)
@@ -46,7 +46,7 @@ fn divergence_tls_vars() {
 fn divergence_url_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'url-configuration-directory)
   (boundp 'url-cookie-file)
@@ -59,7 +59,7 @@ fn divergence_url_vars() {
 fn divergence_dns_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dns-query)
   (fboundp 'dns-lookup-host)
@@ -72,7 +72,7 @@ fn divergence_dns_functions() {
 fn divergence_http_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'url-http-file-exists-p)
   (fboundp 'url-file-exists-p)
@@ -85,7 +85,7 @@ fn divergence_http_functions() {
 fn divergence_ldap_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ldap-open)
   (fboundp 'ldap-close)
@@ -98,7 +98,7 @@ fn divergence_ldap_functions() {
 fn divergence_mime_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'mime-edit)
   (fboundp 'mailcap-parse-mailcaps)
@@ -111,7 +111,7 @@ fn divergence_mime_functions() {
 fn divergence_mail_utils() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'mail-strip-quoted-names)
   (fboundp 'rfc822-addresses)
@@ -124,7 +124,7 @@ fn divergence_mail_utils() {
 fn divergence_news_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'gnus)
   (fboundp 'gnus-group-read-news)

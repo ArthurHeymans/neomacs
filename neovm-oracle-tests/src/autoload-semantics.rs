@@ -5,7 +5,7 @@
 //! `(car-safe OBJECT)`.  These tests cover the user-visible function-cell
 //! shape and error ordering without depending on loading real files.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,7 +24,7 @@ fn oracle_autoloadp_uses_interned_autoload_car_safe_semantics() {
    (autoloadp "autoload")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_autoload_preserves_existing_real_definition_and_replaces_autoloads() {
     (fmakunbound 'neomacs--oracle-autoload-target)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn oracle_autoload_argument_errors_and_function_cell_state() {
       (fmakunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn oracle_autoload_do_load_macro_only_ordering_without_file_load() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -129,5 +129,5 @@ fn oracle_autoload_do_load_macro_only_requires_literal_macro_symbol() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

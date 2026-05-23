@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Recursive descent parser for arithmetic with precedence and evaluation
@@ -126,7 +126,7 @@ fn oracle_prop_strparse_arithmetic_precedence() {
     (fmakunbound 'neovm--test-arith-eval)
     (makunbound 'neovm--test-arith-pos)
     (makunbound 'neovm--test-arith-input)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ fn oracle_prop_strparse_balanced_parens_validator() {
         (funcall 'neovm--test-balance-check
                  "func(arr[i], map{key: val}, <type>)"))
     (fmakunbound 'neovm--test-balance-check)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,7 +309,7 @@ fn oracle_prop_strparse_ini_config_parser() {
     (fmakunbound 'neovm--test-ini-split-lines)
     (fmakunbound 'neovm--test-ini-trim)
     (fmakunbound 'neovm--test-ini-parse)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +414,7 @@ fn oracle_prop_strparse_url_parser() {
         (funcall 'neovm--test-url-parse
                  "https://api.service.com/v2/data?format=json&key=abc123&verbose=true&offset=0"))
     (fmakunbound 'neovm--test-url-parse)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,7 +521,7 @@ fn oracle_prop_strparse_csv_parser() {
                 (mapcar 'length rows))))
     (fmakunbound 'neovm--test-csv-parse-row)
     (fmakunbound 'neovm--test-csv-parse)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -716,7 +716,7 @@ fn oracle_prop_strparse_json_parser() {
     (fmakunbound 'neovm--test-jp-parse)
     (makunbound 'neovm--test-jp-pos)
     (makunbound 'neovm--test-jp-input)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -824,5 +824,5 @@ fn oracle_prop_strparse_c_like_tokenizer() {
                 (length (seq-filter (lambda (t) (eq (car t) 'ident)) tokens)))))
     (fmakunbound 'neovm--test-tokenize-c)
     (makunbound 'neovm--test-tok-keywords)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

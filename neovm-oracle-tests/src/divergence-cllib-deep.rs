@@ -1,13 +1,13 @@
 //! Divergence tests: cl-extra, cl-seq, cl-macs deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_cl_remove_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-remove-if #'cl-evenp '(1 2 3 4 5 6))
@@ -20,7 +20,7 @@ fn divergence_cl_remove_if() {
 fn divergence_cl_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-sort '(3 1 4 1 5 9 2 6) #'<)"#,
     );
@@ -30,7 +30,7 @@ fn divergence_cl_sort() {
 fn divergence_cl_subseq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-subseq '(a b c d e) 1 3)
@@ -43,7 +43,7 @@ fn divergence_cl_subseq() {
 fn divergence_cl_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-position 'b '(a b c b a))
@@ -56,7 +56,7 @@ fn divergence_cl_position() {
 fn divergence_cl_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-count 'a '(a b a c a))
@@ -69,7 +69,7 @@ fn divergence_cl_count() {
 fn divergence_cl_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-reduce #'+ '(1 2 3 4) :initial-value 10)
@@ -82,7 +82,7 @@ fn divergence_cl_reduce() {
 fn divergence_cl_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-merge 'list '(1 3 5 7) '(2 4 6 8) #'<)"#,
     );
@@ -92,7 +92,7 @@ fn divergence_cl_merge() {
 fn divergence_cl_dolist_dotimes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (cl-dolist (x '(a b c) result)
     (push x result)))"#,
@@ -103,7 +103,7 @@ fn divergence_cl_dolist_dotimes() {
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-destructuring-bind (a b . c) '(1 2 3 4 5)
@@ -117,7 +117,7 @@ fn divergence_cl_destructuring_bind() {
 fn divergence_cl_the_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (cl-the fixnum 42)
@@ -132,7 +132,7 @@ fn divergence_cl_the_check() {
 fn divergence_cl_assoc_rassoc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (let ((alist '((a . 1) (b . 2) (c . 3))))
   (list (cl-assoc 'b alist)

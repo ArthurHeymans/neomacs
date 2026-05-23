@@ -1,13 +1,13 @@
 //! Divergence tests: error conditions, condition-case, signal deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_condition_case_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (condition-case err
       (signal 'error "test")
@@ -23,7 +23,7 @@ fn divergence_condition_case_basic() {
 fn divergence_condition_case_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (condition-case err
       (signal 'args-out-of-range '(0 10))
@@ -37,7 +37,7 @@ fn divergence_condition_case_hierarchy() {
 fn divergence_error_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-error)
   (fboundp 'signal)
@@ -52,7 +52,7 @@ fn divergence_error_symbols() {
 fn divergence_unwind_protect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (unwind-protect
       (progn (push 'body result)
@@ -66,7 +66,7 @@ fn divergence_unwind_protect() {
 fn divergence_with_condition_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((result nil))
   (condition-case err
       (unwind-protect
@@ -83,7 +83,7 @@ fn divergence_with_condition_unwind() {
 fn divergence_error_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'error-message-string)
   (stringp (error-message-string '(error "test message")))
@@ -95,7 +95,7 @@ fn divergence_error_message() {
 fn divergence_debug_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'debug-on-error)
   (booleanp debug-on-error)
@@ -108,7 +108,7 @@ fn divergence_debug_on_error() {
 fn divergence_signal_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'signal)
   (fboundp 'error)
@@ -124,7 +124,7 @@ fn divergence_signal_functions() {
 fn divergence_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (car "not-a-list")
   (wrong-type-argument
@@ -136,7 +136,7 @@ fn divergence_wrong_type() {
 fn divergence_void_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(condition-case err
     (nonexistent-function-xyz-123)
   (void-function

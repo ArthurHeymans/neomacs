@@ -6,10 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Lambda with complex parameter lists (&optional + &rest combined)
@@ -32,7 +29,7 @@ fn oracle_prop_lambda_adv_optional_rest_defaults() {
                       (funcall f 1 2)
                       (funcall f 1 2 3)
                       (funcall f 1 2 3 4 5 6)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +53,7 @@ fn oracle_prop_lambda_adv_iife_with_complex_body() {
                        ;; Sort by char code for deterministic output
                        (sort freq (lambda (a b) (< (car a) (car b))))))
                    "abracadabra")"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +74,7 @@ fn oracle_prop_lambda_adv_mapcar_closure_over_loop_var() {
                     (setq makers (nreverse makers))
                     ;; Call each maker with 100
                     (mapcar (lambda (f) (funcall f 100)) makers))"####;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(100 101 102 103 104)", &o, &n);
 }
 

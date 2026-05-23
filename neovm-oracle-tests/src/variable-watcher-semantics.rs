@@ -5,7 +5,7 @@
 //! These tests cover the exact callback operation symbols, pre-write old
 //! value visibility, alias forwarding, and buffer-local WHERE reporting.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_variable_watchers_report_set_let_unlet_and_makunbound() {
       (makunbound 'neomacs--oracle-vw-basic))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn oracle_variable_watcher_callbacks_do_not_reenter_recursively() {
     (makunbound 'neomacs--oracle-vw-reentrant)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn oracle_variable_watchers_follow_defvaralias_base_variable() {
     (unintern 'neomacs--oracle-vw-base nil)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn oracle_defvaralias_watcher_runs_before_alias_install_and_doc_put() {
         (makunbound sym)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn oracle_variable_watchers_report_buffer_local_where() {
       (kill-buffer buf))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -234,7 +234,7 @@ fn oracle_variable_watchers_set_default_reports_set_operation() {
         (makunbound sym)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -276,5 +276,5 @@ fn oracle_variable_watchers_kill_local_variable_notifies_before_local_removal() 
       (kill-buffer buf))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

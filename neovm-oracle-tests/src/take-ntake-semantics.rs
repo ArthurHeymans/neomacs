@@ -4,7 +4,7 @@
 //! positive N, even when N covers the whole list; `ntake` mutates and returns
 //! the original list for positive N, or nil for N <= 0.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_take_fresh_prefix_and_large_n_copy() {
         (eq (cdr large) (cdr lst))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn oracle_take_negative_zero_type_and_improper_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_ntake_destructive_identity_and_large_n() {
         (eq large large-list)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -99,5 +99,5 @@ fn oracle_ntake_negative_zero_and_error_payloads() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

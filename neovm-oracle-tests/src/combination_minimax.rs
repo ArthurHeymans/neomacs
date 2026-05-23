@@ -4,10 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_via_binary,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Basic minimax on a static game tree
@@ -78,7 +75,7 @@ fn oracle_prop_minimax_basic_game_tree() {
        (funcall 'neovm--mm-minimax '((5 5) (5 5)) 10 t))
     (fmakunbound 'neovm--mm-leaf-p)
     (fmakunbound 'neovm--mm-minimax)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +174,7 @@ fn oracle_prop_minimax_alpha_beta_pruning() {
     (fmakunbound 'neovm--ab-leaf-p)
     (fmakunbound 'neovm--ab-minimax)
     (fmakunbound 'neovm--ab-minimax-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +255,7 @@ fn oracle_prop_minimax_tictactoe_evaluation() {
     (fmakunbound 'neovm--ttt-full)
     (fmakunbound 'neovm--ttt-moves)
     (fmakunbound 'neovm--ttt-eval)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +365,7 @@ fn oracle_prop_minimax_tictactoe_with_moves() {
     (fmakunbound 'neovm--ttt2-moves)
     (fmakunbound 'neovm--ttt2-minimax)
     (fmakunbound 'neovm--ttt2-best-move)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_via_binary(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq("((2 10) (2 7) 0 9)", &oracle, &neovm);
 }
 
@@ -478,7 +475,7 @@ fn oracle_prop_minimax_heuristic_evaluation() {
           (funcall 'neovm--heur-minimax board 1 0 3))))
     (fmakunbound 'neovm--heur-eval)
     (fmakunbound 'neovm--heur-minimax)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -542,5 +539,5 @@ fn oracle_prop_minimax_nim_game() {
                  '(1 2 3 5 6 7 9 10 11 13))))
     (fmakunbound 'neovm--nim-can-win)
     (fmakunbound 'neovm--nim-best-take)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

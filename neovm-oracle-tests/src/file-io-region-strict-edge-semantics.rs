@@ -5,7 +5,7 @@
 //! byte-range reads, string writes, numeric append offsets, non-nil append,
 //! replace mode, and exact wrapper behavior visible.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -91,5 +91,5 @@ fn oracle_write_region_insert_file_contents_and_append_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

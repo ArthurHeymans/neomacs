@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Buffer-based ROT13 cipher (char-by-char transform)
@@ -62,7 +62,7 @@ fn oracle_prop_textproc_rot13_cipher() {
                                         (unless (= actual expected)
                                           (setq check-pairs nil))))
                                     check-pairs)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ fn oracle_prop_textproc_line_sort() {
                             num-sorted
                             len-sorted
                             name-len-sorted)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn oracle_prop_textproc_transpose_regions() {
                                 (string= (buffer-string)
                                          "AAAA-BBBB-CCCC-DDDD-EEEE")
                                 text1 text2)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ fn oracle_prop_textproc_word_wrap() {
                            (matches (string= reconstructed text)))
                       (list w20 w30 w10 w80
                             all-ok-20 matches)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ fn oracle_prop_textproc_search_replace_count() {
                             after-first-replace
                             the-count
                             final)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ fn oracle_prop_textproc_multi_buffer_merge() {
                         (list (buffer-string)
                               (length all-sections)
                               (mapcar #'car all-sections)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,5 +430,5 @@ fn oracle_prop_textproc_csv_field_extraction() {
                             total avg max-score min-score
                             a-students
                             sorted-names)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

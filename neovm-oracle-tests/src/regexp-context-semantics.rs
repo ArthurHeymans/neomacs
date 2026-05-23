@@ -5,9 +5,7 @@
 //! the suffix that matched.  `subregexp-context-p` reuses the GNU regexp parser
 //! and interprets selected `invalid-regexp` messages as non-subregexp context.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_looking_back_match_data_and_limit() {
@@ -30,7 +28,7 @@ fn oracle_prop_gnu_looking_back_match_data_and_limit() {
    (match-string 0)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +52,7 @@ fn oracle_prop_gnu_looking_back_greedy_extends_match_data() {
    (match-end 0)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -76,5 +74,5 @@ fn oracle_prop_gnu_subregexp_context_parser_contracts() {
  (subregexp-context-p "[[:alpha:]]" 4))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

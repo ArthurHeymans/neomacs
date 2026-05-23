@@ -1,13 +1,13 @@
 //! Divergence tests: text property + search + undo deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_intangible_prop_search_point_movement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "visible-INVISIBLE-text")
   (put-text-property 8 16 'intangible t)
@@ -26,7 +26,7 @@ fn divergence_intangible_prop_search_point_movement() {
 fn divergence_propertize_insert_regex_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (let ((s (propertize \"TODO: fix #123\" 'face 'bold 'category 'task)))
     (insert s))
@@ -44,7 +44,7 @@ fn divergence_propertize_insert_regex_match() {
 fn divergence_modification_hooks_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-modhook-log-xxx nil)
   (insert "ABCDEFGHIJ")
@@ -69,7 +69,7 @@ fn divergence_modification_hooks_with_undo() {
 fn divergence_overlapping_props_remove_middle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAAAAAAAA")
   (put-text-property 1 11 'face 'bold)
@@ -90,7 +90,7 @@ fn divergence_overlapping_props_remove_middle() {
 fn divergence_textprop_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD")
   (put-text-property 1 4 'group 'a)
@@ -111,7 +111,7 @@ fn divergence_textprop_next_property_change() {
 fn divergence_field_property_search_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "field1:val1\tfield2:val2\tfield3:val3")
   (put-text-property 1 8 'field 'f1)
@@ -132,7 +132,7 @@ fn divergence_field_property_search_boundary() {
 fn divergence_invisible_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "before-HIDDEN-middle-AFTER-end")
   (put-text-property 8 14 'invisible t)
@@ -149,7 +149,7 @@ fn divergence_invisible_property_search() {
 fn divergence_textprops_after_multiple_replaces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"foo-X-foo-Y-foo-Z-foo\")
   (put-text-property 1 20 'track 'original)
@@ -169,7 +169,7 @@ fn divergence_textprops_after_multiple_replaces() {
 fn divergence_propertize_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (put-text-property 1 5 'level 1)
@@ -191,7 +191,7 @@ fn divergence_propertize_buffer_substring() {
 fn divergence_add_face_text_property_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
   (add-face-text-property 1 11 'bold nil (current-buffer))

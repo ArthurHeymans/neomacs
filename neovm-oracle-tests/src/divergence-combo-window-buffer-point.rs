@@ -1,13 +1,13 @@
 //! Divergence tests: window + buffer + point + marker spatial combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_window_point_sync_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-wp-xxx")))
@@ -29,7 +29,7 @@ fn divergence_window_point_sync_across_buffers() {
 fn divergence_temporary_buffer_set_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "MAIN")
   (let ((m (copy-marker 2)))
@@ -47,7 +47,7 @@ fn divergence_temporary_buffer_set_marker() {
 fn divergence_marker_insertion_type_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-mk-xxx")))
@@ -74,7 +74,7 @@ fn divergence_marker_insertion_type_across_buffers() {
 fn divergence_save_excursion_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -95,7 +95,7 @@ fn divergence_save_excursion_marker_overlay() {
 fn divergence_buffer_list_order_after_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((b1 (current-buffer))
         (b2 (generate-new-buffer " test-blo1-xxx"))
@@ -117,7 +117,7 @@ fn divergence_buffer_list_order_after_switch() {
 fn divergence_point_min_max_after_multiple_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m (copy-marker 5)))
@@ -139,7 +139,7 @@ fn divergence_point_min_max_after_multiple_narrow() {
 fn divergence_kill_buffer_undo_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ORIGINAL")
   (undo-boundary)
@@ -162,7 +162,7 @@ fn divergence_kill_buffer_undo_list() {
 fn divergence_get_buffer_create_existing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((name " test-gbc-xxx"))
     (let ((b1 (get-buffer-create name)))
@@ -182,7 +182,7 @@ fn divergence_get_buffer_create_existing() {
 fn divergence_marker_after_revert_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((m1 (copy-marker 3))
@@ -202,7 +202,7 @@ fn divergence_marker_after_revert_buffer() {
 fn divergence_window_buffer_swap_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((buf1 (current-buffer))
         (buf2 (generate-new-buffer " test-wbs1-xxx"))

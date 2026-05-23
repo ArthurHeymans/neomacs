@@ -1,13 +1,13 @@
 //! Divergence tests: char-width + string-width + composition + display combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_char_width_various_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (char-width ?A)
         (= (char-width ?A) 1)
@@ -28,7 +28,7 @@ fn divergence_char_width_various_chars() {
 fn divergence_truncate_string_to_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (truncate-string-to-width "hello world" 5)
         (string= (truncate-string-to-width "hello world" 5) "hello")
@@ -45,7 +45,7 @@ fn divergence_truncate_string_to_width() {
 fn divergence_string_pad_alignment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (format "%-10s" "left")
         (string= (format "%-10s" "left") "left      ")
@@ -62,7 +62,7 @@ fn divergence_string_pad_alignment() {
 fn divergence_buffer_display_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (let ((w1 (string-width (buffer-string)))
@@ -85,7 +85,7 @@ fn divergence_buffer_display_width() {
 fn divergence_string_make_multibyte_unibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((ascii "hello")
         (multi "\xc3\xa9\xc3\xa0"))
@@ -107,7 +107,7 @@ fn divergence_string_make_multibyte_unibyte() {
 fn divergence_string_composition_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (compose-region-p 1 1)
         (null (compose-region-p 1 1))
@@ -121,7 +121,7 @@ fn divergence_string_composition_check() {
 fn divergence_char_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (charsetp 'ascii)
         (charsetp 'unicode)
@@ -139,7 +139,7 @@ fn divergence_char_charset() {
 fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "This is a long line of text that should be filled at the fill column boundary for testing purposes.")
   (let ((fill-column 30))
@@ -157,7 +157,7 @@ fn divergence_fill_region_basic() {
 fn divergence_indent_rigidly_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "    line1\n    line2\n    line3\n")
   (indent-rigidly 1 30 -2)
@@ -177,7 +177,7 @@ fn divergence_indent_rigidly_negative() {
 fn divergence_current_column_with_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello\tworld")
   (goto-char 6)

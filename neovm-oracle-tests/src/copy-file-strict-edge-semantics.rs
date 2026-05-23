@@ -4,7 +4,7 @@
 //! overwrite policy, directory-target expansion, regular-file requirements,
 //! keep-time behavior, and public arity/type errors.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -54,5 +54,5 @@ fn oracle_copy_file_edges() {
     (ignore-errors (delete-directory dir t))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

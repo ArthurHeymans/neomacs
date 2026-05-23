@@ -4,7 +4,7 @@
 //! `indirect-function` in `src/data.c`.  These tests focus on function-cell
 //! return values, nil/t protection, and cyclic function indirection checks.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_function_cell_fset_and_fmakunbound_lifecycle() {
       (fmakunbound 'neomacs--oracle-fcell-basic))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn oracle_fmakunbound_protects_nil_and_t() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn oracle_fset_rejects_cyclic_function_indirection() {
       (fmakunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,5 +107,5 @@ fn oracle_indirect_function_follows_symbol_chain_and_stops_at_nil() {
         (fmakunbound sym)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

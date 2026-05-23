@@ -1,13 +1,13 @@
 //! Divergence tests: undo-bridge, tree-sitter, project, xref stubs.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_bridge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'undo-amalgamate-change-group)
   (fboundp 'undo-start-change-group)
@@ -19,7 +19,7 @@ fn divergence_undo_bridge() {
 fn divergence_undo_redo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'undo-only)
   (fboundp 'undo-redo)
@@ -32,7 +32,7 @@ fn divergence_undo_redo() {
 fn divergence_tree_sitter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'treesit)
   (fboundp 'treesit-language-available-p)
@@ -45,7 +45,7 @@ fn divergence_tree_sitter() {
 fn divergence_project_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'project-current)
   (fboundp 'project-root)
@@ -59,7 +59,7 @@ fn divergence_project_functions() {
 fn divergence_xref_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'xref-find-definitions)
   (fboundp 'xref-find-references)
@@ -72,7 +72,7 @@ fn divergence_xref_functions() {
 fn divergence_eglot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eglot)
   (fboundp 'eglot-connect)
@@ -84,7 +84,7 @@ fn divergence_eglot() {
 fn divergence_flymake() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'flymake-mode)
   (fboundp 'flymake-start)
@@ -97,7 +97,7 @@ fn divergence_flymake() {
 fn divergence_vcs_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'vc-backend)
   (fboundp 'vc-dir)
@@ -111,7 +111,7 @@ fn divergence_vcs_functions() {
 fn divergence_magit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'magit-status)
   (featurep 'magit))"#,
@@ -122,7 +122,7 @@ fn divergence_magit() {
 fn divergence_compilation_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compile)
   (fboundp 'recompile)

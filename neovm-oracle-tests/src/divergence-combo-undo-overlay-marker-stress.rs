@@ -1,13 +1,13 @@
 //! Divergence tests: undo boundary + marker + overlay + narrow + regex stress.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_chain_with_overlays_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "BLOCK1-AAAA BLOCK2-BBBB BLOCK3-CCCC BLOCK4-DDDD")
   (let ((ov1 (make-overlay 1 12))
@@ -51,7 +51,7 @@ fn divergence_undo_chain_with_overlays_narrow() {
 fn divergence_undo_after_delete_insert_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ORIGINAL-CONTENT-HERE")
   (let ((ov (make-overlay 1 22))
@@ -92,7 +92,7 @@ fn divergence_undo_after_delete_insert_replace() {
 fn divergence_undo_with_invisible_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "SHOW1-HIDE-SHOW2-HIDE-SHOW3")
   (let ((ov1 (make-overlay 6 10))
@@ -125,7 +125,7 @@ fn divergence_undo_with_invisible_overlay() {
 fn divergence_undo_preserves_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov1 (make-overlay 1 25))
@@ -163,7 +163,7 @@ fn divergence_undo_preserves_overlay_priority() {
 fn divergence_undo_with_marker_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((m-insert (copy-marker 4 t))
@@ -197,7 +197,7 @@ fn divergence_undo_with_marker_insertion_type() {
 fn divergence_undo_text_property_changes_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 1 17)))
@@ -235,7 +235,7 @@ fn divergence_undo_text_property_changes_only() {
 fn divergence_undo_with_multiple_markers_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m1 (copy-marker 1 t))
@@ -264,7 +264,7 @@ fn divergence_undo_with_multiple_markers_tracking() {
 fn divergence_undo_overlay_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((initial-count (length (overlays-in 1 17))))
@@ -287,7 +287,7 @@ fn divergence_undo_overlay_creation() {
 fn divergence_undo_kill_ring_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "KEEP-REMOVE-KEEP-REMOVE-KEEP")
   (put-text-property 1 5 'zone 'keep)
@@ -317,7 +317,7 @@ fn divergence_undo_kill_ring_save_restore() {
 fn divergence_undo_with_overlay_before_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "CONTENT")
   (let ((ov (make-overlay 1 7)))

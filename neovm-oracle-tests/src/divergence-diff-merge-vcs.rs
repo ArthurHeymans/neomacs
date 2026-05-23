@@ -1,13 +1,13 @@
 //! Divergence tests: ediff, diff, smerge, merge operations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_ediff_controls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ediff-next-difference)
   (fboundp 'ediff-previous-difference)
@@ -20,7 +20,7 @@ fn divergence_ediff_controls() {
 fn divergence_ediff_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ediff-merge-files)
   (fboundp 'ediff-merge-files-with-ancestor)
@@ -33,7 +33,7 @@ fn divergence_ediff_merge() {
 fn diff_tool_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'diff-file-local-copy)
   (fboundp 'diff-goto-source)
@@ -46,7 +46,7 @@ fn diff_tool_deep() {
 fn divergence_smerge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'smerge-mode)
   (fboundp 'smerge-find-conflict)
@@ -59,7 +59,7 @@ fn divergence_smerge() {
 fn divergence_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compare-strings)
   (fboundp 'string-collate-lessp)
@@ -72,7 +72,7 @@ fn divergence_compare() {
 fn divergence_diff_compare_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (compare-strings "hello" 0 5 "hello" 0 5)
   (compare-strings "hello" 0 3 "HELLO" 0 3)
@@ -85,7 +85,7 @@ fn divergence_diff_compare_deep() {
 fn divergence_vcs_log() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'vc-print-log)
   (fboundp 'vc-print-root-log)
@@ -100,7 +100,7 @@ fn divergence_vcs_log() {
 fn divergence_vcs_annotate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'vc-annotate)
   (fboundp 'vc-annotate-show-log-revision-at-line)
@@ -112,7 +112,7 @@ fn divergence_vcs_annotate() {
 fn divergence_magit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'magit-status)
   (fboundp 'magit-log-current)
@@ -125,7 +125,7 @@ fn divergence_magit() {
 fn divergence_project_vcs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'project-vc-merge-subnets-p)
   (fboundp 'project-ignores)

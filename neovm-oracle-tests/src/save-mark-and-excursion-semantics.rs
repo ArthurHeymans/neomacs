@@ -5,7 +5,7 @@
 //! both mark state and point/buffer state while firing activate/deactivate mark
 //! hooks according to the restored transition.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_save_mark_and_excursion_restores_point_mark_and_active_state() {
     (list before during (point) (mark t) mark-active)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn oracle_save_mark_and_excursion_restores_marker_through_buffer_edits() {
     (list before during (point) (mark t) mark-active (buffer-string))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -96,5 +96,5 @@ fn oracle_save_mark_and_excursion_mark_hook_transitions() {
                (nreverse deactivate-log)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: rx macro, regex-builder, and complex pattern matching.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_rx_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match (rx "hello") "say hello world")
   (string-match (rx (+ (any "a-z"))) "hello123")
@@ -19,7 +19,7 @@ fn divergence_rx_basic() {
 fn divergence_rx_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (string-match (rx (group (+ digit)) "." (group (+ digit))) "version 12.34")
   (list (match-string 0 "version 12.34")
@@ -32,7 +32,7 @@ fn divergence_rx_group() {
 fn divergence_rx_char_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match (rx (one-or-more digit)) "abc123def")
   (match-string 0 "abc123def")
@@ -45,7 +45,7 @@ fn divergence_rx_char_classes() {
 fn divergence_rx_alternation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match (rx (or "foo" "bar" "baz")) "xyzbar")
   (match-string 0 "xyzbar"))"#,
@@ -56,7 +56,7 @@ fn divergence_rx_alternation() {
 fn divergence_rx_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match (rx (= 3 digit)) "12345")
   (match-string 0 "12345")
@@ -69,7 +69,7 @@ fn divergence_rx_repeat() {
 fn divergence_rx_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match (rx (any "äöü")) "Grüße")
   (match-string 0 "Grüße")

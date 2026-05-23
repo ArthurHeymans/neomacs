@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // encode-coding-string with utf-8, latin-1, raw-text
@@ -36,7 +36,7 @@ fn oracle_prop_coding_string_advanced_encode_various_codings() {
   (let ((s "\u00E9"))
     (list (string-bytes (encode-coding-string s 'utf-8))
           (string-bytes (encode-coding-string s 'latin-1)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ fn oracle_prop_coding_string_advanced_decode_roundtrip() {
     (= (length orig) (length dec)))
   ;; Decode unibyte string
   (multibyte-string-p (decode-coding-string "abc" 'utf-8)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ fn oracle_prop_coding_string_advanced_empty_string() {
   (string-bytes (encode-coding-string "" 'utf-8))
   (string= (encode-coding-string "" 'utf-8) "")
   (string= (decode-coding-string "" 'utf-8) ""))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ fn oracle_prop_coding_string_advanced_multibyte() {
   (let ((s "\u03B1\u03B2\u03B3\u03B4"))
     (list (length s)
           (string-bytes (encode-coding-string s 'utf-8)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +172,7 @@ fn oracle_prop_coding_string_advanced_no_conversion() {
          (enc (encode-coding-string s 'no-conversion))
          (dec (decode-coding-string enc 'no-conversion)))
     (string= s dec)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ fn oracle_prop_coding_string_advanced_multi_encoding_comparison() {
           (let ((s "A\u00E9\u4E2D"))
             (funcall 'neovm--csa-compare-encodings s codings))))
     (fmakunbound 'neovm--csa-compare-encodings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ fn oracle_prop_coding_string_advanced_byte_pattern_analysis() {
         ;; Empty
         (funcall 'neovm--csa-byte-stats ""))
     (fmakunbound 'neovm--csa-byte-stats)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,5 +301,5 @@ fn oracle_prop_coding_string_advanced_nocopy_flag() {
               (string= (encode-coding-string s 'utf-8 nil)
                        (encode-coding-string s 'utf-8 t)))
             test-strings)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

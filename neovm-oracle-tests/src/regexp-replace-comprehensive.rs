@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Back-references: \& (whole match) and \N (group N)
@@ -26,7 +26,7 @@ fn oracle_prop_regexp_replace_comp_backref_whole_match() {
       (replace-regexp-in-string "\\([a-z]+\\)" "<<\\&>>" "aaa BBB ccc DDD")
       ;; \& on single-char matches
       (replace-regexp-in-string "." "[\\&]" "abc"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn oracle_prop_regexp_replace_comp_backref_groups() {
       ;; Reference same group multiple times
       (replace-regexp-in-string
         "\\([a-z]+\\)" "\\1-\\1" "ab cd"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +90,7 @@ fn oracle_prop_regexp_replace_comp_function_replacement() {
           "X"
           (lambda (m) (setq cnt (1+ cnt)) (number-to-string cnt))
           "X-X-X-X")))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ fn oracle_prop_regexp_replace_comp_fixedcase_interactions() {
       ;; FIXEDCASE=nil with case-insensitive regexp
       (let ((case-fold-search t))
         (replace-regexp-in-string "hello" "world" "HELLO Hello hello" nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ fn oracle_prop_regexp_replace_comp_literal_mode() {
       (replace-regexp-in-string "x" "a\\\\b" "x" nil nil)
       ;; LITERAL=t with backslashes -> all literal
       (replace-regexp-in-string "x" "a\\\\b" "x" nil t))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ fn oracle_prop_regexp_replace_comp_subexp_group_replacement() {
       (replace-regexp-in-string
         "\\([a-z]+\\):\\([0-9]+\\)" (lambda (m) (upcase m))
         "key:42 val:7" nil nil nil nil 1))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +200,7 @@ fn oracle_prop_regexp_replace_comp_start_offset() {
       (replace-regexp-in-string "[a-z]" "?" "Hello World" nil nil nil 1)
       ;; Combine START with FIXEDCASE and LITERAL
       (replace-regexp-in-string "\\([a-z]+\\)" "\\1!" "aaa bbb ccc" nil nil nil 4))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ fn oracle_prop_regexp_replace_comp_empty_matches() {
       (replace-regexp-in-string "x*" "Y" "axbc")
       ;; Word boundary (zero-width)
       (replace-regexp-in-string "\\b" "|" "ab cd"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +247,7 @@ fn oracle_prop_regexp_replace_comp_nested_groups() {
       ;; Back-reference to optional group (may be empty)
       (replace-regexp-in-string
         "\\(a\\)\\(b\\)?" "\\1\\2" "ab a ab"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,7 +277,7 @@ fn oracle_prop_regexp_replace_comp_case_preserving_pipeline() {
              ;; Step 5: LITERAL=t replacement of specific pattern
              (step5 (replace-regexp-in-string "HelloWorld" "\\1-escaped" step4 nil t)))
       (list step1 step2 step3 step4 step5))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,5 +312,5 @@ fn oracle_prop_regexp_replace_comp_all_params_combined() {
           (replace-regexp-in-string "[0-9]+" "N" "a1b2c3")
           (string-match "\\([a-z]+\\)" "testing")
           (list before-match (match-string 1 "testing")))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

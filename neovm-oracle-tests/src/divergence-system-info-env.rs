@@ -1,13 +1,13 @@
 //! Divergence tests: env vars, locale, system info deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_environment_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'getenv)
   (fboundp 'setenv)
@@ -21,7 +21,7 @@ fn divergence_environment_vars() {
 fn divergence_locale() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'locale-info)
   (fboundp 'set-locale-environment)
@@ -35,7 +35,7 @@ fn divergence_locale() {
 fn divergence_system_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'system-name)
   (stringp (system-name))
@@ -52,7 +52,7 @@ fn divergence_system_info() {
 fn divergence_configuration_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'configuration-options)
   (fboundp 'system-configuration)
@@ -66,7 +66,7 @@ fn divergence_configuration_info() {
 fn divergence_user_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'user-login-name)
   (fboundp 'user-full-name)
@@ -82,7 +82,7 @@ fn divergence_user_info() {
 fn divergence_path_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'exec-path)
   (listp exec-path)
@@ -97,7 +97,7 @@ fn divergence_path_vars() {
 fn divergence_data_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'data-directory)
   (stringp data-directory)
@@ -112,7 +112,7 @@ fn divergence_data_directory() {
 fn divergence_invocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'invocation-name)
   (stringp invocation-name)
@@ -127,7 +127,7 @@ fn divergence_invocation() {
 fn divergence_memory_info_func() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'memory-use-counts)
   (fboundp 'memory-limit)
@@ -142,7 +142,7 @@ fn divergence_memory_info_func() {
 fn divergence_feature_checks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (featurep 'emacs)
   (featurep 'x)

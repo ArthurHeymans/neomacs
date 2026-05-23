@@ -5,7 +5,7 @@
 //! A no-SELinux build still returns nil for local files, but handlers must see
 //! the expanded file name and original context argument.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -36,5 +36,5 @@ fn oracle_set_file_selinux_context_no_selinux_handler_edges() {
     (fmakunbound 'neomacs--oracle-selinux-handler)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

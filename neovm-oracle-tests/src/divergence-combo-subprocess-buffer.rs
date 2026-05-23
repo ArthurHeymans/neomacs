@@ -1,13 +1,13 @@
 //! Divergence tests: subprocess + buffer + text property combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_call_process_propertize_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(with-temp-buffer
   (call-process \"seq\" nil t nil \"1\" \"10\")
   (goto-char 1)
@@ -31,7 +31,7 @@ fn divergence_call_process_propertize_search() {
 fn divergence_shell_parse_into_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((output (shell-command-to-string \"echo key1:val1; echo key2:val2; echo key3:val3\"))
         (lines (split-string output \"\\n\" t))
         (ht (make-hash-table :test 'equal)))
@@ -51,7 +51,7 @@ fn divergence_shell_parse_into_hash() {
 fn divergence_temp_file_write_read_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-io-\")))
   (with-temp-buffer
     (insert \"Hello World\")
@@ -72,7 +72,7 @@ fn divergence_temp_file_write_read_props() {
 fn divergence_multi_call_process_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(with-temp-buffer
   (call-process \"echo\" nil t nil \"first\")
   (let ((m1 (set-marker (make-marker) (point-max))))
@@ -89,7 +89,7 @@ fn divergence_multi_call_process_accumulate() {
 fn divergence_call_process_region_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(with-temp-buffer
   (insert \"hello world\")
   (call-process-region (point-min) (point-max) \"tr\" t t nil \"a-z\" \"A-Z\")
@@ -103,7 +103,7 @@ fn divergence_call_process_region_transform() {
 fn divergence_env_var_subprocess() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((result (shell-command-to-string \"echo $HOME\"))
         (trimmed (string-trim result)))
   (list (stringp trimmed)
@@ -116,7 +116,7 @@ fn divergence_env_var_subprocess() {
 fn divergence_process_list_with_temp_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((before (length (process-list))))
   (with-temp-buffer
     (call-process \"echo\" nil t nil \"test\")
@@ -130,7 +130,7 @@ fn divergence_process_list_with_temp_buffers() {
 fn divergence_shell_command_output_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((raw (shell-command-to-string \"echo line1; echo line2; echo line3\"))
         (lines (split-string raw \"\\n\" t)))
   (list (length lines)
@@ -144,7 +144,7 @@ fn divergence_shell_command_output_props() {
 fn divergence_insert_file_contents_with_encoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-enc-\")))
   (write-region \"caf\\u00e9\\n\" nil tmp nil 'silent)
   (let ((result
@@ -162,7 +162,7 @@ fn divergence_insert_file_contents_with_encoding() {
 fn divergence_write_read_large_temp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((tmp (make-temp-file \"test-large-\")))
   (with-temp-buffer
     (dotimes (i 100) (insert (format \"Line %04d\\n\" i)))

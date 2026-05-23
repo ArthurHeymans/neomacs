@@ -1,13 +1,13 @@
 //! Divergence tests: rx macro, pcase pattern, pattern-matching edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_rx_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'rx)
   (fboundp 'rx-to-string)
@@ -21,7 +21,7 @@ fn divergence_rx_basic() {
 fn divergence_rx_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (rx-to-string '(seq "foo" (optional "bar") "baz"))
   (rx-to-string '(or "cat" "dog"))
@@ -34,7 +34,7 @@ fn divergence_rx_composition() {
 fn divergence_rx_named_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (rx-to-string '(group-n 1 (one-or-more (any "a-z"))))
   (rx-to-string '(group (one-or-more (any "0-9"))))) "#,
@@ -45,7 +45,7 @@ fn divergence_rx_named_groups() {
 fn divergence_rx_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (rx-to-string '(= 3 (any "a")))
   (rx-to-string '(>= 2 (any "b")))
@@ -57,7 +57,7 @@ fn divergence_rx_repeat() {
 fn divergence_pcase_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase 1 (1 'one) (2 'two))
   (pcase 'foo ('bar 'no) ('foo 'yes))
@@ -69,7 +69,7 @@ fn divergence_pcase_basic() {
 fn divergence_pcase_guard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase 5 ((guard (> it 3)) 'big) (_ 'small))
   (pcase '(1 2 3)
@@ -81,7 +81,7 @@ fn divergence_pcase_guard() {
 fn divergence_pcase_or_and() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase 3 ((or 1 2 3) 'match))
   (pcase '(1 2)
@@ -93,7 +93,7 @@ fn divergence_pcase_or_and() {
 fn divergence_pcase_app_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase '(1 2)
     ((app car x) x))
@@ -106,7 +106,7 @@ fn divergence_pcase_app_let() {
 fn divergence_pcase_pred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase "hello"
     ((pred stringp) 'string)
@@ -121,7 +121,7 @@ fn divergence_pcase_pred() {
 fn divergence_pcase_map_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (pcase [1 2 3]
     ((pred vectorp) 'vec)

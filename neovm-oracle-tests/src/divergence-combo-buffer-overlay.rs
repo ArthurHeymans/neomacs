@@ -1,13 +1,13 @@
 //! Divergence tests: complex buffer + overlay + textprop combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_overlay_textprop_priority_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (put-text-property 1 11 'face 'default)
@@ -29,7 +29,7 @@ fn divergence_overlay_textprop_priority_conflict() {
 fn divergence_overlay_props_after_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((ov (make-overlay 3 7)))
@@ -50,7 +50,7 @@ fn divergence_overlay_props_after_insert_delete() {
 fn divergence_textprop_survive_replace_in_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"foo X-MARKER-HERE bar baz\")
   (put-text-property 1 26 'category 'test-cat)
@@ -75,7 +75,7 @@ fn divergence_textprop_survive_replace_in_overlay() {
 fn divergence_narrow_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD\")
   (let ((ov (make-overlay 5 9)))
@@ -97,7 +97,7 @@ fn divergence_narrow_overlay_interaction() {
 fn divergence_invisible_overlay_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"before HIDDEN-TEXT after\")
   (let ((ov (make-overlay 8 19)))
@@ -116,7 +116,7 @@ fn divergence_invisible_overlay_search() {
 fn divergence_copy_region_with_props_to_new_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA BBB CCC DDD\")
   (put-text-property 1 4 'weight 'heavy)
@@ -139,7 +139,7 @@ fn divergence_copy_region_with_props_to_new_buffer() {
 fn divergence_overlay_evaporation_on_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AABBCCDD\")
   (let ((ov (make-overlay 3 5)))
@@ -158,7 +158,7 @@ fn divergence_overlay_evaporation_on_empty() {
 fn divergence_overlay_chain_insert_behind_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-hook-log-xxx nil)
   (insert \"FRONT-MIDDLE-BACK\")
@@ -183,7 +183,7 @@ fn divergence_overlay_chain_insert_behind_hooks() {
 fn divergence_multiple_overlays_face_merging() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((ov1 (make-overlay 1 6))
@@ -209,7 +209,7 @@ fn divergence_multiple_overlays_face_merging() {
 fn divergence_textprop_field_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"field1\\tfield2\\tfield3\\n\")
   (insert \"data1\\tdata2\\tdata3\")

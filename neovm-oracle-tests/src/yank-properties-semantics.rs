@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` yank text-property helpers.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_remove_yank_excluded_properties_runs_handlers_then_removes() {
@@ -49,7 +47,7 @@ fn oracle_prop_gnu_remove_yank_excluded_properties_runs_handlers_then_removes() 
             (text-properties-at 3))))))
   (list selective clear-all))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,7 +85,7 @@ fn oracle_insert_buffer_substring_as_yank_processes_inserted_properties() {
     (kill-buffer src)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -125,5 +123,5 @@ fn oracle_yank_property_handlers_match_gnu_merge_rules() {
   (list font-lock-case category-case))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

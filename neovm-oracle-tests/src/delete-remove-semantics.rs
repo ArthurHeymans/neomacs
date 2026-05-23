@@ -5,7 +5,7 @@
 //! no element is removed.  GNU `remove` and `remq` are Lisp wrappers in
 //! `lisp/subr.el`, so their sharing behavior follows those exact wrappers.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_delete_remove_non_list_identity_and_string_properties() {
    v))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -61,7 +61,7 @@ fn oracle_remq_leading_match_sharing_and_copy_boundary() {
          leading-again)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn oracle_remq_improper_list_error_payloads_follow_gnu_wrapper_order() {
     xs)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn oracle_delq_delete_dotted_list_mutation_before_error() {
     xs)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -160,5 +160,5 @@ fn oracle_delete_remove_reject_bool_vector_like_gnu() {
    (error (list (car e) (cdr e)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

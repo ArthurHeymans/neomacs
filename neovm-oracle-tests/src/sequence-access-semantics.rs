@@ -5,7 +5,7 @@
 //! These tests focus on type predicates, index errors, string byte/character
 //! rules, bool-vector truth coercion, and char-table indexing.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -34,7 +34,7 @@ fn oracle_elt_list_and_array_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn oracle_elt_lambda_is_not_sequence_like_gnu() {
     // closure is not an `elt` sequence, even though GNU Faref handles
     // closures directly for lower-level closure-slot access.
     let form = r#"(elt (lambda (x) x) 0)"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn oracle_elt_arraylike_acceptance_edges() {
        (elt table #x400000)
      (error (list (car err) (cdr err))))))"#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn oracle_aref_type_index_and_bounds_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn oracle_aset_vector_bool_and_record_edges() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn oracle_aset_string_ascii_and_multibyte_rules() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -197,5 +197,5 @@ fn oracle_char_table_aref_aset_index_rules() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

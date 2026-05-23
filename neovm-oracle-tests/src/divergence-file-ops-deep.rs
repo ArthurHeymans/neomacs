@@ -1,13 +1,13 @@
 //! Divergence tests: file operations deep, file attributes, directory ops.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_file_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((attrs (file-attributes ".")))
   (list (consp attrs)
         (length attrs)
@@ -21,7 +21,7 @@ fn divergence_file_attributes() {
 fn divergence_file_mtime_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((tmp (make-temp-file "neovm-mtime-"))
           (attrs (file-attributes tmp)))
   (unwind-protect
@@ -38,7 +38,7 @@ fn divergence_file_mtime_size() {
 fn divergence_expand_file_name_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (expand-file-name "foo/bar/../baz")
   (expand-file-name "~/test")
@@ -53,7 +53,7 @@ fn divergence_expand_file_name_edge() {
 fn divergence_file_name_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (file-name-directory "/a/b/c.txt")
   (file-name-nondirectory "/a/b/c.txt")
@@ -68,7 +68,7 @@ fn divergence_file_name_operations() {
 fn divergence_file_copy_rename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((src (make-temp-file "neovm-copy-src-"))
         dst)
   (unwind-protect
@@ -90,7 +90,7 @@ fn divergence_file_copy_rename() {
 fn divergence_make_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((dir (make-temp-file "neovm-mkdir-" t)))
   (unwind-protect
       (list (file-directory-p dir)
@@ -105,7 +105,7 @@ fn divergence_make_directory() {
 fn divergence_path_separators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp path-separator)
   (string= path-separator ":")
@@ -118,7 +118,7 @@ fn divergence_path_separators() {
 fn divergence_file_executable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (file-executable-p "/bin/ls")
   (file-executable-p "/bin/sh")
@@ -131,7 +131,7 @@ fn divergence_file_executable() {
 fn divergence_write_read_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((tmp (make-temp-file "neovm-rw-")))
   (unwind-protect
       (progn
@@ -148,7 +148,7 @@ fn divergence_write_read_region() {
 fn divergence_insert_file_contents_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((tmp (make-temp-file "neovm-partial-")))
   (unwind-protect
       (progn

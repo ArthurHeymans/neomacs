@@ -1,13 +1,13 @@
 //! Divergence tests: macro + compile-time + eval + defmacro combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_defmacro_gentemp_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-dm-xxx (var expr)
     (let ((tmp (make-symbol "tmp")))
@@ -28,7 +28,7 @@ fn divergence_defmacro_gentemp_expansion() {
 fn divergence_macro_nested_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-nbq-xxx (name val)
     (list 'defvar (intern (format "test-nbq-%s-xxx" name)) val))
@@ -47,7 +47,7 @@ fn divergence_macro_nested_backquote() {
 fn divergence_macro_expands_to_defun_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-defn-xxx (name args &rest body)
     (list 'defun name args
@@ -66,7 +66,7 @@ fn divergence_macro_expands_to_defun_closure() {
 fn divergence_macro_with_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-des-xxx ((a b c) &rest body)
     (list 'let (list (list 'x (list '+ a b c)))
@@ -83,7 +83,7 @@ fn divergence_macro_with_destructuring() {
 fn divergence_macro_recursive_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-sum-xxx (&rest args)
     (if (null args) 0
@@ -102,7 +102,7 @@ fn divergence_macro_recursive_accumulate() {
 fn divergence_eval_after_macro_def() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-ea-xxx (x) (list '* x x))
   (let ((result (eval '(test-ea-xxx 7))))
@@ -118,7 +118,7 @@ fn divergence_eval_after_macro_def() {
 fn divergence_macro_winds_binding_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-wbs-xxx 0)
   (defmacro test-inc-xxx ()
@@ -139,7 +139,7 @@ fn divergence_macro_winds_binding_stack() {
 fn divergence_macro_error_in_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-err-xxx (x)
     (if (cl-oddp x)
@@ -157,7 +157,7 @@ fn divergence_macro_error_in_expansion() {
 fn divergence_macro_symbol_macro_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-sym-xxx (expr)
     (list 'symbol-macrolet (list (list 'it expr))
@@ -173,7 +173,7 @@ fn divergence_macro_symbol_macro_let() {
 fn divergence_inline_function_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-inline test-inl-xxx (x)
     (inline-letevals (x)

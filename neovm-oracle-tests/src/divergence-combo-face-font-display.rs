@@ -1,13 +1,13 @@
 //! Divergence tests: face attributes, font specs, display tables, and rendering.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_face_attributes_complete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((attrs (face-all-attributes 'default (selected-frame))))
     (list (plist-member attrs :family)
@@ -33,7 +33,7 @@ fn divergence_face_attributes_complete() {
 fn divergence_face_all_attributes_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'test-faac-xxx)
   (set-face-attribute 'test-faac-xxx nil
@@ -63,7 +63,7 @@ fn divergence_face_all_attributes_custom() {
 fn divergence_face_documentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'test-fdoc-xxx)
   (set-face-documentation 'test-fdoc-xxx "Test face for divergence tests")
@@ -80,7 +80,7 @@ fn divergence_face_documentation() {
 fn divergence_face_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'test-fic-base-xxx)
   (make-face 'test-fic-mid-xxx)
@@ -108,7 +108,7 @@ fn divergence_face_inheritance_chain() {
 fn divergence_display_table_setup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((dt (make-display-table)))
     (aset dt ?\t [?\^ ?I])
@@ -131,7 +131,7 @@ fn divergence_display_table_setup() {
 fn divergence_face_list_and_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'test-fls1-xxx)
   (make-face 'test-fls2-xxx)
@@ -154,7 +154,7 @@ fn divergence_face_list_and_sort() {
 fn divergence_face_color_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn\n\
           (make-face 'test-fcv-xxx)\n\
           (set-face-attribute 'test-fcv-xxx nil\n\
@@ -177,7 +177,7 @@ fn divergence_face_color_values() {
 fn divergence_font_spec_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((fs (font-spec :family "Monospace" :weight 'normal :slant 'normal
                         :size 12)))
@@ -198,7 +198,7 @@ fn divergence_font_spec_creation() {
 fn divergence_face_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (make-face 'test-fremap-xxx)
   (set-face-attribute 'test-fremap-xxx nil :foreground "purple")
@@ -216,7 +216,7 @@ fn divergence_face_remapping() {
 fn divergence_glyphless_char_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((table (make-glyphless-char-display-table)))
     (set-char-table-range table ?\x00 'thin-space)

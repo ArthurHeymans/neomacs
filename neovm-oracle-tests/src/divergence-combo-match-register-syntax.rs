@@ -1,13 +1,13 @@
 //! Divergence tests: match-data + registers + syntax + abbrev combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_match_data_with_registers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo123bar456baz789")
   (goto-char 1)
@@ -29,7 +29,7 @@ fn divergence_match_data_with_registers() {
 fn divergence_nested_regex_match_data_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
   (goto-char 1)
@@ -52,7 +52,7 @@ fn divergence_nested_regex_match_data_save() {
 fn divergence_syntax_table_modify_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aaa_bbb ccc-ddd")
   (let ((saved-syntax (copy-syntax-table (syntax-table))))
@@ -76,7 +76,7 @@ fn divergence_syntax_table_modify_regex() {
 fn divergence_abbrev_expand_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-abbrev-table 'test-abbrev-tbl-xxx nil)
   (define-abbrev 'test-abbrev-tbl-xxx "xyz" "expanded-xyz")
@@ -96,7 +96,7 @@ fn divergence_abbrev_expand_with_undo() {
 fn divergence_match_data_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "match1 match2 match3 match4 match5")
   (let ((ov (make-overlay 1 30)))
@@ -118,7 +118,7 @@ fn divergence_match_data_overlay_interaction() {
 fn divergence_register_point_marker_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m (point-marker)))
@@ -140,7 +140,7 @@ fn divergence_register_point_marker_narrow() {
 fn divergence_syntax_forward_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "one two three four five")
   (goto-char 1)
@@ -162,7 +162,7 @@ fn divergence_syntax_forward_backward_word() {
 fn divergence_re_search_with_match_data_swap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abc123def456ghi789")
   (let ((saved nil))
@@ -182,7 +182,7 @@ fn divergence_re_search_with_match_data_swap() {
 fn divergence_thing_at_point_bounds_with_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world foo bar baz")
   (goto-char 13)
@@ -203,7 +203,7 @@ fn divergence_thing_at_point_bounds_with_syntax() {
 fn divergence_kill_ring_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "match-AAA match-BBB match-CCC")
   (goto-char 1)

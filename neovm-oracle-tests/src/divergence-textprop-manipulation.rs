@@ -1,13 +1,13 @@
 //! Divergence tests: text properties sticky, category, face deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_text_property_any() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -22,7 +22,7 @@ fn divergence_text_property_any() {
 fn divergence_next_single_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -37,7 +37,7 @@ fn divergence_next_single_property_change() {
 fn divergence_text_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abcdef")
   (put-text-property 2 4 'test-prop 'test-val)
@@ -54,7 +54,7 @@ fn divergence_text_property_search() {
 fn divergence_set_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (set-text-properties 1 6 '(face bold))
@@ -69,7 +69,7 @@ fn divergence_set_text_properties() {
 fn divergence_remove_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (put-text-property 1 6 'face 'bold)
@@ -83,7 +83,7 @@ fn divergence_remove_text_properties() {
 fn divergence_add_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (add-text-properties 1 3 '(face bold))
@@ -100,7 +100,7 @@ fn divergence_add_text_properties() {
 fn divergence_sticky_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (put-text-property 1 6 'rear-nonsticky t)
@@ -114,7 +114,7 @@ fn divergence_sticky_text_properties() {
 fn divergence_field_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'field 'greeting)
@@ -129,7 +129,7 @@ fn divergence_field_property() {
 fn divergence_invisible_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'invisible t)
@@ -144,7 +144,7 @@ fn divergence_invisible_property() {
 fn divergence_intangible_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'intangible t)

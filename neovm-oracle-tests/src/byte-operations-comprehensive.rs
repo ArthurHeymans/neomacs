@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // unibyte-string: construct unibyte strings from byte values
@@ -38,7 +38,7 @@ fn oracle_prop_byte_ops_unibyte_string_basic() {
   (length (unibyte-string 1 2 3 4 5))
   ;; string-bytes on unibyte string
   (string-bytes (unibyte-string 72 101 108 108 111)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ fn oracle_prop_byte_ops_multibyte_string_p() {
     (wrong-type-argument (list 'error (car err))))
   (condition-case err (multibyte-string-p nil)
     (wrong-type-argument (list 'error (car err)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ fn oracle_prop_byte_ops_string_bytes() {
   ;; Emoji-like high codepoint (4 bytes in UTF-8)
   (string-bytes "\U0001f600")
   (length "\U0001f600"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn oracle_prop_byte_ops_get_byte_empty_string_position_validation_like_gnu() {
  (get-byte nil "abc")
  (get-byte 2 "abc"))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn oracle_prop_byte_ops_buffer_byte_position_boundaries_like_gnu() {
          (byte-to-position "2")
        (error (list (car err) (cdr err)))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ fn oracle_prop_byte_ops_string_to_multibyte() {
          (m (string-to-multibyte s)))
     (list (length s) (length m)
           (multibyte-string-p m))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ fn oracle_prop_byte_ops_string_as_unibyte() {
          (m (string-as-multibyte u)))
     (list (string= s m)
           (multibyte-string-p m))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ fn oracle_prop_byte_ops_char_conversions() {
                         (unibyte-char-to-multibyte b)))
                   results)))
     (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -308,7 +308,7 @@ fn oracle_prop_byte_ops_char_conversion_errors_and_raw_bytes() {
      (multibyte-char-to-unibyte "A")
    (error (list (car err) (cdr err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +344,7 @@ fn oracle_prop_byte_ops_unibyte_substring() {
     (list (string= s c)
           (multibyte-string-p c)
           (eq s c))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +377,7 @@ fn oracle_prop_byte_ops_encoding_edge_cases() {
         (m "ABC"))
     (list (string= u m)
           (equal u m))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +421,7 @@ fn oracle_prop_byte_ops_boundary_analysis() {
         (let ((s (make-string 100 ?x)))
           (list (string-bytes s) (length s) (= (string-bytes s) (length s)))))
     (fmakunbound 'neovm--byte-analyze)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,5 +479,5 @@ fn oracle_prop_byte_ops_pipeline() {
                             key))))
     (fmakunbound 'neovm--byte-xor-encrypt)
     (fmakunbound 'neovm--byte-checksum)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

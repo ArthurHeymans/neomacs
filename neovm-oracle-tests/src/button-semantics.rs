@@ -3,7 +3,7 @@
 //! GNU implements button types, inherited properties, text-property buttons,
 //! overlay buttons, and boundary lookup in `lisp/button.el`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -37,7 +37,7 @@ fn oracle_prop_button_type_inheritance_and_text_button_properties() {
             (button-at 5)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_prop_insert_text_button_next_previous_and_put() {
             (button-at (point-min))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn oracle_prop_make_text_button_string_and_category_errors() {
             (error (list (car err) (cadr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -124,5 +124,5 @@ fn oracle_prop_overlay_buttons_and_activation_data() {
               (nreverse log))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

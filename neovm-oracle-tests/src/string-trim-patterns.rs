@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Default whitespace trimming with all three functions
@@ -50,7 +50,7 @@ fn oracle_prop_string_trim_default_whitespace() {
   (string-trim-right "   ")
   ;; Internal whitespace preserved
   (string-trim "  hello   world  "))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ fn oracle_prop_string_trim_custom_character_classes() {
   (string-trim "###comment###" "#+")
   (string-trim-left "###comment###" "#+")
   (string-trim-right "###comment###" "#+"))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ fn oracle_prop_string_trim_asymmetric_patterns() {
   (string-trim "xxhelloxxxxx" "x+" "x+")
   ;; Left pattern matches multiple char types, right matches single
   (string-trim "  \t123data!!!" "[ \t0-9]+" "!+"))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,7 @@ fn oracle_prop_string_trim_complex_regexp_patterns() {
   (string-trim-left "000042" "0+")
   ;; Trim trailing whitespace and semicolons
   (string-trim-right "value;  ;" "[; \t]+"))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ fn oracle_prop_string_trim_edge_cases() {
   ;; Result type is always a string
   (stringp (string-trim "  x  "))
   (stringp (string-trim "xxx" "x+")))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ fn oracle_prop_string_trim_pipeline() {
     (fmakunbound 'neovm--test-clean-path)
     (fmakunbound 'neovm--test-clean-comment)
     (fmakunbound 'neovm--test-clean-csv-field)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,5 +287,5 @@ fn oracle_prop_string_trim_consistency() {
        (length results)
        ;; Show actual trimmed values for verification
        (mapcar (lambda (r) (list (nth 0 r) (nth 2 r))) results)))))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -3,14 +3,14 @@
 //! GNU src/search.c.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm, eval_oracle_and_neovm_via_binary};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- string-match with multiple groups ---
 
 #[test]
 fn oracle_string_match_three_groups_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (string-match "\\([a-z]+\\) \\([a-z]+\\) \\([0-9]+\\)" "hello world 42")
   (list (match-string 0 "hello world 42")
@@ -26,7 +26,7 @@ fn oracle_string_match_three_groups_via_binary() {
 #[test]
 fn oracle_posix_string_match_vs_string_match_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(list (posix-string-match "[a-z]+" "hello")
                 (string-match "[a-z]+" "hello"))"#,
     );
@@ -58,7 +58,7 @@ fn oracle_looking_at_alternation_no_match() {
 #[test]
 fn oracle_replace_match_literal_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (set-buffer (get-buffer-create "*rml*"))
   (erase-buffer)
@@ -76,7 +76,7 @@ fn oracle_replace_match_literal_via_binary() {
 #[test]
 fn oracle_match_data_is_marker_list_via_binary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = eval_oracle_and_neovm_via_binary(
+    let (o, n) = eval_oracle_and_neovm(
         r#"(progn
   (set-buffer (get-buffer-create "*md*"))
   (erase-buffer)

@@ -3,7 +3,7 @@
 //! GNU implements `redirect-debugging-output` in `src/print.c` by redirecting
 //! stderr, and `external-debugging-output` writes a character to that stream.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,5 +25,5 @@ fn oracle_redirect_debugging_output_captures_external_debug_chars() {
     (ignore-errors (delete-file file))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: buffer locals deep - permanent locals, hooks, kill-all-locals.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_make_variable_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-perm-bl 0)
   (make-variable-buffer-local 'my-perm-bl)
@@ -24,7 +24,7 @@ fn divergence_make_variable_buffer_local() {
 fn divergence_buffer_local_which_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-blf-test 0)
   (make-local-variable 'my-blf-test)
@@ -46,7 +46,7 @@ fn divergence_buffer_local_which_file() {
 fn divergence_kill_all_local_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-kalv-test 0)
   (make-local-variable 'my-kalv-test)
@@ -62,7 +62,7 @@ fn divergence_kill_all_local_variables() {
 fn divergence_default_value_vssetq_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dv-vs 0)
   (setq-default my-dv-vs 10)
@@ -79,7 +79,7 @@ fn divergence_default_value_vssetq_default() {
 fn divergence_set_default_to_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-sdn-test 0)
   (setq-default my-sdn-test nil)
@@ -93,7 +93,7 @@ fn divergence_set_default_to_nil() {
 fn divergence_buffer_local_force() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-blf-var 0)
   (make-variable-buffer-local 'my-blf-var)
@@ -113,7 +113,7 @@ fn divergence_buffer_local_force() {
 fn divergence_hook_run_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-hook-result nil)
   (add-hook 'my-test-hook-xyz (lambda () (push 1 my-hook-result)))
@@ -127,7 +127,7 @@ fn divergence_hook_run_functions() {
 fn divergence_hook_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-hook-remove-result nil)
   (let ((fn (lambda () (push 'a my-hook-remove-result))))
@@ -142,7 +142,7 @@ fn divergence_hook_remove() {
 fn divergence_change_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'before-change-functions)
   (boundp 'after-change-functions)
@@ -156,7 +156,7 @@ fn divergence_change_hooks() {
 fn divergence_find_file_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'find-file-hook)
   (listp find-file-hook)

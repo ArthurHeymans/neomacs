@@ -1,13 +1,13 @@
 //! Divergence tests: advice, hooks, and buffer-local variables.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_advice_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defun my-test-fn (x) (* x 2))
   (advice-add 'my-test-fn :around
@@ -26,7 +26,7 @@ fn divergence_advice_add_remove() {
 fn divergence_advice_before() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (defun my-adv-fn (x) (push (list 'fn x) log))
   (advice-add 'my-adv-fn :before
@@ -40,7 +40,7 @@ fn divergence_advice_before() {
 fn divergence_advice_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (defun my-adv-fn2 (x) (push (list 'fn x) log))
   (advice-add 'my-adv-fn2 :after
@@ -54,7 +54,7 @@ fn divergence_advice_after() {
 fn divergence_run_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (defvar my-test-hook nil)
   (add-hook 'my-test-hook (lambda () (push 'first log)))
@@ -68,7 +68,7 @@ fn divergence_run_hooks() {
 fn divergence_run_hook_with_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((log nil))
   (defvar my-test-hook2 nil)
   (add-hook 'my-test-hook2 (lambda (x) (push (list 'got x) log)))
@@ -81,7 +81,7 @@ fn divergence_run_hook_with_args() {
 fn divergence_buffer_local_setq_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((buf1 (get-buffer-create " *test-bl1*"))
         (buf2 (get-buffer-create " *test-bl2*")))
   (unwind-protect
@@ -104,7 +104,7 @@ fn divergence_buffer_local_setq_local() {
 fn divergence_make_variable_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-bl-var 0)
   (make-variable-buffer-local 'my-bl-var)
@@ -126,7 +126,7 @@ fn divergence_make_variable_buffer_local() {
 fn divergence_kill_local_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-kl-var 99)
   (make-variable-buffer-local 'my-kl-var)
@@ -140,7 +140,7 @@ fn divergence_kill_local_variable() {
 fn divergence_default_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dv-var 0)
   (setq-default my-dv-var 50)

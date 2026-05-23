@@ -5,7 +5,7 @@
 //! around start columns, padding, explicit ellipses, and display-property
 //! ellipsis mode.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_truncate_ascii_start_and_end_columns() {
  (truncate-string-to-width "abcdefghij" 20 8))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_truncate_wide_chars_and_padding_edges() {
    (truncate-string-to-width s 4 2 ?_)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn oracle_truncate_padding_when_string_is_too_short() {
  (truncate-string-to-width "ab" 5 1 ?-))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn oracle_truncate_explicit_ellipsis_semantics() {
    (truncate-string-to-width "abc" 2 nil nil "")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn oracle_truncate_ellipsis_text_property_mode() {
           (get-text-property 5 'display r))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -112,5 +112,5 @@ fn oracle_truncate_argument_errors() {
    cases))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

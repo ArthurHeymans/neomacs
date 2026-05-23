@@ -3,7 +3,7 @@
 //! GNU implements these in `src/window.c`; invalid window arguments are checked
 //! before any tree mutation.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,5 +23,5 @@ fn oracle_window_tree_primitives_validate_window_arguments_like_gnu() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

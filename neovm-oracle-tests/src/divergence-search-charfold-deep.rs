@@ -1,13 +1,13 @@
 //! Divergence tests: character folding, char-fold search deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_char_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'char-fold-to-regexp)
   (fboundp 'char-fold-make-table)
@@ -20,7 +20,7 @@ fn divergence_char_fold() {
 fn divergence_char_fold_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'char-fold-table)
   (fboundp 'char-fold-ascii-table)
@@ -33,7 +33,7 @@ fn divergence_char_fold_table() {
 fn divergence_isearch_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'isearch-forward)
   (fboundp 'isearch-backward)
@@ -48,7 +48,7 @@ fn divergence_isearch_functions() {
 fn divergence_isearch_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'search-slow-speed)
   (boundp 'search-slow-window-lines)
@@ -63,7 +63,7 @@ fn divergence_isearch_vars() {
 fn divergence_occur_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'occur)
   (fboundp 'multi-occur)
@@ -77,7 +77,7 @@ fn divergence_occur_functions() {
 fn divergence_keep_flush_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'keep-lines)
   (fboundp 'flush-lines)
@@ -90,7 +90,7 @@ fn divergence_keep_flush_lines() {
 fn divergence_replace_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'replace-regexp)
   (fboundp 'replace-string)
@@ -105,7 +105,7 @@ fn divergence_replace_regex() {
 fn divergence_replace_preserve_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'case-replace)
   (booleanp case-replace)
@@ -118,7 +118,7 @@ fn divergence_replace_preserve_case() {
 fn divergence_lazy_highlight() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'isearch-lazy-highlight)
   (booleanp isearch-lazy-highlight)
@@ -133,7 +133,7 @@ fn divergence_lazy_highlight() {
 fn divergence_regexp_opt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'regexp-opt)
   (stringp (regexp-opt '("foo" "bar" "baz")))

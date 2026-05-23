@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` cXXr accessor contracts.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_subr_cxxr_nested_car_cdr_contracts() {
@@ -30,5 +28,5 @@ fn oracle_prop_gnu_subr_cxxr_nested_car_cdr_contracts() {
              (cadr '(a . b))
              (caar 42)
              (caddr '(a . b))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

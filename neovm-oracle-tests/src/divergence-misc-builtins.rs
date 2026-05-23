@@ -1,13 +1,13 @@
 //! Divergence tests: miscellaneous Emacs Lisp builtins not yet covered.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn deficiency_yes_or_no_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'yes-or-no-p)
   (fboundp 'y-or-n-p)
@@ -19,7 +19,7 @@ fn deficiency_yes_or_no_p() {
 fn divergence_random_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (integerp (random))
   (>= (random 100) 0)
@@ -32,7 +32,7 @@ fn divergence_random_numbers() {
 fn divergence_copy_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((orig '((a . 1) (b . 2) (c . 3)))
          (copy (copy-alist orig)))
   (setcdr (assoc 'b copy) 99)
@@ -44,7 +44,7 @@ fn divergence_copy_alist() {
 fn divergence_copy_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((orig '(1 2 3))
          (copy (copy-sequence orig)))
   (list (equal orig copy)
@@ -57,7 +57,7 @@ fn divergence_copy_sequence() {
 fn divergence_copy_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((orig '(a (b (c d)) e))
          (copy (copy-tree orig)))
   (list (equal orig copy)
@@ -69,7 +69,7 @@ fn divergence_copy_tree() {
 fn deficiency_equal_including_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (equal-including-properties "abc" "abc")
   (equal-including-properties
@@ -85,7 +85,7 @@ fn deficiency_equal_including_props() {
 fn divergence_plist_member() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((pl '(a 1 b 2 c 3)))
   (list (plist-member pl 'b)
         (plist-member pl 'z)
@@ -97,7 +97,7 @@ fn divergence_plist_member() {
 fn divergence_format_mode_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'format-mode-line)
   (stringp (format-mode-line mode-line-format))
@@ -109,7 +109,7 @@ fn divergence_format_mode_line() {
 fn divergence_accessible_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'accessible-keymaps)
   (fboundp 'where-is-internal)
@@ -121,7 +121,7 @@ fn divergence_accessible_keymaps() {
 fn divergence_local_key_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (keymapp (current-local-map))
   (keymapp (current-global-map))

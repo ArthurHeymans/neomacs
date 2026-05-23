@@ -4,7 +4,7 @@
 //! observable ordering and cleanup behavior around depth metadata, duplicate
 //! detection by `equal`, and buffer-local hook bindings.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -37,7 +37,7 @@ fn oracle_add_hook_depth_order_and_metadata() {
     (makunbound 'neomacs--oracle-hook-depth)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_add_hook_duplicate_detection_uses_equal() {
     (makunbound 'neomacs--oracle-hook-duplicates)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn oracle_remove_hook_removes_depth_metadata() {
     (makunbound 'neomacs--oracle-hook-remove)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -124,7 +124,7 @@ fn oracle_remove_hook_local_binding_cleanup() {
     (makunbound 'neomacs--oracle-hook-local)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn oracle_add_hook_coerces_single_function_values() {
     (makunbound 'neomacs--oracle-hook-single)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn oracle_remove_hook_local_without_local_binding_is_noop() {
     (makunbound 'neomacs--oracle-hook-local-noop)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn oracle_add_hook_detects_legacy_local_hook_binding() {
     (makunbound 'neomacs--oracle-hook-legacy-local)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -241,5 +241,5 @@ fn oracle_add_hook_local_permanent_hook_property() {
     (makunbound 'neomacs--oracle-hook-permanent)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

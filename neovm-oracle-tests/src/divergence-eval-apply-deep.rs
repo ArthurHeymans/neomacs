@@ -1,13 +1,13 @@
 //! Divergence tests: eval, apply, funcall edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eval_nested_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((x 'outer))
   (list x
         (let ((x 'inner))
@@ -20,7 +20,7 @@ fn divergence_eval_nested_environment() {
 fn divergence_funcall_interactively() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (called-interactively-p 'interactive)
   (interactive-p))"#,
@@ -31,7 +31,7 @@ fn divergence_funcall_interactively() {
 fn divergence_function_quoting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((fn1 (function (lambda (x) (1+ x))))
         (fn2 #'(lambda (x) (1+ x))))
   (list (funcall fn1 41)
@@ -45,7 +45,7 @@ fn divergence_function_quoting() {
 fn divergence_defalias_and_fset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defalias 'my-alias-fn #'car)
   (list (my-alias-fn '(1 2 3))
@@ -59,7 +59,7 @@ fn divergence_defalias_and_fset() {
 fn divergence_special_form_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (special-form-p (symbol-function 'if))
   (special-form-p (symbol-function 'let))
@@ -73,7 +73,7 @@ fn divergence_special_form_p() {
 fn divergence_setq_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-sdq-var 0)
   (setq-default my-sdq-var 50)
@@ -95,7 +95,7 @@ fn divergence_setq_default() {
 fn divergence_dynamic_binding_with_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dyn-var 100)
   (let ((my-dyn-var 200))
@@ -110,7 +110,7 @@ fn divergence_dynamic_binding_with_let() {
 fn divergence_backtrace_frames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((frames nil))
   (condition-case err
       (letrec ((f (lambda (n)
@@ -129,7 +129,7 @@ fn divergence_backtrace_frames() {
 fn divergence_obarray_intern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ob (make-obarray 13)))
   (intern "hello" ob)
   (intern "world" ob)
@@ -146,7 +146,7 @@ fn divergence_obarray_intern() {
 fn divergence_unintern_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((sym (intern "test-unintern-me")))
   (list (intern-soft "test-unintern-me")
         (unintern "test-unintern-me")

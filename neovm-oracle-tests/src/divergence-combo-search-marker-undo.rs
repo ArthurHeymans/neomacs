@@ -1,13 +1,13 @@
 //! Divergence tests: complex search + marker + undo combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_markers_after_regex_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"NUM:10 NUM:20 NUM:30 END\")
   (let ((m1 (make-marker)) (m2 (make-marker)) (m3 (make-marker)))
@@ -27,7 +27,7 @@ fn divergence_markers_after_regex_replace_chain() {
 fn divergence_undo_marker_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDE\")
   (let ((m (make-marker)))
@@ -48,7 +48,7 @@ fn divergence_undo_marker_restore() {
 fn divergence_match_data_with_markers_swap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"foo-bar-baz-qux\")
   (goto-char 1)
@@ -69,7 +69,7 @@ fn divergence_match_data_with_markers_swap() {
 fn divergence_narrowed_search_replace_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD-EEEE\")
   (let ((m (make-marker)))
@@ -88,7 +88,7 @@ fn divergence_narrowed_search_replace_markers() {
 fn divergence_multiline_backref_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"start\\nline1 VALUE=42\\nline2 VALUE=99\\nend\")
   (goto-char 1)
@@ -104,7 +104,7 @@ fn divergence_multiline_backref_replace() {
 fn divergence_save_excursion_restriction_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA-BBB-CCC-DDD-EEE\")
   (let ((m (make-marker)))
@@ -128,7 +128,7 @@ fn divergence_save_excursion_restriction_marker_combo() {
 fn divergence_kill_yank_marker_preservation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m1 (make-marker)) (m2 (make-marker)))
@@ -151,7 +151,7 @@ fn divergence_kill_yank_marker_preservation() {
 fn divergence_marker_insertion_type_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDE\")
   (let ((m1 (make-marker)) (m2 (make-marker)))
@@ -173,7 +173,7 @@ fn divergence_marker_insertion_type_behavior() {
 fn divergence_regex_word_boundaries_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"hello world\\nfoo bar\\nbaz qux\")
   (let ((matches nil))
@@ -188,7 +188,7 @@ fn divergence_regex_word_boundaries_multiline() {
 fn divergence_overlay_dont_track_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"ABCDEFGHIJ\")
   (let ((m (set-marker (make-marker) 5))

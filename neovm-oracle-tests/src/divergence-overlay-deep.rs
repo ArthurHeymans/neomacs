@@ -1,13 +1,13 @@
 //! Divergence tests: overlay deep - priority, lazy highlighting, invisible.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World!")
   (let ((ov1 (make-overlay 1 6))
@@ -27,7 +27,7 @@ fn divergence_overlay_priority() {
 fn divergence_overlay_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -42,7 +42,7 @@ fn divergence_overlay_start_end() {
 fn divergence_overlay_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov (make-overlay 3 7)))
@@ -56,7 +56,7 @@ fn divergence_overlay_move() {
 fn divergence_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World!")
   (let ((ov (make-overlay 6 12)))
@@ -71,7 +71,7 @@ fn divergence_overlay_invisible() {
 fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((ov (make-overlay 3 6))
@@ -89,7 +89,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_insert_in_front() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((ov (make-overlay 3 6 nil t nil)))
@@ -105,7 +105,7 @@ fn divergence_overlay_insert_in_front() {
 fn divergence_overlay_insert_behind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((ov (make-overlay 3 6 nil nil t)))
@@ -121,7 +121,7 @@ fn divergence_overlay_insert_behind() {
 fn divergence_overlay_list_in_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (make-overlay 1 4)
@@ -138,7 +138,7 @@ fn divergence_overlay_list_in_range() {
 fn divergence_delete_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGH")
   (let ((ov (make-overlay 1 5)))
@@ -155,7 +155,7 @@ fn divergence_delete_overlay() {
 fn divergence_next_overlay_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (make-overlay 2 5)

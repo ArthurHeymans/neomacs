@@ -4,7 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // replace-regexp-in-string: FIXEDCASE param (nil vs t)
@@ -20,7 +20,7 @@ fn oracle_prop_replace_regexp_fixedcase_nil_preserves_case() {
       (replace-regexp-in-string "hello" "world" "Hello there, HELLO again, hello end" nil)
       (replace-regexp-in-string "foo" "bar" "Foo FOO foo fOO" nil)
       (replace-regexp-in-string "cat" "dog" "Cat CAT cat CaT" nil))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn oracle_prop_replace_regexp_fixedcase_t_exact_replacement() {
     let form = r#"(list
       (replace-regexp-in-string "hello" "world" "Hello there, HELLO again, hello end" t)
       (replace-regexp-in-string "foo" "xYz" "Foo FOO foo" t))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ fn oracle_prop_replace_regexp_literal_backslash_handling() {
       (replace-regexp-in-string "\\([a-z]+\\)=\\([0-9]+\\)" "\\2->\\1" "foo=10 bar=20" nil nil)
       ;; LITERAL=t: \1 kept literally
       (replace-regexp-in-string "\\([a-z]+\\)=\\([0-9]+\\)" "\\2->\\1" "foo=10 bar=20" nil t))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ fn oracle_prop_replace_regexp_start_offset() {
       (replace-regexp-in-string "[0-9]+" "NUM" "12 ab 34 cd 56" nil nil 14)
       ;; START in the middle of a potential match
       (replace-regexp-in-string "abcd" "XXXX" "abcd-abcd-abcd" nil nil 3))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ fn oracle_prop_replace_regexp_function_replacement() {
         "[A-Z][a-z]+"
         (lambda (m) (format "[%s:%d]" m (length m)))
         "Alice met Bob and Charlie"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ fn oracle_prop_replace_match_all_params() {
         (replace-match "newval" nil nil s 1)
         ;; Verify match-string still works on original
         (match-string 1 s)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ fn oracle_prop_regexp_multi_pass_transform_pipeline() {
                       (lambda (m) (concat "<num>" m "</num>"))
                       step3)))
         (list step1 step2 step3 step4)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,5 +178,5 @@ fn oracle_prop_regexp_quote_in_search_replace() {
                (replaced (replace-regexp-in-string pattern "REPLACED" input)))
           (setq results (cons replaced results))))
       (nreverse results))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

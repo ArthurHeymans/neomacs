@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // define-key with string key sequences (kbd-style)
@@ -43,7 +43,7 @@ fn oracle_prop_define_key_string_sequences() {
     (keymapp (lookup-key m (kbd "C-x 4")))
     ;; Verify the intermediate prefix for C-c
     (keymapp (lookup-key m (kbd "C-c")))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ fn oracle_prop_define_key_vector_sequences() {
     (lookup-key m [f1 ?x])
     (lookup-key m [f1 ?y ?z])
     (keymapp (lookup-key m [f1 ?y]))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ fn oracle_prop_define_key_lambda_bindings() {
     ;; Call the lambda to check it works
     (funcall (lookup-key m [?a]))
     (funcall (lookup-key m [?b]) 7)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ fn oracle_prop_define_key_symbol_bindings() {
     ;; Verify the symbol is exactly what we set
     (lookup-key m [?a])
     (lookup-key m (kbd "C-x C-f"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ fn oracle_prop_define_key_nil_unbind() {
         (lookup-key m [?a])
         ;; C-x prefix still exists even though C-x C-f was unbound
         (keymapp (lookup-key m (kbd "C-x")))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ fn oracle_prop_define_key_prefix_nested_keymaps() {
     (keymapp (lookup-key root (kbd "C-c p q")))
     ;; Too-long returns integer
     (numberp (lookup-key root [?a ?b]))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ fn oracle_prop_define_key_modifier_keys() {
     ;; Unbound modifier combos
     (lookup-key m (kbd "C-b"))
     (lookup-key m (kbd "M-b"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,7 +399,7 @@ fn oracle_prop_define_key_complete_hierarchy() {
     (lookup-key local (kbd "C-x 3"))
     (lookup-key local (kbd "C-x b"))
     (lookup-key local (kbd "C-x k"))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,7 +465,7 @@ fn oracle_prop_define_key_inheritance_overrides() {
                     (lookup-key top [?f])   ;; alt-f (from alt-base)
                     (lookup-key top (kbd "C-x f")))))  ;; mid-cxf (mid's own)
           (list p1 p2-b p3-a p4))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -515,5 +515,5 @@ fn oracle_prop_define_key_overwrite_and_numeric() {
     (let ((count 0))
       (map-keymap (lambda (key binding) (setq count (1+ count))) m)
       (> count 0))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

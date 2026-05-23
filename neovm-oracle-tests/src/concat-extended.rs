@@ -4,10 +4,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 use proptest::prelude::*;
 
-use super::common::{
-    ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_via_binary,
-};
+use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_concat_strings() {
@@ -51,7 +48,7 @@ fn oracle_prop_concat_rejects_bool_vector_as_sequence_like_gnu() {
     let form = r#"(let ((bv (make-bool-vector 3 nil)))
                     (aset bv 1 t)
                     (concat bv))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -88,7 +85,7 @@ fn oracle_prop_concat_in_loop() {
                     (dotimes (i 5)
                       (setq result (concat result (number-to-string i))))
                     result)"####;
-    let (o, n) = eval_oracle_and_neovm_via_binary(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq(r#""01234""#, &o, &n);
 }
 

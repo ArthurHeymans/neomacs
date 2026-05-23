@@ -3,7 +3,7 @@
 //! GNU implements this in `src/lread.c`: after `check_obarray`, it returns one
 //! list per bucket in obarray order, preserving each bucket's symbol chain.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,5 +25,5 @@ fn oracle_internal_obarray_buckets_shape_contents_and_errors() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

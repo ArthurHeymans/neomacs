@@ -1,13 +1,13 @@
 //! Divergence tests: face, color, font specification deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_face_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-attribute)
   (fboundp 'face-all-attributes)
@@ -22,7 +22,7 @@ fn divergence_face_attributes() {
 fn divergence_face_underline_box() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'set-face-underline)
   (fboundp 'face-underline-p)
@@ -37,7 +37,7 @@ fn divergence_face_underline_box() {
 fn divergence_face_realized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'face-id)
   (fboundp 'face-name)
@@ -52,7 +52,7 @@ fn divergence_face_realized() {
 fn divergence_color_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'color-name-to-hex)
   (fboundp 'color-values)
@@ -67,7 +67,7 @@ fn divergence_color_names() {
 fn divergence_color_rgb_hsv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'color-rgb-to-hsv)
   (fboundp 'color-hsv-to-rgb)
@@ -81,7 +81,7 @@ fn divergence_color_rgb_hsv() {
 fn divergence_font_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'font-spec)
   (fboundp 'font-get)
@@ -96,7 +96,7 @@ fn divergence_font_spec() {
 fn divergence_font_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'font-match)
   (fboundp 'font-open)
@@ -110,7 +110,7 @@ fn divergence_font_match() {
 fn divergence_cursor_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'cursor-type)
   (member cursor-type '(t box hollow bar hbar nil))
@@ -124,7 +124,7 @@ fn divergence_cursor_face() {
 fn divergence_mouse_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'mouse-highlight)
   (boundp 'mouse-yank-at-point)
@@ -137,7 +137,7 @@ fn divergence_mouse_face() {
 fn divergence_theme_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'custom-theme-set-faces)
   (fboundp 'custom-theme-set-variables)

@@ -6,7 +6,7 @@
 //! slash boundary, and `directory-abbrev-apply` honors the caller's
 //! `case-fold-search` binding while walking `directory-abbrev-alist` in order.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -53,5 +53,5 @@ fn oracle_directory_abbrev_regexp_boundaries_and_apply_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

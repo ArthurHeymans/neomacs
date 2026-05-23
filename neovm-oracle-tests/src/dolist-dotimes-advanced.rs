@@ -4,10 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // dolist with result form referencing accumulator and loop var
@@ -26,7 +23,7 @@ fn oracle_prop_dolist_result_form_complex() {
                       (setq count (1+ count))
                       (when (> (length (symbol-name item)) 4)
                         (setq acc (cons (cons item (length (symbol-name item))) acc)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +43,7 @@ fn oracle_prop_dolist_nested_cartesian_filtered() {
                                      (= (+ (* x x) (* y y)) (* z z)))
                             (setq result (cons (list x y z) result))))))
                     (nreverse result))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +62,7 @@ fn oracle_prop_dotimes_result_accumulating_factorial_table() {
                           (setq fact 1)
                         (setq fact (* fact i)))
                       (setq table (cons (cons i fact) table))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +82,7 @@ fn oracle_prop_dotimes_fibonacci() {
                       (let ((next (+ a b)))
                         (setq a b
                               b next))))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(0 1 1 2 3 5 8 13 21 34 55 89 144 233 377)", &o, &n);
 }
 
@@ -116,7 +113,7 @@ fn oracle_prop_dolist_dotimes_matrix_transpose() {
                             (setq new-row (cons (nth j row) new-row)))
                           (setq transposed (cons (nreverse new-row) transposed))))
                       (list matrix (nreverse transposed))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +148,7 @@ fn oracle_prop_dolist_dynamic_list_side_effects() {
                                  (setq pairs (cons (cons k v) pairs)))
                                freq)
                       (sort pairs (lambda (a b) (string< (car a) (car b))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +175,7 @@ fn oracle_prop_dolist_early_return_catch_throw() {
                                                     'in group-name
                                                     'with-score score)))))))
                       'nobody-found))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +201,7 @@ fn oracle_prop_dotimes_pascals_triangle() {
                         (setq triangle (cons new-row triangle))
                         (setq prev-row new-row)))
                     (nreverse triangle))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,5 +235,5 @@ fn oracle_prop_dolist_unwind_protect_cleanup() {
                                      (cons (format "error on %d" item)
                                            neovm--test-process-log))))))
                       (makunbound 'neovm--test-process-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

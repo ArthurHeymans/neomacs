@@ -1,13 +1,13 @@
 //! Divergence tests: real macro & advice behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_macroexpand_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-when-xxx (cond &rest body)
     \\`(if ,cond (progn ,@body)))
@@ -21,7 +21,7 @@ fn divergence_macroexpand_all() {
 fn divergence_nested_macro_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-add1-xxx (x) \\`(+ 1 ,x))
   (defmacro test-add2-xxx (x) \\`(+ (test-add1-xxx ,x) 1))
@@ -34,7 +34,7 @@ fn divergence_nested_macro_expansion() {
 fn divergence_advice_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-advice-fn-xxx (x) (* x 2))
   (advice-add 'test-advice-fn-xxx :filter-return
@@ -53,7 +53,7 @@ fn divergence_advice_add_remove() {
 fn divergence_advice_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-advice-log-xxx nil)
   (defun test-advice-fn2-xxx (x)
@@ -76,7 +76,7 @@ fn divergence_advice_before_after() {
 fn divergence_defsubst_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defsubst test-subst-xxx (x) (+ x 100))
   (list (test-subst-xxx 5)
@@ -90,7 +90,7 @@ fn divergence_defsubst_inline() {
 fn deficiency_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((closures nil))
   (dolist (i '(1 2 3))
     (push (let ((n i)) (lambda () n)) closures))
@@ -103,7 +103,7 @@ fn deficiency_closure_capture() {
 fn divergence_inline_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (define-inline test-inline-xxx (x)
     (inline-leteval (x)
@@ -118,7 +118,7 @@ fn divergence_inline_spec() {
 fn divergence_compiled_function_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (compiled-function-p (lambda (x) x))
   (compiled-function-p #'car)
@@ -132,7 +132,7 @@ fn divergence_compiled_function_p() {
 fn divergence_gv_generalized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((lst '(1 2 3 4 5)))
   (cl-incf (nth 2 lst))
   (list lst
@@ -146,7 +146,7 @@ fn divergence_gv_generalized() {
 fn divergence_setf_on_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (make-symbol \"test\")))
   (setf (get sym 'x) 10)
   (setf (get sym 'y) 20)

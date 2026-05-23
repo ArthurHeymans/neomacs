@@ -6,7 +6,7 @@
 //! in column N, `C-n`/`C-p` should try to keep point in column N on the target
 //! line, clamping only while the target line is shorter.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -31,7 +31,7 @@ fn oracle_prop_next_line_preserves_column_across_equal_width_lines() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -56,7 +56,7 @@ fn oracle_prop_next_line_restores_temporary_goal_after_short_line() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_previous_line_uses_existing_goal_column() {
                                             (line-end-position))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,5 +107,5 @@ fn oracle_prop_next_line_honors_explicit_goal_column() {
                                               (line-end-position)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

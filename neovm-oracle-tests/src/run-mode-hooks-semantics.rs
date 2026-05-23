@@ -5,7 +5,7 @@
 //! are queued per buffer, then flushed before the explicit hooks, followed by
 //! `after-change-major-mode-hook` and delayed derived-mode `:after-hook` forms.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -58,7 +58,7 @@ fn oracle_run_mode_hooks_delayed_order_and_after_hooks() {
       (makunbound 'neovm--rmh-d))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -81,5 +81,5 @@ fn oracle_delay_mode_hooks_macroexpansion_and_dynamic_scope() {
            (assq 'delay-mode-hooks (buffer-local-variables))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

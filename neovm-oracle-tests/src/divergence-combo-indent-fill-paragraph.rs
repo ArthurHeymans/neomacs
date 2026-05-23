@@ -1,13 +1,13 @@
 //! Divergence tests: indent + fill + paragraph + page + line combo.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_indent_line_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (goto-char 1)
@@ -40,7 +40,7 @@ fn divergence_indent_line_functions() {
 fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq fill-column 20)
   (insert "This is a long line that should be filled at the fill-column boundary when we call fill-paragraph.")
@@ -63,7 +63,7 @@ fn divergence_fill_region_basic() {
 fn divergence_paragraph_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.")
   (goto-char 1)
@@ -88,7 +88,7 @@ fn divergence_paragraph_operations() {
 fn divergence_page_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Page 1 content\n\x0CPage 2 content\n\x0CPage 3 content")
   (goto-char 1)
@@ -108,7 +108,7 @@ fn divergence_page_operations() {
 fn divergence_comment_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4")
   (comment-region 1 6)
@@ -126,7 +126,7 @@ fn divergence_comment_operations() {
 fn divergence_tab_stop_and_indent_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq tab-width 4)
   (setq indent-tabs-mode nil)
@@ -149,7 +149,7 @@ fn divergence_tab_stop_and_indent_tabs() {
 fn divergence_current_column_with_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq tab-width 4)
   (insert "abc\tdef\tghi")
@@ -173,7 +173,7 @@ fn divergence_current_column_with_mixed() {
 fn divergence_line_beginning_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
   (goto-char 10)
@@ -197,7 +197,7 @@ fn divergence_line_beginning_position() {
 fn divergence_delete_indentation_and_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello\nworld\ntest")
   (goto-char 7)
@@ -215,7 +215,7 @@ fn divergence_delete_indentation_and_newline() {
 fn divergence_move_to_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "abcdefghijklmn")
   (goto-char 1)

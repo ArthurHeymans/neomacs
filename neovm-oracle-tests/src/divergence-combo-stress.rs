@@ -1,13 +1,13 @@
 //! Divergence tests: stress tests with large data, deep recursion, many objects.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_large_buffer_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (dotimes (_ 100) (insert \"abcdefghijklmnopqrstuvwxyz \"))
   (let ((count 0))
@@ -27,7 +27,7 @@ fn divergence_large_buffer_many_overlays() {
 fn divergence_deep_recursive_accumulator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-deep-sum-xxx (n acc)
     (if (<= n 0) acc
@@ -42,7 +42,7 @@ fn divergence_deep_recursive_accumulator() {
 fn divergence_many_interleaved_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert (make-string 200 ?x))
   (dotimes (i 100)
@@ -67,7 +67,7 @@ fn divergence_many_interleaved_textprops() {
 fn divergence_large_list_map_filter_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((nums (number-sequence 1 1000))
         (squares (mapcar (lambda (x) (* x x)) nums))
         (evens (seq-filter #'cl-evenp nums))
@@ -85,7 +85,7 @@ fn divergence_large_list_map_filter_reduce() {
 fn divergence_many_nested_let_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((a 1))
   (let ((b (+ a 1)))
     (let ((c (+ b 1)))
@@ -106,7 +106,7 @@ fn divergence_many_nested_let_bindings() {
 fn divergence_many_hash_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ht (make-hash-table :test 'equal :size 500)))
   (dotimes (i 200)
     (puthash (format \"key-%04d\" i) (* i i) ht))
@@ -124,7 +124,7 @@ fn divergence_many_hash_table_ops() {
 fn divergence_large_string_search_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (dotimes (_ 50)
     (insert \"The quick brown fox jumps over the lazy dog. \"))
@@ -143,7 +143,7 @@ fn divergence_large_string_search_replace() {
 fn divergence_deep_catch_throw_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(catch 'done
   (dotimes (i 10)
     (catch (intern (format \"level-%d\" i))
@@ -157,7 +157,7 @@ fn divergence_deep_catch_throw_chain() {
 fn divergence_many_buffer_ops_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"START\")
   (dotimes (i 100)
@@ -179,7 +179,7 @@ fn divergence_many_buffer_ops_sequence() {
 fn divergence_many_undo_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"BASE\")
   (dotimes (i 10)

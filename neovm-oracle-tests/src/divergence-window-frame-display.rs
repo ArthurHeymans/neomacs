@@ -1,13 +1,13 @@
 //! Divergence tests: window, frame, display, and face attributes.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_window_basic_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w (selected-window)))
   (list (windowp w)
         (window-live-p w)
@@ -22,7 +22,7 @@ fn divergence_window_basic_props() {
 fn divergence_window_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w (selected-window)))
   (list (> (window-total-width w) 0)
         (> (window-total-height w) 0)
@@ -36,7 +36,7 @@ fn divergence_window_dimensions() {
 fn divergence_window_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((w (selected-window)))
   (list (consp (window-edges w))
         (consp (window-inside-edges w))
@@ -48,7 +48,7 @@ fn divergence_window_edges() {
 fn divergence_window_configuration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((cfg (current-window-configuration)))
   (list (window-configuration-p cfg)
         (window-configuration-frame cfg)))"#,
@@ -59,7 +59,7 @@ fn divergence_window_configuration() {
 fn divergence_frame_basic_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((f (selected-frame)))
   (list (framep f)
         (frame-live-p f)
@@ -73,7 +73,7 @@ fn divergence_frame_basic_props() {
 fn divergence_frame_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((f (selected-frame)))
   (list (consp (frame-parameters f))
         (assq 'name (frame-parameters f))
@@ -86,7 +86,7 @@ fn divergence_frame_parameters() {
 fn divergence_face_attribute_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (facep 'default)
   (facep 'bold)
@@ -99,7 +99,7 @@ fn divergence_face_attribute_types() {
 fn divergence_face_attribute_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (face-attribute 'default :family (selected-frame))
   (face-attribute 'default :height (selected-frame))
@@ -111,7 +111,7 @@ fn divergence_face_attribute_values() {
 fn divergence_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "before")
   (put-text-property (point-min) (point-max) 'display '(image :type xpm))
@@ -124,7 +124,7 @@ fn divergence_display_property() {
 fn divergence_invisible_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "visible")
   (insert (propertize "hidden" 'invisible t))
@@ -140,7 +140,7 @@ fn divergence_invisible_text_property() {
 fn divergence_line_beginning_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1\nline2\nline3")
   (goto-char 1)
@@ -156,7 +156,7 @@ fn divergence_line_beginning_position() {
 fn divergence_point_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (list (point-min)

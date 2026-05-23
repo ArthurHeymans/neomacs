@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` bidi string helpers.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_bidi_string_mark_left_to_right_edges() {
@@ -35,5 +33,5 @@ fn oracle_prop_gnu_bidi_string_mark_left_to_right_edges() {
        (bidi-string-mark-left-to-right 42)
      (error (car err)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

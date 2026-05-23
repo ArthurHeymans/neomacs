@@ -1,13 +1,13 @@
 //! Divergence tests: real data structure behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_hash_table_equality() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((h1 (make-hash-table :test 'equal))
         (h2 (make-hash-table :test 'equal)))
   (puthash \"a\" 1 h1)
@@ -29,7 +29,7 @@ fn divergence_hash_table_equality() {
 fn divergence_alist_operations_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((alist '((a . 1) (b . 2) (c . 3))))
   (setf (alist-get 'b alist) 20)
   (setf (alist-get 'd alist) 40)
@@ -48,7 +48,7 @@ fn divergence_alist_operations_real() {
 fn divergence_plist_operations_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((pl nil))
   (setq pl (plist-put pl 'x 10))
   (setq pl (plist-put pl 'y 20))
@@ -67,7 +67,7 @@ fn divergence_plist_operations_real() {
 fn divergence_vector_operations_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v [10 20 30 40 50]))
   (aset v 2 99)
   (list (aref v 0) (aref v 1) (aref v 2) (aref v 3) (aref v 4)
@@ -82,7 +82,7 @@ fn divergence_vector_operations_real() {
 fn divergence_bool_vector_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((bv (make-bool-vector 8 nil)))
   (aset bv 0 t)
   (aset bv 3 t)
@@ -98,7 +98,7 @@ fn divergence_bool_vector_real() {
 fn divergence_char_table_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ct (make-char-table 'syntax-table nil)))
   (set-char-table-range ct ?A 'letter)
   (set-char-table-range ct ?a 'letter)
@@ -117,7 +117,7 @@ fn divergence_char_table_real() {
 fn divergence_record_vs_vector_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((r (record 'point 10 20))
         (v [point 10 20]))
   (list (recordp r)
@@ -136,7 +136,7 @@ fn divergence_record_vs_vector_real() {
 fn divergence_sequence_ops_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (seq-map #'1+ '(1 2 3))
   (seq-filter #'cl-evenp '(1 2 3 4 5))
@@ -153,7 +153,7 @@ fn divergence_sequence_ops_real() {
 fn divergence_weak_hash_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ht (make-hash-table :test 'equal :weakness 'key)))
   (puthash \"foo\" 42 ht)
   (list (hash-table-weakness ht)
@@ -168,7 +168,7 @@ fn divergence_weak_hash_real() {
 fn divergence_sort_stable_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((data '((3 . \"c\") (1 . \"a\") (2 . \"b\") (1 . \"a2\"))))
   (let ((sorted (copy-sequence data)))
     (setq sorted (sort sorted (lambda (a b) (< (car a) (car b)))))

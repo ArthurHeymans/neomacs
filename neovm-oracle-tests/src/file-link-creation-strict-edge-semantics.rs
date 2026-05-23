@@ -5,7 +5,7 @@
 //! EEXIST handling controlled by OK-IF-ALREADY-EXISTS, and `expand_cp_target`
 //! directory-name semantics.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -71,5 +71,5 @@ fn oracle_file_link_creation_edges() {
     (ignore-errors (delete-directory dir t))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

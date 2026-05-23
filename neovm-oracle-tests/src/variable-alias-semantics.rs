@@ -5,7 +5,7 @@
 //! These tests focus on alias value migration, chain following, cycle
 //! rejection, let-bound rejection, and alias deletion.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -45,7 +45,7 @@ fn oracle_defvaralias_migrates_existing_alias_value_to_void_base() {
       (makunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn oracle_indirect_variable_follows_alias_chain_and_rejects_cycle() {
       (makunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn oracle_defvaralias_rejects_constants_and_let_bound_aliases() {
       (makunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -168,5 +168,5 @@ fn oracle_internal_delete_indirect_variable_restores_plain_void_symbol() {
       (makunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -4,7 +4,7 @@
 //! `rassq-delete-all` in Lisp.  Their semantics are intentionally destructive,
 //! skip non-cons elements, and differ by equality predicate.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_prop_assoc_delete_all_removes_equal_keys_destructively() {
         tail))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_assoc_delete_all_custom_test_and_non_cons_elements() {
         alist))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn oracle_assoc_delete_all_improper_alist_mutates_before_error() {
    alist))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_assq_delete_all_uses_eq_not_equal() {
         alist))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn oracle_prop_rassq_delete_all_removes_eq_values() {
         tail))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -122,5 +122,5 @@ fn oracle_rassq_delete_all_improper_alist_mutates_before_error() {
    alist))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

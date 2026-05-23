@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // narrow-to-region + widen cycle
@@ -34,7 +34,7 @@ fn oracle_prop_save_restr_adv_narrow_widen_cycle() {
                       (widen)
                       (setq results (cons (list (point-min) (point-max) (buffer-string)) results))
                       (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ fn oracle_prop_save_restr_adv_preserves_state() {
                             (buffer-string)
                             (point-min)
                             (point-max))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ fn oracle_prop_save_restr_adv_deeply_nested() {
                       ;; Back to full buffer
                       (setq results (cons (buffer-string) results))
                       (nreverse results)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ fn oracle_prop_save_restr_adv_insert_delete_in_narrow() {
                                   narrow-after-delete)))))
                     ;; Full buffer after widen
                     (buffer-string))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn oracle_prop_save_restr_adv_search_in_narrow() {
                         (list count (buffer-string))))
                     ;; Full buffer: only the narrowed region was modified
                     (buffer-string))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ fn oracle_prop_save_restr_adv_point_bounds_tracking() {
                       (widen)
                       (setq r (cons (list 'widened (point-min) (point-max) (buffer-string)) r))
                       (nreverse r)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ fn oracle_prop_save_restr_adv_markers_under_narrow() {
                                 m1-after m2-after
                                 narrow-str
                                 (buffer-string))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ fn oracle_prop_save_restr_adv_section_processing() {
                                       (cons (list name line-count char-count)
                                             sections)))))))
                       (nreverse sections)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,5 +301,5 @@ fn oracle_prop_save_restr_adv_accumulate_from_regions() {
                             (nreverse scores)
                             total
                             (/ total count))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

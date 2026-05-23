@@ -5,8 +5,7 @@
 //! `lisp/subr.el`.  The shape of evaluated frames is user-visible Elisp data.
 
 use super::common::{
-    assert_ok_eq, eval_oracle_and_neovm_with_bootstrap,
-    return_if_neovm_enable_oracle_proptest_not_set,
+    assert_ok_eq, eval_oracle_and_neovm, return_if_neovm_enable_oracle_proptest_not_set,
 };
 
 #[test]
@@ -28,7 +27,7 @@ fn oracle_backtrace_frame_base_counts_from_nearest_activation() {
   (unwind-protect
       (neomacs--oracle-bt-target 3 4)
     (fmakunbound 'neomacs--oracle-bt-target)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         "((t neomacs--oracle-bt-target (3 4)) (nil unwind-protect) (t t neomacs--oracle-bt-target) nil)",
         &oracle,

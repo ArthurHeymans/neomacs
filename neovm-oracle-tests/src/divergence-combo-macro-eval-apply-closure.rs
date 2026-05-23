@@ -1,13 +1,13 @@
 //! Divergence tests: macro expansion + eval + apply + funcall + closure.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_macro_expansion_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-men-xxx (op &rest args)
     `(,op ,@args))
@@ -29,7 +29,7 @@ fn divergence_macro_expansion_nested() {
 fn divergence_apply_funcall_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((add (lambda (a b c) (+ a b c)))
         (mul (lambda (a b) (* a b))))
@@ -52,7 +52,7 @@ fn divergence_apply_funcall_partial() {
 fn divergence_closure_over_mutable_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((state '(nil)))
     (let ((push-fn (lambda (val)
@@ -81,7 +81,7 @@ fn divergence_closure_over_mutable_state() {
 fn divergence_nested_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((outer 1))
     (let ((mid (let ((inner 2))
@@ -106,7 +106,7 @@ fn divergence_nested_closure_capture() {
 fn divergence_defmacro_with_gensym() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-dwg-swap-xxx (a b)
     (let ((tmp (make-symbol "--tmp--")))
@@ -128,7 +128,7 @@ fn divergence_defmacro_with_gensym() {
 fn divergence_eval_defun_and_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (eval '(defun test-edf-xxx (x y)
            (list (* x y) (+ x y) (- x y))))
@@ -149,7 +149,7 @@ fn divergence_eval_defun_and_funcall() {
 fn divergence_closure_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((compose (lambda (f g)
                    (lambda (x) (funcall f (funcall g x)))))
@@ -174,7 +174,7 @@ fn divergence_closure_composition() {
 fn divergence_macro_anaphoric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-ma-when-xxx (test &rest body)
     `(let ((it ,test))
@@ -194,7 +194,7 @@ fn divergence_macro_anaphoric() {
 fn divergence_recursive_lambda_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (letrec ((factorial
             (lambda (n)
@@ -215,7 +215,7 @@ fn divergence_recursive_lambda_funcall() {
 fn divergence_eval_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (list (eval '(condition-case err
                   (/ 10 0)

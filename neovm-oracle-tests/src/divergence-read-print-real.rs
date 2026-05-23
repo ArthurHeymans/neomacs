@@ -1,13 +1,13 @@
 //! Divergence tests: real read/print behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_read_basic_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (read-from-string \"42\")
   (read-from-string \"3.14\")
@@ -24,7 +24,7 @@ fn divergence_read_basic_types() {
 fn divergence_print_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((print-circle t)
         (obj (list 'a 'b)))
   (nconc obj obj)
@@ -37,7 +37,7 @@ fn divergence_print_circle() {
 fn divergence_print_gensym_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (make-symbol \"temp\")))
   (list (symbolp sym)
         (symbol-name sym)
@@ -53,7 +53,7 @@ fn divergence_print_gensym_symbols() {
 fn divergence_print_escape_newlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"hello\\nworld\"))
   (list s
         (let ((print-escape-newlines t))
@@ -67,7 +67,7 @@ fn divergence_print_escape_newlines() {
 fn divergence_format_specifiers_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (format \"hello %s\" \"world\")
   (format \"count: %d\" 42)
@@ -84,7 +84,7 @@ fn divergence_format_specifiers_real() {
 fn divergence_read_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((data '((1 (2 3)) [4 5] \"six\" :kw))
         (printed (prin1-to-string data))
         (re-read (read-from-string printed)))
@@ -98,7 +98,7 @@ fn divergence_read_nested_structures() {
 fn divergence_print_length_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((print-length 3))
   (list (prin1-to-string '(1 2 3 4 5))
         (prin1-to-string '[1 2 3 4 5])
@@ -110,7 +110,7 @@ fn divergence_print_length_limit() {
 fn divergence_print_level_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((print-level 2))
   (list (prin1-to-string '(1 (2 (3 (4)))))
         (prin1-to-string '((a (b (c))))))) ",
@@ -121,7 +121,7 @@ fn divergence_print_level_limit() {
 fn divergence_princ_vs_prin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((s \"hello\"))
   (list (prin1-to-string s)
         (with-output-to-string (princ s))
@@ -133,7 +133,7 @@ fn divergence_princ_vs_prin1() {
 fn divergence_print_escape_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((s \"caf\\u00e9\")
         (p1 (prin1-to-string s))
         (r1 (car (read-from-string p1))))

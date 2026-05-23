@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // string-replace: basic, multiple occurrences, no match
@@ -26,7 +26,7 @@ fn oracle_prop_string_replace_basic_and_multiple() {
   (string-replace "a" "AAA" "abracadabra")
   ;; Replacement shorter than original
   (string-replace "abc" "x" "abcdefabcghi"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ fn oracle_prop_string_replace_empty_strings() {
   (string-replace "" "x" "")
   ;; Entire string is the match
   (string-replace "hello" "" "hello"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ fn oracle_prop_string_replace_case_and_special_chars() {
   (string-replace "\\" "/" "path\\to\\file")
   ;; Overlapping pattern: string-replace is non-greedy, left-to-right
   (string-replace "aa" "b" "aaaa"))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ fn oracle_prop_string_search_all_params() {
   (string-search "he" "hello" 0)
   ;; Search at end of string
   (string-search "d" "world" 4))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ fn oracle_prop_string_search_edge_cases() {
   (string-search "Hello" "hello world")
   ;; START-POS equals length of string
   (string-search "" "abc" 3))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ fn oracle_prop_number_sequence_all_params() {
   (number-sequence 10 0 -2)
   ;; Large step that overshoots: still includes FROM
   (number-sequence 1 3 10))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ fn oracle_prop_number_sequence_float_and_edge_cases() {
   (number-sequence 7 7 0)
   ;; Descending with float step
   (number-sequence 1.0 0.0 -0.5))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,5 +209,5 @@ fn oracle_prop_string_search_substring_parsing() {
     (let ((input "name=Alice\nage=30\ncity=Boston\nactive=true"))
       (let ((lines (funcall split-lines input)))
         (mapcar parse-kv lines)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: buffer substring, insert, delete, replace edge.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buffer_substring_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -22,7 +22,7 @@ fn divergence_buffer_substring_variants() {
 fn divergence_insert_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert-char ?X 5)
   (buffer-string)) "#,
@@ -33,7 +33,7 @@ fn divergence_insert_char() {
 fn divergence_insert_before_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (let ((m (point-marker)))
@@ -48,7 +48,7 @@ fn divergence_insert_before_markers() {
 fn divergence_delete_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (delete-region 6 12)
@@ -60,7 +60,7 @@ fn divergence_delete_region() {
 fn divergence_delete_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (goto-char 1)
@@ -73,7 +73,7 @@ fn divergence_delete_char() {
 fn divergence_delete_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (goto-char 12)
@@ -86,7 +86,7 @@ fn divergence_delete_backward() {
 fn divergence_replace_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo bar foo baz foo")
   (goto-char 1)
@@ -100,7 +100,7 @@ fn divergence_replace_string() {
 fn divergence_substitute_command_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'substitute-command-keys)
   (stringp (substitute-command-keys "hello"))
@@ -112,7 +112,7 @@ fn divergence_substitute_command_keys() {
 fn divergence_format_mode_line_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'format-mode-line)
   (stringp (format-mode-line "%b"))
@@ -125,7 +125,7 @@ fn divergence_format_mode_line_spec() {
 fn divergence_propertize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s (propertize "hello" 'face 'bold 'mouse-face 'highlight)))
   (list (get-text-property 0 'face s)
         (get-text-property 0 'mouse-face s)

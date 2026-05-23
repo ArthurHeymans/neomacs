@@ -1,13 +1,13 @@
 //! Divergence tests: encoding + buffer + marker + minibuffer history combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_multibyte_insert_marker_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABC")
   (let ((m1 (copy-marker 1))
@@ -32,7 +32,7 @@ fn divergence_multibyte_insert_marker_positions() {
 fn divergence_encode_decode_buffer_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello \xc3\xa9 World \xe2\x82\xac")
   (let* ((raw (buffer-string))
@@ -50,7 +50,7 @@ fn divergence_encode_decode_buffer_roundtrip() {
 fn divergence_buffer_local_marker_encoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-blm-pos-xxx 0)
   (make-variable-buffer-local 'test-blm-pos-xxx)
@@ -72,7 +72,7 @@ fn divergence_buffer_local_marker_encoding() {
 fn divergence_charset_conversion_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "\xc3\xa9\xc3\xa0\xc3\xb9")
   (let* ((s1 (buffer-string))
@@ -92,7 +92,7 @@ fn divergence_charset_conversion_after_edit() {
 fn divergence_substring_multibyte_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((s "A\xc3\xa9B\xc3\xa0C"))
     (list (substring s 0 1)
@@ -111,7 +111,7 @@ fn divergence_substring_multibyte_boundary() {
 fn divergence_narrow_multibyte_search_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA\xc3\xa9BBB\xc3\xa0CCC")
   (let ((m (copy-marker 4)))
@@ -131,7 +131,7 @@ fn divergence_narrow_multibyte_search_marker() {
 fn divergence_replace_multibyte_preserves_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "A\xc3\xa9B\xc3\xa0C")
   (let ((m1 (copy-marker 1))
@@ -152,7 +152,7 @@ fn divergence_replace_multibyte_preserves_markers() {
 fn divergence_case_change_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((lower "\xc3\xa9\xc3\xa0\xc3\xb9")
         (upper "\xc3\x89\xc3\x80\xc3\x99"))
@@ -170,7 +170,7 @@ fn divergence_case_change_multibyte() {
 fn divergence_buffer_multibyte_undo_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "START")
   (undo-boundary)
@@ -195,7 +195,7 @@ fn divergence_buffer_multibyte_undo_sequence() {
 fn divergence_char_after_multibyte_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "A\xc3\xa9B\xc3\xa0C\xc3\xb9D")
   (list (char-after 1)

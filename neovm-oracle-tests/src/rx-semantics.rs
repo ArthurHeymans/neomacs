@@ -4,7 +4,7 @@
 //! exact expansion strings and selected match behavior for local and global
 //! definitions.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -22,7 +22,7 @@ fn oracle_prop_rx_to_string_core_forms() {
    (rx-to-string '(seq (syntax word) (not (syntax whitespace))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -41,7 +41,7 @@ fn oracle_prop_rx_macro_expansion_and_match_behavior() {
      (string-match re "abc-"))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn oracle_prop_rx_let_and_rx_let_eval_definitions() {
        (rx-to-string 'runtime-chars)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn oracle_prop_rx_let_rest_and_binding_error_contracts() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -118,5 +118,5 @@ fn oracle_prop_rx_define_and_error_signaling() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

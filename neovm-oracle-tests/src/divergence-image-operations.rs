@@ -1,13 +1,13 @@
 //! Divergence tests: image manipulation, image-cache, image descriptors.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_image_descriptors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'image-type)
   (fboundp 'image-type-from-file-header)
@@ -20,7 +20,7 @@ fn divergence_image_descriptors() {
 fn divergence_image_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'image-property)
   (fboundp 'image-size)
@@ -33,7 +33,7 @@ fn divergence_image_properties() {
 fn divergence_image_cache_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'clear-image-cache)
   (fboundp 'image-flush)
@@ -46,7 +46,7 @@ fn divergence_image_cache_functions() {
 fn divergence_image_formatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'image-format)
   (fboundp 'image-animate)
@@ -59,7 +59,7 @@ fn divergence_image_formatting() {
 fn divergence_xpm_colors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (member 'xpm image-types)
   (fboundp 'xpm-generate-message)
@@ -71,7 +71,7 @@ fn divergence_xpm_colors() {
 fn divergence_image_magick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'imagemagick-types)
   (fboundp 'imagemagick-enabled-p)
@@ -83,7 +83,7 @@ fn divergence_image_magick() {
 fn divergence_image_scaling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'image-scaling-factor)
   (boundp 'image-resize-margin)
@@ -95,7 +95,7 @@ fn divergence_image_scaling() {
 fn divergence_image_size_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'image-size-in-characters)
   (fboundp 'image-get-display-property)
@@ -107,7 +107,7 @@ fn divergence_image_size_pixel() {
 fn divergence_fringe_bitmaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-fringe-bitmap)
   (fboundp 'destroy-fringe-bitmap)
@@ -120,7 +120,7 @@ fn divergence_fringe_bitmaps() {
 fn divergence_window_divider() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'window-divider-default-places)
   (boundp 'window-divider-default-bottom-width)

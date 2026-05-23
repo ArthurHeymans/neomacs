@@ -1,13 +1,13 @@
 //! Divergence tests: real arithmetic & number behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_bignum_arithmetic_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((a (expt 2 100))
         (b (expt 2 99)))
   (list (= a (* b 2))
@@ -23,7 +23,7 @@ fn divergence_bignum_arithmetic_real() {
 fn divergence_float_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (floatp 1.0e+INF)
   (isnan 1.0e+NaN)
@@ -41,7 +41,7 @@ fn divergence_float_edge_cases() {
 fn division_rounding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (/ 7 2)
   (/ 7 -2)
@@ -59,7 +59,7 @@ fn division_rounding() {
 fn divergence_trig_math() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((pi 3.141592653589793))
   (list (< (abs (- (cos 0.0) 1.0)) 1e-10)
         (< (abs (- (sin pi) 0.0)) 1e-6)
@@ -75,7 +75,7 @@ fn divergence_trig_math() {
 fn divergence_number_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (integerp 42)
   (integerp 42.0)
@@ -98,7 +98,7 @@ fn divergence_number_type_predicates() {
 fn divergence_comparison_semantics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (= 1 1)
   (= 1 1.0)
@@ -118,7 +118,7 @@ fn divergence_comparison_semantics() {
 fn divergence_bitwise_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (ash 1 4)
   (ash 16 -1)
@@ -135,7 +135,7 @@ fn divergence_bitwise_operations() {
 fn divergence_random_and_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (number-to-string 42)
   (number-to-string 3.14)
@@ -150,7 +150,7 @@ fn divergence_random_and_decode() {
 fn divergence_rounding_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (floor 3.7)
   (floor -3.7)
@@ -168,7 +168,7 @@ fn divergence_rounding_functions() {
 fn divergence_bignum_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((big1 (expt 2 256))
         (big2 (expt 2 256)))
   (list (= big1 big2)

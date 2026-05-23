@@ -1,13 +1,13 @@
 //! Divergence tests: text property intervals + overlay priority + face combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_text_property_interval_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
   (put-text-property 1 10 'level 1)
@@ -29,7 +29,7 @@ fn divergence_text_property_interval_merge() {
 fn divergence_overlay_stacking_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov1 (make-overlay 1 10))
@@ -58,7 +58,7 @@ fn divergence_overlay_stacking_priority() {
 fn divergence_textprop_front_sticky_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB")
   (put-text-property 1 4 'sticky-front t)
@@ -80,7 +80,7 @@ fn divergence_textprop_front_sticky_insert() {
 fn divergence_remove_list_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 10 'face 'bold)
@@ -105,7 +105,7 @@ fn divergence_remove_list_properties() {
 fn divergence_overlay_invisible_text_adjustment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov1 (make-overlay 5 9))
@@ -125,7 +125,7 @@ fn divergence_overlay_invisible_text_adjustment() {
 fn divergence_textprop_category_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (put 'test-cat-xxx 'face 'bold)
   (put 'test-cat-xxx 'invisible nil)
@@ -149,7 +149,7 @@ fn divergence_textprop_category_inheritance() {
 fn divergence_overlay_before_string_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "MIDDLE")
   (let ((ov (make-overlay 1 6)))
@@ -169,7 +169,7 @@ fn divergence_overlay_before_string_after_string() {
 fn divergence_textprop_search_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
   (put-text-property 1 4 'group 'a)
@@ -190,7 +190,7 @@ fn divergence_textprop_search_property() {
 fn divergence_set_text_properties_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (put-text-property 1 10 'old t)
@@ -213,7 +213,7 @@ fn divergence_set_text_properties_overwrite() {
 fn divergence_overlay_move_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((ov (make-overlay 1 4)))

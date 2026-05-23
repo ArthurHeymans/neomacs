@@ -4,10 +4,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_via_binary,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Game tree representation and traversal
@@ -119,7 +116,7 @@ fn oracle_prop_minimax_advanced_game_tree_representation() {
     (fmakunbound 'neovm--mma-count-leaves)
     (fmakunbound 'neovm--mma-depth)
     (fmakunbound 'neovm--mma-leaf-values)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +217,7 @@ fn oracle_prop_minimax_advanced_alpha_beta_counting() {
            (list (car c1) (car c2)))))
     (fmakunbound 'neovm--mma-mm-plain)
     (fmakunbound 'neovm--mma-mm-ab)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,7 +350,7 @@ fn oracle_prop_minimax_advanced_ttt_full_game() {
     (fmakunbound 'neovm--mma-ttt-ab)
     (fmakunbound 'neovm--mma-ttt-best-move)
     (fmakunbound 'neovm--mma-ttt-play-game)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +463,7 @@ fn oracle_prop_minimax_advanced_move_ordering() {
     (fmakunbound 'neovm--mma-mo-order)
     (fmakunbound 'neovm--mma-mo-ab)
     (fmakunbound 'neovm--mma-mo-ab-unordered)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -547,7 +544,7 @@ fn oracle_prop_minimax_advanced_iterative_deepening() {
                   most-negative-fixnum most-positive-fixnum t)))
     (fmakunbound 'neovm--mma-id-ab)
     (fmakunbound 'neovm--mma-id-search)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -644,7 +641,7 @@ fn oracle_prop_minimax_advanced_negamax() {
     (fmakunbound 'neovm--mma-negamax)
     (fmakunbound 'neovm--mma-negamax-ab)
     (fmakunbound 'neovm--mma-std-mm)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -792,6 +789,6 @@ fn oracle_prop_minimax_advanced_connect_game() {
     (fmakunbound 'neovm--mma-c3-moves)
     (fmakunbound 'neovm--mma-c3-minimax)
     (fmakunbound 'neovm--mma-c3-best-col)))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_via_binary(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq("(0 1 2 (0 1 2 3) (1 42) 2)", &oracle, &neovm);
 }

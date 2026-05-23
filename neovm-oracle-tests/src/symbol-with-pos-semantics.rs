@@ -5,7 +5,7 @@
 //! in `src/data.c`.  Reader integration is in `src/lread.c`, which wraps
 //! symbols when `symbols-with-pos-enabled` is non-nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -30,7 +30,7 @@ fn oracle_position_symbol_basic_accessors_and_predicates() {
    (remove-pos-from-symbol "not-a-symbol")))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_position_symbol_type_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_position_symbol_accepts_negative_fixnum_positions() {
    (symbol-with-pos-pos copied)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn oracle_symbol_with_pos_enabled_controls_symbolp_and_eq() {
            (eq (bare-symbol sp-a) (bare-symbol sp-b)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,5 +114,5 @@ fn oracle_read_symbols_with_positions_records_source_offsets() {
      (symbol-with-pos-pos (cdr (nth 2 form)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

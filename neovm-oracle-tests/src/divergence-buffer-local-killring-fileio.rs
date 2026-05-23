@@ -1,13 +1,13 @@
 //! Divergence tests: buffer-local variables, defaults, and kill ring.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buffer_local_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-bl-test 0)
   (set (make-local-variable 'my-bl-test) 42)
@@ -22,7 +22,7 @@ fn divergence_buffer_local_set() {
 fn divergence_kill_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-bl-kill 0)
   (set (make-local-variable 'my-bl-kill) 99)
@@ -37,7 +37,7 @@ fn divergence_kill_buffer_local() {
 fn divergence_default_toplevel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-dt-var 10)
   (setq-default my-dt-var 20)
@@ -50,7 +50,7 @@ fn divergence_default_toplevel() {
 fn divergence_buffer_local_value_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-cross-buf-var 0)
   (let ((buf (generate-new-buffer " *cross-buf-test*")))
@@ -68,7 +68,7 @@ fn divergence_buffer_local_value_across_buffers() {
 fn divergence_kill_ring_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((kill-ring nil))
   (kill-new "first")
   (kill-new "second")
@@ -84,7 +84,7 @@ fn divergence_kill_ring_basic() {
 fn divergence_kill_ring_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((kill-ring nil))
   (kill-new "a")
   (kill-new "b" t)
@@ -98,7 +98,7 @@ fn divergence_kill_ring_append() {
 fn divergence_kill_ring_max_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((kill-ring nil)
         (kill-ring-max 3))
   (dotimes (i 5)
@@ -114,7 +114,7 @@ fn divergence_kill_ring_max_size() {
 fn divergence_with_temp_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((tmp (make-temp-file "neovm-test-")))
   (unwind-protect
       (progn
@@ -133,7 +133,7 @@ fn divergence_with_temp_file() {
 fn divergence_expand_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (file-name-directory "/foo/bar/baz.el")
   (file-name-nondirectory "/foo/bar/baz.el")
@@ -147,7 +147,7 @@ fn divergence_expand_file_name() {
 fn divergence_directory_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((tmp (make-temp-file "neovm-dir-test-" t)))
   (unwind-protect
       (progn
@@ -162,7 +162,7 @@ fn divergence_directory_files() {
 fn divergence_env_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (getenv "HOME")
   (getenv "PATH")

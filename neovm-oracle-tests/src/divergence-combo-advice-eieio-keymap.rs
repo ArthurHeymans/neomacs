@@ -1,13 +1,13 @@
 //! Divergence tests: advice + EIEIO + keymap triple combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_advice_on_generic_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-adv-obj-xxx () ((v :initarg :v :initform 1)))
   (cl-defgeneric test-adv-compute-xxx (obj) "Compute.")
@@ -28,7 +28,7 @@ fn divergence_advice_on_generic_method() {
 fn divergence_keymap_binding_eieio_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-km-obj-xxx () ((name :initarg :name)))
   (cl-defmethod test-km-greet-xxx ((obj test-km-obj-xxx))
@@ -47,7 +47,7 @@ fn divergence_keymap_binding_eieio_method() {
 fn divergence_advice_on_defun_creating_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-factory-xxx () ((id :initarg :id)))
   (defun test-make-factory-xxx (id)
@@ -73,7 +73,7 @@ fn divergence_advice_on_defun_creating_objects() {
 fn divergence_eieio_accessor_advice_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-acc-xxx ()
     ((val :initarg :val :accessor test-acc-val-xxx :initform 0)))
@@ -95,7 +95,7 @@ fn divergence_eieio_accessor_advice_setf() {
 fn divergence_method_inheritance_advice_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-parent-xxx () ())
   (defclass test-child-xxx (test-parent-xxx) ())
@@ -121,7 +121,7 @@ fn divergence_method_inheritance_advice_child() {
 fn divergence_defclass_accessor_keymap_describe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-desc-xxx ()
     ((data :initarg :data :accessor test-desc-data-xxx :initform nil)))
@@ -138,7 +138,7 @@ fn divergence_defclass_accessor_keymap_describe() {
 fn divergence_defgeneric_filter_args_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-fa-xxx () ((v :initarg :v :initform 0)))
   (cl-defgeneric test-fa-add-xxx (obj n) "Add n to v.")
@@ -161,7 +161,7 @@ fn divergence_defgeneric_filter_args_advice() {
 fn divergence_method_error_after_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-err-method-log-xxx nil)
   (defclass test-err-xxx () ((v :initarg :v)))
@@ -185,7 +185,7 @@ fn divergence_method_error_after_check() {
 fn divergence_advice_on_make_instance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-mi-xxx () ((val :initarg :val :initform 0)))
   (advice-add 'make-instance :filter-args
@@ -210,7 +210,7 @@ fn divergence_advice_on_make_instance() {
 fn divergence_keymap_parent_chain_with_eieio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defclass test-km-disp-xxx () ((mode :initarg :mode)))
   (cl-defmethod test-km-execute-xxx ((obj test-km-disp-xxx))

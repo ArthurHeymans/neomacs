@@ -6,7 +6,7 @@
 //! then shows it only after normal BODY completion.  These tests exercise that
 //! exact contract without substituting a different output path.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -40,7 +40,7 @@ fn oracle_prop_with_output_to_temp_buffer_body_not_current() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn oracle_prop_with_output_to_temp_buffer_clears_existing_buffer() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn oracle_prop_with_output_to_temp_buffer_setup_hook_current_buffer() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -132,5 +132,5 @@ fn oracle_prop_with_output_to_temp_buffer_no_show_on_error() {
       (kill-buffer name))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

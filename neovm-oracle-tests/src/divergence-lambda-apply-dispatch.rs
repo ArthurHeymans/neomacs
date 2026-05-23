@@ -1,13 +1,13 @@
 //! Divergence tests: advsi dispatch, subr argument parsing, lambda list edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_lambda_rest_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((fn (lambda (&rest args) args)))
   (list (funcall fn)
         (funcall fn 1)
@@ -19,7 +19,7 @@ fn divergence_lambda_rest_args() {
 fn divergence_lambda_optional_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-flet ((fn ((a 10) (b 20)) (+ a b)))
   (list (fn 1 2)
@@ -32,7 +32,7 @@ fn divergence_lambda_optional_args() {
 fn divergence_lambda_key_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (cl-flet ((fn (&key a b) (list a b)))
   (list (fn :a 1 :b 2)
@@ -46,7 +46,7 @@ fn divergence_lambda_key_args() {
 fn divergence_apply_with_splice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (apply #'+ 1 2 '(3 4))
   (apply #'+ '(1 2 3))
@@ -58,7 +58,7 @@ fn divergence_apply_with_splice() {
 fn divergence_funcall_vs_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (funcall #'+ 1 2 3)
   (apply #'+ 1 2 '(3))
@@ -70,7 +70,7 @@ fn divergence_funcall_vs_apply() {
 fn divergence_macroexpand_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (macroexpand '(when t 42))
   (macroexpand '(and 1 2 3))
@@ -82,7 +82,7 @@ fn divergence_macroexpand_all() {
 fn divergence_define_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-inline)
   (fboundp 'inline-let)
@@ -94,7 +94,7 @@ fn divergence_define_inline() {
 fn divergence_closure_over_let_star() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((x 1)
         (f (lambda () x))
         (x 2))
@@ -106,7 +106,7 @@ fn divergence_closure_over_let_star() {
 fn divergence_nested_let_star_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((a 1)
          (b (1+ a))
          (c (+ a b)))
@@ -118,7 +118,7 @@ fn divergence_nested_let_star_bindings() {
 fn divergence_setq_default_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar my-sqbl-var 0)
   (setq-default my-sqbl-var 10)

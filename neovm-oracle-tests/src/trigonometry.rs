@@ -3,10 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm,
-    eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // tan
@@ -16,9 +13,9 @@ use super::common::{
 fn oracle_prop_tan_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(tan 0)");
-    assert_oracle_parity_with_bootstrap("(tan 0.0)");
-    assert_oracle_parity_with_bootstrap("(tan 1.0)");
+    assert_oracle_parity("(tan 0)");
+    assert_oracle_parity("(tan 0.0)");
+    assert_oracle_parity("(tan 1.0)");
 }
 
 #[test]
@@ -42,22 +39,22 @@ fn oracle_prop_tan_identity() {
 fn oracle_prop_asin_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(asin 0)");
-    assert_oracle_parity_with_bootstrap("(asin 0.0)");
-    assert_oracle_parity_with_bootstrap("(asin 1.0)");
-    assert_oracle_parity_with_bootstrap("(asin -1.0)");
-    assert_oracle_parity_with_bootstrap("(asin 0.5)");
+    assert_oracle_parity("(asin 0)");
+    assert_oracle_parity("(asin 0.0)");
+    assert_oracle_parity("(asin 1.0)");
+    assert_oracle_parity("(asin -1.0)");
+    assert_oracle_parity("(asin 0.5)");
 }
 
 #[test]
 fn oracle_prop_acos_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(acos 0)");
-    assert_oracle_parity_with_bootstrap("(acos 0.0)");
-    assert_oracle_parity_with_bootstrap("(acos 1.0)");
-    assert_oracle_parity_with_bootstrap("(acos -1.0)");
-    assert_oracle_parity_with_bootstrap("(acos 0.5)");
+    assert_oracle_parity("(acos 0)");
+    assert_oracle_parity("(acos 0.0)");
+    assert_oracle_parity("(acos 1.0)");
+    assert_oracle_parity("(acos -1.0)");
+    assert_oracle_parity("(acos 0.5)");
 }
 
 #[test]
@@ -69,7 +66,7 @@ fn oracle_prop_asin_acos_complementary() {
                   (let ((sum (+ (asin x) (acos x)))
                         (half-pi (/ float-pi 2.0)))
                     (< (abs (- sum half-pi)) 1e-10)))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -101,10 +98,10 @@ fn oracle_prop_acos_roundtrip() {
 fn oracle_prop_atan_one_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(atan 0)");
-    assert_oracle_parity_with_bootstrap("(atan 1.0)");
-    assert_oracle_parity_with_bootstrap("(atan -1.0)");
-    assert_oracle_parity_with_bootstrap("(atan 0.5)");
+    assert_oracle_parity("(atan 0)");
+    assert_oracle_parity("(atan 1.0)");
+    assert_oracle_parity("(atan -1.0)");
+    assert_oracle_parity("(atan 0.5)");
 }
 
 #[test]
@@ -112,11 +109,11 @@ fn oracle_prop_atan_two_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     // atan with 2 args is atan2(y, x)
-    assert_oracle_parity_with_bootstrap("(atan 1.0 1.0)");
-    assert_oracle_parity_with_bootstrap("(atan 1.0 0.0)");
-    assert_oracle_parity_with_bootstrap("(atan 0.0 1.0)");
-    assert_oracle_parity_with_bootstrap("(atan -1.0 -1.0)");
-    assert_oracle_parity_with_bootstrap("(atan 0.0 -1.0)");
+    assert_oracle_parity("(atan 1.0 1.0)");
+    assert_oracle_parity("(atan 1.0 0.0)");
+    assert_oracle_parity("(atan 0.0 1.0)");
+    assert_oracle_parity("(atan -1.0 -1.0)");
+    assert_oracle_parity("(atan 0.0 -1.0)");
 }
 
 #[test]
@@ -152,9 +149,9 @@ fn oracle_prop_atan2_quadrants() {
 fn oracle_prop_exp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap("(exp 0)");
-    assert_oracle_parity_with_bootstrap("(exp 1)");
-    assert_oracle_parity_with_bootstrap("(exp -1)");
+    assert_oracle_parity("(exp 0)");
+    assert_oracle_parity("(exp 1)");
+    assert_oracle_parity("(exp -1)");
 }
 
 #[test]
@@ -195,7 +192,7 @@ fn oracle_prop_trig_pythagorean_identity() {
                       (unless (< (abs (- sum 1.0)) 1e-10)
                         (setq result nil))))
                   result)";
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -226,7 +223,7 @@ fn oracle_prop_trig_complex_computation() {
                       (let ((orig-dist (sqrt (+ (* px px) (* py py))))
                             (new-dist (sqrt (+ (* rx rx) (* ry ry)))))
                         (< (abs (- orig-dist new-dist)) 1e-10)))))";
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]

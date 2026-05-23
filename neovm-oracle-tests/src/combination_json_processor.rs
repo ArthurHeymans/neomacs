@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Path-based querying of nested alist structures
@@ -77,7 +77,7 @@ fn oracle_prop_json_proc_path_query() {
           (funcall 'neovm--jp-get-path data "meta.version")))
     (fmakunbound 'neovm--jp-split)
     (fmakunbound 'neovm--jp-get-path)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ fn oracle_prop_json_proc_path_set() {
     (fmakunbound 'neovm--jp-split2)
     (fmakunbound 'neovm--jp-set-path)
     (fmakunbound 'neovm--jp-get-path2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ fn oracle_prop_json_proc_array_transform() {
       (mapcar (lambda (s) (cons (cdr (assq 'name s))
                                 (cdr (assq 'grade s))))
               graded))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ fn oracle_prop_json_proc_flatten() {
             ;; Total number of leaf entries
             (length flat))))
     (fmakunbound 'neovm--jp-flatten)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ fn oracle_prop_json_proc_diff() {
             ;; Unchanged keys
             (cdr (assq 'unchanged diff)))))
     (fmakunbound 'neovm--jp-diff)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +446,7 @@ fn oracle_prop_json_proc_full_pipeline() {
     (fmakunbound 'neovm--jp-fp-split)
     (fmakunbound 'neovm--jp-fp-get)
     (fmakunbound 'neovm--jp-fp-flatten)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -523,5 +523,5 @@ fn oracle_prop_json_proc_merge_with_strategy() {
           (let ((merged (funcall 'neovm--jp-merge base override :concat)))
             (cdr (assq 'features merged)))))
     (fmakunbound 'neovm--jp-merge)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: complex type coercion + conversion chains.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_number_string_conversion_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((n 42)
         (s (number-to-string n))
         (n2 (string-to-number s))
@@ -27,7 +27,7 @@ fn divergence_number_string_conversion_chain() {
 fn divergence_char_string_number_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((char ?A)
         (s (char-to-string char))
         (n (aref s 0))
@@ -45,7 +45,7 @@ fn divergence_char_string_number_roundtrip() {
 fn divergence_sequence_type_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((lst '(1 2 3 4 5))
         (vec [1 2 3 4 5])
         (str \"abcde\"))
@@ -64,7 +64,7 @@ fn divergence_sequence_type_conversions() {
 fn divergence_float_integer_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (floor 3.7)
   (ceiling 3.7)
@@ -85,7 +85,7 @@ fn divergence_float_integer_boundary() {
 fn divergence_symbol_string_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((sym 'hello-world)
         (name (symbol-name sym))
         (back (intern name)))
@@ -101,7 +101,7 @@ fn divergence_symbol_string_conversion() {
 fn divergence_format_specs_all_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (format \"%s\" 'symbol)
   (format \"%S\" '(a b c))
@@ -123,7 +123,7 @@ fn divergence_format_specs_all_types() {
 fn divergence_bool_coercion_in_conditionals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (if 0 'yes 'no)
   (if \"\" 'yes 'no)
@@ -145,7 +145,7 @@ fn divergence_bool_coercion_in_conditionals() {
 fn divergence_list_vector_hash_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((alist '((a . 1) (b . 2) (c . 3)))
         (ht (alist-get 'hash-table (make-hash-table :test 'equal))))
   (dolist (p alist) (puthash (car p) (cdr p) ht))
@@ -162,7 +162,7 @@ fn divergence_list_vector_hash_conversion() {
 fn divergence_string_bytes_chars_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ascii \"hello\")
         (utf8 \"\\u4e16\\u754c\")
         (mixed \"hi\\u4e16\"))
@@ -182,7 +182,7 @@ fn divergence_string_bytes_chars_multibyte() {
 fn divergence_propertized_string_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((s (propertize \"hello\" 'face 'bold 'data 42))
         (len (length s))
         (has-face (get-text-property 1 'face s))

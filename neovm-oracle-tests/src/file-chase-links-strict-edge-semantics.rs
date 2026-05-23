@@ -5,7 +5,7 @@
 //! directories.  The optional numeric LIMIT caps how many final links are
 //! followed.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -75,5 +75,5 @@ fn oracle_file_chase_links_limit_parent_symlink_and_cycle_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

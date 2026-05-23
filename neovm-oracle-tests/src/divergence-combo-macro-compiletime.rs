@@ -1,13 +1,13 @@
 //! Divergence tests: macro + compile-time + runtime interaction combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_macro_generates_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-safe-div-xxx (a b)
     (let ((err-sym (make-symbol "err")))
@@ -25,7 +25,7 @@ fn divergence_macro_generates_condition_case() {
 fn divergence_eval_when_compile_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defvar test-ewc-xxx nil)
   (eval-and-compile
@@ -42,7 +42,7 @@ fn divergence_eval_when_compile_side_effects() {
 fn divergence_macro_inspects_env() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-if-compiled-xxx (then &rest else)
     (if (byte-code-function-p (symbol-function 'car))
@@ -57,7 +57,7 @@ fn divergence_macro_inspects_env() {
 fn divergence_nested_macro_expansion_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-wrap-xxx (expr) `(list 'wrapped ,expr))
   (defmacro test-double-xxx (expr) `(test-wrap-xxx (test-wrap-xxx ,expr)))
@@ -71,7 +71,7 @@ fn divergence_nested_macro_expansion_order() {
 fn divergence_compiler_macro_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (define-inline test-fast-square-xxx (x)
     (inline-leteval (x)
@@ -89,7 +89,7 @@ fn divergence_compiler_macro_behavior() {
 fn divergence_defmacro_with_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-let1-xxx (binding &rest body)
     (pcase binding
@@ -104,7 +104,7 @@ fn divergence_defmacro_with_destructuring() {
 fn divergence_macro_with_gensym_preventing_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-swap-xxx (a b)
     (let ((tmp (make-symbol "tmp")))
@@ -121,7 +121,7 @@ fn divergence_macro_with_gensym_preventing_capture() {
 fn divergence_eval_form_with_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-when-xxx (cond &rest body)
     `(if ,cond (progn ,@body)))
@@ -138,7 +138,7 @@ fn divergence_eval_form_with_macros() {
 fn divergence_macro_generates_defun_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-define-ops-xxx (name &rest args)
     (let ((fn-name (intern (format "test-op-%s-xxx" name))))
@@ -158,7 +158,7 @@ fn divergence_macro_generates_defun_chain() {
 fn divergence_macro_with_backquote_splice_and_unquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (defmacro test-bind-and-run-xxx (bindings &rest body)
     `(let ,(mapcar (lambda (b) (list (car b) (cadr b))) bindings)

@@ -6,7 +6,7 @@
 //! stop-on-success/failure return values, and local `t` splicing of global
 //! hooks.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_run_hook_with_args_function_value_and_final_value() {
    (nreverse log)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_run_hook_until_success_and_failure_stop_semantics() {
            (run-hook-with-args-until-failure 'empty-hook)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -94,5 +94,5 @@ fn oracle_run_hook_with_args_local_t_ordering_for_stop_variants() {
       (makunbound 'neovm--rhwa-failure))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

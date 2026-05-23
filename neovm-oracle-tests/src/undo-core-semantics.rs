@@ -5,7 +5,7 @@
 //! `lisp/simple.el`.  These tests pin observable low-level behavior without
 //! depending on interactive command-loop undo state.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,7 +26,7 @@ fn oracle_undo_boundary_idempotence_and_disabled_buffer() {
     (nreverse results)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn oracle_buffer_enable_disable_undo_current_and_named_buffers() {
     (kill-buffer buf)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn oracle_primitive_undo_manual_insert_and_delete_records() {
      buffer-undo-list)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn oracle_primitive_undo_property_records_preserve_nil_values() {
      (mapcar (lambda (pos) (text-properties-at pos)) '(1 2 3 4)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -108,7 +108,7 @@ fn oracle_text_property_undo_records_use_character_positions() {
   buffer-undo-list)
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn oracle_primitive_undo_property_records_use_character_positions() {
      (mapcar (lambda (pos) (text-properties-at pos)) '(1 2 3)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -144,7 +144,7 @@ fn oracle_undo_restores_heterogeneous_text_property_intervals() {
   (mapcar (lambda (pos) (text-properties-at pos)) '(1 2 3 4 5 6)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn oracle_undo_restores_removed_property_when_range_start_was_unpropertied() {
   (mapcar (lambda (pos) (text-properties-at pos)) '(1 2 3 4 5 6)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -181,5 +181,5 @@ fn oracle_let_bound_buffer_undo_list_on_modified_buffer_skips_first_change() {
           (buffer-modified-p))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

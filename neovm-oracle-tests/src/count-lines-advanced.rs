@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // count-lines between two positions
@@ -36,7 +36,7 @@ fn oracle_prop_count_lines_between_positions() {
                       ;; Reversed args should also work (count-lines handles both orders)
                       (setq results (cons (count-lines 15 3) results))
                       (nreverse results)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ fn oracle_prop_count_lines_empty_buffer() {
                       (point-min)
                       (point-max)
                       (= (point-min) (point-max))))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ fn oracle_prop_count_lines_trailing_newline() {
                       (insert "no-newline-at-all")
                       (setq results (cons (count-lines (point-min) (point-max)) results)))
                     (nreverse results))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ fn oracle_prop_line_number_at_pos_various() {
                       (goto-char 9)
                       (setq results (cons (line-number-at-pos) results))
                       (nreverse results)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ fn oracle_prop_line_number_at_pos_absolute() {
                                     (line-number-at-pos (point-max) t))))
                             (widen)
                             (list no-narrow narrowed-results))))))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ fn oracle_prop_line_number_at_pos_narrowed_multiple() {
                                         (line-number-at-pos (point-max) t))
                                       all-results))))
                       (nreverse all-results)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ fn oracle_prop_count_lines_build_line_index() {
                 (list idx (nreverse checks)
                       (count-lines (point-min) (point-max))))))
         (fmakunbound 'neovm--test-build-line-index)))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,5 +310,5 @@ fn oracle_prop_count_lines_constructed_content() {
                         (list total first-half second-half
                               (nreverse cross-checks)
                               (nreverse lines)))))"####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

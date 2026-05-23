@@ -5,7 +5,7 @@
 //! `lisp/simple.el`.  These tests focus on narrowing clipping and active mark
 //! behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_region_bounds_clip_mark_to_current_narrowing() {
       (list left (region-beginning) (region-end)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn oracle_mark_respects_transient_mark_mode_and_force() {
        (mark)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn oracle_set_mark_nil_clears_mark_and_region_errors() {
        (error (list (car err) (cdr err)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -102,5 +102,5 @@ fn oracle_push_mark_return_value_and_ring_side_effects() {
          (mapcar #'marker-position global-mark-ring))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -4,7 +4,7 @@
 //! stateful, returns t, rejects a second start while running, and
 //! `profiler-memory-stop` returns whether the profiler had been running.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -24,5 +24,5 @@ fn oracle_profiler_memory_start_stop_running_state() {
   (list initial start running second stop stopped stop2))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

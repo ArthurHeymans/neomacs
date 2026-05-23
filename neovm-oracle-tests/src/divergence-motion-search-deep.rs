@@ -1,13 +1,13 @@
 //! Divergence tests: motion, goto, forward/backward, end-of deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_line_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Line1\nLine2\nLine3\nLine4\n")
   (goto-char (point-min))
@@ -22,7 +22,7 @@ fn divergence_line_motion() {
 fn divergence_beginning_end_of_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (goto-char 5)
@@ -36,7 +36,7 @@ fn divergence_beginning_end_of_line() {
 fn divergence_buffer_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (list (point-min) (point-max)
@@ -50,7 +50,7 @@ fn divergence_buffer_bounds() {
 fn divergence_word_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "hello world foo bar")
   (goto-char 1)
@@ -67,7 +67,7 @@ fn divergence_word_motion() {
 fn divergence_char_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (goto-char 1)
@@ -84,7 +84,7 @@ fn divergence_char_motion() {
 fn divergence_line_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Line1\nLine2\nLine3\nLine4\n")
   (goto-char 1)
@@ -99,7 +99,7 @@ fn divergence_line_number() {
 fn divergence_skip_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "   hello   world   ")
   (goto-char 1)
@@ -116,7 +116,7 @@ fn divergence_skip_chars() {
 fn divergence_skip_chars_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "   hello   world   ")
   (goto-char (point-max))
@@ -131,7 +131,7 @@ fn divergence_skip_chars_backward() {
 fn divergence_search_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "foo bar foo bar foo")
   (goto-char 1)
@@ -146,7 +146,7 @@ fn divergence_search_boundaries() {
 fn divergence_count_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "a\nb\nc\nd\ne\n")
   (list (count-lines (point-min) (point-max))

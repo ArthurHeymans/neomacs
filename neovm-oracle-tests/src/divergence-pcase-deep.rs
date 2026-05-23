@@ -1,13 +1,13 @@
 //! Divergence tests: pcase-let, pcase-dolist, and pcase-lambda.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_pcase_let() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (pcase-let ((`(,a ,b ,c) '(1 2 3)))
   (list a b c))"#,
@@ -18,7 +18,7 @@ fn divergence_pcase_let() {
 fn divergence_pcase_let_star() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (pcase-let* ((`(,a ,b) '(1 2))
              (`(,c ,d) (list a b)))
@@ -30,7 +30,7 @@ fn divergence_pcase_let_star() {
 fn divergence_pcase_dolist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (let ((result nil))
   (pcase-dolist (`(,k ,v) '((a 1) (b 2) (c 3)))
@@ -43,7 +43,7 @@ fn divergence_pcase_dolist() {
 fn divergence_pcase_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (let ((fn (pcase-lambda (`(,a ,b)) (+ a b))))
   (list (funcall fn '(1 2))
@@ -55,7 +55,7 @@ fn divergence_pcase_lambda() {
 fn divergence_pcase_app_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (pcase '(1 2 3)
   ((app length 3) 'three-elements)
@@ -67,7 +67,7 @@ fn divergence_pcase_app_pattern() {
 fn divergence_pcase_pred_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (list
   (pcase 42 ((pred numberp) 'number) (_ 'other))
@@ -80,7 +80,7 @@ fn divergence_pcase_pred_pattern() {
 fn divergence_pcase_not_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (list
   (pcase 5 ((and (pred numberp) (not 0)) 'nonzero) (_ 'other))
@@ -92,7 +92,7 @@ fn divergence_pcase_not_pattern() {
 fn divergence_pcase_or_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (list
   (pcase 'a ((or 'a 'b 'c) 'abc) (_ 'other))
@@ -105,7 +105,7 @@ fn divergence_pcase_or_pattern() {
 fn divergence_pcase_and_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (pcase '(1 2 3)
   ((and `(,a ,b ,c) (guard (> a 0)))
@@ -118,7 +118,7 @@ fn divergence_pcase_and_pattern() {
 fn divergence_pcase_rx_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'pcase)
 (pcase "hello123"
   ((rx (group (+ (any "a-z"))) (group (+ digit)))

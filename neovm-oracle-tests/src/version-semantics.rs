@@ -5,7 +5,7 @@
 //! checks and must preserve GNU's treatment of pre-release markers, snapshots,
 //! letter suffixes, and trailing zeroes.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -27,7 +27,7 @@ fn oracle_prop_version_to_list_valid_forms() {
  (version-to-list "22.3Z"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn oracle_prop_version_to_list_invalid_forms() {
  '("1.0prepre2" "1.0..7.5" "22.8X3" "alpha3.2" "" "pre1"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn oracle_prop_version_list_comparison_trailing_zeroes_and_prereleases() {
  (version-list-not-zero '(0 0 0)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn oracle_prop_version_string_comparison_wrappers() {
  (version< "22.3b" "22.3.3"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -122,5 +122,5 @@ fn oracle_prop_version_dynamic_separator_regexp_and_error_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

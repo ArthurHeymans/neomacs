@@ -1,8 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` `field-at-pos`.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_field_at_pos_boundary_semantics() {
@@ -25,7 +23,7 @@ fn oracle_prop_gnu_field_at_pos_boundary_semantics() {
                    (get-char-property p 'field)))
            (number-sequence 1 5))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +52,7 @@ fn oracle_field_bounds_escape_and_limit_semantics() {
     (field-end 3 t 5)
     (field-end 3 t 8))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -83,7 +81,7 @@ fn oracle_field_string_and_delete_field_semantics() {
          (field-string 99)
        (error (list (car err) (cdr err)))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -110,5 +108,5 @@ fn oracle_constrain_to_field_boundary_motion_semantics() {
        (constrain-to-field 8 2))
      (list (constrain-to-field nil 2) (point)))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: project, xref, imenu, etags deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_project_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'project-current)
   (fboundp 'project-roots)
@@ -20,7 +20,7 @@ fn divergence_project_functions() {
 fn divergence_xref_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'xref-find-definitions)
   (fboundp 'xref-find-references)
@@ -33,7 +33,7 @@ fn divergence_xref_functions() {
 fn divergence_imenu_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'imenu)
   (fboundp 'imenu-add-to-menubar)
@@ -46,7 +46,7 @@ fn divergence_imenu_functions() {
 fn divergence_etags_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'find-tag)
   (fboundp 'visit-tags-table)
@@ -59,7 +59,7 @@ fn divergence_etags_functions() {
 fn divergence_compile_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'compile)
   (fboundp 'recompile)
@@ -72,7 +72,7 @@ fn divergence_compile_functions() {
 fn divergence_grep_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'grep)
   (fboundp 'lgrep)
@@ -85,7 +85,7 @@ fn divergence_grep_functions() {
 fn divergence_occur_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'occur)
   (fboundp 'multi-occur)
@@ -100,7 +100,7 @@ fn divergence_occur_deep() {
 fn divergence_ediff_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ediff-files)
   (fboundp 'ediff-buffers)
@@ -112,7 +112,7 @@ fn divergence_ediff_functions() {
 fn diff_tool_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'diff)
   (fboundp 'diff-backup)
@@ -124,7 +124,7 @@ fn diff_tool_functions() {
 fn divergence_vcs_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'vc-dir)
   (fboundp 'vc-diff)

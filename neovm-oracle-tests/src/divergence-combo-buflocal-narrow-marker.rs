@@ -1,13 +1,13 @@
 //! Divergence tests: buffer-local state + narrowing + marker deep combos.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_buflocal_var_narrow_widen_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq test-bl-narrow-xxx 'global-val)
   (make-variable-buffer-local 'test-bl-narrow-xxx)
@@ -27,7 +27,7 @@ fn divergence_buflocal_var_narrow_widen_propagation() {
 fn divergence_markers_spanning_narrow_boundary_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m1 (set-marker (make-marker) 1))
@@ -55,7 +55,7 @@ fn divergence_markers_spanning_narrow_boundary_edit() {
 fn divergence_multi_buffer_markers_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "BUF1-CONTENT")
   (let ((m1 (set-marker (make-marker) 5 (current-buffer)))
@@ -82,7 +82,7 @@ fn divergence_multi_buffer_markers_switch() {
 fn divergence_save_excursion_restriction_window_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5")
   (goto-char 15)
@@ -105,7 +105,7 @@ fn divergence_save_excursion_restriction_window_nested() {
 fn divergence_buflocal_tab_width_indent_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq tab-width 4)
   (setq-local tab-width 8)
@@ -123,7 +123,7 @@ fn divergence_buflocal_tab_width_indent_in_narrow() {
 fn divergence_overlay_narrow_marker_reconcile() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
   (let ((ov (make-overlay 5 9))
@@ -147,7 +147,7 @@ fn divergence_overlay_narrow_marker_reconcile() {
 fn divergence_kill_buffer_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((buf (generate-new-buffer "*test-kill-mk*"))
        (m (with-current-buffer buf
             (insert "content")
@@ -164,7 +164,7 @@ fn divergence_kill_buffer_with_markers() {
 fn divergence_buffer_locals_list_after_multiple_setq_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq-local test-bvl1-xxx 1)
   (setq-local test-bvl2-xxx 2)
@@ -183,7 +183,7 @@ fn divergence_buffer_locals_list_after_multiple_setq_local() {
 fn divergence_undo_with_buffer_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (setq test-undo-bl-xxx 'initial)
   (make-variable-buffer-local 'test-undo-bl-xxx)
@@ -202,7 +202,7 @@ fn divergence_undo_with_buffer_locals() {
 fn divergence_with_temp_buffer_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(with-temp-buffer
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((m (set-marker (make-marker) 10)))

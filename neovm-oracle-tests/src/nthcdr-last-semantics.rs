@@ -4,7 +4,7 @@
 //! list unchanged, and improper-list errors report the original list object.
 //! GNU implements `last` in `lisp/subr.el`, where negative N returns nil.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -21,7 +21,7 @@ fn oracle_nthcdr_negative_and_oversized_counts() {
         (nth 99 lst)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_nthcdr_improper_list_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn oracle_nthcdr_argument_type_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn oracle_nthcdr_circular_large_and_bignum_counts() {
         (nth 100000000000000000000000000000000000001 x)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -105,5 +105,5 @@ fn oracle_last_negative_zero_and_improper_cases() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

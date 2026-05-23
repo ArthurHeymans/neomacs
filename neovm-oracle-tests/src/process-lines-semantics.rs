@@ -5,9 +5,7 @@
 //! temporary output buffer is current and before the buffer is split into
 //! lines; handlers can inspect or mutate that buffer.
 
-use super::common::{
-    assert_oracle_parity_with_bootstrap, return_if_neovm_enable_oracle_proptest_not_set,
-};
+use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_process_lines_splits_trailing_newlines_like_temp_buffer() {
@@ -20,7 +18,7 @@ fn oracle_prop_gnu_process_lines_splits_trailing_newlines_like_temp_buffer() {
  (process-lines-ignore-status "sh" "-c" "printf 'kept\n'; exit 7"))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -44,7 +42,7 @@ fn oracle_prop_gnu_process_lines_status_handler_sees_output_buffer_before_collec
    handler-point))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -57,5 +55,5 @@ fn oracle_prop_gnu_process_lines_nil_status_handler_errors_after_output() {
   (error err))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

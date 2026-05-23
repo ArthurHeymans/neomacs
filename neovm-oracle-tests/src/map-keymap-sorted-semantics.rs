@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `map-keymap-sorted'.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_map_keymap_sorted_orders_events_and_preserves_bindings() {
@@ -44,5 +44,5 @@ fn oracle_map_keymap_sorted_orders_events_and_preserves_bindings() {
         (condition-case e
             (map-keymap-sorted (lambda (key binding) nil) 42)
           (error (list (car e) (cadr e) (caddr e))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

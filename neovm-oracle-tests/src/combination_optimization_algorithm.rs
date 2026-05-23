@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // 1D Gradient descent on a quadratic
@@ -82,7 +82,7 @@ fn oracle_prop_optimization_gradient_descent_1d() {
     (fmakunbound 'neovm--opt-gd1-grad)
     (fmakunbound 'neovm--opt-gd1-step)
     (fmakunbound 'neovm--opt-gd1-run)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn oracle_prop_optimization_gradient_descent_2d() {
     (fmakunbound 'neovm--opt-gd2-grad-y)
     (fmakunbound 'neovm--opt-gd2-step)
     (fmakunbound 'neovm--opt-gd2-run)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ fn oracle_prop_optimization_simulated_annealing() {
     (fmakunbound 'neovm--opt-sa-neighbor)
     (fmakunbound 'neovm--opt-sa-accept)
     (fmakunbound 'neovm--opt-sa-run)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,7 +332,7 @@ fn oracle_prop_optimization_hill_climbing_restarts() {
     (fmakunbound 'neovm--opt-hc-prng)
     (fmakunbound 'neovm--opt-hc-climb)
     (fmakunbound 'neovm--opt-hc-restarts)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +390,7 @@ fn oracle_prop_optimization_binary_search() {
          (funcall 'neovm--opt-bs-f 1000)))
     (fmakunbound 'neovm--opt-bs-f)
     (fmakunbound 'neovm--opt-bs-ternary)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +456,7 @@ fn oracle_prop_optimization_golden_section_search() {
          (funcall 'neovm--opt-gs-f 8000)))
     (fmakunbound 'neovm--opt-gs-f)
     (fmakunbound 'neovm--opt-gs-search)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -542,7 +542,7 @@ fn oracle_prop_optimization_newtons_method() {
     (fmakunbound 'neovm--opt-nr-step)
     (fmakunbound 'neovm--opt-nr-run)
     (fmakunbound 'neovm--opt-nr-optim-step)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -678,5 +678,5 @@ fn oracle_prop_optimization_nelder_mead_2d() {
     (fmakunbound 'neovm--opt-nm-contract)
     (fmakunbound 'neovm--opt-nm-step)
     (fmakunbound 'neovm--opt-nm-run)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

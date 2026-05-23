@@ -1,13 +1,13 @@
 //! Divergence tests: narrowing, widening, restriction edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_narrow_to_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World Foo Bar")
   (narrow-to-region 7 11)
@@ -20,7 +20,7 @@ fn divergence_narrow_to_region() {
 fn divergence_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World Foo Bar")
   (narrow-to-region 7 11)
@@ -35,7 +35,7 @@ fn divergence_widen() {
 fn divergence_narrow_and_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 7)
@@ -49,7 +49,7 @@ fn divergence_narrow_and_restriction() {
 fn divergence_buffer_narrowed_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (buffer-narrowed-p)
   (progn (insert "Hello") (buffer-narrowed-p))
@@ -62,7 +62,7 @@ fn divergence_buffer_narrowed_p() {
 fn divergence_save_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (narrow-to-region 1 5)
@@ -81,7 +81,7 @@ fn divergence_save_restriction() {
 fn divergence_save_excursion_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (narrow-to-region 1 5)
@@ -97,7 +97,7 @@ fn divergence_save_excursion_narrow() {
 fn divergence_narrow_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (make-overlay 1 6)
@@ -112,7 +112,7 @@ fn divergence_narrow_with_overlay() {
 fn divergence_narrow_with_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -127,7 +127,7 @@ fn divergence_narrow_with_text_props() {
 fn divergence_narrow_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 7)
@@ -143,7 +143,7 @@ fn divergence_narrow_insert() {
 fn divergence_narrow_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (narrow-to-region 3 7)

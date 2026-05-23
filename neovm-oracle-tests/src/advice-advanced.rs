@@ -3,7 +3,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Multiple advisors on the same function (LIFO ordering)
@@ -34,7 +34,7 @@ fn oracle_prop_advice_advanced_multiple_before_advisors_lifo() {
         (fmakunbound 'neovm--adv-b1)
         (fmakunbound 'neovm--adv-b2)
         (makunbound 'neovm--adv-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ fn oracle_prop_advice_advanced_before_after_around_combined() {
         (fmakunbound 'neovm--adv-after2)
         (fmakunbound 'neovm--adv-around2)
         (makunbound 'neovm--adv-log2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ fn oracle_prop_advice_advanced_remove_and_member_lifecycle() {
         (fmakunbound 'neovm--adv-tgt3)
         (fmakunbound 'neovm--adv-fn3a)
         (fmakunbound 'neovm--adv-fn3b)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn oracle_prop_advice_advanced_around_funcall_patterns() {
         (fmakunbound 'neovm--adv-passthru)
         (fmakunbound 'neovm--adv-xform)
         (fmakunbound 'neovm--adv-skip)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +182,7 @@ fn oracle_prop_advice_advanced_override_replaces_then_restores() {
             (list r1 r2 r3))
         (fmakunbound 'neovm--adv-tgt5)
         (fmakunbound 'neovm--adv-override5)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ fn oracle_prop_advice_advanced_logging_system() {
         (fmakunbound 'neovm--adv-tracer-add)
         (fmakunbound 'neovm--adv-tracer-mul)
         (makunbound 'neovm--adv-trace)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ fn oracle_prop_advice_advanced_memoization_wrapper() {
         (fmakunbound 'neovm--adv-memoize)
         (makunbound 'neovm--adv-memo-cache)
         (makunbound 'neovm--adv-memo-call-count)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,5 +316,5 @@ fn oracle_prop_advice_advanced_error_handling_chain() {
         (fmakunbound 'neovm--adv-safe-divide)
         (fmakunbound 'neovm--adv-log-divide)
         (makunbound 'neovm--adv-err-log)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

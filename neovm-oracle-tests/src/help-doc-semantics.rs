@@ -5,7 +5,7 @@
 //! and `help-function-arglist` behavior studied from GNU `src/doc.c` and
 //! `lisp/help.el`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -29,7 +29,7 @@ fn oracle_prop_help_split_and_add_fundoc_usage() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn oracle_prop_help_function_arglist_symbols_functions_and_autoloads() {
    (help-function-arglist 'apply t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn oracle_prop_documentation_property_eval_raw_and_substitution() {
      (documentation 'neomacs-oracle-doc nil))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn oracle_prop_documentation_property_value_evaluation_edges() {
                            (cons 'neomacs-oracle-doc-key nil) t)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -170,7 +170,7 @@ fn oracle_prop_documentation_property_variable_alias_fallback_edges() {
       (makunbound sym))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -198,5 +198,5 @@ fn oracle_prop_substitute_command_keys_keymap_quote_and_faces() {
          (eq plain (substitute-command-keys plain t)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

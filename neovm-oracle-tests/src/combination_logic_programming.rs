@@ -5,7 +5,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Facts database and simple queries with variable binding
@@ -95,7 +95,7 @@ fn oracle_prop_logic_prog_facts_and_queries() {
     (fmakunbound 'neovm--lp-lookup)
     (fmakunbound 'neovm--lp-unify)
     (fmakunbound 'neovm--lp-apply-subst)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +211,7 @@ fn oracle_prop_logic_prog_conjunction_backtracking() {
     (fmakunbound 'neovm--lp-apply-subst)
     (fmakunbound 'neovm--lp-query-goal)
     (fmakunbound 'neovm--lp-query-conj)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ fn oracle_prop_logic_prog_rules() {
     (fmakunbound 'neovm--lp-rename-vars)
     (fmakunbound 'neovm--lp-prove)
     (fmakunbound 'neovm--lp-prove-conj)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -507,7 +507,7 @@ fn oracle_prop_logic_prog_list_operations() {
     (fmakunbound 'neovm--lp-apply-subst)
     (fmakunbound 'neovm--lp-append-query)
     (fmakunbound 'neovm--lp-member-query)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -667,7 +667,7 @@ fn oracle_prop_logic_prog_arithmetic_constraints() {
     (fmakunbound 'neovm--lp-is)
     (fmakunbound 'neovm--lp-check)
     (fmakunbound 'neovm--lp-range-search)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +756,7 @@ fn oracle_prop_logic_prog_path_finding() {
     (fmakunbound 'neovm--lp-get-edges)
     (fmakunbound 'neovm--lp-find-paths)
     (fmakunbound 'neovm--lp-shortest-path)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -867,5 +867,5 @@ fn oracle_prop_logic_prog_constraint_satisfaction() {
     (fmakunbound 'neovm--lp-queens-safe-p)
     (fmakunbound 'neovm--lp-nqueens)
     (fmakunbound 'neovm--lp-nq-solve)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

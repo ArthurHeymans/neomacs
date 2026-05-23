@@ -1,7 +1,7 @@
 //! Oracle parity tests for GNU `subr.el` `add-minor-mode` semantics.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_with_bootstrap};
+use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_add_minor_mode_inserts_after_and_replaces_existing_entries() {
@@ -47,7 +47,7 @@ fn oracle_add_minor_mode_inserts_after_and_replaces_existing_entries() {
                                 (t 'other))))
                   minor-mode-map-alist)
           (get 'neo-mode :minor-mode-function))))"#;
-    let (oracle, neovm) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (oracle, neovm) = eval_oracle_and_neovm(form);
     assert_ok_eq(
         r#"(((neo-mode alpha anchor omega) ((alpha " A") (anchor " Anchor") (neo-mode " Neo") (omega " O")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . new) (omega . omega-map)) neo-toggle) (neo-mode alpha anchor omega) ((alpha " A") (anchor " Anchor") (neo-mode " New") (omega " O")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . repl) (omega . omega-map)) neo-toggle)"#,
         &oracle,

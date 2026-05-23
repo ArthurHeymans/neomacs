@@ -3,7 +3,7 @@
 //! GNU walks symbol function definitions until it finds a property on a symbol,
 //! reaches a non-symbol function object, or hits an unbound function.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -23,7 +23,7 @@ fn oracle_prop_function_get_reads_direct_symbol_property() {
   (setplist 'neovm--fg-direct nil))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn oracle_prop_function_get_follows_alias_chain_to_property() {
         '(neovm--fg-target neovm--fg-alias-1 neovm--fg-alias-2)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn oracle_prop_function_get_stops_at_first_symbol_property() {
         '(neovm--fg-base neovm--fg-wrapper)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,5 +87,5 @@ fn oracle_prop_function_get_unbound_and_non_symbol_inputs() {
   (setplist 'neovm--fg-unbound nil))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

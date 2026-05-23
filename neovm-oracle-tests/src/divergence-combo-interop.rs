@@ -1,13 +1,13 @@
 //! Divergence tests: complex interop - eval/funcall/load chains.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eval_nested_defun_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (eval '(defun test-compose-fn-xxx (f g)
            (lambda (x) (funcall f (funcall g x)))))
@@ -25,7 +25,7 @@ fn divergence_eval_nested_defun_funcall() {
 fn divergence_apply_partial_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((add5 (apply-partially '+ 5))
         (mul3 (apply-partially '* 3)))
   (list (funcall add5 10)
@@ -41,7 +41,7 @@ fn divergence_apply_partial_functions() {
 fn deficiency_mapcan_nconc_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let* ((input '((1 2) (3 4) (5 6)))
         (result (mapcan #'copy-sequence input))
         (doubled (mapcan (lambda (x) (list x (* x 10))) '(1 2 3))))
@@ -56,7 +56,7 @@ fn deficiency_mapcan_nconc_chain() {
 fn divergence_defalias_indirect_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defalias 'test-chain-a-xxx 'car)
   (defalias 'test-chain-b-xxx 'test-chain-a-xxx)
@@ -73,7 +73,7 @@ fn divergence_defalias_indirect_chain() {
 fn divergence_closure_over_let_star() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((fns nil))
   (let* ((a 1)
          (b (+ a 1))
@@ -91,7 +91,7 @@ fn divergence_closure_over_let_star() {
 fn divergence_eval_defmacro_then_use() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (eval '(defmacro test-thrice-xxx (expr)
            \\`(list ,expr ,expr ,expr)))
@@ -104,7 +104,7 @@ fn divergence_eval_defmacro_then_use() {
 fn divergence_funcall_compose_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-safe-div-xxx (a b)
     (condition-case err
@@ -125,7 +125,7 @@ fn divergence_funcall_compose_with_condition_case() {
 fn deficiency_obarray_map_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((syms '(test-ob-a-xxx test-ob-b-xxx test-ob-c-xxx)))
   (dolist (s syms) (set s (intern (symbol-name s))))
   (let ((found nil))
@@ -142,7 +142,7 @@ fn deficiency_obarray_map_symbols() {
 fn divergence_dynamic_binding_through_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-dyn-eval-xxx 'global)
   (defun test-dyn-access-xxx () test-dyn-eval-xxx)
@@ -158,7 +158,7 @@ fn divergence_dynamic_binding_through_eval() {
 fn deficiency_setf_generalized_with_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v [0 0 0 0 0])
         (indices '(1 3)))
   (dolist (i indices)

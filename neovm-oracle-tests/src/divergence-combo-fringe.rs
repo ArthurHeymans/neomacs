@@ -2,14 +2,14 @@
 //! fringe indicator/cursor alists, frame-fringe-width, fringe-bitmaps-at-pos,
 //! overlay fringe display specs, and fringe-mode customization.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_define_fringe_bitmap_known() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((bm (define-fringe-bitmap 'test-dfbk-xxx
               [#b10000000 #b01000000 #b00100000 #b00010000
@@ -33,7 +33,7 @@ fn divergence_define_fringe_bitmap_known() {
 fn divergence_window_fringes_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((fringes (window-fringes)))
     (list (= (length fringes) 4)
@@ -54,7 +54,7 @@ fn divergence_window_fringes_default() {
 fn divergence_set_window_fringes_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((w (selected-window))
         (orig (window-fringes)))
@@ -80,7 +80,7 @@ fn divergence_set_window_fringes_roundtrip() {
 fn divergence_fringe_buffer_local_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((default-left (default-value 'left-fringe-width))
         (default-right (default-value 'right-fringe-width))
@@ -114,7 +114,7 @@ fn divergence_fringe_buffer_local_vars() {
 fn divergence_fringe_indicator_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((orig fringe-indicator-alist))
     (list (listp fringe-indicator-alist)
@@ -146,7 +146,7 @@ fn divergence_fringe_indicator_alist() {
 fn divergence_fringe_cursor_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((orig fringe-cursor-alist))
     (list (listp fringe-cursor-alist)
@@ -173,7 +173,7 @@ fn divergence_fringe_cursor_alist() {
 fn divergence_frame_fringe_width_calls() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((fw (frame-fringe-width))
         (fw-selected (frame-fringe-width (selected-frame))))
@@ -193,7 +193,7 @@ fn divergence_frame_fringe_width_calls() {
 fn divergence_fringe_bitmaps_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Line with fringe indicators test content here")
   (let ((at-nil (fringe-bitmaps-at-pos))
@@ -217,7 +217,7 @@ fn divergence_fringe_bitmaps_at_pos() {
 fn divergence_fringe_overlay_display_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
   (let ((ov1 (make-overlay 5 9))
@@ -266,7 +266,7 @@ fn divergence_fringe_overlay_display_spec() {
 fn divergence_fringe_mode_customization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (require 'fringe)
   (let ((orig fringe-mode))

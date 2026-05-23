@@ -5,7 +5,7 @@
 //! and property interval manipulation.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // add-text-properties: additive merging across overlapping intervals
@@ -34,7 +34,7 @@ fn oracle_prop_tpm_add_text_properties_overlapping() {
                         (get-text-property i 'category s))
                   result)))
     (nreverse result)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ fn oracle_prop_tpm_set_text_properties_edge_cases() {
       (set-text-properties 5 5 '(dummy 1) s)
       (let ((no-op (get-text-property 5 'dummy s)))
         (list after-clear after-replace no-op)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ fn oracle_prop_tpm_text_property_not_all() {
     (text-property-not-all 0 10 'help-echo "tip" s)
     ;; All nil face in 8..10? Should return nil (face is nil in 8..10)
     (text-property-not-all 8 10 'face nil s)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ fn oracle_prop_tpm_single_property_change_traversal() {
         (list (nreverse face-changes)
               face-changes-back
               (nreverse echo-changes))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ fn oracle_prop_tpm_remove_return_value_and_partial() {
                           (get-text-property i 'help-echo s))
                     survey)))
       (list r1 r2 r3 r4 (nreverse survey)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn oracle_prop_tpm_malformed_plist_validation_order() {
    (condition-case err
        (add-text-properties 0 1 '(face . bold) s)
      (error (list (car err) (cdr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn oracle_prop_tpm_string_range_error_payloads() {
    (condition-case err
        (text-properties-at 3 s)
      (error (list (car err) (cdr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn oracle_prop_tpm_buffer_range_error_payloads() {
    (condition-case err
        (put-text-property 1 5 'face 'bold)
      (error (list (car err) (cdr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +280,7 @@ fn oracle_prop_tpm_buffer_text_property_operations() {
             (next-from-bold (next-single-property-change 5 'face)))
         (list r1 r2 r3 r4 r5 r6 r7 r8 r9 r10
               next-face next-from-bold)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +334,7 @@ fn oracle_prop_tpm_interval_merge_annotator() {
                     (previous-single-property-change 10 'face s)
                     (previous-single-property-change 6 'face s))))))
     (fmakunbound 'neovm--test-collect-intervals)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,5 +397,5 @@ fn oracle_prop_tpm_token_stream_intervals() {
                 (get-text-property 8 'token-type annotated)   ;; number (42)
                 )))
     (fmakunbound 'neovm--test-tokenize-annotate)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

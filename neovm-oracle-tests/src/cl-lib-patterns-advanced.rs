@@ -6,9 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{
-    assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm_with_bootstrap,
-};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // dotimes with complex result forms
@@ -25,7 +23,7 @@ fn oracle_prop_cl_adv_dotimes_result_accumulates_vector() {
                     (dotimes (i 8 v)
                       (setq fact (if (= i 0) 1 (* fact i)))
                       (aset v i fact)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,7 +42,7 @@ fn oracle_prop_cl_adv_dolist_result_partition() {
                       (if (= (% x 2) 0)
                           (setq evens (cons x evens))
                         (setq odds (cons x odds)))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,7 +70,7 @@ fn oracle_prop_cl_adv_nested_iteration_matrix_multiply() {
                           (aset (aref result i) j sum))))
                     (list (append (aref result 0) nil)
                           (append (aref result 1) nil)))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("((58 64) (139 154))", &o, &n);
 }
 
@@ -87,7 +85,7 @@ fn oracle_prop_cl_adv_nested_dolist_cartesian_filter() {
                         (when (> (+ a b) 7)
                           (setq result (cons (cons a b) result)))))
                     (nreverse result))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +104,7 @@ fn oracle_prop_cl_adv_loop_collect_when_with_index() {
                         (setq result (cons (list idx x) result)))
                       (setq idx (1+ idx)))
                     (nreverse result))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +132,7 @@ fn oracle_prop_cl_adv_reduce_nested_alist_merge() {
                     (sort merged (lambda (x y)
                                    (string< (symbol-name (car x))
                                             (symbol-name (car y))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +151,7 @@ fn oracle_prop_cl_adv_mapcan_flatten_and_transform() {
                         (setq result (nconc result
                                            (list n (* n 10) (* n 100))))))
                     result)"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(3 30 300 5 50 500 4 40 400)", &o, &n);
 }
 
@@ -186,6 +184,6 @@ fn oracle_prop_cl_adv_remove_if_not_chained_filters() {
                             (when (< x 20)
                               (setq step3 (cons x step3))))
                           (nreverse step3)))))"#;
-    let (o, n) = eval_oracle_and_neovm_with_bootstrap(form);
+    let (o, n) = eval_oracle_and_neovm(form);
     assert_ok_eq("(2 4 6 18 10 14 16)", &o, &n);
 }

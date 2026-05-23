@@ -1,13 +1,13 @@
 //! Divergence tests: undo, buffer-undo-list, primitive-undo deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_undo_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (let ((start-undo buffer-undo-list))
@@ -24,7 +24,7 @@ fn divergence_undo_basic() {
 fn divergence_undo_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (undo-boundary)
@@ -39,7 +39,7 @@ fn divergence_undo_boundary() {
 fn divergence_undo_with_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (let ((m (point-marker)))
@@ -54,7 +54,7 @@ fn divergence_undo_with_marker() {
 fn divergence_undo_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (delete-region 6 12)
@@ -68,7 +68,7 @@ fn divergence_undo_delete() {
 fn divergence_undo_prop_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello World")
   (put-text-property 1 6 'face 'bold)
@@ -83,7 +83,7 @@ fn divergence_undo_prop_change() {
 fn divergence_buffer_undo_list_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'undo-limit)
   (integerp undo-limit)
@@ -98,7 +98,7 @@ fn divergence_buffer_undo_list_limit() {
 fn divergence_undo_in_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'undo-only)
   (fboundp 'undo-in-region)
@@ -111,7 +111,7 @@ fn divergence_undo_in_region() {
 fn divergence_undo_auto() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'undo-auto-current-boundary-timer)
   (fboundp 'undo-auto--boundary-ensure-delayed)
@@ -124,7 +124,7 @@ fn divergence_undo_auto() {
 fn divergence_undo_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA")
   (undo-boundary)
@@ -144,7 +144,7 @@ fn divergence_undo_repeat() {
 fn divergence_undo_nil_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "Hello")
   (let ((ul buffer-undo-list))

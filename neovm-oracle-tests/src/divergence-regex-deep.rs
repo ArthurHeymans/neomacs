@@ -1,13 +1,13 @@
 //! Divergence tests: regexp engine deep - backreferences, lookahead, boundaries.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_regex_backreference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "\\(ab\\)\\1" "abab")
   (string-match "\\(ab\\)\\1" "abba")
@@ -19,7 +19,7 @@ fn divergence_regex_backreference() {
 fn divergence_regex_word_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "\\<hello\\>" "say hello world")
   (string-match "\\<hello\\>" "say helloworld")
@@ -31,7 +31,7 @@ fn divergence_regex_word_boundary() {
 fn divergence_regex_non_greedy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "<.*?>" "<a><b><c>")
   (match-string 0 "<a><b><c>")
@@ -45,7 +45,7 @@ fn divergence_regex_non_greedy() {
 fn divergence_regex_char_class_alternation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "[aeiou]" "xyz")
   (string-match "[aeiou]" "abc")
@@ -58,7 +58,7 @@ fn divergence_regex_char_class_alternation() {
 fn divergence_regex_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((s "line1\nline2\nline3"))
   (list
     (string-match "^line2" s)
@@ -71,7 +71,7 @@ fn divergence_regex_multiline() {
 fn divergence_regex_shy_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (string-match "\\(?:ab\\)\\(cd\\)" "abcd")
   (list (match-string 0 "abcd")
@@ -84,7 +84,7 @@ fn divergence_regex_shy_group() {
 fn divergence_regex_named_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (string-match "(?2:ab)(cd)" "abcd")
   (list (match-beginning 0)
@@ -98,7 +98,7 @@ fn divergence_regex_named_group() {
 fn divergence_regex_replace_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "aaa bbb aaa bbb aaa")
   (goto-char 1)
@@ -114,7 +114,7 @@ fn divergence_regex_replace_count() {
 fn divergence_regex_unicode_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "[[:alpha:]]+" "hello123")
   (match-string 0 "hello123")
@@ -128,7 +128,7 @@ fn divergence_regex_unicode_classes() {
 fn divergence_regex_case_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((case-fold-search t))
   (list (string-match "hello" "HELLO")
         (string-match "hello" "HELLO")))"#,
@@ -139,7 +139,7 @@ fn divergence_regex_case_fold_search() {
 fn divergence_regex_syntax_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (string-match "\\sw+" "hello world")
   (match-string 0 "hello world")

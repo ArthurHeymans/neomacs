@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `substitute-key-definition'.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_substitute_key_definition_direct_nested_oldmap_and_menu_items() {
@@ -28,5 +28,5 @@ fn oracle_substitute_key_definition_direct_nested_oldmap_and_menu_items() {
    (condition-case e
        (substitute-key-definition 'old-cmd 'new-cmd 42)
      (error (list (car e) (cadr e) (caddr e))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

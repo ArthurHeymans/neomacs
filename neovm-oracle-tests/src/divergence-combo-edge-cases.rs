@@ -1,13 +1,13 @@
 //! Divergence tests: edge cases with boundary values, nil, empty, limits.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_empty_string_boundary_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (string= \"\" \"\")
   (string< \"\" \"a\")
@@ -26,7 +26,7 @@ fn divergence_empty_string_boundary_ops() {
 fn divergence_nil_args_to_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (length nil)
   (append nil nil)
@@ -48,7 +48,7 @@ fn divergence_nil_args_to_functions() {
 fn divergence_numeric_boundary_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (= (expt 2 63) 9223372036854775808)
   (< most-negative-fixnum 0)
@@ -68,7 +68,7 @@ fn divergence_numeric_boundary_values() {
 fn divergence_buffer_empty_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (= (point-min) 1)
   (= (point-max) 1)
@@ -86,7 +86,7 @@ fn divergence_buffer_empty_boundary() {
 fn divergence_string_multibyte_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((empty \"\")
         (single \"x\")
         (mb \"\\u4e16\"))
@@ -107,7 +107,7 @@ fn divergence_string_multibyte_boundary() {
 fn divergence_symbol_nil_t_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (null nil)
   (not nil)
@@ -128,7 +128,7 @@ fn divergence_symbol_nil_t_boundary() {
 fn divergence_regex_empty_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"abc\")
   (goto-char 1)
@@ -145,7 +145,7 @@ fn divergence_regex_empty_match() {
 fn divergence_hash_table_empty_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((ht (make-hash-table :test 'equal)))
   (list (hash-table-count ht)
         (= (hash-table-count ht) 0)
@@ -161,7 +161,7 @@ fn divergence_hash_table_empty_ops() {
 fn divergence_vector_empty_and_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((v0 [])
         (v1 [42])
         (v2 [1 2]))
@@ -182,7 +182,7 @@ fn divergence_vector_empty_and_single() {
 fn divergence_char_boundary_codepoints() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (= ?A 65)
   (= ?a 97)

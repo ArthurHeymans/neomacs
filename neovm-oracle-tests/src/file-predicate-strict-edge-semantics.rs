@@ -5,7 +5,7 @@
 //! string, while existence/readability/directory/regular predicates follow
 //! symlinks and therefore treat dangling links as missing targets.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -66,7 +66,7 @@ fn oracle_file_predicates_symlink_and_missing_targets() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -121,5 +121,5 @@ fn oracle_file_predicates_dispatch_after_default_directory_expansion() {
     (makunbound 'neomacs--oracle-file-predicate-calls)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

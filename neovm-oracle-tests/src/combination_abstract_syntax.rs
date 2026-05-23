@@ -12,7 +12,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // 1. AST construction and pretty printing
@@ -109,7 +109,7 @@ fn oracle_prop_ast_construction_and_pretty_print() {
       (fmakunbound 'test-ast--let-expr)
       (fmakunbound 'test-ast--node-type)
       (fmakunbound 'test-ast--pretty))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ fn oracle_prop_ast_constant_folding() {
       (fmakunbound 'test-cf--apply-binop)
       (fmakunbound 'test-cf--apply-unary)
       (fmakunbound 'test-cf--fold))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +330,7 @@ fn oracle_prop_ast_dead_code_elimination() {
       (fmakunbound 'test-dce--let-expr)
       (fmakunbound 'test-dce--node-type)
       (fmakunbound 'test-dce--eliminate))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +447,7 @@ fn oracle_prop_ast_common_subexpression_elimination() {
       (fmakunbound 'test-cse--count-subexprs)
       (fmakunbound 'test-cse--replace)
       (fmakunbound 'test-cse--run))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +608,7 @@ fn oracle_prop_ast_to_stack_machine() {
       (fmakunbound 'test-sm--node-type)
       (fmakunbound 'test-sm--compile)
       (fmakunbound 'test-sm--execute))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -758,5 +758,5 @@ fn oracle_prop_ast_full_optimization_pipeline() {
       (fmakunbound 'test-pipe--compile)
       (fmakunbound 'test-pipe--exec)
       (fmakunbound 'test-pipe--run))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

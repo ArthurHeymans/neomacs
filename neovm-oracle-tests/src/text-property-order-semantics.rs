@@ -5,7 +5,7 @@
 //! observable order semantics for adding properties and replacing all
 //! properties, so these tests pin both paths.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_prop_add_text_properties_preserves_supplied_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_prop_propertize_preserves_supplied_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn oracle_prop_add_text_properties_replacement_keeps_existing_position() {
         (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -64,5 +64,5 @@ fn oracle_prop_set_text_properties_uses_replacement_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

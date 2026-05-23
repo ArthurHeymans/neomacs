@@ -1,13 +1,13 @@
 //! Divergence tests: real EIEIO advanced behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eieio_class_allocated_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-counter-xxx ()
     ((count :initform 0 :accessor test-counter-count-xxx
@@ -27,7 +27,7 @@ fn divergence_eieio_class_allocated_slots() {
 fn divergence_eieio_slot_boundp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-sb-xxx ()
     ((x :initarg :x)
@@ -43,7 +43,7 @@ fn divergence_eieio_slot_boundp() {
 fn divergence_eieio_make_instance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-point-xxx ()
     ((x :initarg :x :initform 0)
@@ -58,7 +58,7 @@ fn divergence_eieio_make_instance() {
 fn divergence_eieio_no_applicable_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-base-xxx () ())
   (cl-defgeneric test-generic-xxx (obj) \"Generic.\")
@@ -73,7 +73,7 @@ fn divergence_eieio_no_applicable_method() {
 fn divergence_eieio_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-pair-xxx ()
     ((a :initarg :a :initform 0)
@@ -92,7 +92,7 @@ fn divergence_eieio_clone() {
 fn divergence_eieio_object_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-printable-xxx ()
     ((val :initarg :val)))
@@ -106,7 +106,7 @@ fn divergence_eieio_object_print() {
 fn divergence_cl_defmethod_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-method-log-xxx nil)
   (defclass test-ma-xxx () ((v :initarg :v :initform 0)))
@@ -130,7 +130,7 @@ fn divergence_cl_defmethod_before_after() {
 fn divergence_eieio_initform_evaluation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-init-counter-xxx 0)
   (defclass test-init-xxx ()
@@ -148,7 +148,7 @@ fn divergence_eieio_initform_evaluation() {
 fn divergence_cl_defgeneric_docstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (cl-defgeneric test-doc-fn-xxx (x)
     \"A documented generic function.\")
@@ -162,7 +162,7 @@ fn divergence_cl_defgeneric_docstring() {
 fn divergence_eieio_multiple_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-mix-a-xxx () ((a :initarg :a)))
   (defclass test-mix-b-xxx () ((b :initarg :b)))

@@ -1,13 +1,13 @@
 //! Divergence tests: json, xml, csv parsing deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_json_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'json-parse-string)
   (fboundp 'json-parse-buffer)
@@ -20,7 +20,7 @@ fn divergence_json_parse() {
 fn divergence_json_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((obj '((foo . 1) (bar . 2) (baz . [3 4 5])))
         (json-str (json-serialize obj)))
   (list (stringp json-str)
@@ -33,7 +33,7 @@ fn divergence_json_roundtrip() {
 fn divergence_json_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'json-insert)
   (fboundp 'json-read)
@@ -47,7 +47,7 @@ fn divergence_json_types() {
 fn divergence_xml_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'xml-parse-region)
   (fboundp 'xml-parse-string)
@@ -61,7 +61,7 @@ fn divergence_xml_parse() {
 fn divergence_dom_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dom-tag)
   (fboundp 'dom-attributes)
@@ -77,7 +77,7 @@ fn divergence_dom_functions() {
 fn divergence_csv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'csv-parse-buffer)
   (fboundp 'csv-parse-string)
@@ -89,7 +89,7 @@ fn divergence_csv() {
 fn divergence_tsv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'tsv-mode)
   (fboundp 'align)
@@ -101,7 +101,7 @@ fn divergence_tsv() {
 fn divergence_yaml() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'yaml-parse-string)
   (fboundp 'yaml-parse-file)
@@ -113,7 +113,7 @@ fn divergence_yaml() {
 fn divergence_toml() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'toml-parse-string)
   (fboundp 'toml-parse-file)
@@ -125,7 +125,7 @@ fn divergence_toml() {
 fn divergence_rpc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'jsonrpc-request)
   (fboundp 'jsonrpc-notify)

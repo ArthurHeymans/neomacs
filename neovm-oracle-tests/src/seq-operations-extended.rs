@@ -6,7 +6,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // seq-map-indexed and seq-do with side-effects
@@ -37,7 +37,7 @@ fn oracle_prop_seq_ext_map_indexed_and_do() {
       (lambda (name idx)
         (list :id idx :name name))
       ["alice" "bob" "carol"])))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn oracle_prop_seq_ext_iteration_short_circuit_contracts() {
                         nil))
                     '(1 2 3))
         (error (list (car err) (cadr err)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ fn oracle_prop_seq_ext_let_destructuring() {
   ;; Empty sequence
   (seq-let (a b) nil
     (list a b)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn oracle_prop_seq_ext_let_setq_rest_destructuring_contracts() {
     (let ((a nil) (b nil) (rest nil))
       (seq-setq (a b &rest rest) [x y z w])
       (list a b rest))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ fn oracle_prop_seq_ext_into_and_concatenate() {
   (seq-into nil 'vector)
   ;; seq-concatenate with mixed types into list
   (seq-concatenate 'list "ab" [99 100] '(1 2)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn oracle_prop_seq_ext_core_copy_reverse_remove_contracts() {
         (seq-remove-at-position '(a b c) 9)
       (error (list (car err) (cadr err))))
     (seq-remove-at-position '(a b c) -1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ fn oracle_prop_seq_ext_mapcat_type_and_error_contracts() {
     (condition-case err
         (seq-mapcat (lambda (x) (list x)) '(1 2) 'hash-table)
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ fn oracle_prop_seq_ext_position_and_contains() {
     (seq-position '(10 20 30) 10)
     (seq-position '(10 20 30) 30)
     (seq-position nil 1)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn oracle_prop_seq_ext_contains_obsolete_contracts() {
                       (lambda (_target _element)
                         (signal 'wrong-type-argument '(integerp bad))))
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +375,7 @@ fn oracle_prop_seq_ext_set_operations() {
         (lambda (a b) (string= (downcase a) (downcase b))))
       (seq-intersection strs1 strs2
         (lambda (a b) (string= (downcase a) (downcase b)))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -408,7 +408,7 @@ fn oracle_prop_seq_ext_set_operations_order_and_type_contracts() {
                      (push (list a b) calls)
                      (string= (downcase a) (downcase b))))
         calls))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -440,7 +440,7 @@ fn oracle_prop_seq_ext_set_equal_p_contracts() {
                            (push (list a b) calls)
                            (eq a b)))
         calls))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +478,7 @@ fn oracle_prop_seq_ext_subseq_comprehensive() {
   (seq-subseq '(1 2 3) 0)
   ;; Single element
   (seq-subseq '(a b c d e) 2 3))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -512,7 +512,7 @@ fn oracle_prop_seq_ext_subseq_bounds_error_contracts() {
     (condition-case err
         (seq-subseq "abc" -4)
       (error (list (car err) (cadr err))))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +560,7 @@ fn oracle_prop_seq_ext_pipeline_word_frequency() {
                  frequent)
     ;; Hapax legomena (words appearing once)
     (seq-map #'car hapax)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -619,5 +619,5 @@ fn oracle_prop_seq_ext_reduce_complex_accumulations() {
     runs
     ;; Zipped pairs
     pairs))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

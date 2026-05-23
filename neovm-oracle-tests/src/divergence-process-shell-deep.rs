@@ -1,13 +1,13 @@
 //! Divergence tests: sub-process, shell, call-process deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_call_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'call-process)
   (fboundp 'call-process-region)
@@ -20,7 +20,7 @@ fn divergence_call_process() {
 fn divergence_shell_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'shell-command)
   (fboundp 'shell-command-to-string)
@@ -34,7 +34,7 @@ fn divergence_shell_functions() {
 fn divergence_make_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-process)
   (fboundp 'make-pipe-process)
@@ -47,7 +47,7 @@ fn divergence_make_process() {
 fn divergence_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'process-list)
   (fboundp 'get-process)
@@ -60,7 +60,7 @@ fn divergence_process_list() {
 fn divergence_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'accept-process-output)
   (fboundp 'process-buffer)
@@ -73,7 +73,7 @@ fn divergence_process_output() {
 fn divergence_process_filter_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'set-process-filter)
   (fboundp 'set-process-sentinel)
@@ -86,7 +86,7 @@ fn divergence_process_filter_sentinel() {
 fn divergence_process_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'set-process-coding-system)
   (fboundp 'process-coding-system)
@@ -99,7 +99,7 @@ fn divergence_process_coding() {
 fn divergence_process_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'process-get)
   (fboundp 'process-put)
@@ -112,7 +112,7 @@ fn divergence_process_plist() {
 fn divergence_signal_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'signal-process)
   (fboundp 'interrupt-process)
@@ -127,7 +127,7 @@ fn divergence_signal_process() {
 fn divergence_network_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-network-process)
   (fboundp 'make-serial-process)

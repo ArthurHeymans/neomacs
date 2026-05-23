@@ -1,6 +1,6 @@
 //! Oracle parity tests for `indent-to`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 
 #[test]
 fn oracle_indent_to_respects_tab_width_and_indent_tabs_mode() {
@@ -21,7 +21,7 @@ fn oracle_indent_to_respects_tab_width_and_indent_tabs_mode() {
                       (list (indent-to 6 2)
                             (current-column)
                             (append (buffer-string) nil))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -32,5 +32,5 @@ fn oracle_indent_to_honors_inhibit_read_only_binding() {
                       (list (indent-to 6 1)
                             (current-column)
                             (buffer-string))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

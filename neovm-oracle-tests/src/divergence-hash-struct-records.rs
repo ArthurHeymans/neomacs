@@ -1,13 +1,13 @@
 //! Divergence tests: hash tables, structs, records, eieio-core edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_make_hash_table_custom_test() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :test 'equal)))
   (puthash "key1" 'val1 ht)
   (puthash "key2" 'val2 ht)
@@ -22,7 +22,7 @@ fn divergence_make_hash_table_custom_test() {
 fn divergence_hash_table_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :test 'eq))
         keys vals)
   (puthash 'a 1 ht)
@@ -39,7 +39,7 @@ fn divergence_hash_table_iteration() {
 fn divergence_hash_table_removal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table)))
   (puthash 'x 10 ht)
   (puthash 'y 20 ht)
@@ -56,7 +56,7 @@ fn divergence_hash_table_removal() {
 fn divergence_hash_table_weakness() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((ht (make-hash-table :weakness t)))
   (puthash 'wk1 (list 1 2 3) ht)
   (list (hash-table-weakness ht)
@@ -70,7 +70,7 @@ fn divergence_hash_table_weakness() {
 fn divergence_copy_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((ht (make-hash-table))
          (ht2 (copy-hash-table ht)))
   (puthash 'a 1 ht)
@@ -86,7 +86,7 @@ fn divergence_copy_hash_table() {
 fn divergence_cl_defstruct_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (require 'cl-lib)
   (cl-defstruct (my-test-str (:constructor my-test-str-create))
@@ -102,7 +102,7 @@ fn divergence_cl_defstruct_basic() {
 fn divergence_record_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((desc (make-record-type 'point '(x y)))
          (ctor (record-constructor desc))
          (inst (funcall ctor 3 4)))
@@ -118,7 +118,7 @@ fn divergence_record_type() {
 fn divergence_named_record() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((cls (make-record-type 'pair '(car cdr)))
          (inst (funcall (record-constructor cls) 1 2)))
   (list (type-of inst)
@@ -130,7 +130,7 @@ fn divergence_named_record() {
 fn divergence_obarray_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (intern "my-obtest-sym")
   (list (intern-soft "my-obtest-sym")
@@ -144,7 +144,7 @@ fn divergence_obarray_symbols() {
 fn divergence_mapc_mapcan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(require 'cl-lib)
 (list
   (mapcar #'1+ '(1 2 3))
@@ -158,7 +158,7 @@ fn divergence_mapc_mapcan() {
 fn divergence_assoc_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((alist '((a . 1) (b . 2) (c . 3))))
   (list (assoc 'b alist)
         (assq 'a alist)
@@ -173,7 +173,7 @@ fn divergence_assoc_list_ops() {
 fn divergence_plist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((pl '(a 1 b 2 c 3)))
   (list (plist-get pl 'b)
         (plist-get pl 'z)

@@ -1,13 +1,13 @@
 //! Divergence tests: bookmark, register, kmacro edge cases.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_bookmark_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'bookmark-set)
   (fboundp 'bookmark-jump)
@@ -20,7 +20,7 @@ fn divergence_bookmark_functions() {
 fn divergence_bookmark_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'bookmark-save)
   (fboundp 'bookmark-load)
@@ -33,7 +33,7 @@ fn divergence_bookmark_save() {
 fn divergence_register_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'point-to-register)
   (fboundp 'jump-to-register)
@@ -49,7 +49,7 @@ fn divergence_register_functions() {
 fn divergence_register_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'register-describe-oneline)
   (fboundp 'get-register)
@@ -61,7 +61,7 @@ fn divergence_register_types() {
 fn divergence_abbrev_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'define-abbrev)
   (fboundp 'abbrev-expand)
@@ -75,7 +75,7 @@ fn divergence_abbrev_functions() {
 fn divergence_abbrev_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-abbrev-table)
   (fboundp 'clear-abbrev-table)
@@ -89,7 +89,7 @@ fn divergence_abbrev_tables() {
 fn divergence_auto_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'auto-fill-mode)
   (boundp 'auto-fill-function)
@@ -103,7 +103,7 @@ fn divergence_auto_fill() {
 fn divergence_paragraph_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'forward-paragraph)
   (fboundp 'backward-paragraph)
@@ -117,7 +117,7 @@ fn divergence_paragraph_functions() {
 fn divergence_page_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'forward-page)
   (fboundp 'backward-page)
@@ -131,7 +131,7 @@ fn divergence_page_functions() {
 fn divergence_sentence_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'forward-sentence)
   (fboundp 'backward-sentence)

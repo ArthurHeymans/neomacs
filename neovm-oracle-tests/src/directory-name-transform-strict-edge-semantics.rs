@@ -4,7 +4,7 @@
 //! `directory-name-p` in `src/fileio.c`.  These are syntactic operations with
 //! specific Unix root and empty-string behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -45,7 +45,7 @@ fn oracle_directory_name_transform_root_and_empty_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_directory_name_transform_handler_result_contract_edges() {
     (fmakunbound 'neomacs--oracle-directory-name-bad-handler)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -100,5 +100,5 @@ fn oracle_unhandled_file_name_directory_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

@@ -1,13 +1,13 @@
 //! Divergence tests: package system, dired, and ELP (Emacs Lisp Profiler).
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_package_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-initialize)
   (fboundp 'package-install)
@@ -23,7 +23,7 @@ fn divergence_package_functions() {
 fn divergence_package_archives() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'package-archives)
   (listp package-archives)
@@ -35,7 +35,7 @@ fn divergence_package_archives() {
 fn divergence_package_desc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'package-desc-create)
   (fboundp 'package-desc-name)
@@ -47,7 +47,7 @@ fn divergence_package_desc() {
 fn divergence_use_package() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'use-package)
   (featurep 'use-package)
@@ -59,7 +59,7 @@ fn divergence_use_package() {
 fn divergence_dired_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dired)
   (fboundp 'dired-other-window)
@@ -73,7 +73,7 @@ fn divergence_dired_functions() {
 fn divergence_dired_mode_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'dired-listing-switches)
   (stringp dired-listing-switches)
@@ -86,7 +86,7 @@ fn divergence_dired_mode_vars() {
 fn divergence_elp_profiler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'elp-instrument-function)
   (fboundp 'elp-instrument-package)
@@ -99,7 +99,7 @@ fn divergence_elp_profiler() {
 fn divergence_elisp_benchmark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'benchmark-run)
   (fboundp 'benchmark-run-compiled)
@@ -111,7 +111,7 @@ fn divergence_elisp_benchmark() {
 fn divergence_info_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'info)
   (fboundp 'info lookup-symbol)
@@ -123,7 +123,7 @@ fn divergence_info_functions() {
 fn divergence_eshell_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eshell)
   (featurep 'eshell)

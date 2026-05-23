@@ -3,7 +3,7 @@
 //! GNU `flatten-tree` performs an iterative cons-tree traversal that drops nil
 //! leaves, keeps dotted tails, and is also exposed as `flatten-list`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -20,7 +20,7 @@ fn oracle_prop_flatten_tree_basic_nil_and_dotted_leaves() {
  (flatten-tree '(nil . tail)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn oracle_prop_flatten_list_alias_and_ordering() {
    (equal (flatten-tree tree) (flatten-list tree))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn oracle_prop_ensure_list_wraps_atoms_and_preserves_lists() {
    (ensure-list 17)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn oracle_prop_flatten_tree_after_mutating_dotted_structure() {
   (list tree (flatten-tree tree)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -103,5 +103,5 @@ fn oracle_prop_flatten_tree_ensure_list_alias_arity_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

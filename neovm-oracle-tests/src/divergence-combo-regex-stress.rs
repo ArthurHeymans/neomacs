@@ -1,13 +1,13 @@
 //! Divergence tests: complex regex engine stress combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_nested_backrefs_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"start\\nkey=abc\\nkey=def\\nkey=abc\\nkey=ghi\\nend\")
   (goto-char 1)
@@ -25,7 +25,7 @@ fn divergence_nested_backrefs_multiline() {
 fn divergence_regex_alternation_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"2024-01-15 14:30:00 user=john action=login ip=10.0.0.1\"))
   (list (string-match \"[0-9]+-[0-9]+-[0-9]+\" text)
         (match-string 0 text)
@@ -42,7 +42,7 @@ fn divergence_regex_alternation_complex() {
 fn divergence_regex_greedy_vs_lazy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((html \"<b>bold1</b> text <b>bold2</b>\"))
   (list (string-match \"<b>\\\\(.*\\\\)</b>\" html)
         (match-string 1 html)
@@ -57,7 +57,7 @@ fn divergence_regex_greedy_vs_lazy() {
 fn divergence_regex_with_escaped_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"price: $19.99 (tax: $3.80) total: $23.79\"))
   (list (string-match \"\\\\\\\\$\\\\([0-9.]+\\\\)\" text)
         (match-string 1 text)
@@ -76,7 +76,7 @@ fn divergence_regex_with_escaped_special() {
 fn divergence_regex_word_constituents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"foo_bar baz-quux hello.world a1b2c3\"))
   (list (string-match \"\\\\\\\\<foo_bar\\\\\\\\>\" text)
         (string-match \"\\\\\\\\<baz\\\\\\\\>\" text)
@@ -91,7 +91,7 @@ fn divergence_regex_word_constituents() {
 fn divergence_regex_syntax_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"abc ABC 123 !@# \\t\\n\"))
   (list (string-match \"\\\\ca\" text)
         (string-match \"\\\\cA\" text)
@@ -106,7 +106,7 @@ fn divergence_regex_syntax_classes() {
 fn divergence_regex_repeated_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"a1b2c3d4e5\"))
   (list (string-match \"\\\\([a-z]\\\\)+\" text)
         (match-string 0 text)
@@ -122,7 +122,7 @@ fn divergence_regex_repeated_groups() {
 fn divergence_regex_case_fold_multi_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((case-fold-search t)
         (text \"Hello HELLO hello HeLLo\"))
   (list text
@@ -137,7 +137,7 @@ fn divergence_regex_case_fold_multi_replace() {
 fn divergence_regex_multiline_dot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((text \"line1\\nline2\\nline3\"))
   (list (string-match \"line1.*line3\" text)
         (string-match \"line1\" text)
@@ -150,7 +150,7 @@ fn divergence_regex_multiline_dot() {
 fn divergence_regex_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (insert \"AAA match1 BBB match2 CCC\")
   (goto-char 1)

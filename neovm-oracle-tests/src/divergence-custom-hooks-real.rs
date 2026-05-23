@@ -1,13 +1,13 @@
 //! Divergence tests: real custom/hook/feature behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_defcustom_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defcustom test-custom-var-xxx 42
     \"A test custom variable.\"
@@ -25,7 +25,7 @@ fn divergence_defcustom_real() {
 fn divergence_custom_set_and_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defcustom test-cs-var-xxx 'default
     \"Test custom.\"
@@ -41,7 +41,7 @@ fn divergence_custom_set_and_save() {
 fn divergence_add_remove_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-hook-xxx nil)
   (add-hook 'test-hook-xxx (lambda () (push 'a test-hook-xxx-run)))
@@ -56,7 +56,7 @@ fn divergence_add_remove_hook() {
 fn divergence_hook_depth_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-depth-hook-xxx nil)
   (add-hook 'test-depth-hook-xxx (lambda () 'c) nil nil 50)
@@ -71,7 +71,7 @@ fn divergence_hook_depth_ordering() {
 fn divergence_run_hooks_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-rh-log-xxx nil)
   (setq test-rh-hook-xxx nil)
@@ -86,7 +86,7 @@ fn divergence_run_hooks_real() {
 fn divergence_provide_require_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (provide 'test-feature-a-xxx)
   (list (featurep 'test-feature-a-xxx)
@@ -99,7 +99,7 @@ fn divergence_provide_require_cycle() {
 fn divergence_autoload_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (autoloadp 'car)
   (autoloadp 'undefined-fn-xxx)
@@ -113,7 +113,7 @@ fn divergence_autoload_detection() {
 fn deficiency_obarray_intern_soft() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (intern-soft \"car\" obarray)))
   (list (symbolp sym)
         (eq sym 'car)
@@ -127,7 +127,7 @@ fn deficiency_obarray_intern_soft() {
 fn divergence_defvar_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-dv-xxx 10 \"Doc string.\")
   (list test-dv-xxx
@@ -141,7 +141,7 @@ fn divergence_defvar_real() {
 fn divergence_buffer_local_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (setq test-bl-hook-xxx nil)
   (add-hook 'test-bl-hook-xxx (lambda () 'global) nil t)

@@ -1,13 +1,13 @@
 //! Divergence tests: subrp, bytecode, compiled-function deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_subrp_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (subrp (symbol-function 'car))
   (subrp (symbol-function 'cons))
@@ -22,7 +22,7 @@ fn divergence_subrp_builtin() {
 fn divergence_compiled_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((fn (symbol-function 'car)))
   (list (compiled-function-p fn)
         (subrp fn)
@@ -34,7 +34,7 @@ fn divergence_compiled_function() {
 fn divergence_byte_code_function_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (byte-code-function-p (symbol-function 'car))
   (byte-code-function-p (symbol-function 'list))
@@ -46,7 +46,7 @@ fn divergence_byte_code_function_p() {
 fn divergence_function_type_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (type-of (symbol-function 'car))
   (type-of (lambda (x) x))
@@ -58,7 +58,7 @@ fn divergence_function_type_all() {
 fn divergence_interactive_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((fn (lambda (x) (interactive "nNum: ") x)))
   (list (functionp fn)
         (commandp fn)
@@ -70,7 +70,7 @@ fn divergence_interactive_lambda() {
 fn divergence_closure_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((x 42)
         (fn (lambda () x)))
   (list (type-of fn)
@@ -83,7 +83,7 @@ fn divergence_closure_type() {
 fn divergence_function_documentation_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (stringp (documentation 'car))
   (stringp (documentation 'cons))
@@ -95,7 +95,7 @@ fn divergence_function_documentation_builtin() {
 fn divergence_advice_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'advice-info)
   (fboundp 'advice-map-tree)
@@ -107,7 +107,7 @@ fn divergence_advice_info() {
 fn divergence_func_arity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (func-arity 'car)
   (func-arity 'list)
@@ -120,7 +120,7 @@ fn divergence_func_arity() {
 fn divergence_help_function_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'help-function-arglist)
   (fboundp 'help-split-fundoc)

@@ -5,7 +5,7 @@
 //! argument is used directly as the final tail.  GNU `nconc` mutates preceding
 //! list arguments and permits a non-list final argument.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -25,7 +25,7 @@ fn oracle_append_copies_prefix_and_shares_final_tail() {
         (eq result prefix)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn oracle_append_sequence_arguments_and_dotted_tail() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn oracle_append_rejects_char_table_like_gnu() {
     (error (list (car err) (cdr err)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn oracle_append_vconcat_accept_byte_code_but_concat_rejects() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn oracle_nconc_mutates_prefix_and_shares_tail() {
         (eq (nthcdr 2 result) b)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn oracle_nconc_nil_arguments_and_dotted_tail() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -146,5 +146,5 @@ fn oracle_nconc_overwrites_dotted_nonfinal_tail() {
         (eq (cdr result) tail)))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

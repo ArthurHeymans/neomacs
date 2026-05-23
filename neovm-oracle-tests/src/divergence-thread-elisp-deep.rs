@@ -1,13 +1,13 @@
 //! Divergence tests: thread macro, threading-first/last deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_thread_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (thread-first 5
     (+ 3)
@@ -21,7 +21,7 @@ fn divergence_thread_first() {
 fn divergence_thread_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (thread-last '(1 2 3)
     (mapcar #'1+)
@@ -35,7 +35,7 @@ fn divergence_thread_last() {
 fn divergence_thread_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (thread-first "hello"
     (concat " " "world")
@@ -51,7 +51,7 @@ fn divergence_thread_nested() {
 fn divergence_dash_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp '-map)
   (fboundp '-filter)
@@ -66,7 +66,7 @@ fn divergence_dash_functions() {
 fn divergence_dash_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp '-first)
   (fboundp '-last)
@@ -81,7 +81,7 @@ fn divergence_dash_list_ops() {
 fn divergence_s_expression_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'sexp-at-point)
   (fboundp 'forward-sexp)
@@ -96,7 +96,7 @@ fn divergence_s_expression_ops() {
 fn divergence_lisp_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'lisp-mode)
   (fboundp 'emacs-lisp-mode)
@@ -109,7 +109,7 @@ fn divergence_lisp_mode() {
 fn divergence_elisp_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'eval-buffer)
   (fboundp 'eval-region)
@@ -124,7 +124,7 @@ fn divergence_elisp_eval() {
 fn divergence_checkdoc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'checkdoc)
   (fboundp 'checkdoc-current-buffer)
@@ -137,7 +137,7 @@ fn divergence_checkdoc() {
 fn divergence_ert_testing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'ert-deftest)
   (fboundp 'ert-run-tests-interactively)

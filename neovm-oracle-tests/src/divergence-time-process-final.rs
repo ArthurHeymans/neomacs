@@ -1,13 +1,13 @@
 //! Divergence tests: final batch - remaining Emacs subsystems.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_decode_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((decoded (decode-time 0 0 12 1 1 2024 t)))
   (list (nth 0 decoded)
         (nth 1 decoded)
@@ -22,7 +22,7 @@ fn divergence_decode_time() {
 fn divergence_format_time_string_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((time (encode-time 0 0 0 1 1 2024)))
   (list (stringp (format-time-string "%Y-%m-%d %H:%M:%S" time))
         (format-time-string "%Y-%m-%d" time)
@@ -34,7 +34,7 @@ fn divergence_format_time_string_deep() {
 fn divergence_time_add_sub() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let* ((t1 (encode-time 0 0 12 1 1 2024))
          (t2 (time-add t1 3600))
          (t3 (time-subtract t2 t1)))
@@ -48,7 +48,7 @@ fn divergence_time_add_sub() {
 fn divergence_current_time_zone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((tz (current-time-zone)))
   (list (integerp (car tz))
         (stringp (cadr tz))))"#,
@@ -59,7 +59,7 @@ fn divergence_current_time_zone() {
 fn divergence_seconds_to_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((time (seconds-to-time 1704067200)))
   (list (consp time)
         (float-time time)
@@ -71,7 +71,7 @@ fn divergence_seconds_to_time() {
 fn divergence_time_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((t1 (current-time))
         (t2 (copy-sequence (current-time))))
   (list (time-equal-p t1 t1)
@@ -83,7 +83,7 @@ fn divergence_time_equal() {
 fn divergence_days_to_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((time (days-to-time 1)))
   (list (consp time)
         (= (float-time time) 86400.0)))"#,
@@ -94,7 +94,7 @@ fn divergence_days_to_time() {
 fn divergence_time_parse_date() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'parse-time-string)
   (fboundp 'date-to-time)
@@ -106,7 +106,7 @@ fn divergence_time_parse_date() {
 fn divergence_timer_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'run-at-time)
   (fboundp 'run-with-timer)
@@ -119,7 +119,7 @@ fn divergence_timer_relative() {
 fn divergence_process_list_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (listp (process-list))
   (>= (length (process-list)) 0))"#,

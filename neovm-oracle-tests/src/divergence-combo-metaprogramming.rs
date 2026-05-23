@@ -1,13 +1,13 @@
 //! Divergence tests: deep Elisp metaprogramming combinations.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_eval_and_defun_macro_generate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-define-accessors-xxx (class slots)
     \\`(progn
@@ -28,7 +28,7 @@ fn divergence_eval_and_defun_macro_generate() {
 fn divergence_advice_around_with_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defvar test-around-count-xxx 0)
   (defun test-around-fn-xxx (x) (* x 10))
@@ -55,7 +55,7 @@ fn divergence_advice_around_with_closure() {
 fn divergence_compiler_macro_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (define-inline test-inline-square-xxx (x)
     (inline-leteval (x)
@@ -74,7 +74,7 @@ fn divergence_compiler_macro_expansion() {
 fn deficiency_obarray_intern_with_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((sym (intern \"test-ob-set-xxx\" obarray)))
   (set sym 100)
   (list (symbol-value sym)
@@ -91,7 +91,7 @@ fn deficiency_obarray_intern_with_set() {
 fn divergence_nested_macro_with_gensym() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defmacro test-alet-xxx (bindings &rest body)
     (let ((var (make-symbol \"result\")))
@@ -108,7 +108,7 @@ fn divergence_nested_macro_with_gensym() {
 fn divergence_cl_defgeneric_method_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-shape-xxx () ())
   (defclass test-circle-xxx (test-shape-xxx) ((r :initarg :r)))
@@ -136,7 +136,7 @@ fn divergence_cl_defgeneric_method_combination() {
 fn divergence_eval_region_with_defuns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (let ((code \"
     (defun test-eval-fn1-xxx (x) (+ x 10))
@@ -161,7 +161,7 @@ fn divergence_eval_region_with_defuns() {
 fn divergence_cl_print_object_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-doc-xxx () ((title :initarg :title)))
   (cl-defmethod cl-print-object ((obj test-doc-xxx) stream)
@@ -184,7 +184,7 @@ fn divergence_cl_print_object_dispatch() {
 fn divergence_function_documentation_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-doc-fn-xxx (x) \"Double X.\" (* x 2))
   (defalias 'test-doc-alias-xxx 'test-doc-fn-xxx)
@@ -199,7 +199,7 @@ fn divergence_function_documentation_chain() {
 fn divergence_setf_with_custom_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defun test-getval-xxx (alist key)
     (cdr (assoc key alist)))

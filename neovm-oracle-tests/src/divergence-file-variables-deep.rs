@@ -1,13 +1,13 @@
 //! Divergence tests: file local variables, dir-locals, safe-local-vars.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_file_local_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'hack-local-variables)
   (fboundp 'hack-local-variables-filter)
@@ -21,7 +21,7 @@ fn divergence_file_local_variables() {
 fn divergence_dir_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'dir-locals-set-directory-class)
   (fboundp 'dir-locals-set-class-variables)
@@ -34,7 +34,7 @@ fn divergence_dir_locals() {
 fn divergence_file_handlers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'file-name-handler-alist)
   (listp file-name-handler-alist)
@@ -46,7 +46,7 @@ fn divergence_file_handlers() {
 fn divergence_file_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'file-attributes)
   (fboundp 'file-attributes-lessp)
@@ -61,7 +61,7 @@ fn divergence_file_attributes() {
 fn divergence_file_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'expand-file-name)
   (fboundp 'abbreviate-file-name)
@@ -75,7 +75,7 @@ fn divergence_file_expand() {
 fn divergence_path_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'directory-file-name)
   (fboundp 'file-name-as-directory)
@@ -89,7 +89,7 @@ fn divergence_path_names() {
 fn divergence_directory_listing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'directory-files)
   (fboundp 'directory-files-and-attributes)
@@ -102,7 +102,7 @@ fn divergence_directory_listing() {
 fn divergence_make_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-directory)
   (fboundp 'make-nearby-directory)
@@ -117,7 +117,7 @@ fn divergence_make_dir() {
 fn divergence_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-symbolic-link)
   (fboundp 'file-symlink-p)
@@ -130,7 +130,7 @@ fn divergence_file_symlink() {
 fn divergence_temp_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-temp-file)
   (fboundp 'make-temp-name)

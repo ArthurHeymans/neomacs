@@ -1,13 +1,13 @@
 //! Divergence tests: simulated editing session + undo + markers + overlays.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_simulated_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "fn main() {\n    println!(\"hello\");\n}\n")
   (let ((ov-fn (make-overlay 1 9))
@@ -46,7 +46,7 @@ fn divergence_simulated_code_edit_session() {
 fn divergence_multi_region_edit_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "REGION1-AAAA REGION2-BBBB REGION3-CCCC")
   (put-text-property 1 12 'zone 1)
@@ -83,7 +83,7 @@ fn divergence_multi_region_edit_with_props() {
 fn divergence_ediff_style_region_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "line1 common\nline2 only-A\nline3 common\nline4 only-A\nline5 common\n")
   (let ((m1 (copy-marker 1 t))
@@ -119,7 +119,7 @@ fn divergence_ediff_style_region_comparison() {
 fn divergence_refactor_rename_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "var foo = 1;\nvar foo = 2;\nprint(foo);\nfoo = 3;\n")
   (let ((refs nil))
@@ -148,7 +148,7 @@ fn divergence_refactor_rename_with_markers() {
 fn divergence_overlay_chain_delete_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")
   (let ((ovs nil))
@@ -182,7 +182,7 @@ fn divergence_overlay_chain_delete_reinsert() {
 fn divergence_nested_narrow_widen_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "OUTER-START MIDDLE-START INNER-END MIDDLE-END OUTER-END")
   (let ((m-inner (copy-marker 20 t))
@@ -214,7 +214,7 @@ fn divergence_nested_narrow_widen_with_undo() {
 fn divergence_comment_uncomment_region_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "code1\ncode2\ncode3\n")
   (put-text-property 1 6 'type 'code)
@@ -244,7 +244,7 @@ fn divergence_comment_uncomment_region_with_props() {
 fn divergence_kill_yank_ring_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
   (let ((m1 (copy-marker 1 t))
@@ -274,7 +274,7 @@ fn divergence_kill_yank_ring_with_markers() {
 fn divergence_text_property_search_replace_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "keep ALPHA replace BETA keep GAMMA replace DELTA keep")
   (put-text-property 6 11 'action 'keep)
@@ -302,7 +302,7 @@ fn divergence_text_property_search_replace_cycle() {
 fn divergence_revert_buffer_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ORIGINAL-CONTENT-HERE")
   (let ((ov (make-overlay 1 22))

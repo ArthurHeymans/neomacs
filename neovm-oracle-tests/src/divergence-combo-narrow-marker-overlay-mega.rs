@@ -1,13 +1,13 @@
 //! Divergence tests: narrow + marker + overlay + text-property + regex + undo mega.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_narrow_undo_replace_with_nested_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH-III-JJJ")
   (let ((ov-outer (make-overlay 1 41))
@@ -76,7 +76,7 @@ fn divergence_narrow_undo_replace_with_nested_overlays() {
 fn divergence_kill_yank_preserve_props_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((src (generate-new-buffer " test-kypac-src-xxx"))
         (dst (generate-new-buffer " test-kypac-dst-xxx")))
@@ -105,7 +105,7 @@ fn divergence_kill_yank_preserve_props_across_buffers() {
 fn divergence_insert_buffer_substring_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (let ((src (generate-new-buffer " test-ibsp-src-xxx"))
         (dst (generate-new-buffer " test-ibsp-dst-xxx")))
@@ -135,7 +135,7 @@ fn divergence_insert_buffer_substring_with_props() {
 fn divergence_undo_after_multiple_narrow_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH")
   (let ((m1 (copy-marker 1 t))
@@ -201,7 +201,7 @@ fn divergence_undo_after_multiple_narrow_cycles() {
 fn divergence_overlay_priority_ordering_after_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "ABCDEFGHIJ")
   (let ((ov1 (make-overlay 1 10))
@@ -251,7 +251,7 @@ fn divergence_overlay_priority_ordering_after_undo() {
 fn divergence_text_property_merge_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "XXXX")
   (put-text-property 1 2 'color 'red)
@@ -280,7 +280,7 @@ fn divergence_text_property_merge_after_insert() {
 fn divergence_replace_match_preserve_adjacent_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "LEFT-MIDDLE-RIGHT")
   (put-text-property 1 4 'zone 'left)
@@ -310,7 +310,7 @@ fn divergence_replace_match_preserve_adjacent_props() {
 fn divergence_undo_with_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "SHOW-HIDE-SHOW")
   (put-text-property 6 9 'display "(hidden)")
@@ -340,7 +340,7 @@ fn divergence_undo_with_display_property() {
 fn divergence_overlay_before_after_string_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "CONTENT-HERE")
   (let ((ov (make-overlay 1 12)))
@@ -377,7 +377,7 @@ fn divergence_overlay_before_after_string_undo() {
 fn divergence_multiple_replace_in_sequence_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH")
   (let ((m1 (copy-marker 1 t))

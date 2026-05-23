@@ -4,7 +4,7 @@
 //! and `transpose-lines` in `lisp/simple.el` through `transpose-subr`.
 //! These tests compare text, point, mark, and error behavior.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -26,7 +26,7 @@ fn oracle_prop_transpose_chars_eol_and_negative_arg() {
   (list eol negative))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -54,7 +54,7 @@ fn oracle_prop_transpose_words_forward_backward_and_mark_arg_zero() {
   (list forward backward marked))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn oracle_prop_transpose_lines_positive_negative_and_mark_arg_zero() {
   (list positive negative marked))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -114,5 +114,5 @@ fn oracle_prop_transpose_sexps_symbols_lists_and_interactive_error() {
   (list symbols lists error-shape))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

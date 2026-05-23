@@ -1,13 +1,13 @@
 //! Divergence tests: display engine, glyphless chars, display tables.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_display_table_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'make-display-table)
   (fboundp 'display-table-slot)
@@ -22,7 +22,7 @@ fn divergence_display_table_functions() {
 fn divergence_glyphless_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'glyphless-char-display)
   (boundp 'glyphless-char-display-control)
@@ -35,7 +35,7 @@ fn divergence_glyphless_chars() {
 fn divergence_redisplay_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'redisplay)
   (fboundp 'force-window-update)
@@ -50,7 +50,7 @@ fn divergence_redisplay_functions() {
 fn divergence_line_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'default-line-height)
   (fboundp 'line-pixel-height)
@@ -64,7 +64,7 @@ fn divergence_line_height() {
 fn divergence_invisible_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'buffer-invisibility-spec)
   (listp buffer-invisibility-spec)
@@ -77,7 +77,7 @@ fn divergence_invisible_text() {
 fn divergence_selective_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'selective-display)
   (boundp 'selective-display-ellipses)
@@ -89,7 +89,7 @@ fn divergence_selective_display() {
 fn divergence_overlay_arrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'overlay-arrow-position)
   (boundp 'overlay-arrow-string)
@@ -101,7 +101,7 @@ fn divergence_overlay_arrow() {
 fn divergence_truncate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'truncate-lines)
   (booleanp truncate-lines)
@@ -114,7 +114,7 @@ fn divergence_truncate_lines() {
 fn divergence_word_wrap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (boundp 'word-wrap)
   (booleanp word-wrap)
@@ -127,7 +127,7 @@ fn divergence_word_wrap() {
 fn divergence_display_margin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'set-window-margins)
   (fboundp 'window-margins)

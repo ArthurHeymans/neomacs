@@ -4,7 +4,7 @@
 //! indexing, oldest/newest insertion modes, resize, and duplicate-removal
 //! helpers in `lisp/emacs-lisp/ring.el`.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -39,7 +39,7 @@ fn oracle_prop_ring_insert_ref_remove_and_wraparound() {
               removed-oldest after-oldest r)))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn oracle_prop_ring_beginning_copy_resize_and_extend() {
               (ring-elements copy))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn oracle_prop_ring_member_next_previous_and_remove_insert_extend() {
               (list (ring-elements r) (ring-size r)))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -121,5 +121,5 @@ fn oracle_prop_ring_errors_and_sequence_conversion() {
        (eq r2 (ring-convert-sequence-to-ring r2))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

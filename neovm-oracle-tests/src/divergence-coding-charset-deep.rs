@@ -1,13 +1,13 @@
 //! Divergence tests: coding system conversion, charset mapping deep.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_coding_system_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((cs-list (coding-system-list)))
   (list (listp cs-list)
         (member 'utf-8 cs-list)
@@ -20,7 +20,7 @@ fn divergence_coding_system_list() {
 fn divergence_coding_system_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-base 'utf-8)
   (coding-system-base 'utf-8-dos)
@@ -33,7 +33,7 @@ fn divergence_coding_system_base() {
 fn divergence_coding_system_eol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-eol-type 'utf-8)
   (coding-system-eol-type 'utf-8-dos)
@@ -45,7 +45,7 @@ fn divergence_coding_system_eol() {
 fn divergence_coding_system_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (coding-system-p 'utf-8)
   (coding-system-p 'latin-1)
@@ -58,7 +58,7 @@ fn divergence_coding_system_p() {
 fn divergence_encode_decode_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'encode-coding-region)
   (fboundp 'decode-coding-region)
@@ -71,7 +71,7 @@ fn divergence_encode_decode_region() {
 fn divergence_charset_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(let ((cs-list (charset-list)))
   (list (listp cs-list)
         (member 'ascii cs-list)
@@ -83,7 +83,7 @@ fn divergence_charset_list() {
 fn divergence_charset_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (charsetp 'ascii)
   (charsetp 'unicode)
@@ -96,7 +96,7 @@ fn divergence_charset_p() {
 fn divergence_decode_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'decode-char)
   (fboundp 'encode-char)
@@ -110,7 +110,7 @@ fn divergence_decode_char() {
 fn divergence_prefer_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'prefer-coding-system)
   (boundp 'buffer-file-coding-system)
@@ -123,7 +123,7 @@ fn divergence_prefer_coding_system() {
 fn divergence_detection_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         r#"(list
   (fboundp 'detect-coding-region)
   (fboundp 'detect-coding-with-priority)

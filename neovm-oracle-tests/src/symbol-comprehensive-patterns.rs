@@ -7,7 +7,7 @@
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity_with_bootstrap, eval_oracle_and_neovm};
+use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // intern vs intern-soft: interaction and edge cases
@@ -62,7 +62,7 @@ fn oracle_prop_symbol_intern_vs_intern_soft_comprehensive() {
       ;; cleanup: we can't really unintern from the default obarray easily,
       ;; but the symbols are harmless with unique prefix
       nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ fn oracle_prop_symbol_make_symbol_full_lifecycle() {
     (symbol-plist s1)
     (symbol-plist s2)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ fn oracle_prop_symbol_name_edge_cases() {
   ;; symbol-name returns string type
   (stringp (symbol-name 'anything)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +185,7 @@ fn oracle_prop_symbol_bound_unbound_lifecycle() {
                   (list r1 r2 r3 r4 r5)))))))
     (ignore-errors (makunbound 'neovm--scp-bul-var))
     (ignore-errors (fmakunbound 'neovm--scp-bul-var))))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ fn oracle_prop_symbol_setplist_comprehensive() {
                               (get 'neovm--scp-sp-sym 'x))))
                 (list r1 r2 r3 r4))))))
     (setplist 'neovm--scp-sp-sym nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ fn oracle_prop_symbol_indirect_function_chain() {
     (fmakunbound 'neovm--scp-if-b)
     (fmakunbound 'neovm--scp-if-c)
     (fmakunbound 'neovm--scp-if-d)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ fn oracle_prop_symbol_equality_interned_vs_uninterned() {
     (eq :foo :foo)
     (eq (intern ":foo") :foo)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +359,7 @@ fn oracle_prop_symbol_custom_obarray() {
         (list (symbolp s-small) (symbolp s-large)
               (eq s-small s-large))))))
 "#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ fn oracle_prop_symbol_memo_table_via_plist() {
           (/ (length (symbol-plist memo)) 2)))
     (fmakunbound 'neovm--scp-memo-fib)))
 "####;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,5 +475,5 @@ fn oracle_prop_symbol_registry_with_inheritance() {
     (fmakunbound 'neovm--scp-rgi-dispatch)
     (setplist 'neovm--scp-rgi-base-class nil)
     (setplist 'neovm--scp-rgi-child-class nil)))"#;
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }

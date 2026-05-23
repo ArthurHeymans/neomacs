@@ -1,13 +1,13 @@
 //! Divergence tests: real EIEIO/object behavioral differences.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn divergence_defclass_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-person-xxx ()
     ((name :initarg :name :accessor test-person-name-xxx)
@@ -26,7 +26,7 @@ fn divergence_defclass_basic() {
 fn divergence_defclass_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-animal-xxx ()
     ((sound :initarg :sound :accessor test-animal-sound-xxx :initform \"\")))
@@ -44,7 +44,7 @@ fn divergence_defclass_inheritance() {
 fn divergence_defclass_method_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-shape-xxx () ())
   (defclass test-circle-xxx (test-shape-xxx) ((radius :initarg :radius)))
@@ -61,7 +61,7 @@ fn divergence_defclass_method_dispatch() {
 fn divergence_eieio_oset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-box-xxx ()
     ((width :initarg :width :initform 0)
@@ -79,7 +79,7 @@ fn divergence_eieio_oset() {
 fn divergence_eieio_object_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(progn
   (defclass test-item-xxx ()
     ((label :initarg :label :initform \"\")))
@@ -97,7 +97,7 @@ fn divergence_eieio_object_functions() {
 fn divergence_keymap_basic_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((map (make-sparse-keymap)))
   (define-key map \"a\" 'insert-char)
   (define-key map \"b\" 'forward-char)
@@ -113,7 +113,7 @@ fn divergence_keymap_basic_ops() {
 fn divergence_keymap_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((map (make-sparse-keymap))
         (prefix (make-sparse-keymap)))
   (define-key prefix \"a\" 'beginning-of-line)
@@ -129,7 +129,7 @@ fn divergence_keymap_prefix() {
 fn divergence_keymap_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((parent (make-sparse-keymap))
         (child (make-sparse-keymap)))
   (define-key parent \"x\" 'exchange-point-and-mark)
@@ -144,7 +144,7 @@ fn divergence_keymap_parent() {
 fn divergence_where_is_internal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(let ((map (make-sparse-keymap)))
   (define-key map \"\\C-x\\C-f\" 'find-file)
   (define-key map \"\\C-x\\C-s\" 'save-buffer)
@@ -158,7 +158,7 @@ fn divergence_where_is_internal() {
 fn divergence_key_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity_with_bootstrap(
+    assert_oracle_parity(
         "(list
   (key-description [?a])
   (key-description [?\\C-x ?\\C-f])

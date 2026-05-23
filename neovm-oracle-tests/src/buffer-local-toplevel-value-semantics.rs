@@ -4,7 +4,7 @@
 //! the buffer-local binding outside any `let` binding and signals
 //! `void-variable` if the target buffer has no local value.
 
-use super::common::assert_oracle_parity_with_bootstrap;
+use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
@@ -28,7 +28,7 @@ fn oracle_buffer_local_toplevel_value_read_set_and_missing_local_errors() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
 
 #[test]
@@ -85,5 +85,5 @@ fn oracle_buffer_local_toplevel_value_ignores_active_let_local_binding() {
       (makunbound 'neomacs--oracle-bltv-let))))
 "#;
 
-    assert_oracle_parity_with_bootstrap(form);
+    assert_oracle_parity(form);
 }
