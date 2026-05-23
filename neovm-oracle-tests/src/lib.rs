@@ -2090,6 +2090,8 @@ mod divergence_combo_edge_cases;
 mod divergence_combo_edit_simulation;
 #[path = "divergence-combo-editing-session.rs"]
 mod divergence_combo_editing_session;
+#[path = "divergence-combo-eieio-dispatch-deep.rs"]
+mod divergence_combo_eieio_dispatch_deep;
 #[path = "divergence-combo-eieio-error-binding.rs"]
 mod divergence_combo_eieio_error_binding;
 #[path = "divergence-combo-eieio-hash-struct.rs"]
