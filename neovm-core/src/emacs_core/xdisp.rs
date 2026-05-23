@@ -3779,7 +3779,6 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("tool-bar-style", Value::NIL);
     obarray.set_symbol_value("global-font-lock-mode", Value::NIL);
     obarray.set_symbol_value("display-line-numbers", Value::NIL);
-    obarray.set_symbol_value("display-line-numbers-type", Value::T);
     obarray.set_symbol_value("display-line-numbers-width", Value::NIL);
     obarray.set_symbol_value("display-line-numbers-current-absolute", Value::T);
     obarray.set_symbol_value("display-line-numbers-widen", Value::NIL);
