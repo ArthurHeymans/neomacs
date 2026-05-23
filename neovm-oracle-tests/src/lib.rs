@@ -2092,10 +2092,14 @@ mod divergence_combo_stdlib;
 mod divergence_combo_stress;
 #[path = "divergence-combo-subprocess-buffer.rs"]
 mod divergence_combo_subprocess_buffer;
+#[path = "divergence-combo-syntax-sexp-nav.rs"]
+mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
 #[path = "divergence-combo-textprop-search-undo.rs"]
 mod divergence_combo_textprop_search_undo;
+#[path = "divergence-combo-timer-process.rs"]
+mod divergence_combo_timer_process;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
 #[path = "divergence-combo-window-buffer-process.rs"]
