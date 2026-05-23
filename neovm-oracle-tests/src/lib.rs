@@ -2148,6 +2148,8 @@ mod divergence_combo_fringe_display_overlay;
 mod divergence_combo_indent_fill_paragraph;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
+#[path = "divergence-combo-interval-split-merge-undo.rs"]
+mod divergence_combo_interval_split_merge_undo;
 #[path = "divergence-combo-keymap-command.rs"]
 mod divergence_combo_keymap_command;
 #[path = "divergence-combo-keymap-command-advice-error.rs"]
