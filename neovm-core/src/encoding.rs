@@ -1381,18 +1381,19 @@ fn coding_string_trivial_ascii_nocopy(bytes: &[u8], coding: &str, encode: bool) 
     if !encode && bytes.contains(&b'\r') {
         return false;
     }
-    matches!(
-        coding_system_family(coding),
-        "utf-8"
-            | "utf-8-emacs"
-            | "iso-latin-1"
-            | "iso-latin-5"
-            | "iso-latin-9"
-            | "ascii"
-            | "us-ascii"
-            | "undecided"
-            | "prefer-utf-8"
-    )
+    is_byte_preserving_coding_system(coding)
+        || matches!(
+            coding_system_family(coding),
+            "utf-8"
+                | "utf-8-emacs"
+                | "iso-latin-1"
+                | "iso-latin-5"
+                | "iso-latin-9"
+                | "ascii"
+                | "us-ascii"
+                | "undecided"
+                | "prefer-utf-8"
+        )
 }
 
 fn copy_lisp_string_value(value: Value) -> Result<Value, crate::emacs_core::error::Flow> {
@@ -1860,6 +1861,11 @@ pub(crate) fn builtin_decode_coding_string_with_known(
     let bytes = storage_string_to_bytes(&s);
     if coding_string_nocopy(&args) && coding_string_trivial_ascii_nocopy(&bytes, &coding, false) {
         return Ok(args[0]);
+    }
+    if coding_string_trivial_ascii_nocopy(&bytes, &coding, false) {
+        return Ok(Value::multibyte_string(
+            String::from_utf8(bytes).expect("ASCII bytes are valid UTF-8"),
+        ));
     }
     if is_byte_preserving_coding_system(&coding) {
         let bytes = if coding.starts_with("raw-text") {

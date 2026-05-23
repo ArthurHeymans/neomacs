@@ -571,6 +571,23 @@ fn decode_no_conversion_returns_unibyte_bytes_for_non_ascii_input() {
 }
 
 #[test]
+fn decode_byte_preserving_ascii_uses_multibyte_fast_path() {
+    crate::test_utils::init_test_tracing();
+    for coding in ["binary", "no-conversion", "raw-text"] {
+        let source = Value::heap_string(crate::heap_types::LispString::from_unibyte(
+            b"Hello".to_vec(),
+        ));
+        let decoded =
+            builtin_decode_coding_string(vec![source, Value::symbol(coding)]).expect("decode");
+        assert!(
+            decoded.string_is_multibyte(),
+            "{coding} should decode ASCII as multibyte"
+        );
+        assert_eq!(decoded.as_lisp_string().unwrap().as_bytes(), b"Hello");
+    }
+}
+
+#[test]
 fn char_byte_conversion() {
     crate::test_utils::init_test_tracing();
     let s = "hello中文";
