@@ -1775,14 +1775,13 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        super::regex::compute_buffer_replacement_with_syntax(
+        crate::emacs_core::search::compute_buffer_replacement_lisp_string(
             buf,
-            &newtext,
+            newtext_lisp,
             fixedcase,
             literal,
             subexp,
             &md_snapshot,
-            case_symbols_as_words,
         )
         .map_err(|msg| {
             if msg == missing_subexp_error {

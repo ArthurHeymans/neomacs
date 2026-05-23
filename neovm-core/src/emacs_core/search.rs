@@ -563,6 +563,97 @@ pub(crate) fn replace_match_lisp_string_with_syntax(
     Ok(concat_lisp_string_pieces(vec![before, replacement, after]))
 }
 
+pub(crate) fn compute_buffer_replacement_lisp_string(
+    buf: &crate::buffer::Buffer,
+    newtext: &crate::heap_types::LispString,
+    fixedcase: bool,
+    literal: bool,
+    subexp: usize,
+    match_data: &Option<super::regex::MatchData>,
+) -> Result<(usize, usize, crate::heap_types::LispString), String> {
+    let md = match match_data {
+        Some(md) => md,
+        None => return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string()),
+    };
+    let Some((match_start, match_end)) = md.groups.get(subexp).and_then(|range| *range) else {
+        return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
+    };
+
+    let (buffer_start, buffer_end) = if md.searched_string.is_some() {
+        (
+            buf.text.char_to_emacs_byte(match_start),
+            buf.text.char_to_emacs_byte(match_end),
+        )
+    } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
+        (
+            buf.text.char_to_emacs_byte(match_start.saturating_sub(1)),
+            buf.text.char_to_emacs_byte(match_end.saturating_sub(1)),
+        )
+    } else {
+        (match_start, match_end)
+    };
+
+    let source = buf.buffer_substring_lisp_string(0, buf.total_bytes());
+    let mut replacement_match_data = md.clone();
+    if replacement_match_data.searched_buffer.is_some()
+        && !replacement_match_data.buffer_positions_are_bytes
+    {
+        for group in &mut replacement_match_data.groups {
+            if let Some((start, end)) = group {
+                *start = start.saturating_sub(1);
+                *end = end.saturating_sub(1);
+            }
+        }
+        replacement_match_data.searched_string =
+            Some(super::regex::SearchedString::Owned(source.clone()));
+        replacement_match_data.searched_buffer = None;
+    }
+
+    let replacement_match_option = Some(replacement_match_data.clone());
+    let replacement = replace_match_lisp_string_with_syntax(
+        &source,
+        newtext,
+        fixedcase,
+        literal,
+        subexp,
+        &replacement_match_option,
+    )?;
+    let replace_start = if replacement_match_data.searched_string.is_some() {
+        super::regex::char_pos_to_byte_lisp_string(
+            &source,
+            replacement_match_data
+                .groups
+                .get(subexp)
+                .and_then(|range| range.map(|(start, _)| start))
+                .unwrap_or(0),
+        )
+    } else {
+        buffer_start
+    };
+    let replace_end = if replacement_match_data.searched_string.is_some() {
+        super::regex::char_pos_to_byte_lisp_string(
+            &source,
+            replacement_match_data
+                .groups
+                .get(subexp)
+                .and_then(|range| range.map(|(_, end)| end))
+                .unwrap_or(0),
+        )
+    } else {
+        buffer_end
+    };
+    let replacement_only = replacement
+        .slice(
+            replace_start,
+            replacement
+                .byte_len()
+                .saturating_sub(source.byte_len().saturating_sub(replace_end)),
+        )
+        .expect("computed replacement slice is within replacement string");
+
+    Ok((buffer_start, buffer_end, replacement_only))
+}
+
 fn replace_regexp_in_string_lisp<F>(
     args: &[Value],
     case_fold: bool,

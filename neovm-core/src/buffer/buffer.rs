@@ -1999,21 +1999,21 @@ impl Buffer {
         end: usize,
     ) -> crate::heap_types::LispString {
         let bytes = self.buffer_substring_bytes(start, end);
-        if self.get_multibyte() {
+        let mut string = if self.get_multibyte() {
             crate::heap_types::LispString::from_emacs_bytes(bytes)
         } else {
             crate::heap_types::LispString::from_unibyte(bytes)
+        };
+        let props = self.text.text_props_slice(start, end);
+        if !props.is_empty() {
+            *string.intervals_mut() = props;
         }
+        string
     }
 
     /// Return the range `[start, end)` as a Lisp value string.
     pub fn buffer_substring_value(&self, start: usize, end: usize) -> Value {
-        let value = Value::heap_string(self.buffer_substring_lisp_string(start, end));
-        let props = self.text.text_props_slice(start, end);
-        if !props.is_empty() {
-            crate::emacs_core::value::set_string_text_properties_table_for_value(value, props);
-        }
-        value
+        Value::heap_string(self.buffer_substring_lisp_string(start, end))
     }
 
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.

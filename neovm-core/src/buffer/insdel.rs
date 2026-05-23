@@ -84,6 +84,17 @@ fn transpose_position(pos: usize, start1: usize, end1: usize, start2: usize, end
 }
 
 impl Buffer {
+    fn buffer_region_lisp_string(&self, start: usize, end: usize) -> LispString {
+        let mut bytes = Vec::new();
+        self.text.copy_emacs_bytes_to(start, end, &mut bytes);
+        let mut string = lisp_string_from_buffer_bytes(bytes, self.get_multibyte());
+        let props = self.text.text_props_slice(start, end);
+        if !props.is_empty() {
+            *string.intervals_mut() = props;
+        }
+        string
+    }
+
     fn insert_bytes_internal(&mut self, bytes: &[u8], char_len: usize, before_markers: bool) {
         self.insert_bytes_internal_full(bytes, char_len, before_markers, false);
     }
@@ -340,12 +351,22 @@ impl Buffer {
 
     pub fn insert_lisp_string(&mut self, text: &LispString) {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
+        let insert_pos = self.pt_byte;
         self.insert_bytes_internal(text.as_bytes(), text.schars(), false);
+        if text.has_intervals() {
+            self.text
+                .text_props_append_shifted(text.intervals(), insert_pos);
+        }
     }
 
     pub fn insert_lisp_string_before_markers(&mut self, text: &LispString) {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
+        let insert_pos = self.pt_byte;
         self.insert_bytes_internal(text.as_bytes(), text.schars(), true);
+        if text.has_intervals() {
+            self.text
+                .text_props_append_shifted(text.intervals(), insert_pos);
+        }
     }
 
     /// GNU-equivalent replace path: insert `text` at point but do NOT
@@ -355,7 +376,12 @@ impl Buffer {
     /// `from_byte` stay put regardless of insertion_type.
     pub fn insert_lisp_string_for_replace(&mut self, text: &LispString) {
         let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
+        let insert_pos = self.pt_byte;
         self.insert_bytes_internal_full(text.as_bytes(), text.schars(), false, true);
+        if text.has_intervals() {
+            self.text
+                .text_props_append_shifted(text.intervals(), insert_pos);
+        }
     }
 
     pub fn replace_region_lisp_string(&mut self, start: usize, end: usize, text: &LispString) {
@@ -369,7 +395,7 @@ impl Buffer {
 
         if start == end {
             self.goto_byte(start);
-            self.insert_bytes_internal(new_bytes, new_char_len, false);
+            self.insert_lisp_string(&text);
             return;
         }
 
@@ -380,10 +406,7 @@ impl Buffer {
 
         let old_pt_byte = self.pt_byte;
         let old_pt = self.pt;
-        let mut deleted_bytes = Vec::new();
-        self.text
-            .copy_emacs_bytes_to(start, end, &mut deleted_bytes);
-        let deleted_text = lisp_string_from_buffer_bytes(deleted_bytes, self.get_multibyte());
+        let deleted_text = self.buffer_region_lisp_string(start, end);
 
         self.undo_prepare_change(start, old_pt_byte);
         let mut ul = self.get_undo_list();
@@ -445,6 +468,9 @@ impl Buffer {
         self.text.adjust_text_props_for_delete(start_char, end_char);
         self.text
             .adjust_text_props_for_insert(start_char, new_char_len);
+        if text.has_intervals() {
+            self.text.text_props_append_shifted(text.intervals(), start);
+        }
         self.overlays
             .adjust_for_replace(start, old_byte_len, new_byte_len);
         self.record_char_modification(old_char_len.max(new_char_len));
@@ -460,10 +486,7 @@ impl Buffer {
         let start_char = self.text.emacs_byte_to_char(start);
         let end_char = self.text.emacs_byte_to_char(end);
         // Record undo: save the deleted text for restoration.
-        let mut deleted_bytes = Vec::new();
-        self.text
-            .copy_emacs_bytes_to(start, end, &mut deleted_bytes);
-        let deleted_text = lisp_string_from_buffer_bytes(deleted_bytes, self.get_multibyte());
+        let deleted_text = self.buffer_region_lisp_string(start, end);
         // GNU `record_delete` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
         self.undo_prepare_change(start, self.pt_byte);
@@ -556,8 +579,12 @@ impl Buffer {
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 let start_char = self.text.emacs_byte_to_char(start);
-                let deleted =
+                let mut deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
+                let props = self.text.text_props_slice(start, end);
+                if !props.is_empty() {
+                    *deleted.intervals_mut() = props;
+                }
                 undo::undo_list_record_delete(
                     &mut ul,
                     start_char,
