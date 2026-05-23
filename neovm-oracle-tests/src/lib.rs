@@ -2046,6 +2046,8 @@ mod divergence_combo_operations;
 mod divergence_completion_ring_deep;
 #[path = "divergence-custom-theme-deep.rs"]
 mod divergence_custom_theme_deep;
+#[path = "divergence-data-formats.rs"]
+mod divergence_data_formats;
 #[path = "divergence-data-types-deep.rs"]
 mod divergence_data_types_deep;
 #[path = "divergence-debug-trace-ert.rs"]
@@ -2138,6 +2140,8 @@ mod divergence_misc_builtins;
 mod divergence_misc_remaining;
 #[path = "divergence-mode-line-misc.rs"]
 mod divergence_mode_line_misc;
+#[path = "divergence-modeline-modes-deep.rs"]
+mod divergence_modeline_modes_deep;
 #[path = "divergence-multibyte-bidi-deep.rs"]
 mod divergence_multibyte_bidi_deep;
 #[path = "divergence-narrowing-edge.rs"]
