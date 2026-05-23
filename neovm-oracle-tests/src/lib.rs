@@ -2096,6 +2096,8 @@ mod divergence_combo_error_recovery;
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-excursion-marker-bufswitch.rs"]
 mod divergence_combo_excursion_marker_bufswitch;
+#[path = "divergence-combo-face-font-display.rs"]
+mod divergence_combo_face_font_display;
 #[path = "divergence-combo-file-path-ops.rs"]
 mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-final-stress.rs"]
