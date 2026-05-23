@@ -1674,6 +1674,45 @@ fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     }
 }
 
+#[test]
+fn vm_bcall_funcall_depth_reports_excessive_lisp_nesting_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_vm_runtime_harness();
+    eval.set_max_depth(100);
+    eval.set_variable("max-lisp-eval-depth", Value::fixnum(100));
+
+    let recurse_sym = intern("vm-bcall-funcall-depth-recurse");
+    let funcall_sym = intern("funcall");
+    let mut recurse = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let funcall_idx = recurse.add_constant(Value::from_sym_id(funcall_sym));
+    let recurse_idx = recurse.add_constant(Value::from_sym_id(recurse_sym));
+    recurse.ops = vec![
+        Op::Constant(funcall_idx),
+        Op::Constant(recurse_idx),
+        Op::Call(1),
+        Op::Return,
+    ];
+    recurse.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(recurse_sym, Value::make_bytecode(recurse.clone()));
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&recurse, vec![])
+    };
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(resolve_sym(sig.symbol), "excessive-lisp-nesting");
+            assert_eq!(sig.data, vec![Value::fixnum(101)]);
+        }
+        other => panic!("expected Ffuncall max-depth signal, got {other:?}"),
+    }
+}
+
 fn vm_unbind_restores_saved_excursion_point() {
     let (result, buffers, (buffer_id, saved_point)) = execute_manual_vm_built(|buffers| {
         let buffer_id = buffers.create_buffer("excursion");

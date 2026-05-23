@@ -10266,13 +10266,13 @@ impl Context {
         self.apply_internal(function, args.into(), true, false)
     }
 
-    /// Apply from GNU's Lisp-visible `apply` subr.
+    /// Apply from GNU's Lisp-visible `apply` / `funcall` subrs.
     ///
-    /// GNU `Fapply` delegates to `Ffuncall`; when called from bytecode, the
-    /// current `Bcall` has already incremented `lisp_eval_depth`, so the
-    /// `Ffuncall` guard observes that active bytecode call. Neomacs tracks
-    /// bytecode calls separately, so include that depth here.
-    pub(crate) fn apply_from_lisp_apply<A>(&mut self, function: Value, args: A) -> EvalResult
+    /// GNU bytecode `Bcall` increments `lisp_eval_depth` before dispatching.
+    /// If the callee is the Lisp-visible `apply` or `funcall` subr, GNU then
+    /// enters `Ffuncall`, whose depth guard observes the active `Bcall`.
+    /// Neomacs tracks bytecode calls separately, so include that depth here.
+    pub(crate) fn apply_from_lisp_funcall<A>(&mut self, function: Value, args: A) -> EvalResult
     where
         A: Into<LispArgVec>,
     {
