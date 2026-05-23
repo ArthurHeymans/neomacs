@@ -2000,6 +2000,8 @@ mod divergence_advice_deep;
 mod divergence_advice_hooks_deep;
 #[path = "divergence-advice-hooks-locals.rs"]
 mod divergence_advice_hooks_locals;
+#[path = "divergence-alist-plist-hash.rs"]
+mod divergence_alist_plist_hash;
 #[path = "divergence-arithmetic-float.rs"]
 mod divergence_arithmetic_float;
 #[path = "divergence-bignum-fixnum-deep.rs"]
@@ -2156,6 +2158,8 @@ mod divergence_project_xref_vcs;
 mod divergence_quit_error_hierarchy;
 #[path = "divergence-read-symbol-obarray.rs"]
 mod divergence_read_symbol_obarray;
+#[path = "divergence-reader-print-deep.rs"]
+mod divergence_reader_print_deep;
 #[path = "divergence-reader-printer.rs"]
 mod divergence_reader_printer;
 #[path = "divergence-regex-deep.rs"]
