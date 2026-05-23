@@ -2070,6 +2070,8 @@ mod divergence_combo_error_condition_unwind;
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
+#[path = "divergence-combo-format-string-char.rs"]
+mod divergence_combo_format_string_char;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
@@ -2114,6 +2116,8 @@ mod divergence_combo_subprocess_buffer;
 mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
+#[path = "divergence-combo-textprop-overlay-face.rs"]
+mod divergence_combo_textprop_overlay_face;
 #[path = "divergence-combo-textprop-search-undo.rs"]
 mod divergence_combo_textprop_search_undo;
 #[path = "divergence-combo-timer-process.rs"]
