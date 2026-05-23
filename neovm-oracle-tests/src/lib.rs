@@ -2247,6 +2247,8 @@ mod divergence_combo_multibyte_coding_undo;
 mod divergence_combo_narrow_marker_overlay_mega;
 mod divergence_combo_number_bignum_float_edge_deep;
 mod divergence_combo_obarray_intern_symbol_deep;
+#[path = "divergence-combo-obarray-mapatoms-symbol-marker-overlay-undo.rs"]
+mod divergence_combo_obarray_mapatoms_symbol_marker_overlay_undo;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-combo-overlap-undo-deep.rs"]
