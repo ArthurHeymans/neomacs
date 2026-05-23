@@ -2082,6 +2082,8 @@ mod divergence_combo_chartab_syntax_category;
 mod divergence_combo_charwidth_display_fill;
 #[path = "divergence-combo-cl-loop-advanced-undo.rs"]
 mod divergence_combo_cl_loop_advanced_undo;
+#[path = "divergence-combo-cl-loop-destructuring-accumulate-deep.rs"]
+mod divergence_combo_cl_loop_destructuring_accumulate_deep;
 #[path = "divergence-combo-cl-loop-seq-accumulate.rs"]
 mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
@@ -2128,6 +2130,8 @@ mod divergence_combo_eieio_process_advice;
 mod divergence_combo_encoding_buffer_marker;
 #[path = "divergence-combo-encoding-multibyte-char.rs"]
 mod divergence_combo_encoding_multibyte_char;
+#[path = "divergence-combo-error-condition-signal-hierarchy-deep.rs"]
+mod divergence_combo_error_condition_signal_hierarchy_deep;
 #[path = "divergence-combo-error-condition-unwind.rs"]
 mod divergence_combo_error_condition_unwind;
 #[path = "divergence-combo-error-recovery.rs"]
@@ -2136,6 +2140,8 @@ mod divergence_combo_error_recovery;
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-excursion-marker-bufswitch.rs"]
 mod divergence_combo_excursion_marker_bufswitch;
+#[path = "divergence-combo-excursion-restriction-buffer-switch-deep.rs"]
+mod divergence_combo_excursion_restriction_buffer_switch_deep;
 #[path = "divergence-combo-face-font-display.rs"]
 mod divergence_combo_face_font_display;
 #[path = "divergence-combo-file-path-ops.rs"]
@@ -2146,16 +2152,22 @@ mod divergence_combo_final_stress;
 mod divergence_combo_format_print_read_obj;
 #[path = "divergence-combo-format-string-char.rs"]
 mod divergence_combo_format_string_char;
+#[path = "divergence-combo-format-time-float-arithmetic-deep.rs"]
+mod divergence_combo_format_time_float_arithmetic_deep;
 #[path = "divergence-combo-fringe.rs"]
 mod divergence_combo_fringe;
 #[path = "divergence-combo-fringe-display-overlay.rs"]
 mod divergence_combo_fringe_display_overlay;
 #[path = "divergence-combo-indent-fill-paragraph.rs"]
 mod divergence_combo_indent_fill_paragraph;
+#[path = "divergence-combo-indirect-buffer-base-shared-deep.rs"]
+mod divergence_combo_indirect_buffer_base_shared_deep;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-interval-split-merge-undo.rs"]
 mod divergence_combo_interval_split_merge_undo;
+#[path = "divergence-combo-iteration-mapcar-nreverse-accumulate.rs"]
+mod divergence_combo_iteration_mapcar_nreverse_accumulate;
 #[path = "divergence-combo-keymap-command.rs"]
 mod divergence_combo_keymap_command;
 #[path = "divergence-combo-keymap-command-advice-error.rs"]
@@ -2202,6 +2214,8 @@ mod divergence_combo_operations;
 mod divergence_combo_overlap_undo_deep;
 #[path = "divergence-combo-overlay-advanced.rs"]
 mod divergence_combo_overlay_advanced;
+#[path = "divergence-combo-overlay-priority-overlap-evaporate-deep.rs"]
+mod divergence_combo_overlay_priority_overlap_evaporate_deep;
 #[path = "divergence-combo-overlay-textprop-marker-mega.rs"]
 mod divergence_combo_overlay_textprop_marker_mega;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
@@ -2224,6 +2238,8 @@ mod divergence_combo_prop_only_undo_deep;
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
 mod divergence_combo_read_eval_obarray;
+#[path = "divergence-combo-read-eval-prin1-obarray-roundtrip.rs"]
+mod divergence_combo_read_eval_prin1_obarray_roundtrip;
 #[path = "divergence-combo-read-print-circle-hash-obarray.rs"]
 mod divergence_combo_read_print_circle_hash_obarray;
 #[path = "divergence-combo-read-print-hash.rs"]
@@ -2254,6 +2270,8 @@ mod divergence_combo_stdlib;
 mod divergence_combo_stress;
 #[path = "divergence-combo-stress-overlay-regex-undo.rs"]
 mod divergence_combo_stress_overlay_regex_undo;
+#[path = "divergence-combo-string-case-comparison-multibyte-deep.rs"]
+mod divergence_combo_string_case_comparison_multibyte_deep;
 #[path = "divergence-combo-string-regexp-multibyte-coding-deep.rs"]
 mod divergence_combo_string_regexp_multibyte_coding_deep;
 #[path = "divergence-combo-string-regexp-undo.rs"]
@@ -2284,6 +2302,8 @@ mod divergence_combo_text_editing;
 mod divergence_combo_textprop_interval_undo;
 #[path = "divergence-combo-textprop-overlay-face.rs"]
 mod divergence_combo_textprop_overlay_face;
+#[path = "divergence-combo-textprop-search-sticky-change-deep.rs"]
+mod divergence_combo_textprop_search_sticky_change_deep;
 #[path = "divergence-combo-textprop-search-undo.rs"]
 mod divergence_combo_textprop_search_undo;
 #[path = "divergence-combo-textprop-special-undo.rs"]
