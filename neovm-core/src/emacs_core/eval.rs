@@ -1929,12 +1929,8 @@ pub(crate) fn plan_require_in_state(
             if noerror.is_some_and(|value| value.is_truthy()) {
                 return Ok(RequirePlan::Return(Value::NIL));
             }
-            Err(signal(
-                "file-missing",
-                vec![Value::string(format!(
-                    "Cannot open load file: no such file or directory, {}",
-                    name
-                ))],
+            Err(super::load::cannot_open_load_file_signal(
+                &crate::heap_types::LispString::from_utf8(&filename),
             ))
         }
     }
@@ -3089,9 +3085,13 @@ impl Context {
         obarray.make_special("load-file-rep-suffixes");
         // file-coding-system-alist: needed by jka-cmpr-hook.el and others.
         obarray.set_symbol_value("file-coding-system-alist", Value::NIL);
-        // GNU fns.c initializes `features' to `(emacs)' before Lisp loadup;
-        // this is a core feature, not a later `provide' side effect.
-        obarray.set_symbol_value("features", Value::list(vec![Value::symbol("emacs")]));
+        // GNU fns.c initializes `features' to include `emacs', and
+        // thread.c:syms_of_threads provides `threads' when thread builtins
+        // are installed.
+        obarray.set_symbol_value(
+            "features",
+            Value::list(vec![Value::symbol("threads"), Value::symbol("emacs")]),
+        );
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
         obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
@@ -3316,8 +3316,10 @@ impl Context {
         obarray.set_symbol_value("yes-or-no-prompt", Value::string("(yes or no) "));
         // Float-valued C variables
         obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
+        obarray.set_symbol_value("max-image-size", Value::make_float(10.0));
         obarray.set_symbol_value("max-mini-window-height", Value::make_float(0.25));
         obarray.set_symbol_value("image-scaling-factor", Value::make_float(1.0));
+        obarray.set_symbol_value("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.set_symbol_value("global-mode-string", Value::NIL);
         // File loading C variables (lread.c)
@@ -4440,7 +4442,7 @@ impl Context {
             symbols_with_pos_enabled,
             print_symbols_bare_symbol: core_eval_symbols.print_symbols_bare_symbol,
             print_symbols_bare,
-            features: vec![intern("emacs")],
+            features: vec![intern("threads"), intern("emacs")],
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             buffers: BufferManager::new(),

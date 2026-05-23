@@ -44,7 +44,7 @@ fn integer_negative() {
 fn integer_hex() {
     crate::test_utils::init_test_tracing();
     let v = read1("0xFF");
-    assert_eq!(v.as_fixnum(), Some(255));
+    assert!(v.is_symbol_named("0xFF"));
 }
 
 #[test]

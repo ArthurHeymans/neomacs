@@ -665,6 +665,31 @@ fn image_cache_size_is_zero() {
 }
 
 #[test]
+fn image_c_variables_match_gnu_defaults() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        eval.eval_str(
+            "(list (boundp 'image-cache-eviction-delay)
+                   image-cache-eviction-delay
+                   (boundp 'max-image-size)
+                   max-image-size
+                   (fboundp 'image-cache-size)
+                   (boundp 'image-cache-size))"
+        )
+        .expect("image variables should be readable"),
+        Value::list(vec![
+            Value::T,
+            Value::fixnum(300),
+            Value::T,
+            Value::make_float(10.0),
+            Value::T,
+            Value::NIL,
+        ])
+    );
+}
+
+#[test]
 fn imagep_matches_image_spec_shape() {
     crate::test_utils::init_test_tracing();
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")])

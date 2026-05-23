@@ -104,6 +104,17 @@ fn format_time_string_literal_percent() {
 }
 
 #[test]
+fn format_time_string_epoch_seconds_specifier_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = builtin_format_time_string(vec![
+        Value::string("%s"),
+        Value::fixnum(1704067200),
+        Value::T,
+    ]);
+    assert_eq!(result.unwrap().as_utf8_str().unwrap(), "1704067200");
+}
+
+#[test]
 fn format_time_string_timezone() {
     crate::test_utils::init_test_tracing();
     let result = builtin_format_time_string(vec![Value::string("%Z"), Value::fixnum(0), Value::T]);

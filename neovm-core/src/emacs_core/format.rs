@@ -238,7 +238,7 @@ pub(crate) fn builtin_format_time_string(args: Vec<Value>) -> EvalResult {
 
     let (offset_secs, zone_name) = zone_offset_name_for_time(args.get(2), timestamp)?;
     let tm = unix_to_broken_down(timestamp.saturating_add(offset_secs));
-    let formatted = format_time(&format_str, &tm, offset_secs, &zone_name);
+    let formatted = format_time(&format_str, &tm, timestamp, offset_secs, &zone_name);
     Ok(Value::string(formatted))
 }
 
@@ -270,7 +270,13 @@ fn format_numeric_zone_offset(offset_secs: i64) -> String {
     }
 }
 
-fn format_time(fmt: &str, tm: &BrokenDownTime, zone_offset_secs: i64, zone_name: &str) -> String {
+fn format_time(
+    fmt: &str,
+    tm: &BrokenDownTime,
+    timestamp: i64,
+    zone_offset_secs: i64,
+    zone_name: &str,
+) -> String {
     let mut result = String::new();
     let chars: Vec<char> = fmt.chars().collect();
     let mut i = 0;
@@ -365,6 +371,7 @@ fn format_time(fmt: &str, tm: &BrokenDownTime, zone_offset_secs: i64, zone_name:
                         result.push_str(&format!("{:02}", tm.second));
                     }
                 }
+                's' => result.push_str(&timestamp.to_string()),
                 'A' => result.push_str(DAY_NAMES[tm.weekday as usize % 7]),
                 'a' => result.push_str(DAY_ABBREVS[tm.weekday as usize % 7]),
                 'B' => result.push_str(MONTH_NAMES[(tm.month as usize).saturating_sub(1) % 12]),

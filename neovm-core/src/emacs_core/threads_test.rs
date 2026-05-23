@@ -392,6 +392,28 @@ fn test_builtin_all_threads_includes_main() {
 }
 
 #[test]
+fn threads_feature_and_main_thread_binding_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            "(list (featurep 'threads)
+                   (memq 'threads features)
+                   (boundp 'main-thread)
+                   (threadp main-thread)
+                   (fboundp 'main-thread))",
+        )
+        .expect("thread feature probe");
+
+    let items = super::super::value::list_to_vec(&result).expect("list result");
+    assert_eq!(items[0], Value::T);
+    assert!(items[1].is_cons());
+    assert_eq!(items[2], Value::T);
+    assert_eq!(items[3], Value::T);
+    assert_eq!(items[4], Value::NIL);
+}
+
+#[test]
 fn test_builtin_all_threads_excludes_finished_worker() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

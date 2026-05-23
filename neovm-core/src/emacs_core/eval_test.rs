@@ -7710,6 +7710,28 @@ fn require_accepts_nil_filename_as_feature_name() {
 }
 
 #[test]
+fn require_missing_file_uses_gnu_file_missing_condition_data() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(condition-case err
+               (require 'vm-require-missing)
+             (error err))
+           (condition-case err
+               (require 'vm-require-missing "vm-explicit-file")
+             (error err))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        r#"OK (file-missing "Cannot open load file" "No such file or directory" "vm-require-missing")"#
+    );
+    assert_eq!(
+        results[1],
+        r#"OK (file-missing "Cannot open load file" "No such file or directory" "vm-explicit-file")"#
+    );
+}
+
+#[test]
 fn provide_preserves_features_variable_entries() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
