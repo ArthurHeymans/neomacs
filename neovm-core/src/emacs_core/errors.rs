@@ -155,9 +155,14 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
     // Root error.
     put_error_properties(obarray, "error", "error", vec!["error"]);
 
+    // GNU `src/data.c:syms_of_data` registers `quit` outside the `error`
+    // hierarchy: (get 'quit 'error-conditions) is just (quit).  This is what
+    // lets `(condition-case ... (error ...))` avoid catching quits.
+    register_simple(obarray, "quit", "Quit", &[]);
+    register_simple(obarray, "minibuffer-quit", "Quit", &["quit"]);
+
     // --- Direct children of `error` ---
 
-    register_simple(obarray, "quit", "Quit", &["error"]);
     register_simple(obarray, "user-error", "User error", &["error"]);
     register_simple(
         obarray,

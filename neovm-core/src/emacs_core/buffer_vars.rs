@@ -56,6 +56,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("truncate-lines", Value::NIL);
     obarray.set_symbol_value("word-wrap", Value::NIL);
     obarray.set_symbol_value("word-wrap-by-category", Value::NIL);
+    // GNU `xdisp.c` defines these as nil, buffer-local display variables.
+    obarray.set_symbol_value("wrap-prefix", Value::NIL);
+    obarray.set_symbol_value("line-prefix", Value::NIL);
     obarray.set_symbol_value("selective-display", Value::NIL);
     obarray.set_symbol_value("selective-display-ellipses", Value::T);
     obarray.set_symbol_value("indicate-empty-lines", Value::NIL);

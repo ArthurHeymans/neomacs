@@ -261,8 +261,8 @@ impl<'a> Vm<'a> {
             if lisp_eval_depth > self.ctx.max_depth {
                 self.ctx.bytecode_call_depth -= 1;
                 return Err(signal(
-                    "error",
-                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
+                    "excessive-lisp-nesting",
+                    vec![Value::fixnum(lisp_eval_depth as i64)],
                 ));
             }
         }

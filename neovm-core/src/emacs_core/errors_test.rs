@@ -170,6 +170,45 @@ fn obarray_void_variable_conditions() {
 }
 
 #[test]
+fn obarray_quit_conditions_match_gnu_non_error_hierarchy() {
+    crate::test_utils::init_test_tracing();
+    let mut ob = Obarray::new();
+    init_standard_errors(&mut ob);
+
+    let quit_conds = ob.get_property("quit", "error-conditions").unwrap();
+    assert_eq!(iter_symbol_list(&quit_conds), vec!["quit"]);
+
+    let minibuffer_quit_conds = ob
+        .get_property("minibuffer-quit", "error-conditions")
+        .unwrap();
+    assert_eq!(
+        iter_symbol_list(&minibuffer_quit_conds),
+        vec!["minibuffer-quit", "quit"]
+    );
+
+    assert!(signal_matches_condition_value(
+        &ob,
+        "quit",
+        &Value::symbol("quit")
+    ));
+    assert!(!signal_matches_condition_value(
+        &ob,
+        "quit",
+        &Value::symbol("error")
+    ));
+    assert!(signal_matches_condition_value(
+        &ob,
+        "minibuffer-quit",
+        &Value::symbol("quit")
+    ));
+    assert!(!signal_matches_condition_value(
+        &ob,
+        "minibuffer-quit",
+        &Value::symbol("error")
+    ));
+}
+
+#[test]
 fn obarray_overflow_error_conditions() {
     crate::test_utils::init_test_tracing();
     let mut ob = Obarray::new();

@@ -1664,11 +1664,8 @@ fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     };
     match result {
         Err(Flow::Signal(sig)) => {
-            assert_eq!(resolve_sym(sig.symbol), "error");
-            assert_eq!(
-                sig.data,
-                vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")]
-            );
+            assert_eq!(resolve_sym(sig.symbol), "excessive-lisp-nesting");
+            assert_eq!(sig.data, vec![Value::fixnum(101)]);
         }
         other => panic!("expected bytecode max-depth error, got {other:?}"),
     }

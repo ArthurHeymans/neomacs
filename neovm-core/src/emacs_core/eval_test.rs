@@ -9826,6 +9826,36 @@ fn with_local_quit_catches_quit_and_sets_quit_flag() {
 }
 
 #[test]
+fn condition_case_does_not_catch_quit_with_error_clause() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(list
+           (condition-case err
+               (signal 'error \"boom\")
+             (error 'got-error)
+             (quit 'got-quit))
+           (condition-case err
+               (signal 'quit nil)
+             (error 'got-error)
+             (quit 'got-quit))
+           (member 'error (get 'quit 'error-conditions))
+           (get 'minibuffer-quit 'error-conditions))",
+    );
+    assert_eq!(
+        results[0],
+        "OK (got-error got-quit nil (minibuffer-quit quit))"
+    );
+}
+
+#[test]
+fn xdisp_prefix_variables_are_bound_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result =
+        eval_one("(list (boundp 'wrap-prefix) wrap-prefix (boundp 'line-prefix) line-prefix)");
+    assert_eq!(result, "OK (t nil t nil)");
+}
+
+#[test]
 fn while_processes_quit_flag_without_loop_local_gc() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

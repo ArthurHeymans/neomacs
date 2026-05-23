@@ -4487,6 +4487,19 @@ fn where_is_internal_finds_binding_in_explicit_map() {
 }
 
 #[test]
+fn where_is_internal_does_not_duplicate_nested_sparse_binding() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\C-x\C-f" 'find-file)
+             (define-key m "\C-x\C-s" 'save-buffer)
+             (list (where-is-internal 'find-file m)
+                   (where-is-internal 'save-buffer m)))"#,
+    );
+    assert_eq!(result, "OK (([24 6]) ([24 19]))");
+}
+
+#[test]
 fn where_is_internal_first_only_returns_vector() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
