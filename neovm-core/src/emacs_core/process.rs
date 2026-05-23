@@ -6900,6 +6900,26 @@ fn getenv_from_list(varname: &LispString, env_list: Value) -> EnvLookup {
     EnvLookup::Missing
 }
 
+pub(crate) fn make_network_process_subfeatures() -> Value {
+    Value::list(vec![
+        Value::list(vec![Value::keyword("nowait"), Value::T]),
+        Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("local")]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("ipv4")]),
+        Value::list(vec![Value::keyword("family"), Value::symbol("ipv6")]),
+        Value::list(vec![Value::keyword("service"), Value::T]),
+        Value::list(vec![Value::keyword("server"), Value::T]),
+        Value::symbol("bindtodevice"),
+        Value::symbol("broadcast"),
+        Value::symbol("dontroute"),
+        Value::symbol("keepalive"),
+        Value::symbol("linger"),
+        Value::symbol("oobinline"),
+        Value::symbol("priority"),
+        Value::symbol("reuseaddr"),
+    ])
+}
+
 /// (set-binary-mode STREAM MODE) -> t
 ///
 /// Batch/runtime compatibility path. Accepts stdin/stdout/stderr symbols.

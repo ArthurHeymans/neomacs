@@ -19,6 +19,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
+use super::symbol::Obarray;
 use super::value::*;
 use std::collections::{HashMap, HashSet};
 
@@ -266,6 +267,9 @@ pub struct CodingSystemManager {
     pub systems: HashMap<SymId, CodingSystemInfo>,
     /// Alias -> canonical name mapping.
     pub aliases: HashMap<SymId, SymId>,
+    /// GNU stores aliases in each coding-system spec and appends new aliases
+    /// at the tail.  Keep the same order for `coding-system-aliases`.
+    pub alias_order: HashMap<SymId, Vec<SymId>>,
     /// Detection priority list (ordered list of system names).
     pub priority: Vec<SymId>,
     /// Current keyboard coding system.
@@ -280,6 +284,7 @@ impl CodingSystemManager {
         let mut mgr = Self {
             systems: HashMap::new(),
             aliases: HashMap::new(),
+            alias_order: HashMap::new(),
             priority: Vec::new(),
             keyboard_coding: intern("utf-8-unix"),
             terminal_coding: intern("utf-8-unix"),
@@ -407,12 +412,6 @@ impl CodingSystemManager {
             EolType::Mac,
         ));
         mgr.register(CodingSystemInfo::new(
-            "binary",
-            "raw-text",
-            '=',
-            EolType::Unix,
-        ));
-        mgr.register(CodingSystemInfo::new(
             "raw-text",
             "raw-text",
             '=',
@@ -461,16 +460,28 @@ impl CodingSystemManager {
             EolType::Mac,
         ));
         mgr.register(CodingSystemInfo::new(
-            "emacs-internal",
+            "utf-8-emacs",
+            "utf-8",
+            'U',
+            EolType::Undecided,
+        ));
+        mgr.register(CodingSystemInfo::new(
+            "utf-8-emacs-unix",
             "utf-8",
             'U',
             EolType::Unix,
         ));
         mgr.register(CodingSystemInfo::new(
-            "utf-8-emacs",
+            "utf-8-emacs-dos",
             "utf-8",
             'U',
-            EolType::Undecided,
+            EolType::Dos,
+        ));
+        mgr.register(CodingSystemInfo::new(
+            "utf-8-emacs-mac",
+            "utf-8",
+            'U',
+            EolType::Mac,
         ));
         mgr.register(CodingSystemInfo::new(
             "no-conversion",
@@ -478,26 +489,16 @@ impl CodingSystemManager {
             '=',
             EolType::Unix,
         ));
-        mgr.register(CodingSystemInfo::new(
-            "utf-8-auto",
-            "utf-8",
-            'U',
-            EolType::Undecided,
-        ));
+        for (name, eol) in [
+            ("utf-8-auto", EolType::Undecided),
+            ("utf-8-auto-unix", EolType::Unix),
+            ("utf-8-auto-dos", EolType::Dos),
+            ("utf-8-auto-mac", EolType::Mac),
+        ] {
+            mgr.register(CodingSystemInfo::new(name, "utf-8", 'U', eol));
+        }
         mgr.register(CodingSystemInfo::new(
             "utf-16",
-            "utf-16",
-            'U',
-            EolType::Undecided,
-        ));
-        mgr.register(CodingSystemInfo::new(
-            "utf-16-be",
-            "utf-16",
-            'U',
-            EolType::Undecided,
-        ));
-        mgr.register(CodingSystemInfo::new(
-            "utf-16-le",
             "utf-16",
             'U',
             EolType::Undecided,
@@ -526,12 +527,14 @@ impl CodingSystemManager {
             'U',
             EolType::Undecided,
         ));
-        mgr.register(CodingSystemInfo::new(
-            "prefer-utf-8",
-            "undecided",
-            '-',
-            EolType::Undecided,
-        ));
+        for (name, eol) in [
+            ("prefer-utf-8", EolType::Undecided),
+            ("prefer-utf-8-unix", EolType::Unix),
+            ("prefer-utf-8-dos", EolType::Dos),
+            ("prefer-utf-8-mac", EolType::Mac),
+        ] {
+            mgr.register(CodingSystemInfo::new(name, "undecided", '-', eol));
+        }
         for (name, eol) in [
             ("chinese-iso-8bit", EolType::Undecided),
             ("chinese-iso-8bit-unix", EolType::Unix),
@@ -605,8 +608,8 @@ impl CodingSystemManager {
         mgr.add_alias("iso-8859-15", "iso-latin-9");
         mgr.add_alias("latin-9", "iso-latin-9");
         mgr.add_alias("latin-0", "iso-latin-9");
-        mgr.add_alias("ascii", "us-ascii");
         mgr.add_alias("iso-safe", "us-ascii");
+        mgr.add_alias("ascii", "us-ascii");
         mgr.add_alias("cn-gb-2312", "chinese-iso-8bit");
         mgr.add_alias("euc-china", "chinese-iso-8bit");
         mgr.add_alias("euc-cn", "chinese-iso-8bit");
@@ -621,6 +624,10 @@ impl CodingSystemManager {
         mgr.add_alias("cp936", "chinese-gbk");
         mgr.add_alias("windows-936", "chinese-gbk");
         mgr.add_alias("gb18030", "chinese-gb18030");
+        mgr.add_alias("binary", "no-conversion");
+        mgr.add_alias("emacs-internal", "utf-8-emacs-unix");
+        mgr.add_alias("utf-16-le", "utf-16le-with-signature");
+        mgr.add_alias("utf-16-be", "utf-16be-with-signature");
 
         // Default priority list
         mgr.priority = vec![
@@ -639,7 +646,9 @@ impl CodingSystemManager {
 
     /// Register a coding system.
     fn register(&mut self, info: CodingSystemInfo) {
-        self.systems.insert(info.name, info);
+        let name = info.name;
+        self.systems.insert(name, info);
+        self.alias_order.entry(name).or_insert_with(|| vec![name]);
     }
 
     /// Resolve a name through the alias table to a canonical name.
@@ -708,16 +717,24 @@ impl CodingSystemManager {
 
     /// Add an alias mapping.
     pub fn add_alias(&mut self, alias: &str, target: &str) {
-        self.aliases.insert(intern(alias), intern(target));
+        let alias_id = intern(alias);
+        let target_id = self.resolve(target).unwrap_or_else(|| intern(target));
+        self.aliases.insert(alias_id, target_id);
+        let aliases = self
+            .alias_order
+            .entry(target_id)
+            .or_insert_with(|| vec![target_id]);
+        if !aliases.contains(&alias_id) {
+            aliases.push(alias_id);
+        }
     }
 
     /// Get all aliases that point to a given canonical name.
     pub fn aliases_for(&self, canonical: SymId) -> Vec<SymId> {
-        self.aliases
-            .iter()
-            .filter(|(_, v)| **v == canonical)
-            .map(|(k, _)| *k)
-            .collect()
+        self.alias_order
+            .get(&canonical)
+            .cloned()
+            .unwrap_or_else(|| vec![canonical])
     }
 
     /// List all registered coding system names (canonical only).
@@ -749,6 +766,7 @@ impl CodingSystemManager {
     pub(crate) fn from_dump(
         systems: HashMap<SymId, CodingSystemInfo>,
         aliases: HashMap<SymId, SymId>,
+        alias_order: HashMap<SymId, Vec<SymId>>,
         priority: Vec<SymId>,
         keyboard_coding: SymId,
         terminal_coding: SymId,
@@ -756,6 +774,7 @@ impl CodingSystemManager {
         Self {
             systems,
             aliases,
+            alias_order,
             priority,
             keyboard_coding,
             terminal_coding,
@@ -773,6 +792,75 @@ impl CodingSystemManager {
             }
         }
     }
+}
+
+fn cons_coding_system_variable(obarray: &mut Obarray, name: SymId) {
+    let var = intern("coding-system-list");
+    let current = obarray.symbol_value_id_or_nil(var);
+    obarray.set_symbol_value_id(var, Value::cons(Value::from_sym_id(name), current));
+}
+
+fn coding_system_alist_has_name(mut alist: Value, name: &str) -> bool {
+    while alist.is_cons() {
+        let entry = alist.cons_car();
+        if entry.is_cons()
+            && let Some(entry_name) = entry.cons_car().as_lisp_string()
+            && entry_name.as_bytes() == name.as_bytes()
+        {
+            return true;
+        }
+        alist = alist.cons_cdr();
+    }
+    false
+}
+
+fn cons_coding_system_alist(obarray: &mut Obarray, name: SymId) {
+    let var = intern("coding-system-alist");
+    let current = obarray.symbol_value_id_or_nil(var);
+    let name_str = resolve_sym(name);
+    if coding_system_alist_has_name(current, name_str) {
+        return;
+    }
+    let entry = Value::cons(Value::string(name_str), Value::NIL);
+    obarray.set_symbol_value_id(var, Value::cons(entry, current));
+}
+
+fn record_coding_system_name(obarray: &mut Obarray, name: SymId) {
+    cons_coding_system_variable(obarray, name);
+    cons_coding_system_alist(obarray, name);
+}
+
+/// Mirror GNU `define-coding-system-internal`'s updates to
+/// `Vcoding_system_list` and `Vcoding_system_alist` in `src/coding.c`.
+/// When EOL is unspecified, GNU records the three subsidiary systems first
+/// and then the base coding system, all by consing onto the front.
+pub(crate) fn record_lisp_define_coding_system_internal(obarray: &mut Obarray, args: &[Value]) {
+    if args.len() < 13 {
+        return;
+    }
+    let Some(name_id) = args[0].as_symbol_id() else {
+        return;
+    };
+    let name = resolve_sym(name_id);
+    let eol_unspecified = args[12].is_nil();
+    if eol_unspecified && EolType::from_suffix(name).is_none() {
+        for suffix in ["-unix", "-dos", "-mac"] {
+            record_coding_system_name(obarray, intern(&format!("{name}{suffix}")));
+        }
+    }
+    record_coding_system_name(obarray, name_id);
+}
+
+/// Mirror GNU `define-coding-system-alias`: append alias metadata in the
+/// runtime registry, then cons the alias onto the Lisp-visible list and alist.
+pub(crate) fn record_lisp_define_coding_system_alias(obarray: &mut Obarray, args: &[Value]) {
+    if args.len() != 2 {
+        return;
+    }
+    let Some(alias_id) = args[0].as_symbol_id() else {
+        return;
+    };
+    record_coding_system_name(obarray, alias_id);
 }
 
 impl crate::gc_trace::GcTrace for CodingSystemManager {
@@ -885,12 +973,7 @@ pub(crate) fn builtin_coding_system_aliases(
     let canonical_id = mgr
         .resolve(&canonical)
         .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
-    let mut aliases = mgr.aliases_for(canonical_id);
-    aliases.sort_by(|a, b| {
-        alias_sort_rank(&canonical, resolve_sym(*a))
-            .cmp(&alias_sort_rank(&canonical, resolve_sym(*b)))
-            .then_with(|| resolve_sym(*a).cmp(resolve_sym(*b)))
-    });
+    let aliases = mgr.aliases_for(canonical_id);
     let mut names = vec![format!("{display}{suffix}")];
     for alias in aliases {
         let alias = resolve_sym(alias);
@@ -1888,6 +1971,8 @@ pub(crate) fn builtin_set_keyboard_coding_system(
     }
     let normalization_input = if matches!(EolType::from_suffix(&name), Some(EolType::Unix)) {
         name.clone()
+    } else if name == "emacs-internal" {
+        name.clone()
     } else {
         canonical_runtime_name(mgr, &name)
             .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?
@@ -2224,7 +2309,7 @@ fn resolve_runtime_name(mgr: &CodingSystemManager, name: &str) -> Option<String>
     let base = strip_eol_suffix(normalized);
     let canonical_base = mgr.resolve(base)?;
     let derived = derive_coding_for_eol(resolve_sym(canonical_base), eol.to_int())?;
-    if derived.ends_with(eol.suffix()) {
+    if mgr.resolve(&derived).is_some() && derived.ends_with(eol.suffix()) {
         Some(derived)
     } else {
         None
@@ -2236,7 +2321,8 @@ fn canonical_runtime_name(mgr: &CodingSystemManager, name: &str) -> Option<Strin
     if let Some(eol) = EolType::from_suffix(normalized) {
         let base = strip_eol_suffix(normalized);
         let canonical_base = mgr.resolve(base)?;
-        return derive_coding_for_eol(resolve_sym(canonical_base), eol.to_int());
+        let derived = derive_coding_for_eol(resolve_sym(canonical_base), eol.to_int())?;
+        return mgr.resolve(&derived).map(|id| resolve_sym(id).to_string());
     }
 
     mgr.resolve(normalized)
@@ -2439,6 +2525,17 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     defvar_lisp(obarray, "coding-system-list", Value::NIL);
     // coding.c:11930 — DEFVAR_LISP (Vcoding_system_alist)
     defvar_lisp(obarray, "coding-system-alist", Value::NIL);
+    // `syms_of_coding` defines these two coding systems in C before
+    // `mule-conf.el` adds aliases and the rest of the language codings.
+    record_coding_system_name(obarray, intern("no-conversion"));
+    for name in [
+        "undecided-unix",
+        "undecided-dos",
+        "undecided-mac",
+        "undecided",
+    ] {
+        record_coding_system_name(obarray, intern(name));
+    }
     // coding.c:11935 — DEFVAR_LISP (Vcoding_category_list)
     defvar_lisp(obarray, "coding-category-list", Value::NIL);
     // coding.c:11941 — DEFVAR_LISP (Vcoding_system_for_read)

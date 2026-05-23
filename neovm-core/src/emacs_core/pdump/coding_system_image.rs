@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const CODING_MAGIC: [u8; 16] = *b"NEOCODING\0\0\0\0\0\0\0";
-const CODING_FORMAT_VERSION: u32 = 1;
+const CODING_FORMAT_VERSION: u32 = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -26,6 +26,8 @@ struct CodingHeader {
     system_string_count: u64,
     alias_sym_count: u64,
     alias_string_count: u64,
+    alias_order_sym_count: u64,
+    alias_order_string_count: u64,
     priority_sym_count: u64,
     priority_string_count: u64,
     payload_offset: u64,
@@ -55,6 +57,14 @@ pub(crate) fn coding_system_section_bytes(
         write_string(&mut bytes, alias)?;
         write_string(&mut bytes, base)?;
     }
+    for (base, aliases) in &manager.alias_order_syms {
+        write_u32(&mut bytes, base.0);
+        write_sym_vec(&mut bytes, aliases)?;
+    }
+    for (base, aliases) in &manager.alias_order {
+        write_string(&mut bytes, base)?;
+        write_string_vec(&mut bytes, aliases)?;
+    }
     for sym in &manager.priority_syms {
         write_u32(&mut bytes, sym.0);
     }
@@ -75,6 +85,14 @@ pub(crate) fn coding_system_section_bytes(
         system_string_count: count_u64(manager.systems.len(), "coding system string count")?,
         alias_sym_count: count_u64(manager.aliases_syms.len(), "coding alias symbol count")?,
         alias_string_count: count_u64(manager.aliases.len(), "coding alias string count")?,
+        alias_order_sym_count: count_u64(
+            manager.alias_order_syms.len(),
+            "coding alias order symbol count",
+        )?,
+        alias_order_string_count: count_u64(
+            manager.alias_order.len(),
+            "coding alias order string count",
+        )?,
         priority_sym_count: count_u64(manager.priority_syms.len(), "coding priority symbol count")?,
         priority_string_count: count_u64(manager.priority.len(), "coding priority string count")?,
         payload_offset: HEADER_SIZE as u64,
@@ -139,6 +157,23 @@ pub(crate) fn load_coding_system_section(
     for _ in 0..header.alias_string_count {
         aliases.push((read_string(&mut cursor)?, read_string(&mut cursor)?));
     }
+    let mut alias_order_syms = Vec::with_capacity(to_usize(
+        header.alias_order_sym_count,
+        "coding alias order symbol count",
+    )?);
+    for _ in 0..header.alias_order_sym_count {
+        alias_order_syms.push((
+            DumpSymId(cursor.read_u32("coding alias order base symbol")?),
+            read_sym_vec(&mut cursor)?,
+        ));
+    }
+    let mut alias_order = Vec::with_capacity(to_usize(
+        header.alias_order_string_count,
+        "coding alias order string count",
+    )?);
+    for _ in 0..header.alias_order_string_count {
+        alias_order.push((read_string(&mut cursor)?, read_string_vec(&mut cursor)?));
+    }
     let mut priority_syms = Vec::with_capacity(to_usize(
         header.priority_sym_count,
         "coding priority symbol count",
@@ -171,6 +206,8 @@ pub(crate) fn load_coding_system_section(
         systems,
         aliases_syms,
         aliases,
+        alias_order_syms,
+        alias_order,
         priority_syms,
         priority,
         keyboard_coding_sym,
@@ -493,6 +530,8 @@ pub(crate) fn empty_coding_system_manager() -> DumpCodingSystemManager {
         systems: Vec::new(),
         aliases_syms: Vec::new(),
         aliases: Vec::new(),
+        alias_order_syms: Vec::new(),
+        alias_order: Vec::new(),
         priority_syms: Vec::new(),
         priority: Vec::new(),
         keyboard_coding_sym: None,
@@ -507,6 +546,8 @@ pub(crate) fn coding_system_manager_is_empty(manager: &DumpCodingSystemManager) 
         && manager.systems.is_empty()
         && manager.aliases_syms.is_empty()
         && manager.aliases.is_empty()
+        && manager.alias_order_syms.is_empty()
+        && manager.alias_order.is_empty()
         && manager.priority_syms.is_empty()
         && manager.priority.is_empty()
         && manager.keyboard_coding_sym.is_none()
@@ -571,6 +612,11 @@ mod tests {
             )],
             aliases_syms: vec![(DumpSymId(11), DumpSymId(12))],
             aliases: vec![("legacy-alias".into(), "legacy-base".into())],
+            alias_order_syms: vec![(DumpSymId(16), vec![DumpSymId(16), DumpSymId(17)])],
+            alias_order: vec![(
+                "legacy-base".into(),
+                vec!["legacy-base".into(), "legacy-alias".into()],
+            )],
             priority_syms: vec![DumpSymId(13)],
             priority: vec!["legacy-priority".into()],
             keyboard_coding_sym: Some(DumpSymId(14)),

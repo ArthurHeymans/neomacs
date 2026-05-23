@@ -4528,6 +4528,11 @@ impl Context {
             macro_perf_stats: MacroPerfStats::default(),
             interpreted_closure_filter_fn: None,
         };
+        ev.provide_value(
+            Value::symbol("make-network-process"),
+            Some(super::process::make_network_process_subfeatures()),
+        )
+        .expect("startup make-network-process provide should succeed");
         ev.finish_runtime_activation(false);
         ev
     }
@@ -4713,6 +4718,14 @@ impl Context {
             } else {
                 ev.obarray.clear_function_silent_id(sym_id);
             }
+        }
+
+        if !ev.feature_present("make-network-process") {
+            ev.provide_value(
+                Value::symbol("make-network-process"),
+                Some(super::process::make_network_process_subfeatures()),
+            )
+            .expect("startup make-network-process provide should succeed");
         }
 
         ev.finish_runtime_activation(true);

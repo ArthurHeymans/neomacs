@@ -3184,6 +3184,17 @@ pub(crate) fn dump_coding_system_manager(
             .map(|(k, v)| (dump_sym_id(*k), dump_sym_id(*v)))
             .collect(),
         aliases: Vec::new(),
+        alias_order_syms: csm
+            .alias_order
+            .iter()
+            .map(|(k, v)| {
+                (
+                    dump_sym_id(*k),
+                    v.iter().map(|id| dump_sym_id(*id)).collect(),
+                )
+            })
+            .collect(),
+        alias_order: Vec::new(),
         priority_syms: csm.priority.iter().map(|id| dump_sym_id(*id)).collect(),
         priority: Vec::new(),
         keyboard_coding_sym: Some(dump_sym_id(csm.dump_keyboard_coding_sym())),
@@ -5058,6 +5069,25 @@ pub(crate) fn load_mode_registry(
     )
 }
 
+fn rebuild_coding_alias_order(
+    systems: &HashMap<SymId, CodingSystemInfo>,
+    aliases: &HashMap<SymId, SymId>,
+) -> HashMap<SymId, Vec<SymId>> {
+    let mut order: HashMap<SymId, Vec<SymId>> =
+        systems.keys().copied().map(|id| (id, vec![id])).collect();
+    let mut alias_pairs: Vec<(SymId, SymId)> = aliases.iter().map(|(k, v)| (*k, *v)).collect();
+    alias_pairs.sort_by(|(left, _), (right, _)| {
+        intern::resolve_sym(*left).cmp(intern::resolve_sym(*right))
+    });
+    for (alias, target) in alias_pairs {
+        let aliases = order.entry(target).or_insert_with(|| vec![target]);
+        if !aliases.contains(&alias) {
+            aliases.push(alias);
+        }
+    }
+    order
+}
+
 pub(crate) fn load_coding_system_manager(
     decoder: &mut LoadDecoder,
     dcsm: &DumpCodingSystemManager,
@@ -5198,24 +5228,48 @@ pub(crate) fn load_coding_system_manager(
             })
             .collect()
     };
-    CodingSystemManager::from_dump(
-        systems,
-        if dcsm.aliases_syms.is_empty() {
-            dcsm.aliases
+    let aliases: HashMap<SymId, SymId> = if dcsm.aliases_syms.is_empty() {
+        dcsm.aliases
+            .iter()
+            .map(|(k, v)| {
+                (
+                    crate::emacs_core::intern::intern(k),
+                    crate::emacs_core::intern::intern(v),
+                )
+            })
+            .collect()
+    } else {
+        dcsm.aliases_syms
+            .iter()
+            .map(|(k, v)| (load_sym_id(k), load_sym_id(v)))
+            .collect()
+    };
+    let alias_order: HashMap<SymId, Vec<SymId>> = if dcsm.alias_order_syms.is_empty() {
+        if dcsm.alias_order.is_empty() {
+            rebuild_coding_alias_order(&systems, &aliases)
+        } else {
+            dcsm.alias_order
                 .iter()
                 .map(|(k, v)| {
                     (
                         crate::emacs_core::intern::intern(k),
-                        crate::emacs_core::intern::intern(v),
+                        v.iter()
+                            .map(|name| crate::emacs_core::intern::intern(name))
+                            .collect(),
                     )
                 })
                 .collect()
-        } else {
-            dcsm.aliases_syms
-                .iter()
-                .map(|(k, v)| (load_sym_id(k), load_sym_id(v)))
-                .collect()
-        },
+        }
+    } else {
+        dcsm.alias_order_syms
+            .iter()
+            .map(|(k, v)| (load_sym_id(k), v.iter().map(load_sym_id).collect()))
+            .collect()
+    };
+    CodingSystemManager::from_dump(
+        systems,
+        aliases,
+        alias_order,
         if dcsm.priority_syms.is_empty() {
             dcsm.priority
                 .iter()

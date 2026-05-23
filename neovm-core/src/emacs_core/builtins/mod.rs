@@ -856,13 +856,21 @@ fn defsubr_define_coding_system_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::coding::builtin_define_coding_system_internal(&mut eval.coding_systems, args)
+    let result = super::coding::builtin_define_coding_system_internal(
+        &mut eval.coding_systems,
+        args.clone(),
+    )?;
+    super::coding::record_lisp_define_coding_system_internal(&mut eval.obarray, &args);
+    Ok(result)
 }
 fn defsubr_define_coding_system_alias(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::coding::builtin_define_coding_system_alias(&mut eval.coding_systems, args)
+    let result =
+        super::coding::builtin_define_coding_system_alias(&mut eval.coding_systems, args.clone())?;
+    super::coding::record_lisp_define_coding_system_alias(&mut eval.obarray, &args);
+    Ok(result)
 }
 fn defsubr_set_coding_system_priority(
     eval: &mut super::eval::Context,

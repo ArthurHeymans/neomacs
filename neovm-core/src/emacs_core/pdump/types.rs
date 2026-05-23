@@ -990,6 +990,10 @@ pub struct DumpCodingSystemManager {
     #[serde(default)]
     pub aliases: Vec<(String, String)>,
     #[serde(default)]
+    pub alias_order_syms: Vec<(DumpSymId, Vec<DumpSymId>)>,
+    #[serde(default)]
+    pub alias_order: Vec<(String, Vec<String>)>,
+    #[serde(default)]
     pub priority_syms: Vec<DumpSymId>,
     #[serde(default)]
     pub priority: Vec<String>,
