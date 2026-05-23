@@ -2056,6 +2056,8 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_buflocal_narrow_marker;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
+#[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
+mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
 mod divergence_combo_edge_cases;
 #[path = "divergence-combo-eieio-error-binding.rs"]
@@ -2094,6 +2096,8 @@ mod divergence_combo_serialization;
 mod divergence_combo_stdlib;
 #[path = "divergence-combo-stress.rs"]
 mod divergence_combo_stress;
+#[path = "divergence-combo-stress-overlay-regex-undo.rs"]
+mod divergence_combo_stress_overlay_regex_undo;
 #[path = "divergence-combo-subprocess-buffer.rs"]
 mod divergence_combo_subprocess_buffer;
 #[path = "divergence-combo-syntax-sexp-nav.rs"]
