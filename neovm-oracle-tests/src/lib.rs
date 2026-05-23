@@ -2050,6 +2050,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-abbrev-completion-syntax.rs"]
 mod divergence_combo_abbrev_completion_syntax;
+#[path = "divergence-combo-advice-defun-buffer-local-overlay-marker-undo.rs"]
+mod divergence_combo_advice_defun_buffer_local_overlay_marker_undo;
 #[path = "divergence-combo-advice-eieio-keymap.rs"]
 mod divergence_combo_advice_eieio_keymap;
 #[path = "divergence-combo-advice-eieio-undo-deep.rs"]
@@ -2095,6 +2097,8 @@ mod divergence_combo_cl_pcase_destructure_guard_deep;
 mod divergence_combo_cl_pcase_rx_thread;
 #[path = "divergence-combo-cl-seq-loop.rs"]
 mod divergence_combo_cl_seq_loop;
+#[path = "divergence-combo-coding-marker-overlay-undo-textprop.rs"]
+mod divergence_combo_coding_marker_overlay_undo_textprop;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 mod divergence_combo_completion_try_all_completions_deep;
@@ -2152,6 +2156,8 @@ mod divergence_combo_file_path_expand_directory_ops;
 mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-final-stress.rs"]
 mod divergence_combo_final_stress;
+#[path = "divergence-combo-fontlock-marker-overlay-undo-textprop.rs"]
+mod divergence_combo_fontlock_marker_overlay_undo_textprop;
 #[path = "divergence-combo-format-print-read-obj.rs"]
 mod divergence_combo_format_print_read_obj;
 #[path = "divergence-combo-format-string-char.rs"]
