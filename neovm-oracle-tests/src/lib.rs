@@ -2052,6 +2052,8 @@ mod divergence_data_types_deep;
 mod divergence_debug_trace_ert;
 #[path = "divergence-devtools-stubs.rs"]
 mod divergence_devtools_stubs;
+#[path = "divergence-dired-file-mgmt.rs"]
+mod divergence_dired_file_mgmt;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
 #[path = "divergence-eieio-method-deep.rs"]
@@ -2188,6 +2190,8 @@ mod divergence_register_narrow_misc;
 mod divergence_rx_pcase_pattern;
 #[path = "divergence-rx-regex-builder.rs"]
 mod divergence_rx_regex_builder;
+#[path = "divergence-scope-binding.rs"]
+mod divergence_scope_binding;
 #[path = "divergence-search-charfold-occur.rs"]
 mod divergence_search_charfold_occur;
 #[path = "divergence-seq-cl-deep.rs"]
