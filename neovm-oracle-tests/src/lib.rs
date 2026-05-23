@@ -2166,6 +2166,8 @@ mod divergence_combo_macro_compiletime;
 mod divergence_combo_macro_eieio_generic;
 #[path = "divergence-combo-macro-eval-apply-closure.rs"]
 mod divergence_combo_macro_eval_apply_closure;
+#[path = "divergence-combo-macro-eval-buffer-undo.rs"]
+mod divergence_combo_macro_eval_buffer_undo;
 #[path = "divergence-combo-macro-gv.rs"]
 mod divergence_combo_macro_gv;
 #[path = "divergence-combo-marker-point-region-undo.rs"]
