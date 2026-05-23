@@ -2189,6 +2189,8 @@ mod divergence_combo_indent_fill_paragraph;
 mod divergence_combo_indirect_buffer_base_shared_deep;
 #[path = "divergence-combo-insert-char-buffer-switch-marker-overlay-undo.rs"]
 mod divergence_combo_insert_char_buffer_switch_marker_overlay_undo;
+#[path = "divergence-combo-interactive-command-execute-marker-overlay-undo.rs"]
+mod divergence_combo_interactive_command_execute_marker_overlay_undo;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-interval-split-merge-undo.rs"]
