@@ -2238,6 +2238,8 @@ mod divergence_combo_syntax_sexp_nav;
 mod divergence_combo_syntax_sexp_textprop_narrow;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
+#[path = "divergence-combo-textprop-interval-undo.rs"]
+mod divergence_combo_textprop_interval_undo;
 #[path = "divergence-combo-textprop-overlay-face.rs"]
 mod divergence_combo_textprop_overlay_face;
 #[path = "divergence-combo-textprop-search-undo.rs"]
