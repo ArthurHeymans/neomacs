@@ -2052,6 +2052,8 @@ mod divergence_data_types_deep;
 mod divergence_debug_trace_ert;
 #[path = "divergence-devtools-stubs.rs"]
 mod divergence_devtools_stubs;
+#[path = "divergence-diff-merge-vcs.rs"]
+mod divergence_diff_merge_vcs;
 #[path = "divergence-dired-file-mgmt.rs"]
 mod divergence_dired_file_mgmt;
 #[path = "divergence-display-table-glyph.rs"]
@@ -2126,6 +2128,8 @@ mod divergence_macro_pcase_cllib;
 mod divergence_map_patterns;
 #[path = "divergence-marker-undo-deep.rs"]
 mod divergence_marker_undo_deep;
+#[path = "divergence-math-bignum-deep.rs"]
+mod divergence_math_bignum_deep;
 #[path = "divergence-minibuf-completion-ring.rs"]
 mod divergence_minibuf_completion_ring;
 #[path = "divergence-misc-builtins.rs"]
