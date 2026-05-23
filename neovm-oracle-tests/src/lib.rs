@@ -2048,6 +2048,8 @@ mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
+#[path = "divergence-combo-abbrev-completion-syntax.rs"]
+mod divergence_combo_abbrev_completion_syntax;
 #[path = "divergence-combo-advice-eieio-keymap.rs"]
 mod divergence_combo_advice_eieio_keymap;
 #[path = "divergence-combo-arith-math-compare.rs"]
