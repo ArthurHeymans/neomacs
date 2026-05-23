@@ -2064,6 +2064,8 @@ mod divergence_combo_error_recovery;
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
+#[path = "divergence-combo-keymap-command.rs"]
+mod divergence_combo_keymap_command;
 #[path = "divergence-combo-macro-compiletime.rs"]
 mod divergence_combo_macro_compiletime;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
@@ -2074,6 +2076,8 @@ mod divergence_combo_metaprogramming;
 mod divergence_combo_operations;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
+#[path = "divergence-combo-read-eval-obarray.rs"]
+mod divergence_combo_read_eval_obarray;
 #[path = "divergence-combo-real-world.rs"]
 mod divergence_combo_real_world;
 #[path = "divergence-combo-regex-stress.rs"]
