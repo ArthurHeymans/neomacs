@@ -51,9 +51,9 @@ pub enum LogTarget {
     /// interactive runs) where writing to stdout or stderr would
     /// corrupt the alt-screen the redisplay engine is drawing into.
     ///
-    /// The default path is `NEOMACS_LOG_FILE` if set, otherwise
-    /// `/tmp/neomacs-{pid}.log`. There is no "silent" mode — the TUI
-    /// always has a log somewhere; users just need to know where.
+    /// When `NEOMACS_LOG_FILE` is not set, the TUI runs silently (no
+    /// file output). Set `NEOMACS_LOG_FILE=<path>` to opt in to file
+    /// logging.
     File,
     /// Unit or integration test. Default writer: captured test writer
     /// (`tracing_subscriber::fmt::TestWriter`, visible only on test
@@ -83,11 +83,11 @@ type BoxedLayer = Box<dyn Layer<Registry> + Send + Sync + 'static>;
 /// | target | default writer | with `NEOMACS_LOG_FILE=<path>` |
 /// |---|---|---|
 /// | [`LogTarget::Stdout`] | stdout | stdout + file |
-/// | [`LogTarget::File`] | file at default path | file at `<path>` |
+/// | [`LogTarget::File`] | silent (no file) | file at `<path>` |
 /// | [`LogTarget::Test`] | captured test writer | test writer + file |
 ///
-/// [`LogTarget::File`]'s default path is
-/// `/tmp/neomacs-{pid}.log` when `NEOMACS_LOG_FILE` is unset.
+/// [`LogTarget::File`] produces no file output unless `NEOMACS_LOG_FILE`
+/// is set, so TUI runs are silent by default.
 ///
 /// Behavior shared across all targets:
 ///
@@ -100,8 +100,8 @@ type BoxedLayer = Box<dyn Layer<Registry> + Send + Sync + 'static>;
 ///   guard.
 /// - If the configured log file fails to open, a warning is printed to
 ///   stderr and the function continues with the default writer only
-///   (for [`LogTarget::Stdout`] and [`LogTarget::Test`]) or falls
-///   through to `/dev/null` (for [`LogTarget::File`]).
+///   (for [`LogTarget::Stdout`] and [`LogTarget::Test`]) or silently
+///   (for [`LogTarget::File`]).
 ///
 /// Legacy: `NEOMACS_LOG_TO_FILE=1` is still accepted and is equivalent
 /// to setting `NEOMACS_LOG_FILE=neomacs-{pid}.log` in the current
@@ -194,13 +194,6 @@ fn resolve_env_log_file() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Default file path for [`LogTarget::File`] when `NEOMACS_LOG_FILE`
-/// is not set. The TUI needs SOME log destination — choosing a
-/// predictable `/tmp/neomacs-{pid}.log` makes it easy to `tail -f`
-/// from another terminal while debugging.
-fn default_tui_log_path() -> std::path::PathBuf {
-    std::path::PathBuf::from(format!("/tmp/neomacs-{}.log", std::process::id()))
-}
 
 fn default_layer(target: LogTarget) -> Option<BoxedLayer> {
     match target {
@@ -256,14 +249,11 @@ fn file_layer_for(
     Option<BoxedLayer>,
     Option<tracing_appender::non_blocking::WorkerGuard>,
 ) {
-    let path = match (target, resolve_env_log_file()) {
-        // Explicit NEOMACS_LOG_FILE always wins, regardless of target.
-        (_, Some(path)) => path,
-        // LogTarget::File without an env override falls back to the
-        // default TUI log path so the TUI always has a place to log.
-        (LogTarget::File, None) => default_tui_log_path(),
-        // Stdout and Test without an env override have no file layer.
-        (LogTarget::Stdout | LogTarget::Test, None) => return (None, None),
+    let path = match resolve_env_log_file() {
+        Some(path) => path,
+        // No env override → no file layer for any target. TUI runs
+        // silently by default; use NEOMACS_LOG_FILE to opt in.
+        None => return (None, None),
     };
     open_file_layer(&path)
 }
