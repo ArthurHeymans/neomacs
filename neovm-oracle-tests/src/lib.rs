@@ -2142,6 +2142,8 @@ mod divergence_keymap_syntax_category;
 mod divergence_kmacro_persistence;
 #[path = "divergence-lambda-apply-dispatch.rs"]
 mod divergence_lambda_apply_dispatch;
+#[path = "divergence-list-manipulation-real.rs"]
+mod divergence_list_manipulation_real;
 #[path = "divergence-load-native-comp.rs"]
 mod divergence_load_native_comp;
 #[path = "divergence-macro-advice-real.rs"]
@@ -2278,6 +2280,8 @@ mod divergence_system_info_env;
 mod divergence_terminal_eshell;
 #[path = "divergence-testing-debug.rs"]
 mod divergence_testing_debug;
+#[path = "divergence-text-processing-real.rs"]
+mod divergence_text_processing_real;
 #[path = "divergence-textprop-deep.rs"]
 mod divergence_textprop_deep;
 #[path = "divergence-textprop-manipulation.rs"]
