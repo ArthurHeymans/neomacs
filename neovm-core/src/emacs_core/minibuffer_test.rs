@@ -643,6 +643,23 @@ fn builtin_try_completion_handles_raw_unibyte_candidates_without_panicking() {
 }
 
 #[test]
+fn builtin_try_completion_accepts_gnu_obarray_objects() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let obarray = Value::obarray(3);
+    let buckets = vec![
+        Value::NIL,
+        Value::list(vec![Value::symbol("neo-obarray-beta")]),
+        Value::list(vec![Value::symbol("neo-obarray-alpha")]),
+    ];
+    assert!(crate::emacs_core::builtins::symbols::replace_obarray_buckets(obarray, buckets));
+
+    let result = builtin_try_completion(&mut eval, vec![Value::string("neo-obarray-"), obarray])
+        .expect("try-completion should accept GNU obarray objects");
+    assert_eq!(result.as_utf8_str().unwrap(), "neo-obarray-");
+}
+
+#[test]
 fn builtin_try_completion_rejects_more_than_three_args() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

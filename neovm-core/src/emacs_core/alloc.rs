@@ -33,6 +33,8 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     obarray.make_special("gc-elapsed");
     obarray.set_symbol_value("gcs-done", Value::fixnum(0));
     obarray.make_special("gcs-done");
+    obarray.set_symbol_value("pure-bytes-used", Value::fixnum(0));
+    obarray.make_special("pure-bytes-used");
 }
 
 #[cfg(test)]

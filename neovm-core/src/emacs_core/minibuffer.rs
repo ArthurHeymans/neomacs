@@ -1796,6 +1796,9 @@ pub(crate) fn completion_candidates_from_collection_in_state(
             let obarray = super::builtins::symbols::check_obarray_value(*collection)?;
             Some(completion_candidates_from_custom_obarray(obarray))
         }
+        ValueKind::Veclike(VecLikeType::Obarray) => {
+            Some(completion_candidates_from_custom_obarray(*collection))
+        }
         _ => None,
     })
 }
@@ -1945,7 +1948,7 @@ pub(crate) fn builtin_test_completion_with_candidates(
 }
 
 fn completion_candidates_from_custom_obarray(collection: Value) -> Vec<CompletionCandidate> {
-    let slots = collection.as_vector_data().unwrap().clone();
+    let slots = super::builtins::symbols::obarray_buckets(collection).unwrap_or_default();
     let mut candidates = Vec::new();
     for slot in slots {
         let mut current = slot;

@@ -411,23 +411,17 @@ impl Buffer {
         self.undo_prepare_change(start, old_pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            undo::undo_list_record_insert(
-                &mut ul,
-                start_char + deleted_text.schars(),
-                new_char_len,
-                self.undo_state.point_before_command_or_undo(),
-            );
-            for (marker, adjustment) in self
-                .text
-                .marker_adjustments_for_delete(start_char, end_char)
-            {
-                undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
-            }
             undo::undo_list_record_delete(
                 &mut ul,
                 start_char,
                 deleted_text,
                 old_pt,
+                self.undo_state.point_before_command_or_undo(),
+            );
+            undo::undo_list_record_insert(
+                &mut ul,
+                start_char,
+                new_char_len,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);

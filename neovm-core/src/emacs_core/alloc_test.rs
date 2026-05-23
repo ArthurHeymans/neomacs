@@ -27,6 +27,10 @@ fn register_bootstrap_vars_matches_gnu_alloc_defaults() {
         obarray.symbol_value("gcs-done").copied(),
         Some(Value::fixnum(0))
     );
+    assert_eq!(
+        obarray.symbol_value("pure-bytes-used").copied(),
+        Some(Value::fixnum(0))
+    );
 
     let signal_data = obarray
         .symbol_value("memory-signal-data")
@@ -54,6 +58,10 @@ fn evaluator_binds_alloc_bootstrap_vars() {
     assert_eq!(
         obarray.symbol_value("post-gc-hook").copied(),
         Some(Value::NIL)
+    );
+    assert_eq!(
+        obarray.symbol_value("pure-bytes-used").copied(),
+        Some(Value::fixnum(0))
     );
 
     let signal_data = obarray
