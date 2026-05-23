@@ -2144,6 +2144,8 @@ mod divergence_combo_match_register_syntax;
 mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-milestone-100.rs"]
 mod divergence_combo_milestone_100;
+#[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
+mod divergence_combo_narrow_marker_overlay_mega;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
