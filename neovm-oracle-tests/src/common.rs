@@ -474,6 +474,19 @@ pub(crate) fn run_neovm_eval_with_load_raw(
 }
 
 // ---------------------------------------------------------------------------
+// Internal parity helper
+// ---------------------------------------------------------------------------
+
+fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
+    if neovm == oracle {
+        return;
+    }
+    panic!(
+        "oracle parity mismatch for form: {form}\n  NEO Emacs:  {neovm}\n  GNU Emacs:  {oracle}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Public parity assertions
 // ---------------------------------------------------------------------------
 
@@ -501,21 +514,21 @@ pub(crate) fn assert_oracle_parity(form: &str) {
         eprintln!("oracle-timing: oracle-done {:.3?}", oracle_t0.elapsed());
     }
     eprintln!("total: {:.3?}", t0.elapsed());
-    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn assert_oracle_parity_with_load(form: &str, load_files: &[&str]) {
     let neovm =
         run_neomacs_binary_eval_inner(form, load_files).expect("neomacs binary eval should run");
     let oracle = run_oracle_eval_with_load(form, load_files).expect("oracle eval should run");
-    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]) {
     let neovm = run_neomacs_binary_eval_inner_raw(form, load_files)
         .expect("neomacs binary eval should run");
     let oracle = run_oracle_eval_with_load_raw(form, load_files).expect("oracle eval should run");
-    assert_eq!(neovm, oracle, "oracle parity mismatch for form: {form}");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
@@ -526,9 +539,9 @@ pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
 
 pub(crate) fn assert_ok_eq(expected_payload: &str, oracle: &str, neovm: &str) {
     let expected = format!("OK {expected_payload}");
-    assert_eq!(oracle, expected, "oracle should match expected payload");
-    assert_eq!(neovm, expected, "neovm should match expected payload");
-    assert_eq!(neovm, oracle, "neovm and oracle should match");
+    assert_eq!(oracle, expected, "GNU Emacs should match expected payload");
+    assert_eq!(neovm, expected, "Neomacs should match expected payload");
+    assert_neovm_oracle_parity(neovm, oracle, "assert_ok_eq");
 }
 
 pub(crate) fn assert_err_kind(oracle: &str, neovm: &str, err_kind: &str) {
