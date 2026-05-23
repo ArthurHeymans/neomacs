@@ -2379,6 +2379,8 @@ mod divergence_combo_undo_overlay_marker_stress;
 mod divergence_combo_undo_replace_prop_extreme;
 #[path = "divergence-combo-undo-stress-marker-textprop.rs"]
 mod divergence_combo_undo_stress_marker_textprop;
+#[path = "divergence-combo-vector-char-table-marker-overlay-undo.rs"]
+mod divergence_combo_vector_char_table_marker_overlay_undo;
 #[path = "divergence-combo-window-buf-marker.rs"]
 mod divergence_combo_window_buf_marker;
 #[path = "divergence-combo-window-buffer-point.rs"]
