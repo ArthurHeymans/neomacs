@@ -2048,6 +2048,10 @@ mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
+#[path = "divergence-combo-buffer-overlay.rs"]
+mod divergence_combo_buffer_overlay;
+#[path = "divergence-combo-eval-error-scope.rs"]
+mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-compat-legacy.rs"]
