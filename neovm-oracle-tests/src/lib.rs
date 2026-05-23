@@ -2086,6 +2086,8 @@ mod divergence_combo_defstruct_eieio_interop;
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
 mod divergence_combo_edge_cases;
+#[path = "divergence-combo-edit-simulation.rs"]
+mod divergence_combo_edit_simulation;
 #[path = "divergence-combo-editing-session.rs"]
 mod divergence_combo_editing_session;
 #[path = "divergence-combo-eieio-error-binding.rs"]
