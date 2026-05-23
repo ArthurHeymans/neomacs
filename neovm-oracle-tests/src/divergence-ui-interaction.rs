@@ -35,9 +35,16 @@ fn divergence_drag_n_drop() {
 
     assert_oracle_parity(
         r#"(list
-  (fboundp 'x-dnd-handle-drag-n-drop-event)
   (fboundp 'x-begin-drag)
   (featurep 'dnd))"#,
+    );
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'x-dnd)
+  (list
+    (fboundp 'x-dnd-handle-drag-n-drop-event)
+    (featurep 'x-dnd)))"#,
     );
 }
 

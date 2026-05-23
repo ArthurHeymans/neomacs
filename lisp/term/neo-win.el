@@ -22,7 +22,7 @@
 
 ;;; Commentary:
 
-;; Neomacs is a GPU-accelerated display backend using GTK4 and Rust.
+;; Neomacs is a GPU-accelerated display backend implemented in Rust.
 
 ;;; Code:
 
