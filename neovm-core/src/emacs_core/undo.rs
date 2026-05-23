@@ -237,6 +237,40 @@ fn primitive_undo_inner(
                                 )],
                             ));
                         }
+                    }
+
+                    let apos1 = pos1.abs();
+                    let mut valid_marker_adjustments = Vec::new();
+                    while list.is_cons() {
+                        let marker_adj = list.cons_car();
+                        if !marker_adj.is_cons() {
+                            break;
+                        }
+                        let marker = marker_adj.cons_car();
+                        let offset = marker_adj.cons_cdr();
+                        let Some(offset) = offset.as_fixnum() else {
+                            break;
+                        };
+                        if !marker.is_marker() {
+                            break;
+                        }
+
+                        list = list.cons_cdr();
+                        let marker_in_current_buffer =
+                            super::marker::marker_logical_fields(&marker)
+                                .is_some_and(|(buffer, _, _)| buffer == Some(buf_id));
+                        let marker_at_undo_position =
+                            super::marker::marker_position_as_int_with_buffers(
+                                &ctx.buffers,
+                                &marker,
+                            )
+                            .is_ok_and(|pos| pos == apos1);
+                        if marker_in_current_buffer && marker_at_undo_position {
+                            valid_marker_adjustments.push((marker, offset));
+                        }
+                    }
+
+                    if let Some(buf) = ctx.buffers.get(buf_id) {
                         let clamped = char_pos1_to_byte_clamped(buf, apos1);
                         ctx.buffers.goto_buffer_byte(buf_id, clamped);
                         ctx.buffers.insert_lisp_string_into_buffer(buf_id, ls);
@@ -246,6 +280,28 @@ fn primitive_undo_inner(
                         if pos1 > 0 {
                             ctx.buffers.goto_buffer_byte(buf_id, clamped);
                         }
+                    }
+
+                    for (marker, offset) in valid_marker_adjustments {
+                        let marker_still_live = super::marker::marker_logical_fields(&marker)
+                            .is_some_and(|(buffer, _, _)| buffer.is_some());
+                        if !marker_still_live {
+                            continue;
+                        }
+                        let Ok(pos) = super::marker::marker_position_as_int_with_buffers(
+                            &ctx.buffers,
+                            &marker,
+                        ) else {
+                            continue;
+                        };
+                        super::marker::builtin_set_marker_in_buffers(
+                            &mut ctx.buffers,
+                            vec![
+                                marker,
+                                Value::fixnum(pos - offset),
+                                Value::make_buffer(buf_id),
+                            ],
+                        )?;
                     }
                 }
                 // (t . MODTIME) — restore buffer-modified state.
@@ -385,9 +441,23 @@ fn primitive_undo_inner(
                         let _ = ctx.funcall_general(fun, fargs);
                     }
                 }
-                // (MARKER . OFFSET) — adjust marker; skip for now.
-                (ValueKind::Veclike(VecLikeType::Marker), ValueKind::Fixnum(_)) => {
-                    // Marker adjustment is rarely critical; skip.
+                // (MARKER . OFFSET) — unexpected marker adjustment without a
+                // matching (TEXT . POS) entry.  GNU warns and still applies it
+                // conservatively.
+                (ValueKind::Veclike(VecLikeType::Marker), ValueKind::Fixnum(offset)) => {
+                    let marker_still_live = super::marker::marker_logical_fields(&car)
+                        .is_some_and(|(buffer, _, _)| buffer.is_some());
+                    if marker_still_live {
+                        let Ok(pos) =
+                            super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &car)
+                        else {
+                            continue;
+                        };
+                        super::marker::builtin_set_marker_in_buffers(
+                            &mut ctx.buffers,
+                            vec![car, Value::fixnum(pos - offset), Value::make_buffer(buf_id)],
+                        )?;
+                    }
                 }
                 _ => {
                     // Unknown entry type — skip.

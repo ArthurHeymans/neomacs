@@ -146,6 +146,69 @@ fn test_primitive_undo_reverts_deletion() {
 }
 
 #[test]
+fn test_primitive_undo_restores_marker_adjustments_after_deletion() {
+    crate::test_utils::init_test_tracing();
+    use super::super::{eval::Context, marker};
+
+    let mut eval = Context::new();
+    let buf_id = eval.buffers.current_buffer_id().expect("scratch buffer");
+    eval.buffers
+        .current_buffer_mut()
+        .expect("scratch buffer")
+        .insert("ae");
+
+    let marker = marker::make_registered_buffer_marker(&mut eval.buffers, buf_id, 2, false);
+    let delete_record = Value::cons(Value::string("bcd"), Value::fixnum(2));
+    let marker_record = Value::cons(marker, Value::fixnum(-2));
+    let list = Value::list(vec![delete_record, marker_record]);
+
+    builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]).unwrap();
+
+    let contents = eval
+        .buffers
+        .current_buffer()
+        .expect("scratch buffer")
+        .buffer_string();
+    assert_eq!(contents, "abcde");
+    let marker_position =
+        marker::builtin_marker_position_in_buffers(&eval.buffers, vec![marker]).unwrap();
+    assert_eq!(marker_position, Value::fixnum(4));
+}
+
+#[test]
+fn test_delete_records_marker_adjustments_for_primitive_undo() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+  (insert "ABCDE")
+  (let ((m (make-marker)))
+    (set-marker m 3)
+    (undo-boundary)
+    (goto-char 3)
+    (insert "123")
+    (undo-boundary)
+    (delete-region 1 3)
+    (let ((after-delete (marker-position m)))
+      (primitive-undo 1 buffer-undo-list)
+      (list after-delete (marker-position m) (buffer-string)))))"#,
+        )
+        .expect("undo marker eval");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::fixnum(1),
+            Value::fixnum(3),
+            Value::string("AB123CDE")
+        ])
+    );
+}
+
+#[test]
 fn test_primitive_undo_reverts_raw_unibyte_deletion() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

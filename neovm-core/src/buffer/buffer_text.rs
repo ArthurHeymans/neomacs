@@ -805,6 +805,40 @@ impl BufferText {
         }
     }
 
+    /// Return GNU `record_marker_adjustments` entries for markers whose
+    /// Lisp character positions are in the deleted range `[from, to]`.
+    pub fn marker_adjustments_for_delete(
+        &self,
+        from_char: usize,
+        to_char: usize,
+    ) -> Vec<(crate::emacs_core::value::Value, i64)> {
+        let from1 = from_char as i64 + 1;
+        let to1 = to_char as i64 + 1;
+        let storage = self.storage.borrow();
+        let mut curr = storage.markers_head;
+        let mut adjustments = Vec::new();
+        unsafe {
+            while !curr.is_null() {
+                let data = &(*curr).data;
+                let charpos1 = data.charpos as i64 + 1;
+                if from1 <= charpos1 && charpos1 <= to1 {
+                    let target = if data.insertion_type { to1 } else { from1 };
+                    let adjustment = target - charpos1;
+                    if adjustment != 0 {
+                        adjustments.push((
+                            crate::emacs_core::value::Value::from_veclike_ptr(
+                                curr as *const crate::tagged::header::VecLikeHeader,
+                            ),
+                            adjustment,
+                        ));
+                    }
+                }
+                curr = data.next_marker;
+            }
+        }
+        adjustments
+    }
+
     /// Read the byte position of a marker by id.
     pub fn marker_bytepos(&self, marker_id: u64) -> usize {
         let ptr = self.chain_find_by_id(marker_id);

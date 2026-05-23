@@ -137,6 +137,25 @@ pub fn undo_list_record_delete(
     restore_scratch_gc_roots(saved);
 }
 
+/// Record a marker adjustment immediately before a deletion record.
+///
+/// GNU `record_marker_adjustments` conses `(MARKER . ADJUSTMENT)` entries
+/// before `record_delete` conses `(TEXT . POS)`, so the final undo list has
+/// the deletion first followed by its marker adjustments.
+pub fn undo_list_record_marker_adjustment(undo_list: &mut Value, marker: Value, adjustment: i64) {
+    if undo_list_is_disabled(undo_list) || adjustment == 0 {
+        return;
+    }
+
+    let saved = save_scratch_gc_roots();
+    push_scratch_gc_root(*undo_list);
+    push_scratch_gc_root(marker);
+    let entry = Value::cons(marker, Value::fixnum(adjustment));
+    push_scratch_gc_root(entry);
+    *undo_list = Value::cons(entry, *undo_list);
+    restore_scratch_gc_roots(saved);
+}
+
 /// Record the cursor position (0-indexed `pt`) as a 1-indexed integer.
 /// Skips if the most recent entry is the same position.
 pub fn undo_list_record_point(undo_list: &mut Value, pt: usize) {
