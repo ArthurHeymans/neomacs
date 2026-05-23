@@ -2004,6 +2004,8 @@ mod divergence_advice_hooks_locals;
 mod divergence_alist_plist_hash;
 #[path = "divergence-arithmetic-float.rs"]
 mod divergence_arithmetic_float;
+#[path = "divergence-arithmetic-real.rs"]
+mod divergence_arithmetic_real;
 #[path = "divergence-bignum-fixnum-deep.rs"]
 mod divergence_bignum_fixnum_deep;
 #[path = "divergence-bookmark-register-text.rs"]
@@ -2052,6 +2054,8 @@ mod divergence_compat_legacy;
 mod divergence_completion_frameworks;
 #[path = "divergence-completion-ring-deep.rs"]
 mod divergence_completion_ring_deep;
+#[path = "divergence-control-flow-real.rs"]
+mod divergence_control_flow_real;
 #[path = "divergence-custom-theme-deep.rs"]
 mod divergence_custom_theme_deep;
 #[path = "divergence-data-formats.rs"]
