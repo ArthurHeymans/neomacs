@@ -930,11 +930,10 @@ pub(crate) fn collect_mapatoms_symbols(
         return Ok((func, symbols));
     }
 
-    let symbols = eval
-        .obarray()
-        .global_member_ids()
-        .map(Value::from_sym_id)
-        .collect();
+    let symbols = crate::emacs_core::builtins::symbols::global_obarray_symbols_in_bucket_order(
+        eval.obarray(),
+        effective_obarray,
+    );
     Ok((func, symbols))
 }
 

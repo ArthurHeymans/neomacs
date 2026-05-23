@@ -1749,26 +1749,20 @@ fn is_global_obarray_proxy_in_state(obarray: &Obarray, value: &Value) -> bool {
 
 fn completion_candidates_from_global_obarray_in_state(
     obarray: &Obarray,
+    lisp_obarray: Value,
 ) -> Vec<CompletionCandidate> {
-    let mut entries: Vec<(crate::heap_types::LispString, Value)> = obarray
-        .global_member_ids()
+    super::builtins::symbols::global_obarray_symbols_in_bucket_order(obarray, lisp_obarray)
+        .into_iter()
         .map(|id| {
             (
-                crate::emacs_core::intern::resolve_sym_lisp_string(id).clone(),
-                Value::from_sym_id(id),
+                crate::emacs_core::intern::resolve_sym_lisp_string(
+                    id.as_symbol_id()
+                        .expect("global obarray entries are symbols"),
+                )
+                .clone(),
+                id,
             )
         })
-        .collect();
-    entries.sort_by(|(left, _), (right, _)| {
-        left.as_bytes()
-            .cmp(right.as_bytes())
-            .then(left.is_multibyte().cmp(&right.is_multibyte()))
-    });
-    entries.dedup_by(|(left_name, left_sym), (right_name, right_sym)| {
-        left_name == right_name && left_sym.bits() == right_sym.bits()
-    });
-    entries
-        .into_iter()
         .map(|(name, sym)| CompletionCandidate {
             completion: CompletionText::Generated { string: name },
             predicate_arg: sym,
@@ -1790,7 +1784,10 @@ pub(crate) fn completion_candidates_from_collection_in_state(
         ValueKind::Veclike(VecLikeType::Vector)
             if is_global_obarray_proxy_in_state(obarray, collection) =>
         {
-            Some(completion_candidates_from_global_obarray_in_state(obarray))
+            Some(completion_candidates_from_global_obarray_in_state(
+                obarray,
+                *collection,
+            ))
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             let obarray = super::builtins::symbols::check_obarray_value(*collection)?;

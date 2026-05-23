@@ -11,6 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 static PROFILER_MEMORY_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// GNU `init_obarray_once` creates the initial obarray with size_bits = 15.
+pub(crate) const GNU_INITIAL_OBARRAY_SIZE: usize = 1 << 15;
+
 // ===========================================================================
 // Symbol operations (need evaluator for obarray access)
 // ===========================================================================
@@ -1350,6 +1353,29 @@ fn obarray_hash_bytes(bytes: &[u8], len: usize) -> usize {
     } else {
         (hash as usize) % len
     }
+}
+
+pub(crate) fn global_obarray_symbols_in_bucket_order(
+    obarray: &Obarray,
+    lisp_obarray: Value,
+) -> Vec<Value> {
+    let len = obarray_len(lisp_obarray)
+        .filter(|len| *len > 1)
+        .unwrap_or(GNU_INITIAL_OBARRAY_SIZE);
+    let mut buckets = vec![Vec::new(); len];
+    for id in obarray.global_member_ids() {
+        let name = crate::emacs_core::intern::resolve_sym_lisp_string(id);
+        let idx = obarray_hash_lisp_string(name, len);
+        buckets[idx].push(id);
+    }
+
+    let mut symbols = Vec::new();
+    for bucket in buckets {
+        for id in bucket.into_iter().rev() {
+            symbols.push(Value::from_sym_id(id));
+        }
+    }
+    symbols
 }
 
 /// Search a bucket chain (cons list) for a symbol with the given name.
