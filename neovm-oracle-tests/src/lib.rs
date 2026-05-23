@@ -2074,6 +2074,10 @@ mod divergence_combo_real_world;
 mod divergence_combo_regex_stress;
 #[path = "divergence-combo-search-marker-undo.rs"]
 mod divergence_combo_search_marker_undo;
+#[path = "divergence-combo-serialization.rs"]
+mod divergence_combo_serialization;
+#[path = "divergence-combo-stdlib.rs"]
+mod divergence_combo_stdlib;
 #[path = "divergence-combo-stress.rs"]
 mod divergence_combo_stress;
 #[path = "divergence-combo-text-editing.rs"]
