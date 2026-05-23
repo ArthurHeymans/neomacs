@@ -2060,6 +2060,8 @@ mod divergence_combo_advice_filter_before_after_combo;
 #[path = "divergence-combo-arith-math-compare.rs"]
 mod divergence_combo_arith_math_compare;
 mod divergence_combo_bool_vector_bitwise_operations_deep;
+#[path = "divergence-combo-buffer-lifecycle-clone-indirect-overlay-marker.rs"]
+mod divergence_combo_buffer_lifecycle_clone_indirect_overlay_marker;
 #[path = "divergence-combo-buffer-local-closure.rs"]
 mod divergence_combo_buffer_local_closure;
 #[path = "divergence-combo-buffer-overlay.rs"]
@@ -2367,6 +2369,8 @@ mod divergence_combo_type_coercion;
 mod divergence_combo_undo_boundary_deep;
 #[path = "divergence-combo-undo-boundary-limit-narrow-marker-overlay-textprop.rs"]
 mod divergence_combo_undo_boundary_limit_narrow_marker_overlay_textprop;
+#[path = "divergence-combo-undo-chain-narrow-buflocal-overlay-textprop-stress.rs"]
+mod divergence_combo_undo_chain_narrow_buflocal_overlay_textprop_stress;
 #[path = "divergence-combo-undo-deep-stress.rs"]
 mod divergence_combo_undo_deep_stress;
 #[path = "divergence-combo-undo-list-inspect.rs"]
