@@ -2042,6 +2042,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-compat-legacy.rs"]
+mod divergence_compat_legacy;
 #[path = "divergence-completion-frameworks.rs"]
 mod divergence_completion_frameworks;
 #[path = "divergence-completion-ring-deep.rs"]
@@ -2224,6 +2226,8 @@ mod divergence_sort_type_predicates;
 mod divergence_stress_combo;
 #[path = "divergence-stress-combo-2.rs"]
 mod divergence_stress_combo_2;
+#[path = "divergence-stress-combo-3.rs"]
+mod divergence_stress_combo_3;
 #[path = "divergence-stress-large-deep.rs"]
 mod divergence_stress_large_deep;
 #[path = "divergence-string-ops.rs"]
