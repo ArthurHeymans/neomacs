@@ -556,27 +556,53 @@ fn format_cons_in_state(
 ) {
     let mut cursor = *value;
     let mut first = true;
+    let mut maxlen = options.print_length.unwrap_or(i64::MAX);
+    let mut tortoise = *value;
+    let mut n: i64 = 2;
+    let mut m: i64 = 2;
+    let mut tortoise_idx: i64 = 0;
     let stack_len = format_object_stack_len();
     loop {
         match cursor.kind() {
             ValueKind::Cons => {
-                if !first {
-                    if let Some(index) = format_cycle_stack_index(&cursor) {
-                        out.push_str(" . ");
-                        out.push_str(&format!("#{index}"));
+                if first {
+                    if maxlen == 0 {
+                        out.push_str("...");
                         truncate_format_object_stack(stack_len);
                         return;
                     }
-                    push_format_cycle_object(&cursor);
-                }
-                if !first {
+                } else {
                     out.push(' ');
+                    maxlen = maxlen.saturating_sub(1);
+                    if maxlen <= 0 {
+                        out.push_str("...");
+                        truncate_format_object_stack(stack_len);
+                        return;
+                    }
+
+                    n -= 1;
+                    if n == 0 {
+                        tortoise_idx = tortoise_idx.saturating_add(m);
+                        m = m.saturating_mul(2);
+                        n = m;
+                        tortoise = cursor;
+                    } else if cursor == tortoise {
+                        out.push_str(&format!(". #{tortoise_idx}"));
+                        truncate_format_object_stack(stack_len);
+                        return;
+                    }
                 }
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
+                let pushed = if first {
+                    false
+                } else {
+                    push_format_cycle_object(&cursor)
+                };
                 out.push_str(&format_value_in_state(
                     obarray, buffers, frames, threads, &pair_car, options,
                 ));
+                pop_format_cycle_object(pushed);
                 cursor = pair_cdr;
                 first = false;
             }
@@ -797,27 +823,53 @@ fn append_cons_bytes_in_state(
 ) {
     let mut cursor = *value;
     let mut first = true;
+    let mut maxlen = options.print_length.unwrap_or(i64::MAX);
+    let mut tortoise = *value;
+    let mut n: i64 = 2;
+    let mut m: i64 = 2;
+    let mut tortoise_idx: i64 = 0;
     let stack_len = format_object_stack_len();
     loop {
         match cursor.kind() {
             ValueKind::Cons => {
-                if !first {
-                    if let Some(index) = format_cycle_stack_index(&cursor) {
-                        out.extend_from_slice(b" . ");
-                        out.extend_from_slice(format!("#{index}").as_bytes());
+                if first {
+                    if maxlen == 0 {
+                        out.extend_from_slice(b"...");
                         truncate_format_object_stack(stack_len);
                         return;
                     }
-                    push_format_cycle_object(&cursor);
-                }
-                if !first {
+                } else {
                     out.push(b' ');
+                    maxlen = maxlen.saturating_sub(1);
+                    if maxlen <= 0 {
+                        out.extend_from_slice(b"...");
+                        truncate_format_object_stack(stack_len);
+                        return;
+                    }
+
+                    n -= 1;
+                    if n == 0 {
+                        tortoise_idx = tortoise_idx.saturating_add(m);
+                        m = m.saturating_mul(2);
+                        n = m;
+                        tortoise = cursor;
+                    } else if cursor == tortoise {
+                        out.extend_from_slice(format!(". #{tortoise_idx}").as_bytes());
+                        truncate_format_object_stack(stack_len);
+                        return;
+                    }
                 }
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
+                let pushed = if first {
+                    false
+                } else {
+                    push_format_cycle_object(&cursor)
+                };
                 out.extend(format_value_bytes_in_state_with_options(
                     obarray, buffers, frames, threads, &pair_car, options,
                 ));
+                pop_format_cycle_object(pushed);
                 cursor = pair_cdr;
                 first = false;
             }

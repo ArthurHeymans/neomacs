@@ -10272,6 +10272,34 @@ fn prin1_to_string_supports_noescape_for_strings() {
 }
 
 #[test]
+fn prin1_to_string_uses_gnu_default_cycle_tail_indices() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (list
+             (let ((x (list 'a 'b)))
+               (setcdr (cdr x) x)
+               (prin1-to-string x))
+             (let ((x (list 'a 'b 'c)))
+               (setcdr (cdr (cdr x)) x)
+               (prin1-to-string (memq 'b x))))
+            "#,
+        )
+        .expect("prin1-to-string should print circular lists like GNU");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::string("(a b a b . #2)"),
+            Value::string("(b c a b c . #2)"),
+        ])
+    );
+}
+
+#[test]
 fn prin1_to_string_respects_print_overrides_for_control_characters() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
