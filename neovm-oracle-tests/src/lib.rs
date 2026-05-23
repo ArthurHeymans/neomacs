@@ -2216,6 +2216,8 @@ mod divergence_combo_timer_process;
 mod divergence_combo_timer_process_time;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
+#[path = "divergence-combo-undo-deep-stress.rs"]
+mod divergence_combo_undo_deep_stress;
 #[path = "divergence-combo-undo-mega-stress.rs"]
 mod divergence_combo_undo_mega_stress;
 #[path = "divergence-combo-undo-overlay-marker-stress.rs"]
