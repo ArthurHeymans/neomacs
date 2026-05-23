@@ -2246,8 +2246,12 @@ mod divergence_subr_bytecode_deep;
 mod divergence_symbol_reader_deep;
 #[path = "divergence-syntax-parse-deep.rs"]
 mod divergence_syntax_parse_deep;
+#[path = "divergence-system-info-env.rs"]
+mod divergence_system_info_env;
 #[path = "divergence-terminal-eshell.rs"]
 mod divergence_terminal_eshell;
+#[path = "divergence-testing-debug.rs"]
+mod divergence_testing_debug;
 #[path = "divergence-textprop-deep.rs"]
 mod divergence_textprop_deep;
 #[path = "divergence-textprop-manipulation.rs"]
