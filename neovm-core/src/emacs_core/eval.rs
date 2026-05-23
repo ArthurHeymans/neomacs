@@ -3089,7 +3089,9 @@ impl Context {
         obarray.make_special("load-file-rep-suffixes");
         // file-coding-system-alist: needed by jka-cmpr-hook.el and others.
         obarray.set_symbol_value("file-coding-system-alist", Value::NIL);
-        obarray.set_symbol_value("features", Value::NIL);
+        // GNU fns.c initializes `features' to `(emacs)' before Lisp loadup;
+        // this is a core feature, not a later `provide' side effect.
+        obarray.set_symbol_value("features", Value::list(vec![Value::symbol("emacs")]));
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
         obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
@@ -4437,7 +4439,7 @@ impl Context {
             symbols_with_pos_enabled,
             print_symbols_bare_symbol: core_eval_symbols.print_symbols_bare_symbol,
             print_symbols_bare,
-            features: Vec::new(),
+            features: vec![intern("emacs")],
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             buffers: BufferManager::new(),

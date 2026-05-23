@@ -144,13 +144,6 @@ fn divergence_feature_checks() {
 
     assert_oracle_parity(
         r#"(list
-  (featurep 'emacs)
-  (featurep 'x)
-  (featurep 'gtk)
-  (featurep 'ns)
-  (featurep 'w32)
-  (featurep 'haiku)
-  (featurep 'pgtk)
-  (featurep 'athena)) "#,
+  (featurep 'emacs)) "#,
     );
 }

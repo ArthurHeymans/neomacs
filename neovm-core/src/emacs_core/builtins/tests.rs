@@ -3840,6 +3840,17 @@ fn buffer_list_frame_arg_moves_displayed_buffer_to_front_like_gnu() {
 }
 
 #[test]
+fn featurep_sees_emacs_from_core_startup_features() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+
+    assert_eq!(
+        builtin_featurep(&mut eval, vec![Value::symbol("emacs")]).unwrap(),
+        Value::T
+    );
+}
+
+#[test]
 fn featurep_accepts_optional_subfeature_arg() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
