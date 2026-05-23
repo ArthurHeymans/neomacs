@@ -2052,6 +2052,8 @@ mod divergence_coding_process;
 mod divergence_combo_abbrev_completion_syntax;
 #[path = "divergence-combo-advice-eieio-keymap.rs"]
 mod divergence_combo_advice_eieio_keymap;
+#[path = "divergence-combo-advice-eieio-undo-deep.rs"]
+mod divergence_combo_advice_eieio_undo_deep;
 #[path = "divergence-combo-arith-math-compare.rs"]
 mod divergence_combo_arith_math_compare;
 #[path = "divergence-combo-buffer-overlay.rs"]
