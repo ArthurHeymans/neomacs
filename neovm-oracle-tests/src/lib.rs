@@ -2121,6 +2121,8 @@ mod divergence_combo_defmacro_eval_and_compile_expansion;
 mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-defstruct-eieio-interop.rs"]
 mod divergence_combo_defstruct_eieio_interop;
+#[path = "divergence-combo-defvar-defconst-make-local-marker-overlay-undo.rs"]
+mod divergence_combo_defvar_defconst_make_local_marker_overlay_undo;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
