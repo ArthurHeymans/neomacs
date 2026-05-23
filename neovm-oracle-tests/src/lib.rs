@@ -2236,6 +2236,8 @@ mod divergence_combo_overlay_priority_overlap_evaporate_deep;
 mod divergence_combo_overlay_textprop_marker_mega;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
 mod divergence_combo_overlay_textprop_narrow_undo;
+#[path = "divergence-combo-pcase-marker-overlay-undo-textprop.rs"]
+mod divergence_combo_pcase_marker_overlay_undo_textprop;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
 mod divergence_combo_pcase_thread_rx;
 #[path = "divergence-combo-plist-hash-symbol-eval.rs"]
