@@ -2102,6 +2102,8 @@ mod divergence_combo_eieio_dispatch_deep;
 mod divergence_combo_eieio_error_binding;
 #[path = "divergence-combo-eieio-hash-struct.rs"]
 mod divergence_combo_eieio_hash_struct;
+#[path = "divergence-combo-eieio-inherit-undo-deep.rs"]
+mod divergence_combo_eieio_inherit_undo_deep;
 #[path = "divergence-combo-eieio-inheritance-advice.rs"]
 mod divergence_combo_eieio_inheritance_advice;
 #[path = "divergence-combo-eieio-inheritance-method.rs"]
@@ -2166,6 +2168,8 @@ mod divergence_combo_milestone_100;
 mod divergence_combo_narrow_marker_overlay_mega;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-combo-overlap-undo-deep.rs"]
+mod divergence_combo_overlap_undo_deep;
 #[path = "divergence-combo-overlay-advanced.rs"]
 mod divergence_combo_overlay_advanced;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
