@@ -2212,6 +2212,8 @@ mod divergence_profiling_memory;
 mod divergence_project_xref_vcs;
 #[path = "divergence-quit-error-hierarchy.rs"]
 mod divergence_quit_error_hierarchy;
+#[path = "divergence-read-print-real.rs"]
+mod divergence_read_print_real;
 #[path = "divergence-read-symbol-obarray.rs"]
 mod divergence_read_symbol_obarray;
 #[path = "divergence-reader-print-deep.rs"]
@@ -2260,6 +2262,8 @@ mod divergence_string_ops_deep;
 mod divergence_string_regex_real;
 #[path = "divergence-subr-bytecode-deep.rs"]
 mod divergence_subr_bytecode_deep;
+#[path = "divergence-symbol-obarray-real.rs"]
+mod divergence_symbol_obarray_real;
 #[path = "divergence-symbol-reader-deep.rs"]
 mod divergence_symbol_reader_deep;
 #[path = "divergence-syntax-parse-deep.rs"]
