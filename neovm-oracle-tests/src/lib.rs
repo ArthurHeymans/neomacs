@@ -2210,6 +2210,8 @@ mod divergence_combo_read_print_hash;
 mod divergence_combo_real_world;
 #[path = "divergence-combo-record-type-eval-bytecomp.rs"]
 mod divergence_combo_record_type_eval_bytecomp;
+#[path = "divergence-combo-rectangle-region-undo.rs"]
+mod divergence_combo_rectangle_region_undo;
 #[path = "divergence-combo-regex-match-replace-props.rs"]
 mod divergence_combo_regex_match_replace_props;
 #[path = "divergence-combo-regex-match-undo-deep.rs"]
