@@ -2146,8 +2146,12 @@ mod divergence_network_mail_web;
 mod divergence_obarray_symbol_deep;
 #[path = "divergence-overlay-deep.rs"]
 mod divergence_overlay_deep;
+#[path = "divergence-overlay-operations.rs"]
+mod divergence_overlay_operations;
 #[path = "divergence-package-dired-elp.rs"]
 mod divergence_package_dired_elp;
+#[path = "divergence-package-system-deep.rs"]
+mod divergence_package_system_deep;
 #[path = "divergence-pcase-deep.rs"]
 mod divergence_pcase_deep;
 #[path = "divergence-predicates-deep.rs"]
