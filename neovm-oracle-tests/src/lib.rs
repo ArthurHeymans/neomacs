@@ -2168,6 +2168,8 @@ mod divergence_combo_mega_undo;
 mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-milestone-100.rs"]
 mod divergence_combo_milestone_100;
+#[path = "divergence-combo-misc-ops-undo.rs"]
+mod divergence_combo_misc_ops_undo;
 #[path = "divergence-combo-multibyte-coding-undo.rs"]
 mod divergence_combo_multibyte_coding_undo;
 #[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
