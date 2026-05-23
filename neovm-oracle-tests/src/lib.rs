@@ -2062,6 +2062,8 @@ mod divergence_devtools_stubs;
 mod divergence_diff_merge_vcs;
 #[path = "divergence-dired-file-mgmt.rs"]
 mod divergence_dired_file_mgmt;
+#[path = "divergence-display-engine.rs"]
+mod divergence_display_engine;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
 #[path = "divergence-eieio-method-deep.rs"]
@@ -2146,6 +2148,8 @@ mod divergence_misc_remaining;
 mod divergence_mode_line_misc;
 #[path = "divergence-modeline-modes-deep.rs"]
 mod divergence_modeline_modes_deep;
+#[path = "divergence-motion-search-deep.rs"]
+mod divergence_motion_search_deep;
 #[path = "divergence-multibyte-bidi-deep.rs"]
 mod divergence_multibyte_bidi_deep;
 #[path = "divergence-narrowing-edge.rs"]
