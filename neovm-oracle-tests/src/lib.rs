@@ -2140,8 +2140,12 @@ mod divergence_combo_stress;
 mod divergence_combo_stress_overlay_regex_undo;
 #[path = "divergence-combo-subprocess-buffer.rs"]
 mod divergence_combo_subprocess_buffer;
+#[path = "divergence-combo-subprocess-tempbuf-encoding.rs"]
+mod divergence_combo_subprocess_tempbuf_encoding;
 #[path = "divergence-combo-syntax-sexp-nav.rs"]
 mod divergence_combo_syntax_sexp_nav;
+#[path = "divergence-combo-syntax-sexp-textprop-narrow.rs"]
+mod divergence_combo_syntax_sexp_textprop_narrow;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
 #[path = "divergence-combo-textprop-overlay-face.rs"]
