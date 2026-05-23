@@ -2164,6 +2164,8 @@ mod divergence_combo_mega_undo;
 mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-milestone-100.rs"]
 mod divergence_combo_milestone_100;
+#[path = "divergence-combo-multibyte-coding-undo.rs"]
+mod divergence_combo_multibyte_coding_undo;
 #[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
 mod divergence_combo_narrow_marker_overlay_mega;
 #[path = "divergence-combo-operations.rs"]
@@ -2240,6 +2242,8 @@ mod divergence_combo_timer_process;
 mod divergence_combo_timer_process_time;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
+#[path = "divergence-combo-undo-boundary-deep.rs"]
+mod divergence_combo_undo_boundary_deep;
 #[path = "divergence-combo-undo-deep-stress.rs"]
 mod divergence_combo_undo_deep_stress;
 #[path = "divergence-combo-undo-mega-stress.rs"]
