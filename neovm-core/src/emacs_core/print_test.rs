@@ -179,6 +179,30 @@ fn print_propertized_string_literal_shape() {
 }
 
 #[test]
+fn print_propertized_string_properties_keep_buffer_context() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers
+        .find_buffer_by_name("*scratch*")
+        .expect("scratch buffer");
+    let value = Value::string_with_text_properties(
+        "x",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![Value::symbol("owner"), Value::make_buffer(buffer_id)]),
+        }],
+    );
+
+    buffers.kill_buffer(buffer_id);
+
+    assert_eq!(
+        print_value_with_buffers(&value, &buffers),
+        r#"#("x" 0 1 (owner #<killed buffer>))"#
+    );
+}
+
+#[test]
 fn print_string_keeps_non_bmp_visible() {
     crate::test_utils::init_test_tracing();
     assert_eq!(print_value(&Value::string("\u{10ffff}")), "\"\u{10ffff}\"");

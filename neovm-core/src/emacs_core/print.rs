@@ -695,11 +695,7 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
             } else {
                 match get_string_text_properties_for_value(*value) {
-                    Some(runs) => out.push_str(&format_lisp_propertized_string_emacs(
-                        ls,
-                        &runs,
-                        state.options,
-                    )),
+                    Some(runs) => write_lisp_propertized_string_stateful(ls, &runs, out, state),
                     None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
                 }
             }
@@ -1499,23 +1495,23 @@ fn format_frame_handle(id: u64) -> String {
     }
 }
 
-fn format_lisp_propertized_string_emacs(
+fn write_lisp_propertized_string_stateful(
     ls: &crate::heap_types::LispString,
     runs: &[StringTextPropertyRun],
-    options: PrintOptions,
-) -> String {
-    let mut out = String::from("#(");
-    out.push_str(&format_lisp_string_emacs(ls, &options));
+    out: &mut String,
+    state: &mut PrintState<'_>,
+) {
+    out.push_str("#(");
+    out.push_str(&format_lisp_string_emacs(ls, &state.options));
     for run in runs {
         out.push(' ');
         out.push_str(&run.start.to_string());
         out.push(' ');
         out.push_str(&run.end.to_string());
         out.push(' ');
-        out.push_str(&print_value_with_options(&run.plist, options));
+        write_value_stateful(&run.plist, out, state);
     }
     out.push(')');
-    out
 }
 
 /// Print a `Value` as a Lisp string, with buffer-manager awareness for
