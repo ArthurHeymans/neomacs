@@ -2104,6 +2104,8 @@ mod divergence_combo_final_stress;
 mod divergence_combo_format_string_char;
 #[path = "divergence-combo-fringe.rs"]
 mod divergence_combo_fringe;
+#[path = "divergence-combo-fringe-display-overlay.rs"]
+mod divergence_combo_fringe_display_overlay;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
