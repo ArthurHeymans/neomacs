@@ -2006,6 +2006,8 @@ mod divergence_alist_plist_hash;
 mod divergence_arithmetic_float;
 #[path = "divergence-bignum-fixnum-deep.rs"]
 mod divergence_bignum_fixnum_deep;
+#[path = "divergence-bookmark-register-text.rs"]
+mod divergence_bookmark_register_text;
 #[path = "divergence-buffer-edit-deep.rs"]
 mod divergence_buffer_edit_deep;
 #[path = "divergence-buffer-editing.rs"]
@@ -2024,6 +2026,8 @@ mod divergence_buffer_motion_search;
 mod divergence_bytecomp_deep;
 #[path = "divergence-calendar-time-deep.rs"]
 mod divergence_calendar_time_deep;
+#[path = "divergence-category-unicode-props.rs"]
+mod divergence_category_unicode_props;
 #[path = "divergence-chartab-charset-deep.rs"]
 mod divergence_chartab_charset_deep;
 #[path = "divergence-chartab-syntax-deep.rs"]
