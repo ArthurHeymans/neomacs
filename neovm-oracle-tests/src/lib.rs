@@ -2287,6 +2287,8 @@ mod divergence_combo_process_pipe_filter;
 mod divergence_combo_process_sentinel_buflocal_overlay_marker_undo;
 #[path = "divergence-combo-prop-only-undo-deep.rs"]
 mod divergence_combo_prop_only_undo_deep;
+#[path = "divergence-combo-re-search-replace-match-marker-overlay-undo.rs"]
+mod divergence_combo_re_search_replace_match_marker_overlay_undo;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
