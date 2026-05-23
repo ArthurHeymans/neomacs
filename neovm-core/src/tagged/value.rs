@@ -797,6 +797,12 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::HashTable)
     }
 
+    /// True if this value is a GNU-shaped obarray object.
+    #[inline]
+    pub fn is_obarray(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::Obarray)
+    }
+
     /// True if this value is a symbol-with-pos pseudo-vector.
     #[inline]
     pub fn is_symbol_with_pos(self) -> bool {
@@ -865,6 +871,7 @@ impl TaggedValue {
                 VecLikeType::ModuleFunction => "module-function",
                 VecLikeType::CharTable => "char-table",
                 VecLikeType::SubCharTable => "sub-char-table",
+                VecLikeType::Obarray => "obarray",
             },
             ValueKind::Unbound => "unbound",
             ValueKind::Unknown => "unknown",

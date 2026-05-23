@@ -46,9 +46,9 @@ use crate::emacs_core::eval::Context;
 use crate::emacs_core::fontset::{
     FontsetRegistrySnapshot, restore_fontset_registry, snapshot_fontset_registry,
 };
+#[cfg(test)]
 use crate::emacs_core::value;
 
-const AFTER_PDUMP_LOAD_HOOK_PENDING_SYMBOL: &str = "neovm--after-pdump-load-hook-pending";
 // Phase 21 bump: phase 16 introduced an explicit dump-local symbol table,
 // phase 17 fixed the on-disk `DumpSymbolData` layout, phase 18 stores subr
 // names as dump-local name atoms instead of dump-local symbol slots,
@@ -769,17 +769,12 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
 }
 
 fn mark_after_pdump_load_hook_pending(eval: &mut Context) {
-    eval.obarray_mut()
-        .set_symbol_value(AFTER_PDUMP_LOAD_HOOK_PENDING_SYMBOL, value::Value::T);
+    eval.after_pdump_load_hook_pending = true;
 }
 
 pub(crate) fn take_after_pdump_load_hook_pending(eval: &mut Context) -> bool {
-    let pending = eval
-        .obarray()
-        .symbol_value(AFTER_PDUMP_LOAD_HOOK_PENDING_SYMBOL)
-        .is_some_and(|value| value.is_truthy());
-    eval.obarray_mut()
-        .set_symbol_value(AFTER_PDUMP_LOAD_HOOK_PENDING_SYMBOL, value::Value::NIL);
+    let pending = eval.after_pdump_load_hook_pending;
+    eval.after_pdump_load_hook_pending = false;
     pending
 }
 

@@ -1245,7 +1245,7 @@ pub(crate) fn builtin_internal_labeled_widen_in_buffers(
 pub(crate) fn builtin_internal_obarray_buckets(args: Vec<Value>) -> EvalResult {
     expect_args("internal--obarray-buckets", &args, 1)?;
     let obarray_val = expect_obarray_vector_id(&args[0])?;
-    let buckets = obarray_val.as_vector_data().unwrap().clone();
+    let buckets = super::symbols::obarray_buckets(obarray_val).unwrap_or_default();
     Ok(Value::list(buckets))
 }
 

@@ -1802,16 +1802,6 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         &replacement,
     )?;
     let newend = oldstart + replacement_len;
-    // Match GNU adjust_intervals_for_insertion: apply sticky-aware
-    // text-property inheritance after the replacement.
-    super::buffers::apply_inherited_text_properties(
-        obarray,
-        &[],
-        buffers,
-        current_id,
-        oldstart,
-        replacement_len,
-    );
     update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
     Ok(Value::NIL)
 }

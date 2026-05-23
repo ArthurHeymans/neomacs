@@ -243,7 +243,7 @@ fn test_make_abbrev_table_and_predicate() {
 
     // make-abbrev-table creates an abbrev table
     let table = builtin_make_abbrev_table(&mut eval, vec![]).unwrap();
-    assert!(table.is_vector());
+    assert!(table.is_obarray());
 
     // abbrev-table-p returns true for it
     let result = builtin_abbrev_table_p(&mut eval, vec![table]).unwrap();

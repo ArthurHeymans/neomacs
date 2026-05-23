@@ -615,6 +615,24 @@ fn read_from_string_stream() {
 }
 
 #[test]
+fn read_from_string_interns_symbols_in_global_obarray() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result =
+        builtin_read_from_string(&mut ev, vec![Value::string("reader-obarray-side-effect")])
+            .unwrap();
+    assert_eq!(
+        result.cons_car().as_symbol_name(),
+        Some("reader-obarray-side-effect")
+    );
+    assert!(
+        ev.obarray()
+            .intern_soft("reader-obarray-side-effect")
+            .is_some()
+    );
+}
+
+#[test]
 fn read_nil_stream_uses_string_valued_standard_input() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -630,6 +648,23 @@ fn read_no_args_uses_string_valued_standard_input() {
     ev.set_variable("standard-input", Value::string("(LBRACE RBRACE)"));
     let result = builtin_read(&mut ev, vec![]).unwrap();
     assert_eq!(print_value(&result), "(LBRACE RBRACE)");
+}
+
+#[test]
+fn read_interns_symbols_in_global_obarray() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result =
+        builtin_read(&mut ev, vec![Value::string("reader-stream-obarray-symbol")]).unwrap();
+    assert_eq!(
+        result.as_symbol_name(),
+        Some("reader-stream-obarray-symbol")
+    );
+    assert!(
+        ev.obarray()
+            .intern_soft("reader-stream-obarray-symbol")
+            .is_some()
+    );
 }
 
 #[test]

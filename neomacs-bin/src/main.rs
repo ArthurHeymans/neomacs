@@ -35,7 +35,7 @@ use neomacs_display_runtime::thread_comm::{
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
 use neomacs_layout_engine::gui_chrome::{
-    collect_gui_menu_bar_items, collect_gui_tool_bar_items, compact_bar_mode_enabled,
+    collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
 
 use neovm_core::buffer::BufferId;
@@ -1673,8 +1673,15 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
         ensure_gnu_tool_bar_setup(eval);
     }
 
+    let selected_gui_frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .filter(|frame| frame.effective_window_system().is_some())
+        .map(|frame| frame.id);
     let menu_items = if menu_enabled {
-        collect_gui_menu_bar_items(eval)
+        selected_gui_frame_id
+            .map(|frame_id| collect_gui_menu_bar_items_for_frame(eval, frame_id))
+            .unwrap_or_default()
     } else {
         Vec::new()
     };

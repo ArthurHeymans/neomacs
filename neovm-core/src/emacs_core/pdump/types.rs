@@ -106,6 +106,7 @@ pub enum DumpValue {
     SubCharTable(DumpHeapRef),
     Record(DumpHeapRef),
     HashTable(DumpHeapRef),
+    Obarray(DumpHeapRef),
     Lambda(DumpHeapRef),
     Macro(DumpHeapRef),
     Subr(DumpNameId),
@@ -158,6 +159,10 @@ pub enum DumpHeapObject {
         contents: Vec<DumpValue>,
     },
     HashTable(DumpLispHashTable),
+    Obarray {
+        buckets: Vec<DumpValue>,
+        count: u32,
+    },
     Str {
         data: DumpByteData,
         size: usize,

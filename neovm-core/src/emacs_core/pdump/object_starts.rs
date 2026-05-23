@@ -114,6 +114,7 @@ fn write_object_span(
         }
         // Category C: no HeapImage representation.
         DumpHeapObject::HashTable(_)
+        | DumpHeapObject::Obarray { .. }
         | DumpHeapObject::CharTable { .. }
         | DumpHeapObject::SubCharTable { .. }
         | DumpHeapObject::ByteCode(_)
@@ -259,6 +260,7 @@ fn span_record_from_heap(heap: &DumpTaggedHeap, index: usize) -> LoadedObjectSpa
     match heap.objects.get(index) {
         Some(
             DumpHeapObject::HashTable(_)
+            | DumpHeapObject::Obarray { .. }
             | DumpHeapObject::ByteCode(_)
             | DumpHeapObject::Subr { .. }
             | DumpHeapObject::Buffer(_)

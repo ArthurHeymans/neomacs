@@ -248,7 +248,7 @@ pub(crate) fn builtin_boundp_1(eval: &mut super::eval::Context, arg: Value) -> E
 
 pub(crate) fn builtin_obarrayp(args: Vec<Value>) -> EvalResult {
     expect_args("obarrayp", &args, 1)?;
-    Ok(Value::bool_val(is_obarray_vector(args[0])))
+    Ok(Value::bool_val(is_obarray_value(args[0])))
 }
 
 pub(crate) fn builtin_special_variable_p(
@@ -1404,7 +1404,7 @@ fn obarray_symbol_count(buckets: &[Value]) -> usize {
 }
 
 fn grow_obarray_vector_if_needed(obarray_val: Value) {
-    let Some(buckets) = obarray_val.as_vector_data() else {
+    let Some(buckets) = obarray_buckets(obarray_val) else {
         return;
     };
     let old_len = buckets.len();
@@ -1422,7 +1422,7 @@ fn grow_obarray_vector_if_needed(obarray_val: Value) {
             new_buckets[idx] = Value::cons(sym, new_buckets[idx]);
         }
     }
-    let _ = obarray_val.replace_vector_data(new_buckets);
+    let _ = replace_obarray_buckets(obarray_val, new_buckets);
 }
 
 pub(crate) fn is_global_obarray_proxy(eval: &super::eval::Context, value: &Value) -> bool {
@@ -1488,8 +1488,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
     // Custom obarray path
     if !is_global_obarray_proxy(eval, &effective_obarray) {
         let obarray_val = check_obarray_value(effective_obarray)?;
-        let vec_data = obarray_val.as_vector_data().unwrap();
-        let vec_len = vec_data.len();
+        let vec_len = obarray_len(obarray_val).unwrap_or(0);
         if vec_len == 0 {
             return Err(signal(
                 "wrong-type-argument",
@@ -1497,7 +1496,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             ));
         }
         let bucket_idx = obarray_hash_lisp_string(name, vec_len);
-        let bucket = vec_data[bucket_idx];
+        let bucket = obarray_bucket(obarray_val, bucket_idx).unwrap_or(Value::NIL);
 
         // Check if already interned
         if let Some(sym) = obarray_bucket_find(bucket, name) {
@@ -1518,7 +1517,8 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             crate::emacs_core::intern::make_uninterned_symbol_with_name_value(symbol_name_value),
         );
         let new_bucket = Value::cons(sym, bucket);
-        let _ = obarray_val.set_vector_slot(bucket_idx, new_bucket);
+        let _ = set_obarray_bucket(obarray_val, bucket_idx, new_bucket);
+        note_obarray_symbol_added(obarray_val);
         grow_obarray_vector_if_needed(obarray_val);
         return Ok(sym);
     }
@@ -1566,8 +1566,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
                 }
             }
         };
-        let vec_data = obarray_val.as_vector_data().unwrap();
-        let vec_len = vec_data.len();
+        let vec_len = obarray_len(obarray_val).unwrap_or(0);
         if vec_len == 0 {
             return Err(signal(
                 "wrong-type-argument",
@@ -1575,7 +1574,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
             ));
         }
         let bucket_idx = obarray_hash_lisp_string(name.as_ref(), vec_len);
-        let bucket = vec_data[bucket_idx];
+        let bucket = obarray_bucket(obarray_val, bucket_idx).unwrap_or(Value::NIL);
         return Ok(obarray_bucket_find(bucket, name.as_ref()).unwrap_or(Value::NIL));
     }
 
@@ -1617,35 +1616,39 @@ pub(crate) fn builtin_obarray_make(args: Vec<Value>) -> EvalResult {
     } else {
         expect_wholenump(&args[0])? as usize
     };
-    Ok(Value::vector(vec![Value::NIL; size]))
+    Ok(Value::obarray(size))
 }
 
-fn is_obarray_vector(value: Value) -> bool {
+fn is_legacy_obarray_vector(value: Value) -> bool {
     value.is_vector()
         && value
             .as_vector_data()
             .is_some_and(|items| items.iter().all(|slot| slot.is_nil() || slot.is_cons()))
 }
 
-fn make_compat_obarray_vector() -> Value {
+fn is_obarray_value(value: Value) -> bool {
+    value.is_obarray() || is_legacy_obarray_vector(value)
+}
+
+fn make_compat_obarray() -> Value {
     // GNU lread.c:check_obarray_slow calls make_obarray(0), producing a
     // one-bucket obarray for the legacy vector slot-zero compatibility path.
-    Value::vector(vec![Value::NIL])
+    Value::obarray(1)
 }
 
 pub(crate) fn check_obarray_value(value: Value) -> Result<Value, Flow> {
-    if is_obarray_vector(value) {
+    if is_obarray_value(value) {
         return Ok(value);
     }
 
     if value.is_vector() {
         let slots = value.as_vector_data().unwrap();
         if let Some(slot0) = slots.first().copied() {
-            if is_obarray_vector(slot0) {
+            if is_obarray_value(slot0) {
                 return Ok(slot0);
             }
             if slot0 == Value::fixnum(0) {
-                let obarray = make_compat_obarray_vector();
+                let obarray = make_compat_obarray();
                 let _ = value.set_vector_slot(0, obarray);
                 return Ok(obarray);
             }
@@ -1662,11 +1665,79 @@ pub(crate) fn expect_obarray_vector_id(value: &Value) -> Result<Value, Flow> {
     check_obarray_value(*value)
 }
 
+pub(crate) fn obarray_buckets(value: Value) -> Option<Vec<Value>> {
+    if value.is_obarray() {
+        return value
+            .as_obarray_obj()
+            .map(|obj| obj.buckets.as_slice().to_vec());
+    }
+    value.as_vector_data().map(|items| items.to_vec())
+}
+
+pub(crate) fn obarray_bucket(value: Value, idx: usize) -> Option<Value> {
+    if value.is_obarray() {
+        return value
+            .as_obarray_obj()
+            .and_then(|obj| obj.buckets.get(idx).copied());
+    }
+    value
+        .as_vector_data()
+        .and_then(|items| items.get(idx).copied())
+}
+
+pub(crate) fn obarray_len(value: Value) -> Option<usize> {
+    if value.is_obarray() {
+        return value.as_obarray_obj().map(|obj| obj.buckets.len());
+    }
+    value.as_vector_data().map(|items| items.len())
+}
+
+pub(crate) fn set_obarray_bucket(value: Value, idx: usize, bucket: Value) -> bool {
+    if value.is_obarray() {
+        return value
+            .with_obarray_mut(|obj| {
+                if let Some(slot) = obj.buckets.get_mut(idx) {
+                    *slot = bucket;
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+    }
+    value.set_vector_slot(idx, bucket)
+}
+
+pub(crate) fn replace_obarray_buckets(value: Value, buckets: Vec<Value>) -> bool {
+    if value.is_obarray() {
+        return value
+            .with_obarray_mut(|obj| {
+                obj.buckets = buckets.into();
+                true
+            })
+            .unwrap_or(false);
+    }
+    value.replace_vector_data(buckets)
+}
+
+pub(crate) fn note_obarray_symbol_added(value: Value) {
+    let _ = value.with_obarray_mut(|obj| {
+        obj.count = obj.count.saturating_add(1);
+    });
+}
+
+pub(crate) fn note_obarray_symbol_removed(value: Value) {
+    let _ = value.with_obarray_mut(|obj| {
+        obj.count = obj.count.saturating_sub(1);
+    });
+}
+
 pub(crate) fn builtin_obarray_clear(args: Vec<Value>) -> EvalResult {
     expect_args("obarray-clear", &args, 1)?;
     let obarray_val = expect_obarray_vector_id(&args[0])?;
-    let vec_len = obarray_val.as_vector_data().map_or(0, |vec| vec.len());
-    let _ = obarray_val.replace_vector_data(vec![Value::NIL; vec_len]);
+    let vec_len = obarray_len(obarray_val).unwrap_or(0);
+    let _ = replace_obarray_buckets(obarray_val, vec![Value::NIL; vec_len]);
+    let _ = obarray_val.with_obarray_mut(|obj| obj.count = 0);
     Ok(Value::NIL)
 }
 

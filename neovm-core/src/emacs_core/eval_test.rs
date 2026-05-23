@@ -29,6 +29,35 @@ fn eval_one_lexical(src: &str) -> String {
 }
 
 #[test]
+fn c_level_defsym_hook_names_are_in_global_obarray() {
+    let ev = Context::new();
+
+    for name in [
+        "insert-in-front-hooks",
+        "insert-behind-hooks",
+        "long-line-optimizations-in-command-hooks",
+    ] {
+        assert!(
+            ev.obarray().intern_soft(name).is_some(),
+            "{name} should be globally interned like GNU DEFSYM"
+        );
+    }
+
+    assert!(
+        ev.obarray()
+            .intern_soft("mouse-leave-buffer-hook")
+            .is_some(),
+        "mouse-leave-buffer-hook should be globally interned like GNU DEFVAR_LISP"
+    );
+    assert_eq!(
+        *ev.obarray()
+            .symbol_value("mouse-leave-buffer-hook")
+            .unwrap_or(&Value::UNBOUND),
+        Value::NIL
+    );
+}
+
+#[test]
 fn mapc_mapconcat_and_mapcan_signal_circular_list_like_gnu() {
     crate::test_utils::init_test_tracing();
 

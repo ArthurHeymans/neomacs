@@ -196,6 +196,7 @@ fn is_print_circle_candidate(value: &Value, print_gensym: bool) -> bool {
         }
         ValueKind::Veclike(VecLikeType::Record) => true,
         ValueKind::Veclike(VecLikeType::HashTable) => true,
+        ValueKind::Veclike(VecLikeType::Obarray) => true,
         ValueKind::Veclike(VecLikeType::Lambda) => true,
         ValueKind::Veclike(VecLikeType::Macro) => true,
         ValueKind::Veclike(VecLikeType::ByteCode) => true,
@@ -427,6 +428,13 @@ fn print_preprocess(value: &Value, state: &mut PrintCircleState, options: PrintO
                     }
                 }
             }
+            ValueKind::Veclike(VecLikeType::Obarray) => {
+                if let Some(obarray) = obj.as_obarray_obj() {
+                    for item in obarray.buckets.iter().rev() {
+                        stack.push(*item);
+                    }
+                }
+            }
             ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
                 if let Some(doc) = obj.closure_doc_value() {
                     stack.push(doc);
@@ -501,6 +509,13 @@ fn print_preprocess_external(value: &Value, table_value: Value, options: PrintOp
                         stack.push(*val);
                         let key_val = super::hashtab::hash_key_to_visible_value(&table, key_hk);
                         stack.push(key_val);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::Obarray) => {
+                if let Some(obarray) = obj.as_obarray_obj() {
+                    for item in obarray.buckets.iter().rev() {
+                        stack.push(*item);
                     }
                 }
             }
@@ -845,6 +860,10 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 write_hash_table_stateful(value, out, state);
                 state.depth -= 1;
             });
+        }
+        ValueKind::Veclike(VecLikeType::Obarray) => {
+            let count = value.as_obarray_obj().map_or(0, |obj| obj.count);
+            out.push_str(&format!("#<obarray n={count}>"));
         }
         ValueKind::Veclike(VecLikeType::Lambda) => {
             write_lambda_stateful(value, out, state);
@@ -1784,6 +1803,10 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             let pushed = push_bytes_cycle_object(value);
             append_hash_table_bytes(value, out, options);
             pop_bytes_cycle_object(pushed);
+        }
+        ValueKind::Veclike(VecLikeType::Obarray) => {
+            let count = value.as_obarray_obj().map_or(0, |obj| obj.count);
+            out.extend_from_slice(format!("#<obarray n={count}>").as_bytes());
         }
         ValueKind::Veclike(VecLikeType::Lambda) => {
             if append_bytes_cycle_ref_if_any(value, out) {

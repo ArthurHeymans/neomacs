@@ -95,6 +95,23 @@ fn active_catch_throw_is_not_logged_as_load_form_failure() {
 }
 
 #[test]
+fn load_interns_read_symbols_in_global_obarray() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("tempdir");
+    let path = dir.path().join("reader-obarray-load.el");
+    fs::write(&path, "'load-reader-obarray-side-effect\n").expect("write load file");
+
+    let mut eval = Context::new();
+    load_file(&mut eval, &path).expect("load file");
+
+    assert!(
+        eval.obarray()
+            .intern_soft("load-reader-obarray-side-effect")
+            .is_some()
+    );
+}
+
+#[test]
 fn loaded_source_paths_accepts_raw_unibyte_load_history_entries() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -1013,6 +1030,13 @@ fn after_pdump_load_hook_runs_after_finalize_and_only_once() {
     assert!(
         !maybe_run_after_pdump_load_hook(&mut loaded),
         "after-pdump-load-hook should be a one-shot startup hook"
+    );
+    assert!(
+        loaded
+            .obarray()
+            .intern_soft("neovm--after-pdump-load-hook-pending")
+            .is_none(),
+        "pdump runtime flags must not leak into the public obarray"
     );
 }
 
@@ -5828,6 +5852,7 @@ fn bootstrap_x_runtime_prebinds_gnu_x_globals_before_x_win_initialization() {
         r#"(list (hash-table-p x-keysym-table)
                  (hash-table-test x-keysym-table)
                  (gethash 160 x-keysym-table)
+                 x-toolkit-scroll-bars
                  x-selection-timeout
                  x-session-id
                  x-session-previous-id
@@ -5837,7 +5862,7 @@ fn bootstrap_x_runtime_prebinds_gnu_x_globals_before_x_win_initialization() {
                  x-meta-keysym
                  x-super-keysym)"#,
     );
-    assert_eq!(rendered, "OK (t eql 160 0 nil nil nil nil nil nil nil)");
+    assert_eq!(rendered, "OK (t eql 160 gtk 0 nil nil nil nil nil nil nil)");
 }
 
 #[test]

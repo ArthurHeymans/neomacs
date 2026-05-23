@@ -228,6 +228,9 @@ impl DumpEncoder {
             ValueKind::Veclike(VecLikeType::HashTable) => {
                 DumpValue::HashTable(dump_heap_ref(self.value_to_heap_ref(v)))
             }
+            ValueKind::Veclike(VecLikeType::Obarray) => {
+                DumpValue::Obarray(dump_heap_ref(self.value_to_heap_ref(v)))
+            }
             ValueKind::Veclike(VecLikeType::Lambda) => {
                 DumpValue::Lambda(dump_heap_ref(self.value_to_heap_ref(v)))
             }
@@ -1088,6 +1091,7 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::Symbol(_)
             | DumpValue::Subr(_)
             | DumpValue::HashTable(_)
+            | DumpValue::Obarray(_)
             | DumpValue::ByteCode(_)
             | DumpValue::Buffer(_)
             | DumpValue::Window(_)
@@ -1254,6 +1258,7 @@ impl<'a> LoadDecoder<'a> {
                     ht.rehash_threshold,
                 ))
             }),
+            DumpHeapObject::Obarray { buckets, .. } => Value::obarray(buckets.len()),
             DumpHeapObject::Str {
                 data,
                 size,
@@ -1561,6 +1566,15 @@ impl<'a> LoadDecoder<'a> {
                     table.rebuild_iterable_hash_keys_from_data();
                 });
             }
+            DumpHeapObject::Obarray { buckets, count } => {
+                let buckets: Vec<_> = buckets
+                    .into_iter()
+                    .map(|bucket| self.load_value_owned(bucket))
+                    .collect();
+                let _ =
+                    crate::emacs_core::builtins::symbols::replace_obarray_buckets(value, buckets);
+                let _ = value.with_obarray_mut(|obj| obj.count = count);
+            }
             DumpHeapObject::Str { text_props, .. } => {
                 if !text_props.is_empty() {
                     for run in &text_props {
@@ -1686,6 +1700,9 @@ impl<'a> LoadDecoder<'a> {
                         stack.push(value);
                     }
                 }
+                DumpHeapObject::Obarray { buckets, .. } => {
+                    stack.extend(buckets);
+                }
                 DumpHeapObject::Str { text_props, .. } => {
                     for run in text_props {
                         stack.push(run.plist);
@@ -1737,6 +1754,7 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::SubCharTable(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Record(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::HashTable(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
+            DumpValue::Obarray(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Lambda(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Macro(id) => self.heap_ref_to_value(tagged_heap_ref(id)),
             DumpValue::Subr(s) => {
@@ -1777,6 +1795,7 @@ impl<'a> LoadDecoder<'a> {
             DumpValue::SubCharTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Record(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::HashTable(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
+            DumpValue::Obarray(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Lambda(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Macro(id) => self.heap_ref_to_value(tagged_heap_ref(&id)),
             DumpValue::Subr(s) => {
@@ -1839,6 +1858,7 @@ fn dump_value_heap_ref(value: &DumpValue) -> Option<TaggedHeapRef> {
         | DumpValue::SubCharTable(id)
         | DumpValue::Record(id)
         | DumpValue::HashTable(id)
+        | DumpValue::Obarray(id)
         | DumpValue::Lambda(id)
         | DumpValue::Macro(id)
         | DumpValue::ByteCode(id)
@@ -2440,6 +2460,17 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
             encoder,
             value.as_hash_table().expect("hash-table"),
         )),
+        ValueKind::Veclike(VecLikeType::Obarray) => {
+            let obarray = value.as_obarray_obj().expect("obarray");
+            DumpHeapObject::Obarray {
+                buckets: obarray
+                    .buckets
+                    .iter()
+                    .map(|item| encoder.dump_value(item))
+                    .collect(),
+                count: obarray.count,
+            }
+        }
         ValueKind::Veclike(VecLikeType::Lambda) => {
             DumpHeapObject::Lambda(dump_closure_slots(encoder, value))
         }

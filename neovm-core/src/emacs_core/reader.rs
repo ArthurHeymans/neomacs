@@ -591,7 +591,12 @@ pub(crate) fn builtin_read_from_string(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    read_from_string_impl(&ctx.obarray, args)
+    let result = read_from_string_impl(&ctx.obarray, args)?;
+    if result.is_cons() {
+        ctx.obarray_mut()
+            .materialize_read_symbols(result.cons_car());
+    }
+    Ok(result)
 }
 
 pub(crate) fn read_from_string_impl(
@@ -746,7 +751,7 @@ pub fn builtin_read_impl(
             match result.kind() {
                 ValueKind::Cons => {
                     let pair_car = result.cons_car();
-                    let pair_cdr = result.cons_cdr();
+                    ctx.obarray_mut().materialize_read_symbols(pair_car);
                     Ok(pair_car)
                 }
                 _ => Ok(result),
@@ -779,7 +784,9 @@ pub fn builtin_read_impl(
             };
 
             let _ = &mut ctx.buffers.goto_buffer_byte(buf_id, new_pt);
-            maybe_value.ok_or_else(end_of_file_during_parsing_error)
+            let value = maybe_value.ok_or_else(end_of_file_during_parsing_error)?;
+            ctx.obarray_mut().materialize_read_symbols(value);
+            Ok(value)
         }
         ValueKind::Symbol(id) => Err(signal(
             "void-function",

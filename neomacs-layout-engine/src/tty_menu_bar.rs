@@ -18,10 +18,10 @@
 //!   `CONSP (def)` guards.  The key still counts as seen while walking
 //!   parent keymaps, matching GNU's `keymap-canonicalize`: a child
 //!   binding of `undefined` hides an inherited menu entry.
-//! * `current-minor-mode-map-alist` is not walked yet — minor-mode
-//!   menu-bar additions are TODO. Major-mode (`current-local-map`) and
-//!   global maps are walked, which matches GNU's most common menus
-//!   like `Lisp-Interaction` in `*scratch*`.
+//! * The active maps are computed from the selected window's buffer, not
+//!   the evaluator's current buffer.  GNU's menu-bar redisplay path
+//!   (`xmenu.c`/`pgtkmenu.c`) temporarily selects the frame's selected
+//!   window buffer before calling `menu_bar_items`.
 
 use std::collections::HashSet;
 
@@ -30,7 +30,9 @@ use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::keymap::{
     list_keymap_for_each_binding, list_keymap_lookup_one, list_keymap_parent,
+    menu_bar_active_keymaps_for_frame_read_only, menu_bar_active_keymaps_read_only,
 };
+use neovm_core::window::FrameId;
 
 /// Walk the active `[menu-bar]` keymap(s) and return the items to draw.
 ///
@@ -40,29 +42,27 @@ use neovm_core::emacs_core::keymap::{
 /// with `menu-bar-final-items` (default: `help-menu`) moved to the end
 /// like GNU `keyboard.c:8697-8716`.
 ///
-/// Walks `current-global-map` first, then the current buffer's
-/// `current-local-map` (the major-mode map). This is enough to
-/// reproduce GNU's behaviour for the common case where the major mode
-/// adds menu items (e.g. `Lisp-Interaction`); minor-mode menu-bar
-/// additions are TODO.
+/// Walks the selected window's active menu-bar maps in GNU's display
+/// collection order.
 pub fn collect_tty_menu_bar_items(eval: &Context) -> Vec<TtyMenuBarItem> {
     let mut items: Vec<TtyMenuBarItem> = Vec::new();
 
-    // 1. global-map: foundation set of items.
-    if let Some(global_map) = eval.obarray().symbol_value("global-map").copied() {
-        collect_from_keymap(eval, &global_map, &mut items);
+    for keymap in menu_bar_active_keymaps_read_only(eval) {
+        collect_from_keymap(eval, &keymap, &mut items);
     }
 
-    // 2. current-local-map: the major-mode map for the selected
-    //    window's buffer. GNU walks this AFTER the global map (well,
-    //    technically before in the maps[] array but it iterates
-    //    backwards), and items found here append to the existing
-    //    vector — duplicates are filtered by `key` so a local entry
-    //    with the same key as a global entry doesn't duplicate the
-    //    label, matching GNU `menu_bar_item`'s dedup-by-key behaviour.
-    let local_map = eval.buffer_manager().current_local_map();
-    if !local_map.is_nil() {
-        collect_from_keymap(eval, &local_map, &mut items);
+    move_final_items_to_end(eval, &mut items);
+    items
+}
+
+pub fn collect_tty_menu_bar_items_for_frame(
+    eval: &Context,
+    frame_id: FrameId,
+) -> Vec<TtyMenuBarItem> {
+    let mut items: Vec<TtyMenuBarItem> = Vec::new();
+
+    for keymap in menu_bar_active_keymaps_for_frame_read_only(eval, frame_id) {
+        collect_from_keymap(eval, &keymap, &mut items);
     }
 
     move_final_items_to_end(eval, &mut items);

@@ -1446,6 +1446,7 @@ fn streaming_readevalloop(
         let Some((form, next_pos)) = read_result else {
             break; // EOF
         };
+        eval.obarray_mut().materialize_read_symbols(form);
 
         // Log a preview of the form source text.
         let form_start = pos;
@@ -1535,6 +1536,7 @@ fn streaming_readevalloop_lisp_source(
         let Some((form, next_pos)) = read_result else {
             break;
         };
+        eval.obarray_mut().materialize_read_symbols(form);
 
         let form_start = pos;
         pos = next_pos;
@@ -3682,6 +3684,7 @@ fn install_bootstrap_x_window_system_vars(
     ])
     .map_err(map_flow)?;
     eval.set_variable("x-keysym-table", keysym_table);
+    eval.set_variable("x-toolkit-scroll-bars", Value::symbol("gtk"));
     eval.set_variable("x-selection-timeout", Value::fixnum(0));
     eval.set_variable("x-session-id", Value::NIL);
     eval.set_variable("x-session-previous-id", Value::NIL);

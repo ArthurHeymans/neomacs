@@ -32,7 +32,7 @@ use super::intern::{
     lookup_interned_lisp_string, resolve_name, resolve_sym, resolve_sym_lisp_string,
     symbol_name_id,
 };
-use super::value::{Value, ValueKind};
+use super::value::{Value, ValueKind, VecLikeType};
 use crate::emacs_core::error::Flow;
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
@@ -668,6 +668,115 @@ impl Obarray {
     /// initial-obarray semantics here.
     pub fn ensure_interned_global_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);
+    }
+
+    /// Materialize the symbols read from Lisp source in the active global
+    /// obarray.  GNU's reader interns symbol tokens into `Vobarray` while
+    /// reading; Neomacs' value reader allocates canonical symbol ids first,
+    /// so callers that read source must apply the same obarray side effect.
+    pub(crate) fn materialize_read_symbols(&mut self, value: Value) {
+        let mut seen = Vec::new();
+        self.materialize_read_symbols_1(value, &mut seen);
+    }
+
+    fn materialize_read_symbols_1(&mut self, value: Value, seen: &mut Vec<Value>) {
+        match value.kind() {
+            ValueKind::Symbol(id) => self.ensure_interned_global_id(id),
+            ValueKind::Cons => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                self.materialize_read_symbols_1(value.cons_car(), seen);
+                self.materialize_read_symbols_1(value.cons_cdr(), seen);
+            }
+            ValueKind::Veclike(
+                VecLikeType::Vector
+                | VecLikeType::Record
+                | VecLikeType::Lambda
+                | VecLikeType::Macro,
+            ) => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                if let Some(slots) = value
+                    .as_vector_data()
+                    .or_else(|| value.as_record_data())
+                    .or_else(|| value.closure_slots())
+                {
+                    for slot in slots.iter().copied() {
+                        self.materialize_read_symbols_1(slot, seen);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::CharTable) => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                if let Some(slots) = value.char_table_external_slots() {
+                    for slot in slots {
+                        self.materialize_read_symbols_1(slot, seen);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::SubCharTable) => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                if let Some(table) = value.as_sub_char_table_obj() {
+                    for slot in table.contents.iter().copied() {
+                        self.materialize_read_symbols_1(slot, seen);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::HashTable) => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                if let Some(table) = value.as_hash_table() {
+                    for key_value in table.key_snapshots.values().copied() {
+                        self.materialize_read_symbols_1(key_value, seen);
+                    }
+                    for value in table.data.values().copied() {
+                        self.materialize_read_symbols_1(value, seen);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::ByteCode) => {
+                if seen.contains(&value) {
+                    return;
+                }
+                seen.push(value);
+                if let Some(bytecode) = value.get_bytecode_data() {
+                    self.materialize_read_symbols_1(bytecode.arglist, seen);
+                    for constant in bytecode.constants.iter().copied() {
+                        self.materialize_read_symbols_1(constant, seen);
+                    }
+                    if let Some(env) = bytecode.env {
+                        self.materialize_read_symbols_1(env, seen);
+                    }
+                    if let Some(doc_form) = bytecode.doc_form {
+                        self.materialize_read_symbols_1(doc_form, seen);
+                    }
+                    if let Some(interactive) = bytecode.interactive {
+                        self.materialize_read_symbols_1(interactive, seen);
+                    }
+                    for slot in bytecode.extra_slots.iter().copied() {
+                        self.materialize_read_symbols_1(slot, seen);
+                    }
+                }
+            }
+            ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
+                if let Some(symbol) = value.as_symbol_with_pos_sym() {
+                    self.materialize_read_symbols_1(symbol, seen);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Look up a symbol without creating it. Returns None if not interned.

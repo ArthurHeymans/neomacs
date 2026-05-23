@@ -6,7 +6,7 @@
 
 use super::display_status_line::*;
 use super::font_metrics::{FontMetrics, FontMetricsService};
-use super::gui_chrome::{collect_gui_menu_bar_items, collect_gui_tool_bar_items};
+use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
 use super::hit_test::*;
 use super::types::*;
 use super::unicode::*;
@@ -2829,7 +2829,8 @@ impl LayoutEngine {
         let char_h = frame_params.char_height.max(1.0);
         let menu_bar_lines = (menu_bar_lines_px / char_h).round() as u16;
         if menu_bar_lines > 0 {
-            let items = crate::tty_menu_bar::collect_tty_menu_bar_items(evaluator);
+            let items =
+                crate::tty_menu_bar::collect_tty_menu_bar_items_for_frame(evaluator, frame_id);
             // Resolve the GNU `menu` face once and pass its attributes
             // through to the TTY rasterizer.  Mirrors how
             // `display_menu_bar` (`xdisp.c:27444`) initialises its
@@ -2882,7 +2883,7 @@ impl LayoutEngine {
                 let menu_face = menu_face_resolver.resolve_named_face_without_inverse_video("menu");
                 frame_display_state.gui_menu_bar =
                     Some(neomacs_display_protocol::glyph_matrix::GuiMenuBarState {
-                        items: collect_gui_menu_bar_items(evaluator),
+                        items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
                         height: frame_params.menu_bar_height,
                         fg: pixel_to_tuple(menu_face.fg),
                         bg: pixel_to_tuple(menu_face.bg),
@@ -2905,7 +2906,7 @@ impl LayoutEngine {
                 let tool_bar_face = menu_face_resolver.resolve_named_face("tool-bar");
                 frame_display_state.gui_compact_bar =
                     Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
-                        menu_items: collect_gui_menu_bar_items(evaluator),
+                        menu_items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
                         tool_items: collect_gui_tool_bar_items(evaluator),
                         height: frame_params.compact_bar_height,
                         menu_fg: pixel_to_tuple(menu_face.fg),

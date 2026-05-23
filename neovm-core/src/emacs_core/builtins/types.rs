@@ -402,6 +402,7 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::SubCharTable) => "sub-char-table",
         ValueKind::Veclike(VecLikeType::Record) => unreachable!(),
         ValueKind::Veclike(VecLikeType::HashTable) => "hash-table",
+        ValueKind::Veclike(VecLikeType::Obarray) => "obarray",
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => "primitive-function",
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
             "interpreted-function"

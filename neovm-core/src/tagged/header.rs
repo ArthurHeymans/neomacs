@@ -159,6 +159,8 @@ pub enum VecLikeType {
     CharTable = 18,
     /// Internal sub character table (like GNU's PVEC_SUB_CHAR_TABLE).
     SubCharTable = 19,
+    /// Obarray object (like GNU's PVEC_OBARRAY).
+    Obarray = 20,
 }
 
 use std::sync::OnceLock;
@@ -395,6 +397,18 @@ pub struct SubCharTableObj {
 pub struct HashTableObj {
     pub header: VecLikeHeader,
     pub table: crate::emacs_core::value::LispHashTable,
+}
+
+/// Heap-allocated obarray.
+///
+/// Mirrors GNU Emacs's `struct Lisp_Obarray`: a vectorlike object with
+/// bucket storage and a symbol count.  Legacy vector obarrays are still
+/// accepted by `check_obarray` compatibility code.
+#[repr(C)]
+pub struct ObarrayObj {
+    pub header: VecLikeHeader,
+    pub buckets: LispValueVec,
+    pub count: u32,
 }
 
 /// Heap-allocated lambda (interpreted closure).

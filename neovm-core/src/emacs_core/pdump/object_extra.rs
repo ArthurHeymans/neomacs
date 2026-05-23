@@ -6,8 +6,8 @@
 //! Category B objects (string, overlay, marker) have mapped HeapImage spans
 //! but need a small descriptor for fields that can't be raw bytes.
 //!
-//! Category C objects (hash-table, bytecode, subr, buffer, window, frame,
-//! timer, free) have no HeapImage representation and need a full descriptor.
+//! Category C objects (hash-table, obarray, bytecode, subr, buffer, window,
+//! frame, timer, free) have no HeapImage representation and need a full descriptor.
 //!
 //! Serialization strategy: each sparse record starts with the object index, then
 //! the extra tag byte identifies the variant. Complex payloads use the same
@@ -53,6 +53,7 @@ const EXTRA_MARKER: u8 = 110;
 const EXTRA_FREE: u8 = 111;
 const EXTRA_CHAR_TABLE: u8 = 112;
 const EXTRA_SUB_CHAR_TABLE: u8 = 113;
+const EXTRA_OBARRAY: u8 = 114;
 
 /// Per-object extra data needed during load.
 #[derive(Debug, Clone)]
@@ -66,6 +67,8 @@ pub(crate) enum ObjectExtra {
     },
     /// Category C: hash table (no HeapImage bytes).
     HashTable(DumpLispHashTable),
+    /// Category C: obarray (no HeapImage bytes).
+    Obarray { buckets: Vec<DumpValue>, count: u32 },
     /// Category C: bytecode function (no HeapImage bytes).
     ByteCode(DumpByteCodeFunction),
     /// Category C: char-table (no HeapImage bytes).
@@ -182,6 +185,10 @@ fn write_object_extra(out: &mut Vec<u8>, obj: &DumpHeapObject) -> Result<(), Dum
         DumpHeapObject::HashTable(table) => {
             object_value_codec::write_u8(out, EXTRA_HASH_TABLE);
             object_value_codec::write_heap_object(out, &DumpHeapObject::HashTable(table.clone()))?;
+        }
+        DumpHeapObject::Obarray { .. } => {
+            object_value_codec::write_u8(out, EXTRA_OBARRAY);
+            object_value_codec::write_heap_object(out, obj)?;
         }
         DumpHeapObject::ByteCode(function) => {
             object_value_codec::write_u8(out, EXTRA_BYTE_CODE);
@@ -357,6 +364,7 @@ fn object_extra_into_heap_object(extra: ObjectExtra) -> DumpHeapObject {
             text_props,
         },
         ObjectExtra::HashTable(table) => DumpHeapObject::HashTable(table),
+        ObjectExtra::Obarray { buckets, count } => DumpHeapObject::Obarray { buckets, count },
         ObjectExtra::ByteCode(function) => DumpHeapObject::ByteCode(function),
         ObjectExtra::CharTable {
             defalt,
@@ -474,6 +482,18 @@ fn read_object_extra(cursor: &mut object_value_codec::Cursor) -> Result<ObjectEx
                 DumpHeapObject::HashTable(table) => Ok(ObjectExtra::HashTable(table)),
                 other => Err(DumpError::ImageFormatError(format!(
                     "expected HashTable in ObjectExtra, got {:?}",
+                    other.variant_name()
+                ))),
+            }
+        }
+        EXTRA_OBARRAY => {
+            let obj = cursor.read_heap_object()?;
+            match obj {
+                DumpHeapObject::Obarray { buckets, count } => {
+                    Ok(ObjectExtra::Obarray { buckets, count })
+                }
+                other => Err(DumpError::ImageFormatError(format!(
+                    "expected Obarray in ObjectExtra, got {:?}",
                     other.variant_name()
                 ))),
             }
@@ -672,6 +692,7 @@ impl DumpHeapObject {
             DumpHeapObject::Cons { .. } => "Cons",
             DumpHeapObject::Vector(_) => "Vector",
             DumpHeapObject::HashTable(_) => "HashTable",
+            DumpHeapObject::Obarray { .. } => "Obarray",
             DumpHeapObject::Str { .. } => "Str",
             DumpHeapObject::Float(_) => "Float",
             DumpHeapObject::Lambda(_) => "Lambda",

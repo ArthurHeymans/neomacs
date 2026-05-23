@@ -5001,25 +5001,28 @@ fn pure_dispatch_typed_extended_list_ops_work() {
 }
 
 #[test]
-fn pure_dispatch_obarray_make_and_clear_use_vector_semantics() {
+fn pure_dispatch_obarray_make_returns_gnu_obarray_and_clear_keeps_vector_compat() {
     crate::test_utils::init_test_tracing();
     let made = dispatch_builtin_pure("obarray-make", vec![Value::fixnum(3)])
         .expect("builtin obarray-make should resolve")
         .expect("builtin obarray-make should evaluate");
-    if !&made.is_vector() {
-        panic!("obarray-make should return vector");
+    if !&made.is_obarray() {
+        panic!("obarray-make should return obarray");
     };
-    let created_data = made.as_vector_data().unwrap().clone();
+    let created_data = crate::emacs_core::builtins::symbols::obarray_buckets(made).unwrap();
     assert_eq!(created_data.len(), 3);
     assert!(created_data.iter().all(|v| v.is_nil()));
 
     let default = dispatch_builtin_pure("obarray-make", vec![])
         .expect("builtin obarray-make should resolve")
         .expect("builtin obarray-make should evaluate");
-    if !&default.is_vector() {
-        panic!("obarray-make default should return vector");
+    if !&default.is_obarray() {
+        panic!("obarray-make default should return obarray");
     };
-    assert_eq!(default.as_vector_data().unwrap().len(), 1511);
+    assert_eq!(
+        crate::emacs_core::builtins::symbols::obarray_len(default).unwrap(),
+        1511
+    );
 
     let table = Value::vector(vec![Value::NIL, Value::list(vec![Value::symbol("x")])]);
     let cleared = dispatch_builtin_pure("obarray-clear", vec![table])

@@ -909,7 +909,8 @@ pub(crate) fn collect_mapatoms_symbols(
     if !crate::emacs_core::builtins::symbols::is_global_obarray_proxy(eval, &effective_obarray) {
         let custom_obarray =
             crate::emacs_core::builtins::symbols::check_obarray_value(effective_obarray)?;
-        let all_slots = custom_obarray.as_vector_data().unwrap().clone();
+        let all_slots = crate::emacs_core::builtins::symbols::obarray_buckets(custom_obarray)
+            .unwrap_or_default();
         let mut symbols = Vec::new();
         for slot in &all_slots {
             let mut current = *slot;
@@ -975,14 +976,16 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
     {
         let custom_obarray =
             crate::emacs_core::builtins::symbols::check_obarray_value(*custom_obarray)?;
-        let vec_data = custom_obarray.as_vector_data().unwrap();
-        let vec_len = vec_data.len();
+        let vec_len =
+            crate::emacs_core::builtins::symbols::obarray_len(custom_obarray).unwrap_or(0);
         if vec_len == 0 {
             return Ok(Value::NIL);
         }
         let bucket_idx =
             crate::emacs_core::builtins::symbols::obarray_hash_lisp_string(target_name, vec_len);
-        let bucket = vec_data[bucket_idx];
+        let bucket =
+            crate::emacs_core::builtins::symbols::obarray_bucket(custom_obarray, bucket_idx)
+                .unwrap_or(Value::NIL);
 
         // Walk the bucket chain and rebuild without the matching symbol
         let mut items = Vec::new();
@@ -1023,7 +1026,12 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
                 .into_iter()
                 .rev()
                 .fold(Value::NIL, |acc, sym| Value::cons(sym, acc));
-            let _ = custom_obarray.set_vector_slot(bucket_idx, new_bucket);
+            let _ = crate::emacs_core::builtins::symbols::set_obarray_bucket(
+                custom_obarray,
+                bucket_idx,
+                new_bucket,
+            );
+            crate::emacs_core::builtins::symbols::note_obarray_symbol_removed(custom_obarray);
             return Ok(Value::T);
         }
         return Ok(Value::NIL);

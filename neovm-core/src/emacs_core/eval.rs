@@ -1521,6 +1521,9 @@ pub struct Context {
     /// Mmap-backed pdump image that owns any mapped heap payloads borrowed by
     /// this evaluator's Lisp objects.
     pub(crate) pdump_image: Option<super::pdump::mmap_image::LoadedMmapImage>,
+    /// One-shot runtime flag set by file pdump loads.  GNU keeps this as
+    /// pdumper runtime state, not as a public obarray symbol.
+    pub(crate) after_pdump_load_hook_pending: bool,
     /// The obarray — unified symbol table with value cells, function cells, plists.
     pub(crate) obarray: Obarray,
     /// Specpdl — special binding stack that writes directly to the obarray.
@@ -4365,6 +4368,34 @@ impl Context {
         obarray.set_symbol_value("post-self-insert-hook", Value::NIL);
         obarray.make_special("post-self-insert-hook");
 
+        // --- src/buffer.c: syms_of_buffer ---
+        // GNU registers overlay hook property names with DEFSYM.  They are
+        // globally interned symbols, not variables.
+        for name in ["insert-in-front-hooks", "insert-behind-hooks"] {
+            let id = crate::emacs_core::intern::intern(name);
+            obarray.ensure_interned_global_id(id);
+        }
+
+        // --- src/keyboard.c: syms_of_keyboard ---
+        // GNU registers this command-loop restriction label with DEFSYM.
+        {
+            let id = crate::emacs_core::intern::intern("long-line-optimizations-in-command-hooks");
+            obarray.ensure_interned_global_id(id);
+        }
+
+        // --- src/callint.c: syms_of_callint ---
+        // DEFVAR_LISP, default nil.
+        obarray.set_symbol_value("mouse-leave-buffer-hook", Value::NIL);
+        obarray.make_special("mouse-leave-buffer-hook");
+
+        // --- src/xterm.c: syms_of_xterm / src/pgtkterm.c: syms_of_pgtkterm ---
+        // GNU defines `x-toolkit-scroll-bars' from the compiled window-system
+        // backend before Lisp loadup.  `lisp/loadup.el' deliberately checks
+        // only `boundp' so `scroll-bar.el' is loaded even when the value is
+        // nil for a non-toolkit build.
+        obarray.set_symbol_value("x-toolkit-scroll-bars", Value::symbol("gtk"));
+        obarray.make_special("x-toolkit-scroll-bars");
+
         let mut command_loop = crate::keyboard::CommandLoop::new();
         command_loop
             .keyboard
@@ -4387,6 +4418,7 @@ impl Context {
         let mut ev = Self {
             tagged_heap,
             pdump_image: None,
+            after_pdump_load_hook_pending: false,
             obarray,
             specpdl: Vec::new(),
             lexenv: Value::NIL,
@@ -4556,6 +4588,7 @@ impl Context {
         let mut ev = Self {
             tagged_heap,
             pdump_image: None,
+            after_pdump_load_hook_pending: false,
             obarray,
             specpdl: Vec::new(),
             lexenv,

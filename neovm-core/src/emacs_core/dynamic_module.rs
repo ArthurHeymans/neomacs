@@ -785,6 +785,7 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
         super::value::ValueKind::Veclike(vt) => match vt {
             VecLikeType::Vector => "vector",
             VecLikeType::HashTable => "hash-table",
+            VecLikeType::Obarray => "obarray",
             VecLikeType::Lambda | VecLikeType::Macro => "interpreted-function",
             VecLikeType::ByteCode => "byte-code-function",
             VecLikeType::Record => "record",

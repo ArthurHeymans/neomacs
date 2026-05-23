@@ -1717,6 +1717,49 @@ pub(crate) fn collect_minor_mode_maps_in_state(
     maps
 }
 
+/// Return the active keymaps GNU's menu-bar builder would consult for the
+/// selected window's buffer, in display collection order.
+///
+/// GNU `keyboard.c:menu_bar_items` sets the current buffer to the selected
+/// window's buffer before walking the active maps.  It then scans the global
+/// map first, followed by selected-buffer local/minor maps.  Redisplay may run
+/// while `current-buffer` still names some other buffer, so the menu-bar path
+/// must not use `BufferManager::current_local_map` as a proxy for the selected
+/// window.
+pub fn menu_bar_active_keymaps_for_frame_read_only(
+    ctx: &Context,
+    frame_id: crate::window::FrameId,
+) -> Vec<Value> {
+    let selected_window = ctx
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.selected_window())
+        .map(|window| Value::make_window(window.id().0));
+    let obey_overriding_local_maps = ctx
+        .obarray
+        .symbol_value("overriding-local-map-menu-flag")
+        .copied()
+        .is_some_and(|value| value.is_truthy());
+
+    let Ok(mut maps) = current_active_maps_for_position_read_only(
+        ctx,
+        obey_overriding_local_maps,
+        selected_window.as_ref(),
+    ) else {
+        return Vec::new();
+    };
+
+    maps.reverse();
+    maps
+}
+
+pub fn menu_bar_active_keymaps_read_only(ctx: &Context) -> Vec<Value> {
+    let Some(frame_id) = ctx.frames.selected_frame().map(|frame| frame.id) else {
+        return Vec::new();
+    };
+    menu_bar_active_keymaps_for_frame_read_only(ctx, frame_id)
+}
+
 pub(crate) fn collect_minor_mode_map_entries_in_state(
     obarray: &Obarray,
     dynamic: &[OrderedRuntimeBindingMap],

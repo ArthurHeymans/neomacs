@@ -1021,6 +1021,10 @@ impl TaggedHeap {
         size_of::<RecordObj>().saturating_add(Self::lisp_value_vec_storage_bytes(&obj.data))
     }
 
+    fn obarray_object_bytes(obj: &ObarrayObj) -> usize {
+        size_of::<ObarrayObj>().saturating_add(Self::lisp_value_vec_storage_bytes(&obj.buckets))
+    }
+
     fn object_bytes_from_header(header: *const GcHeader) -> usize {
         unsafe {
             match (*header).kind {
@@ -1046,6 +1050,9 @@ impl TaggedHeap {
                         }
                         VecLikeType::HashTable => {
                             Self::hash_table_object_bytes(&*(ptr as *const HashTableObj))
+                        }
+                        VecLikeType::Obarray => {
+                            Self::obarray_object_bytes(&*(ptr as *const ObarrayObj))
                         }
                         VecLikeType::Lambda => {
                             Self::lambda_object_bytes(&*(ptr as *const LambdaObj))
@@ -1238,6 +1245,21 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::hash_table_object_bytes(&*ptr) });
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a GNU-shaped obarray object.
+    pub fn alloc_obarray(&mut self, buckets: Vec<TaggedValue>) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, buckets.len() as u64);
+        let obj = Box::new(ObarrayObj {
+            header: VecLikeHeader::new(VecLikeType::Obarray),
+            buckets: buckets.into(),
+            count: 0,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(unsafe { Self::obarray_object_bytes(&*ptr) });
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -1987,6 +2009,14 @@ impl TaggedHeap {
                     }
                 }
             }
+            VecLikeType::Obarray => {
+                let obj = unsafe { &*(ptr as *const ObarrayObj) };
+                for val in &obj.buckets {
+                    if val.is_heap_object() {
+                        self.push_gray(*val, "obarray-bucket");
+                    }
+                }
+            }
             VecLikeType::Lambda | VecLikeType::Macro => {
                 // Closures are plain Value vectors (GNU PVEC_CLOSURE compat).
                 // Trace ALL slots uniformly — no type-specific logic needed.
@@ -2184,6 +2214,7 @@ impl TaggedHeap {
                     VecLikeType::HashTable => unsafe {
                         drop(Box::from_raw(ptr as *mut HashTableObj))
                     },
+                    VecLikeType::Obarray => unsafe { drop(Box::from_raw(ptr as *mut ObarrayObj)) },
                     VecLikeType::Lambda => unsafe { drop(Box::from_raw(ptr as *mut LambdaObj)) },
                     VecLikeType::Macro => unsafe { drop(Box::from_raw(ptr as *mut MacroObj)) },
                     VecLikeType::ByteCode => unsafe {

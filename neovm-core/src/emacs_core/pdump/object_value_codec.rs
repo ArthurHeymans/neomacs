@@ -31,6 +31,7 @@ const HEAP_SUBR: u8 = 15;
 const HEAP_FREE: u8 = 16;
 const HEAP_CHAR_TABLE: u8 = 17;
 const HEAP_SUB_CHAR_TABLE: u8 = 18;
+const HEAP_OBARRAY: u8 = 19;
 
 pub(crate) fn write_heap_object(
     out: &mut Vec<u8>,
@@ -75,6 +76,11 @@ pub(crate) fn write_heap_object(
         DumpHeapObject::HashTable(table) => {
             write_u8(out, HEAP_HASH_TABLE);
             write_hash_table(out, table)?;
+        }
+        DumpHeapObject::Obarray { buckets, count } => {
+            write_u8(out, HEAP_OBARRAY);
+            write_values(out, buckets)?;
+            write_u32(out, *count);
         }
         DumpHeapObject::Str {
             data,
@@ -195,6 +201,7 @@ const VALUE_BIGNUM: u8 = 20;
 const VALUE_UNBOUND: u8 = 21;
 const VALUE_CHAR_TABLE: u8 = 22;
 const VALUE_SUB_CHAR_TABLE: u8 = 23;
+const VALUE_OBARRAY: u8 = 24;
 
 pub(crate) fn write_value(out: &mut Vec<u8>, value: &DumpValue) -> Result<(), DumpError> {
     match value {
@@ -216,6 +223,7 @@ pub(crate) fn write_value(out: &mut Vec<u8>, value: &DumpValue) -> Result<(), Du
         DumpValue::SubCharTable(id) => write_heap_ref_value(out, VALUE_SUB_CHAR_TABLE, id),
         DumpValue::Record(id) => write_heap_ref_value(out, VALUE_RECORD, id),
         DumpValue::HashTable(id) => write_heap_ref_value(out, VALUE_HASH_TABLE, id),
+        DumpValue::Obarray(id) => write_heap_ref_value(out, VALUE_OBARRAY, id),
         DumpValue::Lambda(id) => write_heap_ref_value(out, VALUE_LAMBDA, id),
         DumpValue::Macro(id) => write_heap_ref_value(out, VALUE_MACRO, id),
         DumpValue::Subr(id) => {
@@ -930,6 +938,10 @@ impl<'a> Cursor<'a> {
                 contents: self.read_values()?,
             }),
             HEAP_HASH_TABLE => Ok(DumpHeapObject::HashTable(self.read_hash_table()?)),
+            HEAP_OBARRAY => Ok(DumpHeapObject::Obarray {
+                buckets: self.read_values()?,
+                count: self.read_u32("obarray count")?,
+            }),
             HEAP_STRING => Ok(DumpHeapObject::Str {
                 data: self.read_byte_data()?,
                 size: self.read_usize("string char size")?,
@@ -998,6 +1010,7 @@ impl<'a> Cursor<'a> {
             VALUE_HASH_TABLE => Ok(DumpValue::HashTable(
                 self.read_heap_ref("hash table heap ref")?,
             )),
+            VALUE_OBARRAY => Ok(DumpValue::Obarray(self.read_heap_ref("obarray heap ref")?)),
             VALUE_LAMBDA => Ok(DumpValue::Lambda(self.read_heap_ref("lambda heap ref")?)),
             VALUE_MACRO => Ok(DumpValue::Macro(self.read_heap_ref("macro heap ref")?)),
             VALUE_SUBR => Ok(DumpValue::Subr(DumpNameId(self.read_u32("subr id")?))),

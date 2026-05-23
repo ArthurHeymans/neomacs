@@ -27,8 +27,8 @@ use crate::heap_types::LispString;
 use crate::tagged::gc::{MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, with_tagged_heap};
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
-    HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj,
-    SubCharTableObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
+    HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
+    RecordObj, StringObj, SubCharTableObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1339,6 +1339,11 @@ impl TaggedValue {
         })
     }
 
+    /// Allocate a GNU-shaped obarray object.
+    pub fn obarray(size: usize) -> Self {
+        with_tagged_heap(|h| h.alloc_obarray(vec![Value::NIL; size]))
+    }
+
     /// Allocate a marker.
     pub fn make_marker(data: crate::heap_types::LispMarker) -> Self {
         with_tagged_heap(|h| h.alloc_marker(data))
@@ -1815,6 +1820,25 @@ impl TaggedValue {
     pub fn replace_hash_table(self, table: LispHashTable) -> bool {
         self.with_hash_table_mut(|current| *current = table)
             .is_some()
+    }
+
+    /// Borrow a GNU-shaped obarray object.
+    pub fn as_obarray_obj(self) -> Option<&'static ObarrayObj> {
+        if self.is_obarray() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const ObarrayObj;
+            Some(unsafe { &*ptr })
+        } else {
+            None
+        }
+    }
+
+    /// Mutate a GNU-shaped obarray object.
+    pub fn with_obarray_mut<R>(self, f: impl FnOnce(&mut ObarrayObj) -> R) -> Option<R> {
+        if !self.is_obarray() {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *mut ObarrayObj;
+        Some(f(unsafe { &mut *ptr }))
     }
 
     /// Mutate bytecode data through the centralized tagged-runtime write path.

@@ -7,8 +7,9 @@ use neomacs_display_protocol::{MenuBarItem, ToolBarItem};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::list_keymap_for_each_binding;
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::window::FrameId;
 
-use crate::tty_menu_bar::collect_tty_menu_bar_items;
+use crate::tty_menu_bar::{collect_tty_menu_bar_items, collect_tty_menu_bar_items_for_frame};
 
 pub fn compact_bar_mode_enabled(eval: &Context) -> bool {
     eval.obarray()
@@ -20,6 +21,18 @@ pub fn compact_bar_mode_enabled(eval: &Context) -> bool {
 
 pub fn collect_gui_menu_bar_items(eval: &Context) -> Vec<MenuBarItem> {
     collect_tty_menu_bar_items(eval)
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| MenuBarItem {
+            index: index as u32,
+            label: item.label,
+            key: item.key,
+        })
+        .collect()
+}
+
+pub fn collect_gui_menu_bar_items_for_frame(eval: &Context, frame_id: FrameId) -> Vec<MenuBarItem> {
+    collect_tty_menu_bar_items_for_frame(eval, frame_id)
         .into_iter()
         .enumerate()
         .map(|(index, item)| MenuBarItem {
