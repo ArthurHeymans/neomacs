@@ -2070,6 +2070,8 @@ mod divergence_combo_dynbind_closure_eval_obarray;
 mod divergence_combo_edge_cases;
 #[path = "divergence-combo-eieio-error-binding.rs"]
 mod divergence_combo_eieio_error_binding;
+#[path = "divergence-combo-eieio-inheritance-advice.rs"]
+mod divergence_combo_eieio_inheritance_advice;
 #[path = "divergence-combo-encoding-buffer-marker.rs"]
 mod divergence_combo_encoding_buffer_marker;
 #[path = "divergence-combo-error-condition-unwind.rs"]
@@ -2142,6 +2144,8 @@ mod divergence_combo_textprop_search_undo;
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
+#[path = "divergence-combo-undo-stress-marker-textprop.rs"]
+mod divergence_combo_undo_stress_marker_textprop;
 #[path = "divergence-combo-window-buffer-point.rs"]
 mod divergence_combo_window_buffer_point;
 #[path = "divergence-combo-window-buffer-process.rs"]
