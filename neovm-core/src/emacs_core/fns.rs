@@ -558,16 +558,7 @@ pub(crate) fn replace_buffer_region_lisp_string_in_manager(
     replacement: &crate::heap_types::LispString,
 ) -> Result<(), Flow> {
     buffers
-        .goto_buffer_byte(buffer_id, start_byte)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    buffers
-        .delete_buffer_region(buffer_id, start_byte, end_byte)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    buffers
-        .goto_buffer_byte(buffer_id, start_byte)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    buffers
-        .insert_lisp_string_into_buffer_for_replace(buffer_id, replacement)
+        .replace_buffer_region_lisp_string(buffer_id, start_byte, end_byte, replacement)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     buffers
         .append_buffer_text_properties(buffer_id, replacement.intervals(), start_byte)

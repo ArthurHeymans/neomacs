@@ -136,6 +136,22 @@ fn before_markers_insert_moves_overlay_boundaries_at_point() {
 }
 
 #[test]
+fn replace_preserves_overlay_spanning_replaced_text() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let overlay = alloc_overlay(25, 32);
+    list.insert_overlay(overlay);
+
+    list.adjust_for_replace(26, 5, 5);
+    assert_eq!(list.overlay_start(overlay), Some(25));
+    assert_eq!(list.overlay_end(overlay), Some(32));
+
+    list.adjust_for_insert(10, 15, false);
+    assert_eq!(list.overlay_start(overlay), Some(40));
+    assert_eq!(list.overlay_end(overlay), Some(47));
+}
+
+#[test]
 fn delete_evaporates_zero_width_overlay() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();

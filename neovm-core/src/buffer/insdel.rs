@@ -358,6 +358,98 @@ impl Buffer {
         self.insert_bytes_internal_full(text.as_bytes(), text.schars(), false, true);
     }
 
+    pub fn replace_region_lisp_string(&mut self, start: usize, end: usize, text: &LispString) {
+        if start > end {
+            return;
+        }
+        let text = convert_lisp_string_for_buffer_mode(text, self.get_multibyte());
+        let new_bytes = text.as_bytes();
+        let new_byte_len = new_bytes.len();
+        let new_char_len = text.schars();
+
+        if start == end {
+            self.goto_byte(start);
+            self.insert_bytes_internal(new_bytes, new_char_len, false);
+            return;
+        }
+
+        let start_char = self.text.emacs_byte_to_char(start);
+        let end_char = self.text.emacs_byte_to_char(end);
+        let old_byte_len = end - start;
+        let old_char_len = end_char - start_char;
+
+        let old_pt_byte = self.pt_byte;
+        let old_pt = self.pt;
+        let mut deleted_bytes = Vec::new();
+        self.text
+            .copy_emacs_bytes_to(start, end, &mut deleted_bytes);
+        let deleted_text = lisp_string_from_buffer_bytes(deleted_bytes, self.get_multibyte());
+
+        self.undo_prepare_change(start, old_pt_byte);
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            undo::undo_list_record_insert(
+                &mut ul,
+                start + deleted_text.sbytes(),
+                new_byte_len,
+                self.undo_state.point_before_command_or_undo(),
+            );
+            undo::undo_list_record_delete(
+                &mut ul,
+                start,
+                deleted_text,
+                old_pt_byte,
+                self.undo_state.point_before_command_or_undo(),
+            );
+            self.set_undo_list(ul);
+        }
+
+        self.text.delete_range_both(start, end, old_char_len);
+        self.text
+            .insert_emacs_bytes_both(start, new_bytes, new_char_len);
+
+        if start < old_pt_byte || old_pt_byte == end {
+            let clamped = old_pt_byte.min(end);
+            self.pt_byte = old_pt_byte + start + new_byte_len - clamped;
+            let clamped_char = old_pt.min(end_char);
+            self.pt = old_pt + start_char + new_char_len - clamped_char;
+        } else if old_pt_byte > end {
+            self.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
+            self.pt = old_pt + new_char_len - old_char_len;
+        }
+
+        if self.begv_byte > end {
+            self.begv_byte = self.begv_byte + new_byte_len - old_byte_len;
+            self.begv = self.begv + new_char_len - old_char_len;
+        } else if self.begv_byte > start {
+            self.begv_byte = start;
+            self.begv = start_char;
+        }
+
+        if self.zv_byte >= end {
+            self.zv_byte = self.zv_byte + new_byte_len - old_byte_len;
+            self.zv = self.zv + new_char_len - old_char_len;
+        } else if self.zv_byte > start {
+            self.zv_byte = start + new_byte_len;
+            self.zv = start_char + new_char_len;
+        }
+
+        self.text.adjust_markers_for_replace(
+            start,
+            end,
+            start_char,
+            end_char,
+            new_byte_len,
+            new_char_len,
+        );
+        self.text.adjust_text_props_for_delete(start_char, end_char);
+        self.text
+            .adjust_text_props_for_insert(start_char, new_char_len);
+        self.overlays
+            .adjust_for_replace(start, old_byte_len, new_byte_len);
+        self.record_char_modification(old_char_len.max(new_char_len));
+    }
+
     /// Delete the byte range `[start, end)`.
     ///
     /// Adjusts point, mark, markers, and the narrowing boundary.
@@ -698,6 +790,62 @@ impl BufferManager {
         );
     }
 
+    fn adjust_shared_replace_metadata(
+        buf: &mut Buffer,
+        start: usize,
+        end: usize,
+        start_char: usize,
+        end_char: usize,
+        new_byte_len: usize,
+        new_char_len: usize,
+        update_state_fields: bool,
+    ) {
+        let old_byte_len = end - start;
+        let old_char_len = end_char - start_char;
+        let old_pt_byte = buf.pt_byte;
+        let old_pt = buf.pt;
+
+        if update_state_fields {
+            if start < old_pt_byte || old_pt_byte == end {
+                let clamped = old_pt_byte.min(end);
+                buf.pt_byte = old_pt_byte + start + new_byte_len - clamped;
+                let clamped_char = old_pt.min(end_char);
+                buf.pt = old_pt + start_char + new_char_len - clamped_char;
+            } else if old_pt_byte > end {
+                buf.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
+                buf.pt = old_pt + new_char_len - old_char_len;
+            }
+
+            if buf.begv_byte > end {
+                buf.begv_byte = buf.begv_byte + new_byte_len - old_byte_len;
+                buf.begv = buf.begv + new_char_len - old_char_len;
+            } else if buf.begv_byte > start {
+                buf.begv_byte = start;
+                buf.begv = start_char;
+            }
+
+            if buf.zv_byte >= end {
+                buf.zv_byte = buf.zv_byte + new_byte_len - old_byte_len;
+                buf.zv = buf.zv + new_char_len - old_char_len;
+            } else if buf.zv_byte > start {
+                buf.zv_byte = start + new_byte_len;
+                buf.zv = start_char + new_char_len;
+            }
+        }
+
+        buf.text.adjust_markers_for_replace(
+            start,
+            end,
+            start_char,
+            end_char,
+            new_byte_len,
+            new_char_len,
+        );
+        buf.overlays
+            .adjust_for_replace(start, old_byte_len, new_byte_len);
+        buf.record_char_modification(old_char_len.max(new_char_len));
+    }
+
     fn adjust_shared_same_len_edit_metadata(
         buf: &mut Buffer,
         changed_chars: usize,
@@ -918,6 +1066,60 @@ impl BufferManager {
                 end,
                 start_char,
                 end_char,
+                update_state_fields,
+            );
+            self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
+        }
+        Some(())
+    }
+
+    pub fn replace_buffer_region_lisp_string(
+        &mut self,
+        id: BufferId,
+        start: usize,
+        end: usize,
+        text: &LispString,
+    ) -> Option<()> {
+        if start > end {
+            return None;
+        }
+
+        if start == end {
+            self.goto_buffer_byte(id, start)?;
+            return self.insert_lisp_string_into_buffer(id, text);
+        }
+
+        let converted = {
+            let source = self.buffers.get(&id)?;
+            convert_lisp_string_for_buffer_mode(text, source.get_multibyte())
+        };
+        let new_byte_len = converted.sbytes();
+        let new_char_len = converted.schars();
+        let root_id = self.shared_text_root_id(id)?;
+        let shared_ids = self.buffers_sharing_root_ids(root_id);
+        let source = self.buffers.get(&id)?;
+        let start_char = source.text.emacs_byte_to_char(start);
+        let end_char = source.text.emacs_byte_to_char(end);
+
+        self.buffers
+            .get_mut(&id)?
+            .replace_region_lisp_string(start, end, &converted);
+
+        for sibling_id in shared_ids {
+            if sibling_id == id {
+                continue;
+            }
+            let update_state_fields =
+                self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
+            let sibling = self.buffers.get_mut(&sibling_id)?;
+            Self::adjust_shared_replace_metadata(
+                sibling,
+                start,
+                end,
+                start_char,
+                end_char,
+                new_byte_len,
+                new_char_len,
                 update_state_fields,
             );
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;

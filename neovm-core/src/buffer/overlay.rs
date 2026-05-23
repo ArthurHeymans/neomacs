@@ -446,6 +446,16 @@ impl OverlayList {
         self.rebuild_indexes();
     }
 
+    pub fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
+        if old_len == 0 {
+            self.adjust_for_insert(start, new_len, false);
+            return;
+        }
+
+        self.adjust_for_insert(start + old_len, new_len, true);
+        self.adjust_for_delete(start, start + old_len);
+    }
+
     pub fn set_front_advance(&mut self, overlay: Value, advance: bool) {
         let _ = overlay.with_overlay_data_mut(|data| {
             data.front_advance = advance;

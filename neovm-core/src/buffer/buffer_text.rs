@@ -1051,6 +1051,40 @@ impl BufferText {
         }
     }
 
+    pub fn adjust_markers_for_replace(
+        &self,
+        start: usize,
+        end: usize,
+        start_char: usize,
+        end_char: usize,
+        new_byte_len: usize,
+        new_char_len: usize,
+    ) {
+        if start >= end {
+            self.adjust_markers_for_insert(start, new_byte_len, new_char_len);
+            return;
+        }
+
+        let old_byte_len = end - start;
+        let old_char_len = end_char - start_char;
+        let storage = self.storage.borrow();
+        let mut curr = storage.markers_head;
+        // SAFETY: same invariant as adjust_markers_for_insert.
+        unsafe {
+            while !curr.is_null() {
+                let data = &mut (*curr).data;
+                if data.bytepos >= end {
+                    data.bytepos = data.bytepos + new_byte_len - old_byte_len;
+                    data.charpos = data.charpos + new_char_len - old_char_len;
+                } else if data.bytepos > start {
+                    data.bytepos = start;
+                    data.charpos = start_char;
+                }
+                curr = data.next_marker;
+            }
+        }
+    }
+
     pub fn advance_markers_at(&self, pos: usize, byte_len: usize, char_len: usize) {
         if byte_len == 0 {
             return;
