@@ -2064,6 +2064,8 @@ mod divergence_combo_edge_cases;
 mod divergence_combo_eieio_error_binding;
 #[path = "divergence-combo-encoding-buffer-marker.rs"]
 mod divergence_combo_encoding_buffer_marker;
+#[path = "divergence-combo-error-condition-unwind.rs"]
+mod divergence_combo_error_condition_unwind;
 #[path = "divergence-combo-error-recovery.rs"]
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
@@ -2072,6 +2074,8 @@ mod divergence_combo_eval_error_scope;
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
 mod divergence_combo_keymap_command;
+#[path = "divergence-combo-macro-compile-eval.rs"]
+mod divergence_combo_macro_compile_eval;
 #[path = "divergence-combo-macro-compiletime.rs"]
 mod divergence_combo_macro_compiletime;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
