@@ -731,7 +731,28 @@ fn matching_paren_basics_and_errors() {
         Value::char('[')
     );
     assert_eq!(
+        builtin_matching_paren(&mut eval, vec![Value::fixnum('{' as i64)]).unwrap(),
+        Value::char('}')
+    );
+    assert_eq!(
         builtin_matching_paren(&mut eval, vec![Value::fixnum('a' as i64)]).unwrap(),
+        Value::NIL
+    );
+
+    let custom = builtin_copy_syntax_table(vec![builtin_standard_syntax_table(vec![]).unwrap()])
+        .expect("copy standard syntax table");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('{' as i64), Value::string("_"), custom],
+    )
+    .expect("make brace a symbol constituent");
+    builtin_set_syntax_table(&mut eval, vec![custom]).expect("set current syntax table");
+    assert_eq!(
+        builtin_char_syntax(&mut eval, vec![Value::fixnum('{' as i64)]).unwrap(),
+        Value::char('_')
+    );
+    assert_eq!(
+        builtin_matching_paren(&mut eval, vec![Value::fixnum('{' as i64)]).unwrap(),
         Value::NIL
     );
 

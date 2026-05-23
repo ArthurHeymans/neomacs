@@ -1925,8 +1925,8 @@ pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
 /// `(matching-paren CHAR)` — return matching paren for bracket chars.
 ///
 /// This is an evaluator-dependent version that uses the current buffer's
-/// syntax table. For backwards compatibility, also works as a pure function
-/// with standard bracket pairs.
+/// syntax table, matching GNU `Fmatching_paren`: return a match only when the
+/// effective syntax class is open or close.
 pub(crate) fn builtin_matching_paren(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1963,7 +1963,6 @@ pub(crate) fn builtin_matching_paren_in_buffers(
         }
     };
 
-    // Look up in the current buffer's syntax table
     if let Some(buf) = buffers.current_buffer() {
         let entry = SyntaxTable::for_buffer(buf).get_entry(ch);
         if let Some(e) = entry {
@@ -1974,18 +1973,7 @@ pub(crate) fn builtin_matching_paren_in_buffers(
             }
         }
     }
-
-    // Fallback to standard hardcoded pairs
-    let out = match ch {
-        '(' => Some(')'),
-        ')' => Some('('),
-        '[' => Some(']'),
-        ']' => Some('['),
-        '{' => Some('}'),
-        '}' => Some('{'),
-        _ => None,
-    };
-    Ok(out.map_or(Value::NIL, Value::char))
+    Ok(Value::NIL)
 }
 
 /// `(standard-syntax-table)` — return the standard syntax table.
