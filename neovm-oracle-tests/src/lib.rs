@@ -2090,6 +2090,8 @@ mod divergence_combo_macro_eieio_generic;
 mod divergence_combo_match_register_syntax;
 #[path = "divergence-combo-metaprogramming.rs"]
 mod divergence_combo_metaprogramming;
+#[path = "divergence-combo-milestone-100.rs"]
+mod divergence_combo_milestone_100;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
