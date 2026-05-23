@@ -2078,6 +2078,8 @@ mod divergence_error_signaling_deep;
 mod divergence_eval_deep_edge;
 #[path = "divergence-eval-load-read.rs"]
 mod divergence_eval_load_read;
+#[path = "divergence-face-color-font.rs"]
+mod divergence_face_color_font;
 #[path = "divergence-face-custom-theme.rs"]
 mod divergence_face_custom_theme;
 #[path = "divergence-file-ops-deep.rs"]
@@ -2254,6 +2256,8 @@ mod divergence_textprop_manipulation;
 mod divergence_textprop_overlay;
 #[path = "divergence-textprop-sticky-deep.rs"]
 mod divergence_textprop_sticky_deep;
+#[path = "divergence-thread-concurrency.rs"]
+mod divergence_thread_concurrency;
 #[path = "divergence-thread-elisp-deep.rs"]
 mod divergence_thread_elisp_deep;
 #[path = "divergence-time-process-final.rs"]
