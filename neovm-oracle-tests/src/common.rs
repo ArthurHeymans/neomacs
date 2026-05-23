@@ -482,7 +482,7 @@ fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
         return;
     }
     panic!(
-        "oracle parity mismatch for form: {form}\n  NEO Emacs:  {neovm}\n  GNU Emacs:  {oracle}"
+        "oracle parity mismatch for form: {form}\n  \x1b[31;1mNEO Emacs:\x1b[0m  {neovm}\n  \x1b[32;1mGNU Emacs:\x1b[0m  {oracle}"
     );
 }
 
