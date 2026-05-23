@@ -2102,6 +2102,8 @@ mod divergence_combo_file_path_ops;
 mod divergence_combo_final_stress;
 #[path = "divergence-combo-format-string-char.rs"]
 mod divergence_combo_format_string_char;
+#[path = "divergence-combo-fringe.rs"]
+mod divergence_combo_fringe;
 #[path = "divergence-combo-interop.rs"]
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
@@ -2118,6 +2120,8 @@ mod divergence_combo_macro_compile_eval;
 mod divergence_combo_macro_compiletime;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
 mod divergence_combo_macro_eieio_generic;
+#[path = "divergence-combo-macro-eval-apply-closure.rs"]
+mod divergence_combo_macro_eval_apply_closure;
 #[path = "divergence-combo-match-register-syntax.rs"]
 mod divergence_combo_match_register_syntax;
 #[path = "divergence-combo-metaprogramming.rs"]
@@ -2130,6 +2134,8 @@ mod divergence_combo_operations;
 mod divergence_combo_overlay_textprop_narrow_undo;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
 mod divergence_combo_pcase_thread_rx;
+#[path = "divergence-combo-plist-hash-symbol-eval.rs"]
+mod divergence_combo_plist_hash_symbol_eval;
 #[path = "divergence-combo-plist-symprop-face.rs"]
 mod divergence_combo_plist_symprop_face;
 #[path = "divergence-combo-process-pipe-filter.rs"]
