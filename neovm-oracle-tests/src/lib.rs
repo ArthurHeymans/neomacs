@@ -2108,6 +2108,8 @@ mod divergence_combo_coding_marker_overlay_undo_textprop;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 mod divergence_combo_completion_try_all_completions_deep;
+#[path = "divergence-combo-condition-case-error-marker-overlay-undo.rs"]
+mod divergence_combo_condition_case_error_marker_overlay_undo;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-deep-undo-stress-2.rs"]
