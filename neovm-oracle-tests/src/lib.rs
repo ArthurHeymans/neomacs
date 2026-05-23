@@ -2172,6 +2172,8 @@ mod divergence_predicates_deep;
 mod divergence_print_circle_read;
 #[path = "divergence-print-format-charset.rs"]
 mod divergence_print_format_charset;
+#[path = "divergence-print-read-circle.rs"]
+mod divergence_print_read_circle;
 #[path = "divergence-process-shell.rs"]
 mod divergence_process_shell;
 #[path = "divergence-process-shell-deep.rs"]
@@ -2240,6 +2242,8 @@ mod divergence_textprop_manipulation;
 mod divergence_textprop_overlay;
 #[path = "divergence-textprop-sticky-deep.rs"]
 mod divergence_textprop_sticky_deep;
+#[path = "divergence-thread-elisp-deep.rs"]
+mod divergence_thread_elisp_deep;
 #[path = "divergence-time-process-final.rs"]
 mod divergence_time_process_final;
 #[path = "divergence-timer-eventloop.rs"]
