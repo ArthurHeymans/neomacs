@@ -2048,6 +2048,8 @@ mod divergence_cllib_seq_map;
 mod divergence_coding_charset_deep;
 #[path = "divergence-coding-process.rs"]
 mod divergence_coding_process;
+#[path = "divergence-combo-advice-eieio-keymap.rs"]
+mod divergence_combo_advice_eieio_keymap;
 #[path = "divergence-combo-buffer-overlay.rs"]
 mod divergence_combo_buffer_overlay;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
@@ -2074,6 +2076,8 @@ mod divergence_combo_macro_eieio_generic;
 mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
+mod divergence_combo_overlay_textprop_narrow_undo;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
