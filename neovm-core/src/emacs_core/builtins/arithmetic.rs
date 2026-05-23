@@ -1663,7 +1663,7 @@ fn emacs_get_random_unlocked() -> i64 {
 }
 
 #[cfg(unix)]
-fn emacs_get_random() -> i64 {
+pub(crate) fn emacs_get_random() -> i64 {
     let _guard = emacs_random_lock().lock().expect("random lock poisoned");
     emacs_get_random_unlocked()
 }
@@ -1709,7 +1709,7 @@ fn emacs_init_random() {
 }
 
 #[cfg(not(unix))]
-fn emacs_get_random() -> i64 {
+pub(crate) fn emacs_get_random() -> i64 {
     use std::cell::Cell;
     thread_local! {
         static STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };

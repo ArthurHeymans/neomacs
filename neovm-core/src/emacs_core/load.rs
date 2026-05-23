@@ -3613,6 +3613,17 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
     super::window_cmds::seed_batch_startup_frame_in_state(&mut eval.frames, &mut eval.buffers);
     eval_startup_forms(
         eval,
+        // GNU `startup.el` abbreviates `default-directory` after loadup, and
+        // the initial window displays `*scratch*` through the same metadata
+        // path as later `set-window-buffer` calls.
+        r#"
+          (progn
+            (setq default-directory (abbreviate-file-name default-directory))
+            (set-window-buffer (selected-window) (current-buffer)))
+        "#,
+    )?;
+    eval_startup_forms(
+        eval,
         // Note: the closing paren count must balance the opens.
         // GNU loadup.el invokes `initial-major-mode` on `*scratch*`
         // when it's still in `fundamental-mode`; we replicate that

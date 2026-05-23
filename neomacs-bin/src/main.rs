@@ -2891,6 +2891,14 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
         .map(|p| ensure_dir_string(&p))
         .unwrap_or_else(|_| "/".to_string());
     eval.set_variable("default-directory", Value::unibyte_string(cwd));
+    if let Err(error) =
+        eval.eval_str("(setq default-directory (abbreviate-file-name default-directory))")
+    {
+        tracing::warn!(?error, "failed to abbreviate startup default-directory");
+    }
+    if let Err(error) = eval.eval_str("(set-window-buffer (selected-window) (current-buffer))") {
+        tracing::warn!(?error, "failed to record initially displayed buffer");
+    }
     eval.set_variable("terminal-frame", terminal_frame);
     eval.set_variable("frame-initial-frame", frame_initial_frame);
     eval.set_variable("default-minibuffer-frame", default_minibuffer_frame);

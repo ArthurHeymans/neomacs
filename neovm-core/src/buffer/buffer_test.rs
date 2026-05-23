@@ -1100,6 +1100,29 @@ fn manager_generate_new_buffer_name_honors_ignore_candidate() {
     );
 }
 
+#[test]
+fn manager_generate_new_buffer_name_hidden_buffer_uses_random_suffix() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    mgr.create_buffer(" hidden");
+    assert_eq!(
+        mgr.generate_new_buffer_name_ignoring_with_random(" hidden", None, || 123_456),
+        " hidden-123456"
+    );
+}
+
+#[test]
+fn manager_generate_new_buffer_name_hidden_buffer_falls_back_after_random_collision() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    mgr.create_buffer(" hidden");
+    mgr.create_buffer(" hidden-123456");
+    assert_eq!(
+        mgr.generate_new_buffer_name_ignoring_with_random(" hidden", None, || 123_456),
+        " hidden-123456<2>"
+    );
+}
+
 // -----------------------------------------------------------------------
 // BufferManager — markers
 // -----------------------------------------------------------------------

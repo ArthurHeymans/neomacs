@@ -1123,6 +1123,80 @@ pub fn lookup_buffer_slot_by_sym_id(sym_id: SymId) -> Option<&'static BufferSlot
         .and_then(|slot| *slot)
 }
 
+/// Neomacs stores per-buffer slots in a compact Rust table, but GNU exposes
+/// their C `struct buffer` order through `buffer-local-variables`: it walks
+/// from `name_` through `cursor_in_non_selected_windows_` and prepends each
+/// visible slot.  Keep that externally visible walk independent from the
+/// internal slot-offset numbering.
+const GNU_STRUCT_BUFFER_SLOT_ORDER: &[usize] = &[
+    BUFFER_SLOT_FILE_NAME,
+    BUFFER_SLOT_DEFAULT_DIRECTORY,
+    BUFFER_SLOT_BACKED_UP,
+    BUFFER_SLOT_SAVED_SIZE,
+    BUFFER_SLOT_AUTO_SAVE_FILE_NAME,
+    BUFFER_SLOT_READ_ONLY,
+    BUFFER_SLOT_MAJOR_MODE,
+    BUFFER_SLOT_LOCAL_MINOR_MODES,
+    BUFFER_SLOT_MODE_NAME,
+    BUFFER_SLOT_MODE_LINE_FORMAT,
+    BUFFER_SLOT_HEADER_LINE_FORMAT,
+    BUFFER_SLOT_TAB_LINE_FORMAT,
+    BUFFER_SLOT_LOCAL_ABBREV_TABLE,
+    BUFFER_SLOT_SYNTAX_TABLE,
+    BUFFER_SLOT_CATEGORY_TABLE,
+    BUFFER_SLOT_TAB_WIDTH,
+    BUFFER_SLOT_FILL_COLUMN,
+    BUFFER_SLOT_LEFT_MARGIN,
+    BUFFER_SLOT_AUTO_FILL_FUNCTION,
+    BUFFER_SLOT_CASE_TABLE,
+    BUFFER_SLOT_TRUNCATE_LINES,
+    BUFFER_SLOT_WORD_WRAP,
+    BUFFER_SLOT_CTL_ARROW,
+    BUFFER_SLOT_BIDI_DISPLAY_REORDERING,
+    BUFFER_SLOT_BIDI_PARAGRAPH_DIRECTION,
+    BUFFER_SLOT_BIDI_PARAGRAPH_SEPARATE_RE,
+    BUFFER_SLOT_BIDI_PARAGRAPH_START_RE,
+    BUFFER_SLOT_SELECTIVE_DISPLAY,
+    BUFFER_SLOT_SELECTIVE_DISPLAY_ELLIPSES,
+    BUFFER_SLOT_OVERWRITE_MODE,
+    BUFFER_SLOT_ABBREV_MODE,
+    BUFFER_SLOT_BUFFER_DISPLAY_TABLE,
+    BUFFER_SLOT_MARK_ACTIVE,
+    BUFFER_SLOT_ENABLE_MULTIBYTE_CHARACTERS,
+    BUFFER_SLOT_BUFFER_FILE_CODING_SYSTEM,
+    BUFFER_SLOT_FILE_FORMAT,
+    BUFFER_SLOT_AUTO_SAVE_FILE_FORMAT,
+    BUFFER_SLOT_CACHE_LONG_SCANS,
+    BUFFER_SLOT_POINT_BEFORE_SCROLL,
+    BUFFER_SLOT_FILE_TRUENAME,
+    BUFFER_SLOT_INVISIBILITY_SPEC,
+    BUFFER_SLOT_DISPLAY_COUNT,
+    BUFFER_SLOT_LEFT_MARGIN_WIDTH,
+    BUFFER_SLOT_RIGHT_MARGIN_WIDTH,
+    BUFFER_SLOT_LEFT_FRINGE_WIDTH,
+    BUFFER_SLOT_RIGHT_FRINGE_WIDTH,
+    BUFFER_SLOT_FRINGES_OUTSIDE_MARGINS,
+    BUFFER_SLOT_SCROLL_BAR_WIDTH,
+    BUFFER_SLOT_SCROLL_BAR_HEIGHT,
+    BUFFER_SLOT_VERTICAL_SCROLL_BAR,
+    BUFFER_SLOT_HORIZONTAL_SCROLL_BAR,
+    BUFFER_SLOT_INDICATE_EMPTY_LINES,
+    BUFFER_SLOT_INDICATE_BUFFER_BOUNDARIES,
+    BUFFER_SLOT_FRINGE_INDICATOR_ALIST,
+    BUFFER_SLOT_FRINGE_CURSOR_ALIST,
+    BUFFER_SLOT_DISPLAY_TIME,
+    BUFFER_SLOT_SCROLL_UP_AGGRESSIVELY,
+    BUFFER_SLOT_SCROLL_DOWN_AGGRESSIVELY,
+    BUFFER_SLOT_CURSOR_TYPE,
+    BUFFER_SLOT_LINE_SPACING,
+    BUFFER_SLOT_TEXT_CONVERSION_STYLE,
+    BUFFER_SLOT_CURSOR_IN_NON_SELECTED_WINDOWS,
+];
+
+fn buffer_slot_info_by_offset(offset: usize) -> Option<&'static BufferSlotInfo> {
+    BUFFER_SLOT_INFO.iter().find(|info| info.offset == offset)
+}
+
 fn buffer_undo_list_sym() -> SymId {
     static SYM: OnceLock<SymId> = OnceLock::new();
     *SYM.get_or_init(|| intern("buffer-undo-list"))
@@ -2707,10 +2781,13 @@ impl Buffer {
             }
         }
 
-        // Step 2: BUFFER_OBJFWD slots in declaration order. Same
-        // forward iteration; the `.rev()' in the caller flips them
-        // to match GNU's prepend reversal.
-        for info in BUFFER_SLOT_INFO {
+        // Step 2: BUFFER_OBJFWD slots in GNU `struct buffer' order.
+        // Same forward iteration; the `.rev()' in the caller flips
+        // them to match GNU's prepend reversal.
+        for offset in GNU_STRUCT_BUFFER_SLOT_ORDER {
+            let Some(info) = buffer_slot_info_by_offset(*offset) else {
+                continue;
+            };
             if !info.install_as_forwarder {
                 continue;
             }
@@ -4278,21 +4355,43 @@ impl BufferManager {
     }
 
     /// Generate a unique buffer name.  If `base` is not taken, returns it
-    /// unchanged; otherwise appends `<2>`, `<3>`, ... until a free name is
-    /// found.
+    /// unchanged; otherwise follows GNU `generate-new-buffer-name`.
     pub fn generate_new_buffer_name(&self, base: &str) -> String {
-        self.generate_new_buffer_name_ignoring(base, None)
+        self.generate_new_buffer_name_ignoring_with_random(base, None, || {
+            crate::emacs_core::builtins::emacs_get_random()
+        })
     }
 
     /// Generate a unique buffer name, allowing `ignore` to be reused even if
     /// a live buffer already owns that name.
     pub fn generate_new_buffer_name_ignoring(&self, base: &str, ignore: Option<&str>) -> String {
+        self.generate_new_buffer_name_ignoring_with_random(base, ignore, || {
+            crate::emacs_core::builtins::emacs_get_random()
+        })
+    }
+
+    pub(crate) fn generate_new_buffer_name_ignoring_with_random(
+        &self,
+        base: &str,
+        ignore: Option<&str>,
+        mut random: impl FnMut() -> i64,
+    ) -> String {
         if ignore == Some(base) || self.find_buffer_by_name(base).is_none() {
             return base.to_string();
         }
+        let genbase = if base.as_bytes().first() == Some(&b' ') {
+            let random_suffix = random().rem_euclid(1_000_000);
+            let candidate = format!("{base}-{random_suffix}");
+            if self.find_buffer_by_name(&candidate).is_none() {
+                return candidate;
+            }
+            candidate
+        } else {
+            base.to_string()
+        };
         let mut n = 2u64;
         loop {
-            let candidate = format!("{}<{}>", base, n);
+            let candidate = format!("{genbase}<{n}>");
             if ignore == Some(candidate.as_str()) || self.find_buffer_by_name(&candidate).is_none()
             {
                 return candidate;

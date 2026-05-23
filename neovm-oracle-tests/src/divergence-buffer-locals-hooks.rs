@@ -29,7 +29,15 @@ fn divergence_buffer_local_which_file() {
   (defvar my-blf-test 0)
   (make-local-variable 'my-blf-test)
   (setq my-blf-test 99)
-  (list (buffer-local-variables)
+  (list (mapcar (lambda (entry)
+                  (if (eq (car-safe entry) 'buffer-display-time)
+                      (list 'buffer-display-time
+                            (and (consp (cdr entry))
+                                 (integerp (cadr entry))
+                                 (integerp (caddr entry))
+                                 (integerp (cadddr entry)))))
+                    entry))
+                (buffer-local-variables))
         (assq 'my-blf-test (buffer-local-variables))))"#,
     );
 }

@@ -36,13 +36,21 @@ fn divergence_generate_new_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity_with_bootstrap(
-        r#"(let ((buf1 (generate-new-buffer " *test-gnb*"))
-        (buf2 (generate-new-buffer " *test-gnb*")))
-  (list (buffer-name buf1)
-        (buffer-name buf2)
-        (not (eq buf1 buf2))
-        (kill-buffer buf1)
-        (kill-buffer buf2)))"#,
+        r#"(let ((visible1 (generate-new-buffer "*test-gnb*"))
+        (visible2 (generate-new-buffer "*test-gnb*"))
+        (hidden1 (generate-new-buffer " *test-gnb*"))
+        (hidden2 (generate-new-buffer " *test-gnb*")))
+  (unwind-protect
+      (list (buffer-name visible1)
+            (buffer-name visible2)
+            (not (eq visible1 visible2))
+            (buffer-name hidden1)
+            (string-match-p "\\` \\*test-gnb\\*-[0-9]+\\'" (buffer-name hidden2))
+            (not (eq hidden1 hidden2)))
+    (mapc (lambda (buf)
+            (when (buffer-live-p buf)
+              (kill-buffer buf)))
+          (list visible1 visible2 hidden1 hidden2))))"#,
     );
 }
 
