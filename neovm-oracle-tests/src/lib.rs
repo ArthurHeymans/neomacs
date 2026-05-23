@@ -2174,8 +2174,12 @@ mod divergence_combo_textprop_overlay_face;
 mod divergence_combo_textprop_search_undo;
 #[path = "divergence-combo-timer-process.rs"]
 mod divergence_combo_timer_process;
+#[path = "divergence-combo-timer-process-time.rs"]
+mod divergence_combo_timer_process_time;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
+#[path = "divergence-combo-undo-overlay-marker-stress.rs"]
+mod divergence_combo_undo_overlay_marker_stress;
 #[path = "divergence-combo-undo-stress-marker-textprop.rs"]
 mod divergence_combo_undo_stress_marker_textprop;
 #[path = "divergence-combo-window-buffer-point.rs"]
