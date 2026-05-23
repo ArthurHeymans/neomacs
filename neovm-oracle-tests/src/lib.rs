@@ -2076,6 +2076,8 @@ mod divergence_combo_keymap_command;
 mod divergence_combo_macro_compiletime;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
 mod divergence_combo_macro_eieio_generic;
+#[path = "divergence-combo-match-register-syntax.rs"]
+mod divergence_combo_match_register_syntax;
 #[path = "divergence-combo-metaprogramming.rs"]
 mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-operations.rs"]
@@ -2114,6 +2116,8 @@ mod divergence_combo_textprop_search_undo;
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
+#[path = "divergence-combo-window-buffer-point.rs"]
+mod divergence_combo_window_buffer_point;
 #[path = "divergence-combo-window-buffer-process.rs"]
 mod divergence_combo_window_buffer_process;
 #[path = "divergence-combo-window-spatial.rs"]
