@@ -2216,6 +2216,8 @@ mod divergence_combo_macro_eval_apply_closure;
 mod divergence_combo_macro_eval_buffer_undo;
 #[path = "divergence-combo-macro-gv.rs"]
 mod divergence_combo_macro_gv;
+#[path = "divergence-combo-mapconcat-mapcar-seq-marker-overlay-undo.rs"]
+mod divergence_combo_mapconcat_mapcar_seq_marker_overlay_undo;
 mod divergence_combo_mapconcat_seq_map_string_build;
 #[path = "divergence-combo-marker-insertion-type-overlay-undo.rs"]
 mod divergence_combo_marker_insertion_type_overlay_undo;
