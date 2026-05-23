@@ -2273,6 +2273,8 @@ mod divergence_combo_regex_matchdata_replace_overlay;
 #[path = "divergence-combo-regex-stress.rs"]
 mod divergence_combo_regex_stress;
 mod divergence_combo_regexp_match_replace_narrow_prop;
+#[path = "divergence-combo-register-marker-overlay-undo-narrow.rs"]
+mod divergence_combo_register_marker_overlay_undo_narrow;
 mod divergence_combo_rx_regexp_composition_deep;
 #[path = "divergence-combo-search-marker-undo.rs"]
 mod divergence_combo_search_marker_undo;
@@ -2319,6 +2321,8 @@ mod divergence_combo_textprop_search_sticky_change_deep;
 mod divergence_combo_textprop_search_undo;
 #[path = "divergence-combo-textprop-special-undo.rs"]
 mod divergence_combo_textprop_special_undo;
+#[path = "divergence-combo-thing-at-point-marker-overlay-undo-narrow.rs"]
+mod divergence_combo_thing_at_point_marker_overlay_undo_narrow;
 #[path = "divergence-combo-timer-process.rs"]
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-timer-process-time.rs"]
