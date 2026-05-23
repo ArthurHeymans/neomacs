@@ -2054,6 +2054,8 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-edge-cases.rs"]
 mod divergence_combo_edge_cases;
+#[path = "divergence-combo-error-recovery.rs"]
+mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-interop.rs"]
@@ -2076,6 +2078,8 @@ mod divergence_combo_search_marker_undo;
 mod divergence_combo_stress;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
+#[path = "divergence-combo-type-coercion.rs"]
+mod divergence_combo_type_coercion;
 #[path = "divergence-combo-window-buffer-process.rs"]
 mod divergence_combo_window_buffer_process;
 #[path = "divergence-compat-legacy.rs"]
