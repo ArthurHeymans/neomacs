@@ -2194,6 +2194,8 @@ mod divergence_combo_stdlib;
 mod divergence_combo_stress;
 #[path = "divergence-combo-stress-overlay-regex-undo.rs"]
 mod divergence_combo_stress_overlay_regex_undo;
+#[path = "divergence-combo-string-regexp-undo.rs"]
+mod divergence_combo_string_regexp_undo;
 #[path = "divergence-combo-subprocess-buffer.rs"]
 mod divergence_combo_subprocess_buffer;
 #[path = "divergence-combo-subprocess-tempbuf-encoding.rs"]
