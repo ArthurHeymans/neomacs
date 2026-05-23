@@ -2123,6 +2123,8 @@ mod divergence_combo_defmacro_eval_and_compile_expansion;
 mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-defstruct-eieio-interop.rs"]
 mod divergence_combo_defstruct_eieio_interop;
+#[path = "divergence-combo-defstruct-record-type-of-marker-overlay-undo.rs"]
+mod divergence_combo_defstruct_record_type_of_marker_overlay_undo;
 #[path = "divergence-combo-defun-defmacro-marker-overlay-undo.rs"]
 mod divergence_combo_defun_defmacro_marker_overlay_undo;
 #[path = "divergence-combo-defvar-defconst-make-local-marker-overlay-undo.rs"]
