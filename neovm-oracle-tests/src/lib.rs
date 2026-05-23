@@ -2208,6 +2208,8 @@ mod divergence_combo_window_buf_marker;
 mod divergence_combo_window_buffer_point;
 #[path = "divergence-combo-window-buffer-process.rs"]
 mod divergence_combo_window_buffer_process;
+#[path = "divergence-combo-window-frame-minibuf.rs"]
+mod divergence_combo_window_frame_minibuf;
 #[path = "divergence-combo-window-spatial.rs"]
 mod divergence_combo_window_spatial;
 #[path = "divergence-compat-legacy.rs"]
