@@ -2136,6 +2136,8 @@ mod divergence_macro_expansion_stress;
 mod divergence_macro_pcase_cllib;
 #[path = "divergence-map-patterns.rs"]
 mod divergence_map_patterns;
+#[path = "divergence-marker-point-deep.rs"]
+mod divergence_marker_point_deep;
 #[path = "divergence-marker-undo-deep.rs"]
 mod divergence_marker_undo_deep;
 #[path = "divergence-math-bignum-deep.rs"]
@@ -2284,6 +2286,8 @@ mod divergence_unicode_normalization;
 mod divergence_weak_hash_lifecycle;
 #[path = "divergence-whitespace-display-modes.rs"]
 mod divergence_whitespace_display_modes;
+#[path = "divergence-window-config-deep.rs"]
+mod divergence_window_config_deep;
 #[path = "divergence-window-frame-display.rs"]
 mod divergence_window_frame_display;
 #[path = "divergence-window-geometry.rs"]
