@@ -2268,6 +2268,8 @@ mod divergence_combo_type_coercion;
 mod divergence_combo_undo_boundary_deep;
 #[path = "divergence-combo-undo-deep-stress.rs"]
 mod divergence_combo_undo_deep_stress;
+#[path = "divergence-combo-undo-list-inspect.rs"]
+mod divergence_combo_undo_list_inspect;
 #[path = "divergence-combo-undo-mega-stress.rs"]
 mod divergence_combo_undo_mega_stress;
 #[path = "divergence-combo-undo-overlay-marker-stress.rs"]
