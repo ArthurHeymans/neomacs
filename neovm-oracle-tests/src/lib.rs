@@ -2215,6 +2215,8 @@ mod divergence_combo_match_data_replace_marker_overlay_undo;
 mod divergence_combo_match_register_syntax;
 #[path = "divergence-combo-match-string-data-marker-overlay-undo-replace.rs"]
 mod divergence_combo_match_string_data_marker_overlay_undo_replace;
+#[path = "divergence-combo-mega-all-subsystems-stress.rs"]
+mod divergence_combo_mega_all_subsystems_stress;
 #[path = "divergence-combo-mega-undo.rs"]
 mod divergence_combo_mega_undo;
 #[path = "divergence-combo-metaprogramming.rs"]
