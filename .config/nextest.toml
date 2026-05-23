@@ -1,8 +1,5 @@
 experimental = ["wrapper-scripts"]
 
-[test-groups]
-tui-serial = { max-threads = 1 }
-
 # Memory-limited wrapper: each test process gets an 8GB virtual address space limit.
 # Uses prlimit (RLIMIT_AS) so allocation failures produce a Rust abort with
 # backtrace instead of a silent SIGKILL from cgroup OOM killer.
