@@ -51,7 +51,8 @@ fn divergence_window_configuration() {
     assert_oracle_parity(
         r#"(let ((cfg (current-window-configuration)))
   (list (window-configuration-p cfg)
-        (window-configuration-frame cfg)))"#,
+        (framep (window-configuration-frame cfg))
+        (eq (window-configuration-frame cfg) (selected-frame))))"#,
     );
 }
 
