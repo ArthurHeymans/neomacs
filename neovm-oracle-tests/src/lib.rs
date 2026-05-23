@@ -2094,6 +2094,8 @@ mod divergence_eval_load_read;
 mod divergence_face_color_font;
 #[path = "divergence-face-custom-theme.rs"]
 mod divergence_face_custom_theme;
+#[path = "divergence-file-io-real.rs"]
+mod divergence_file_io_real;
 #[path = "divergence-file-ops-deep.rs"]
 mod divergence_file_ops_deep;
 #[path = "divergence-file-remote-tramp.rs"]
@@ -2142,6 +2144,8 @@ mod divergence_kmacro_persistence;
 mod divergence_lambda_apply_dispatch;
 #[path = "divergence-load-native-comp.rs"]
 mod divergence_load_native_comp;
+#[path = "divergence-macro-advice-real.rs"]
+mod divergence_macro_advice_real;
 #[path = "divergence-macro-expansion-stress.rs"]
 mod divergence_macro_expansion_stress;
 #[path = "divergence-macro-pcase-cllib.rs"]
