@@ -2175,6 +2175,8 @@ mod divergence_combo_format_time_float_arithmetic_deep;
 mod divergence_combo_fringe;
 #[path = "divergence-combo-fringe-display-overlay.rs"]
 mod divergence_combo_fringe_display_overlay;
+#[path = "divergence-combo-hash-table-record-marker-overlay-undo.rs"]
+mod divergence_combo_hash_table_record_marker_overlay_undo;
 mod divergence_combo_hook_run_add_remove_buffer_local;
 #[path = "divergence-combo-indent-fill-paragraph.rs"]
 mod divergence_combo_indent_fill_paragraph;
