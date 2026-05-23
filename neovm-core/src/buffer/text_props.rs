@@ -681,7 +681,16 @@ impl IntervalTree {
     }
 
     fn insert_default_at(&mut self, pos: usize, len: usize) {
-        if len == 0 || self.root.is_none() || pos >= self.len() {
+        if len == 0 || self.root.is_none() {
+            return;
+        }
+
+        let tree_len = self.len();
+        if pos >= tree_len {
+            if tree_len < pos {
+                self.append_default_interval(tree_len, pos);
+            }
+            self.append_default_interval(pos, pos + len);
             return;
         }
 

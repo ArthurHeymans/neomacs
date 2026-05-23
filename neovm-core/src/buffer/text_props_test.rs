@@ -449,6 +449,37 @@ fn adjust_insert_preserves_raw_boundaries_without_rebuilding_tree() {
     );
 }
 
+#[test]
+fn adjust_insert_beyond_trailing_property_preserves_insert_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 4, Value::symbol("part"), Value::symbol("state"));
+    table.put_property(5, 10, Value::symbol("part"), Value::symbol("before"));
+
+    table.adjust_for_insert(12, 8);
+    table.put_property(11, 19, Value::symbol("part"), Value::symbol("appended"));
+
+    // GNU `offset_intervals' still represents the default-property gap and
+    // the inserted text as separate interval nodes.  `put-text-property'
+    // updates both nodes but does not coalesce their now-equal plists.
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![
+            (0, 4, false),
+            (4, 5, true),
+            (5, 10, false),
+            (10, 11, true),
+            (11, 12, false),
+            (12, 19, false),
+        ]
+    );
+    let snapshot = table.intervals_snapshot();
+    assert_eq!(snapshot[2].start, 11);
+    assert_eq!(snapshot[2].end, 12);
+    assert_eq!(snapshot[3].start, 12);
+    assert_eq!(snapshot[3].end, 19);
+}
+
 // -----------------------------------------------------------------------
 // adjust_for_delete
 // -----------------------------------------------------------------------
