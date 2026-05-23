@@ -2052,12 +2052,16 @@ mod divergence_coding_process;
 mod divergence_combo_buffer_overlay;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
+#[path = "divergence-combo-macro-eieio-generic.rs"]
+mod divergence_combo_macro_eieio_generic;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-search-marker-undo.rs"]
 mod divergence_combo_search_marker_undo;
+#[path = "divergence-combo-window-buffer-process.rs"]
+mod divergence_combo_window_buffer_process;
 #[path = "divergence-compat-legacy.rs"]
 mod divergence_compat_legacy;
 #[path = "divergence-completion-frameworks.rs"]
