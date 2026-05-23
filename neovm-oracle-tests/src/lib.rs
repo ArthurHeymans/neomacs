@@ -2084,6 +2084,8 @@ mod divergence_combo_editing_session;
 mod divergence_combo_eieio_error_binding;
 #[path = "divergence-combo-eieio-inheritance-advice.rs"]
 mod divergence_combo_eieio_inheritance_advice;
+#[path = "divergence-combo-eieio-inheritance-method.rs"]
+mod divergence_combo_eieio_inheritance_method;
 #[path = "divergence-combo-encoding-buffer-marker.rs"]
 mod divergence_combo_encoding_buffer_marker;
 #[path = "divergence-combo-error-condition-unwind.rs"]
@@ -2186,6 +2188,8 @@ mod divergence_combo_type_coercion;
 mod divergence_combo_undo_overlay_marker_stress;
 #[path = "divergence-combo-undo-stress-marker-textprop.rs"]
 mod divergence_combo_undo_stress_marker_textprop;
+#[path = "divergence-combo-window-buf-marker.rs"]
+mod divergence_combo_window_buf_marker;
 #[path = "divergence-combo-window-buffer-point.rs"]
 mod divergence_combo_window_buffer_point;
 #[path = "divergence-combo-window-buffer-process.rs"]
