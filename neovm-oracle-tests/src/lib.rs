@@ -2054,6 +2054,10 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_eval_error_scope;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-combo-read-eval-circular.rs"]
+mod divergence_combo_read_eval_circular;
+#[path = "divergence-combo-search-marker-undo.rs"]
+mod divergence_combo_search_marker_undo;
 #[path = "divergence-compat-legacy.rs"]
 mod divergence_compat_legacy;
 #[path = "divergence-completion-frameworks.rs"]
