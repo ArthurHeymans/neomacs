@@ -2092,6 +2092,8 @@ mod divergence_combo_eval_error_scope;
 mod divergence_combo_excursion_marker_bufswitch;
 #[path = "divergence-combo-file-path-ops.rs"]
 mod divergence_combo_file_path_ops;
+#[path = "divergence-combo-final-stress.rs"]
+mod divergence_combo_final_stress;
 #[path = "divergence-combo-format-string-char.rs"]
 mod divergence_combo_format_string_char;
 #[path = "divergence-combo-interop.rs"]
@@ -2136,6 +2138,8 @@ mod divergence_combo_read_print_circle_hash_obarray;
 mod divergence_combo_read_print_hash;
 #[path = "divergence-combo-real-world.rs"]
 mod divergence_combo_real_world;
+#[path = "divergence-combo-record-type-eval-bytecomp.rs"]
+mod divergence_combo_record_type_eval_bytecomp;
 #[path = "divergence-combo-regex-matchdata-replace-overlay.rs"]
 mod divergence_combo_regex_matchdata_replace_overlay;
 #[path = "divergence-combo-regex-stress.rs"]
