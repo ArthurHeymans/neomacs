@@ -2062,6 +2062,8 @@ mod divergence_combo_dynbind_closure_eval_obarray;
 mod divergence_combo_edge_cases;
 #[path = "divergence-combo-eieio-error-binding.rs"]
 mod divergence_combo_eieio_error_binding;
+#[path = "divergence-combo-encoding-buffer-marker.rs"]
+mod divergence_combo_encoding_buffer_marker;
 #[path = "divergence-combo-error-recovery.rs"]
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
@@ -2084,6 +2086,8 @@ mod divergence_combo_overlay_textprop_narrow_undo;
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
 mod divergence_combo_read_eval_obarray;
+#[path = "divergence-combo-read-print-hash.rs"]
+mod divergence_combo_read_print_hash;
 #[path = "divergence-combo-real-world.rs"]
 mod divergence_combo_real_world;
 #[path = "divergence-combo-regex-stress.rs"]
