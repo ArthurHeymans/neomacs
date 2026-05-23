@@ -2308,6 +2308,9 @@ fn equal_value_inner(
             super::marker::marker_equal_logical_fields(&left)
                 == super::marker::marker_equal_logical_fields(&right)
         }
+        VecLikeType::Bignum => {
+            left.as_bignum().expect("left bignum") == right.as_bignum().expect("right bignum")
+        }
         VecLikeType::Overlay => {
             let Some(left_overlay) = left.as_overlay_data() else {
                 return false;
@@ -2527,6 +2530,9 @@ fn try_equal_value_inner(
     match left_type {
         VecLikeType::Marker => Ok(super::marker::marker_equal_logical_fields(&left)
             == super::marker::marker_equal_logical_fields(&right)),
+        VecLikeType::Bignum => {
+            Ok(left.as_bignum().expect("left bignum") == right.as_bignum().expect("right bignum"))
+        }
         VecLikeType::Overlay => {
             let Some(left_overlay) = left.as_overlay_data() else {
                 return Ok(false);

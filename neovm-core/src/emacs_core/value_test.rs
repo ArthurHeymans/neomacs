@@ -89,6 +89,34 @@ fn eql_compares_bignums_by_numeric_value() {
 }
 
 #[test]
+fn equal_compares_bignums_by_numeric_value() {
+    crate::test_utils::init_test_tracing();
+    with_test_heap(|| {
+        let left = Value::make_integer(
+            rug::Integer::parse("1267650600228229401496703205376")
+                .expect("valid bignum")
+                .into(),
+        );
+        let right = Value::make_integer(
+            rug::Integer::parse("1267650600228229401496703205376")
+                .expect("valid bignum")
+                .into(),
+        );
+        let different = Value::make_integer(
+            rug::Integer::parse("1267650600228229401496703205377")
+                .expect("valid bignum")
+                .into(),
+        );
+
+        assert!(left.is_bignum());
+        assert!(right.is_bignum());
+        assert!(!eq_value(&left, &right));
+        assert!(equal_value(&left, &right, 0));
+        assert!(!equal_value(&left, &different, 0));
+    });
+}
+
+#[test]
 fn make_int_uses_gnu_fixnum_boundary() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
