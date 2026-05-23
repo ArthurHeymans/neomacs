@@ -115,8 +115,8 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_insert(
                 &mut ul,
-                insert_pos,
-                byte_len,
+                insert_char_pos,
+                char_len,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -390,15 +390,15 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_insert(
                 &mut ul,
-                start + deleted_text.sbytes(),
-                new_byte_len,
+                start_char + deleted_text.schars(),
+                new_char_len,
                 self.undo_state.point_before_command_or_undo(),
             );
             undo::undo_list_record_delete(
                 &mut ul,
-                start,
+                start_char,
                 deleted_text,
-                old_pt_byte,
+                old_pt,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -471,9 +471,9 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&ul) {
             undo::undo_list_record_delete(
                 &mut ul,
-                start,
+                start_char,
                 deleted_text,
-                self.pt_byte,
+                self.pt,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
@@ -555,19 +555,20 @@ impl Buffer {
             self.undo_prepare_change(start, self.pt_byte);
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
+                let start_char = self.text.emacs_byte_to_char(start);
                 let deleted =
                     lisp_string_from_buffer_bytes(region_bytes.clone(), self.get_multibyte());
                 undo::undo_list_record_delete(
                     &mut ul,
-                    start,
+                    start_char,
                     deleted,
-                    self.pt_byte,
+                    self.pt,
                     self.undo_state.point_before_command_or_undo(),
                 );
                 undo::undo_list_record_insert(
                     &mut ul,
-                    start,
-                    replacement_bytes.len(),
+                    start_char,
+                    changed_chars,
                     self.undo_state.point_before_command_or_undo(),
                 );
                 self.set_undo_list(ul);
@@ -660,15 +661,15 @@ impl Buffer {
             let deleted = lisp_string_from_buffer_bytes(old_span, self.get_multibyte());
             undo::undo_list_record_delete(
                 &mut undo_list,
-                start1_byte,
+                start1_char,
                 deleted,
-                self.pt_byte,
+                self.pt,
                 self.undo_state.point_before_command_or_undo(),
             );
             undo::undo_list_record_insert(
                 &mut undo_list,
-                start1_byte,
-                replacement.len(),
+                start1_char,
+                end2_char - start1_char,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(undo_list);

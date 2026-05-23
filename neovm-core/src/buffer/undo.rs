@@ -35,8 +35,8 @@ pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
     undo_list.is_t()
 }
 
-/// Record that text was inserted at byte position `beg` with byte length
-/// `len`.  Positions stored in the list are 1-indexed.
+/// Record that text was inserted at character position `beg` with character
+/// length `len`.  Positions stored in the list are 1-indexed.
 ///
 /// If we are right at an undo boundary (head is nil or list is empty)
 /// and `pt` != `beg`, a cursor-position entry is recorded first.
@@ -95,12 +95,12 @@ pub fn undo_list_record_insert(
     restore_scratch_gc_roots(saved);
 }
 
-/// Record a deletion.  `beg` is the 0-indexed byte position, `text` is
-/// the deleted string, `pt` is the 0-indexed cursor byte position at
+/// Record a deletion.  `beg` is the 0-indexed character position, `text` is
+/// the deleted string, `pt` is the 0-indexed cursor character position at
 /// the time of deletion.
 ///
 /// The stored position is 1-indexed and negative when `pt` was at the
-/// END of the deleted region (i.e. `pt == beg + text.len()`).
+/// END of the deleted region (i.e. `pt == beg + SCHARS (text)`).
 pub fn undo_list_record_delete(
     undo_list: &mut Value,
     beg: usize,
@@ -121,7 +121,7 @@ pub fn undo_list_record_delete(
     }
 
     let pos1 = (beg + 1) as i64;
-    let stored_pos = if pt == beg + text.sbytes() {
+    let stored_pos = if pt == beg + text.schars() {
         -pos1
     } else {
         pos1

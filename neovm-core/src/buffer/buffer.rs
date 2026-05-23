@@ -4056,14 +4056,14 @@ impl BufferManager {
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.pt_byte));
+            .set_point_before_command_or_undo(Some(buf.pt));
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.pt_byte));
+            .set_point_before_command_or_undo(Some(buf.pt));
         Some(())
     }
 

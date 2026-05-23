@@ -77,6 +77,14 @@ fn expect_list_like(value: &Value) -> Result<(), Flow> {
     }
 }
 
+fn char_pos1_to_char0(pos1: i64) -> usize {
+    (pos1 - 1).max(0) as usize
+}
+
+fn char_pos1_to_byte_clamped(buf: &crate::buffer::Buffer, pos1: i64) -> usize {
+    buf.char_to_byte_clamped(char_pos1_to_char0(pos1))
+}
+
 // ---------------------------------------------------------------------------
 // Pure builtins
 // ---------------------------------------------------------------------------
@@ -177,13 +185,10 @@ fn primitive_undo_inner(
 
             // Integer POS: goto-char
             if let Some(pos1) = entry.as_fixnum() {
-                let pos = (pos1 - 1).max(0) as usize;
-                let clamped = ctx
-                    .buffers
-                    .get(buf_id)
-                    .map(|b| pos.min(b.text.len()))
-                    .unwrap_or(0);
-                ctx.buffers.goto_buffer_byte(buf_id, clamped);
+                if let Some(buf) = ctx.buffers.get(buf_id) {
+                    let byte = char_pos1_to_byte_clamped(buf, pos1);
+                    ctx.buffers.goto_buffer_byte(buf_id, byte);
+                }
                 continue;
             }
 
@@ -198,10 +203,10 @@ fn primitive_undo_inner(
             match (car.kind(), cdr.kind()) {
                 // (BEG . END) both integers — undo an insertion by deleting.
                 (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
-                    let beg = (beg1 - 1).max(0) as usize;
-                    let end = (end1 - 1).max(0) as usize;
                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                        if beg < buf.begv_byte || end > buf.zv_byte {
+                        let point_min = buf.point_min_char() as i64 + 1;
+                        let point_max = buf.point_max_char() as i64 + 1;
+                        if beg1 < point_min || end1 > point_max {
                             return Err(signal(
                                 "error",
                                 vec![Value::string(
@@ -209,8 +214,8 @@ fn primitive_undo_inner(
                                 )],
                             ));
                         }
-                        let clamped_end = end.min(buf.text.len());
-                        let clamped_beg = beg.min(clamped_end);
+                        let clamped_beg = char_pos1_to_byte_clamped(buf, beg1);
+                        let clamped_end = char_pos1_to_byte_clamped(buf, end1);
                         ctx.buffers
                             .delete_buffer_region(buf_id, clamped_beg, clamped_end);
                     }
@@ -220,9 +225,11 @@ fn primitive_undo_inner(
                     let ls = car
                         .as_lisp_string()
                         .expect("ValueKind::String must carry LispString payload");
-                    let pos = (pos1.abs() - 1).max(0) as usize;
                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                        if pos < buf.begv_byte || pos > buf.zv_byte {
+                        let apos1 = pos1.abs();
+                        let point_min = buf.point_min_char() as i64 + 1;
+                        let point_max = buf.point_max_char() as i64 + 1;
+                        if apos1 < point_min || apos1 > point_max {
                             return Err(signal(
                                 "error",
                                 vec![Value::string(
@@ -230,7 +237,7 @@ fn primitive_undo_inner(
                                 )],
                             ));
                         }
-                        let clamped = pos.min(buf.text.len());
+                        let clamped = char_pos1_to_byte_clamped(buf, apos1);
                         ctx.buffers.goto_buffer_byte(buf_id, clamped);
                         ctx.buffers.insert_lisp_string_into_buffer(buf_id, ls);
                         // If POS was negative, point should be at end of
@@ -254,10 +261,14 @@ fn primitive_undo_inner(
                 (ValueKind::Nil, ValueKind::Fixnum(len1)) => {
                     let len = len1.max(0) as usize;
                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                        if buf.pt_byte >= len {
-                            let del_start = buf.pt_byte - len;
-                            let del_end = buf.pt_byte;
-                            if del_start >= buf.begv_byte && del_end <= buf.zv_byte {
+                        if buf.pt >= len {
+                            let del_start_char = buf.pt - len;
+                            let del_end_char = buf.pt;
+                            let del_start = buf.char_to_byte_clamped(del_start_char);
+                            let del_end = buf.char_to_byte_clamped(del_end_char);
+                            if del_start_char >= buf.point_min_char()
+                                && del_end_char <= buf.point_max_char()
+                            {
                                 ctx.buffers.goto_buffer_byte(buf_id, del_start);
                                 ctx.buffers.delete_buffer_region(buf_id, del_start, del_end);
                             }
@@ -335,10 +346,10 @@ fn primitive_undo_inner(
                             if let (Some(start1), Some(end1)) =
                                 (start_v.as_fixnum(), end_v.as_fixnum())
                             {
-                                let start_byte = (start1 - 1).max(0) as usize;
-                                let end_byte = (end1 - 1).max(0) as usize;
                                 if let Some(buf) = ctx.buffers.get(buf_id) {
-                                    if start_byte < buf.begv_byte || end_byte > buf.zv_byte {
+                                    let point_min = buf.point_min_char() as i64 + 1;
+                                    let point_max = buf.point_max_char() as i64 + 1;
+                                    if start1 < point_min || end1 > point_max {
                                         return Err(signal(
                                             "error",
                                             vec![Value::string(
