@@ -2300,6 +2300,26 @@ mod divergence_combo_window_frame_minibuf;
 mod divergence_combo_window_point_marker_scroll;
 #[path = "divergence-combo-window-spatial.rs"]
 mod divergence_combo_window_spatial;
+#[path = "divergence-combo-catch-throw-unwind-buffer-deep.rs"]
+mod divergence_combo_catch_throw_unwind_buffer_deep;
+#[path = "divergence-combo-syntax-scan-narrow-prop-deep.rs"]
+mod divergence_combo_syntax_scan_narrow_prop_deep;
+#[path = "divergence-combo-struct-print-read-hash-eval.rs"]
+mod divergence_combo_struct_print_read_hash_eval;
+#[path = "divergence-combo-obarray-intern-symbol-deep.rs"]
+mod divergence_combo_obarray_intern_symbol_deep;
+#[path = "divergence-combo-buflocal-default-setq-kill-deep.rs"]
+mod divergence_combo_buflocal_default_setq_kill_deep;
+#[path = "divergence-combo-plist-hash-symbol-eval-deep.rs"]
+mod divergence_combo_plist_hash_symbol_eval_deep;
+#[path = "divergence-combo-regexp-match-replace-narrow-prop.rs"]
+mod divergence_combo_regexp_match_replace_narrow_prop;
+#[path = "divergence-combo-char-table-syntax-category-deep.rs"]
+mod divergence_combo_char_table_syntax_category_deep;
+#[path = "divergence-combo-string-regexp-multibyte-coding-deep.rs"]
+mod divergence_combo_string_regexp_multibyte_coding_deep;
+#[path = "divergence-combo-keymap-define-lookup-where-is.rs"]
+mod divergence_combo_keymap_define_lookup_where_is;
 #[path = "divergence-compat-legacy.rs"]
 mod divergence_compat_legacy;
 #[path = "divergence-completion-frameworks.rs"]
