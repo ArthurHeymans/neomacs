@@ -2042,6 +2042,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
+#[path = "divergence-completion-frameworks.rs"]
+mod divergence_completion_frameworks;
 #[path = "divergence-completion-ring-deep.rs"]
 mod divergence_completion_ring_deep;
 #[path = "divergence-custom-theme-deep.rs"]
@@ -2154,6 +2156,8 @@ mod divergence_net_thread_json_xml;
 mod divergence_net_xml_dom_mail;
 #[path = "divergence-network-mail-web.rs"]
 mod divergence_network_mail_web;
+#[path = "divergence-network-tls-url.rs"]
+mod divergence_network_tls_url;
 #[path = "divergence-obarray-symbol-deep.rs"]
 mod divergence_obarray_symbol_deep;
 #[path = "divergence-overlay-deep.rs"]
