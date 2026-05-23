@@ -2010,6 +2010,8 @@ mod divergence_bignum_fixnum_deep;
 mod divergence_bookmark_register_text;
 #[path = "divergence-buffer-edit-deep.rs"]
 mod divergence_buffer_edit_deep;
+#[path = "divergence-buffer-edit-real.rs"]
+mod divergence_buffer_edit_real;
 #[path = "divergence-buffer-editing.rs"]
 mod divergence_buffer_editing;
 #[path = "divergence-buffer-local-killring-fileio.rs"]
@@ -2076,6 +2078,8 @@ mod divergence_eieio_oop;
 mod divergence_error_conditions_deep;
 #[path = "divergence-error-signaling-deep.rs"]
 mod divergence_error_signaling_deep;
+#[path = "divergence-eval-apply-real.rs"]
+mod divergence_eval_apply_real;
 #[path = "divergence-eval-deep-edge.rs"]
 mod divergence_eval_deep_edge;
 #[path = "divergence-eval-load-read.rs"]
