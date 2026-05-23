@@ -2060,10 +2060,14 @@ mod divergence_combo_eval_error_scope;
 mod divergence_combo_interop;
 #[path = "divergence-combo-macro-eieio-generic.rs"]
 mod divergence_combo_macro_eieio_generic;
+#[path = "divergence-combo-metaprogramming.rs"]
+mod divergence_combo_metaprogramming;
 #[path = "divergence-combo-operations.rs"]
 mod divergence_combo_operations;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
+#[path = "divergence-combo-real-world.rs"]
+mod divergence_combo_real_world;
 #[path = "divergence-combo-regex-stress.rs"]
 mod divergence_combo_regex_stress;
 #[path = "divergence-combo-search-marker-undo.rs"]
