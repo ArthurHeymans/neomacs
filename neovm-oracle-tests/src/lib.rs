@@ -2326,6 +2326,8 @@ mod divergence_combo_syntax_scan_narrow_prop_deep;
 mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-syntax-sexp-textprop-narrow.rs"]
 mod divergence_combo_syntax_sexp_textprop_narrow;
+#[path = "divergence-combo-syntax-table-marker-overlay-undo.rs"]
+mod divergence_combo_syntax_table_marker_overlay_undo;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
 #[path = "divergence-combo-textprop-interval-undo.rs"]
