@@ -1475,6 +1475,7 @@ fn test_pos_visible_in_window_p_eval_window_validation() {
 fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-pos", 160, 64, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
@@ -1511,6 +1512,30 @@ fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() 
     )
     .unwrap();
     assert_eq!(super::super::print::print_value(&result), "(0 16)");
+}
+
+#[test]
+fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval.frames.create_frame("xdisp-batch-pos", 160, 64, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("abc\ndef\n");
+        buf.goto_byte(1);
+    }
+
+    let implicit = builtin_pos_visible_in_window_p_ctx(&mut eval, vec![Value::fixnum(1)]).unwrap();
+    assert!(implicit.is_nil());
+
+    let explicit = builtin_pos_visible_in_window_p_ctx(
+        &mut eval,
+        vec![Value::fixnum(1), Value::make_window(selected_window.0)],
+    )
+    .unwrap();
+    assert!(explicit.is_nil());
 }
 
 #[test]

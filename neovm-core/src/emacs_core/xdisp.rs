@@ -2657,6 +2657,16 @@ pub(crate) fn builtin_pos_visible_in_window_p_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    if eval.noninteractive() {
+        expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
+        validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
+        if let Some(pos) = args.first() {
+            if !pos.is_nil() && !pos.is_t() && !pos.is_symbol_named("t") {
+                expect_integer_or_marker(pos)?;
+            }
+        }
+        return Ok(Value::NIL);
+    }
     pos_visible_in_window_p_impl(&mut eval.frames, &mut eval.buffers, args)
 }
 
