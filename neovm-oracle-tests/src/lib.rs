@@ -2130,6 +2130,8 @@ mod divergence_combo_face_font_display;
 mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-final-stress.rs"]
 mod divergence_combo_final_stress;
+#[path = "divergence-combo-format-print-read-obj.rs"]
+mod divergence_combo_format_print_read_obj;
 #[path = "divergence-combo-format-string-char.rs"]
 mod divergence_combo_format_string_char;
 #[path = "divergence-combo-fringe.rs"]
