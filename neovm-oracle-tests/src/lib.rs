@@ -2079,6 +2079,8 @@ mod divergence_combo_buflocal_indirect_kill_undo_evaporate;
 mod divergence_combo_buflocal_narrow_closure_eval;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
 mod divergence_combo_buflocal_narrow_marker;
+#[path = "divergence-combo-buflocal-setq-set-let-marker-overlay-undo.rs"]
+mod divergence_combo_buflocal_setq_set_let_marker_overlay_undo;
 mod divergence_combo_catch_throw_unwind_buffer_deep;
 mod divergence_combo_char_table_syntax_category_deep;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
