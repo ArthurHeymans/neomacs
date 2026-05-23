@@ -2068,6 +2068,8 @@ mod divergence_combo_chartab_syntax_category;
 mod divergence_combo_charwidth_display_fill;
 #[path = "divergence-combo-cl-loop-seq-accumulate.rs"]
 mod divergence_combo_cl_loop_seq_accumulate;
+#[path = "divergence-combo-cl-pcase-rx-thread.rs"]
+mod divergence_combo_cl_pcase_rx_thread;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 #[path = "divergence-combo-data-pipeline.rs"]
