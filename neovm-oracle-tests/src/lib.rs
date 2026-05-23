@@ -2198,6 +2198,8 @@ mod divergence_combo_keymap_define_lookup_where_is;
 mod divergence_combo_kill_ring_yank_undo_proprs_deep;
 #[path = "divergence-combo-list-seq-map.rs"]
 mod divergence_combo_list_seq_map;
+#[path = "divergence-combo-looking-at-skip-chars-regexp-opt-marker-overlay-undo.rs"]
+mod divergence_combo_looking_at_skip_chars_regexp_opt_marker_overlay_undo;
 #[path = "divergence-combo-loop-seq-generator.rs"]
 mod divergence_combo_loop_seq_generator;
 #[path = "divergence-combo-macro-compile-eval.rs"]
