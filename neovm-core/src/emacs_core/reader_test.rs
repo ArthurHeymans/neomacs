@@ -3452,6 +3452,26 @@ fn read_from_string_hash_syntax() {
 }
 
 #[test]
+fn read_from_string_c_style_hex_token_is_symbol_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("0xc0")]).unwrap();
+    assert_eq!(result.cons_cdr(), Value::fixnum(4));
+    let symbol = result.cons_car();
+    assert!(
+        symbol.as_symbol_id().is_some() && resolve_sym(symbol.as_symbol_id().unwrap()) == "0xc0",
+        "GNU reads ordinary 0x-prefixed tokens as symbols, got {symbol:?}"
+    );
+
+    let hash_x = builtin_read_from_string(&mut ev, vec![Value::string("#xC0")]).unwrap();
+    assert_eq!(hash_x.cons_car(), Value::fixnum(192));
+
+    let hash_radix = builtin_read_from_string(&mut ev, vec![Value::string("#16rC0")]).unwrap();
+    assert_eq!(hash_radix.cons_car(), Value::fixnum(192));
+}
+
+#[test]
 fn read_from_string_hash_space_payload_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

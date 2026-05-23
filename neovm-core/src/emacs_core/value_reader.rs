@@ -1990,13 +1990,6 @@ impl<'a> Reader<'a> {
                     }
                 }
 
-                // Hex integer: 0xFF
-                if token_text.starts_with("0x") || token_text.starts_with("0X") {
-                    if let Ok(n) = i64::from_str_radix(&token_text[2..], 16) {
-                        return Ok(Value::make_integer(rug::Integer::from(n)));
-                    }
-                }
-
                 // t and nil
                 if token_text == "t" {
                     return Ok(Value::T);
