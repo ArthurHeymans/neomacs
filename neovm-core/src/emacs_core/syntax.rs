@@ -3983,24 +3983,8 @@ pub(crate) fn builtin_parse_partial_sexp(
         ));
     }
 
-    let from = match args[0].kind() {
-        ValueKind::Fixnum(n) => n,
-        other => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("number-or-marker-p"), args[0]],
-            ));
-        }
-    };
-    let to = match args[1].kind() {
-        ValueKind::Fixnum(n) => n,
-        other => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("number-or-marker-p"), args[1]],
-            ));
-        }
-    };
+    let from = super::position::fix_position_eval(eval, &args[0])?;
+    let to = super::position::fix_position_eval(eval, &args[1])?;
 
     if to < from {
         return Err(signal(
@@ -4013,6 +3997,14 @@ pub(crate) fn builtin_parse_partial_sexp(
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if from < point_min || from > point_max || to < point_min || to > point_max {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        ));
+    }
     let table = SyntaxTable::for_buffer(buf);
     let target_depth = match args.get(2) {
         Some(v) if !v.is_nil() => match v.kind() {

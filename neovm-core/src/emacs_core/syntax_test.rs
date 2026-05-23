@@ -1367,6 +1367,70 @@ fn parse_partial_sexp_baseline_shapes() {
 }
 
 #[test]
+fn parse_partial_sexp_accepts_marker_positions_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("abc");
+    }
+
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let from = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buffer_id,
+        1,
+        false,
+    );
+    let to = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut eval.buffers,
+        buffer_id,
+        4,
+        false,
+    );
+
+    let state = builtin_parse_partial_sexp(&mut eval, vec![from, to]).unwrap();
+    assert_eq!(
+        state,
+        Value::list(vec![
+            Value::fixnum(0),
+            Value::NIL,
+            Value::fixnum(1),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(0),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+        ])
+    );
+}
+
+#[test]
+fn parse_partial_sexp_rejects_non_integer_positions_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let err = builtin_parse_partial_sexp(&mut eval, vec![Value::make_float(1.2), Value::fixnum(1)])
+        .unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(
+                sig.symbol,
+                crate::emacs_core::intern::intern("wrong-type-argument")
+            );
+            assert_eq!(
+                sig.data.first(),
+                Some(&Value::symbol("integer-or-marker-p"))
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+#[test]
 fn parse_partial_sexp_tracks_completed_sexp_per_nesting_level_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
