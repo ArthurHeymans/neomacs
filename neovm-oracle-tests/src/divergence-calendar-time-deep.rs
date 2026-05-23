@@ -127,11 +127,13 @@ fn divergence_time_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity_with_bootstrap(
-        r#"(let ((now (current-time)))
+        r#"(let ((now (current-time))
+        (fixed '(27153 25741 493127 0)))
   (list (listp now)
-        (time-add now 100)
-        (time-subtract now 50)
-        (time-equal-p now now)
-        (time-less-p now (time-add now 1)))) "#,
+        (= (length now) 4)
+        (time-add fixed 100)
+        (time-subtract fixed 50)
+        (time-equal-p fixed fixed)
+        (time-less-p fixed (time-add fixed 1)))) "#,
     );
 }

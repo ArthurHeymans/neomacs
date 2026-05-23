@@ -3318,9 +3318,6 @@ impl Context {
         obarray.set_symbol_value("load-in-progress", Value::NIL);
         // Process/daemon C variables (process.c)
         obarray.set_symbol_value("internal--daemon-sockname", Value::NIL);
-        // Byte compiler variables (bytecomp.el defcustom, but referenced
-        // at runtime by legacy packages like evil-escape via ad-add-advice)
-        obarray.set_symbol_value("byte-compile-warnings", Value::T);
         // Other missing C variables cus-start.el checks
         obarray.set_symbol_value("history-length", Value::fixnum(100));
         obarray.make_special("history-length");
