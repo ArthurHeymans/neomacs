@@ -2208,6 +2208,8 @@ mod divergence_combo_subprocess_tempbuf_encoding;
 mod divergence_combo_subr_cl_lib_deep;
 #[path = "divergence-combo-subr-seq-record.rs"]
 mod divergence_combo_subr_seq_record;
+#[path = "divergence-combo-symbol-print-read.rs"]
+mod divergence_combo_symbol_print_read;
 #[path = "divergence-combo-syntax-sexp-nav.rs"]
 mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-syntax-sexp-textprop-narrow.rs"]
