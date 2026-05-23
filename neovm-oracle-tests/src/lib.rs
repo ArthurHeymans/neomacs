@@ -2233,6 +2233,8 @@ mod divergence_combo_operations;
 mod divergence_combo_overlap_undo_deep;
 #[path = "divergence-combo-overlay-advanced.rs"]
 mod divergence_combo_overlay_advanced;
+#[path = "divergence-combo-overlay-priority-marker-undo.rs"]
+mod divergence_combo_overlay_priority_marker_undo;
 mod divergence_combo_overlay_priority_overlap_evaporate_deep;
 #[path = "divergence-combo-overlay-textprop-marker-mega.rs"]
 mod divergence_combo_overlay_textprop_marker_mega;
