@@ -194,7 +194,6 @@ fn resolve_env_log_file() -> Option<std::path::PathBuf> {
     None
 }
 
-
 fn default_layer(target: LogTarget) -> Option<BoxedLayer> {
     match target {
         LogTarget::Stdout => Some(
