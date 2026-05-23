@@ -2248,6 +2248,8 @@ mod divergence_combo_textprop_interval_undo;
 mod divergence_combo_textprop_overlay_face;
 #[path = "divergence-combo-textprop-search-undo.rs"]
 mod divergence_combo_textprop_search_undo;
+#[path = "divergence-combo-textprop-special-undo.rs"]
+mod divergence_combo_textprop_special_undo;
 #[path = "divergence-combo-timer-process.rs"]
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-timer-process-time.rs"]
