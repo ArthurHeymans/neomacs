@@ -2078,6 +2078,8 @@ mod divergence_combo_error_condition_unwind;
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
+#[path = "divergence-combo-file-path-ops.rs"]
+mod divergence_combo_file_path_ops;
 #[path = "divergence-combo-format-string-char.rs"]
 mod divergence_combo_format_string_char;
 #[path = "divergence-combo-interop.rs"]
@@ -2104,6 +2106,8 @@ mod divergence_combo_milestone_100;
 mod divergence_combo_operations;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
 mod divergence_combo_overlay_textprop_narrow_undo;
+#[path = "divergence-combo-process-pipe-filter.rs"]
+mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
