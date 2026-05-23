@@ -1868,9 +1868,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
             bytes
         };
         return Ok(Value::heap_string(
-            crate::heap_types::LispString::from_emacs_bytes(
-                crate::emacs_core::emacs_char::str_to_multibyte(&bytes),
-            ),
+            crate::heap_types::LispString::from_unibyte(bytes),
         ));
     }
     if matches!(coding_system_family(&coding), "utf-8" | "utf-8-emacs") {
