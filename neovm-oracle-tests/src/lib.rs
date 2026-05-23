@@ -2022,6 +2022,8 @@ mod divergence_buffer_management;
 mod divergence_buffer_manip_rect;
 #[path = "divergence-buffer-motion-search.rs"]
 mod divergence_buffer_motion_search;
+#[path = "divergence-bufferlocal-frame-deep.rs"]
+mod divergence_bufferlocal_frame_deep;
 #[path = "divergence-bytecomp-deep.rs"]
 mod divergence_bytecomp_deep;
 #[path = "divergence-calendar-time-deep.rs"]
@@ -2192,6 +2194,8 @@ mod divergence_print_read_circle;
 mod divergence_process_shell;
 #[path = "divergence-process-shell-deep.rs"]
 mod divergence_process_shell_deep;
+#[path = "divergence-process-signal-deep.rs"]
+mod divergence_process_signal_deep;
 #[path = "divergence-profiling-memory.rs"]
 mod divergence_profiling_memory;
 #[path = "divergence-project-xref-vcs.rs"]
