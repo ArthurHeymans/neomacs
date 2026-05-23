@@ -2082,6 +2082,8 @@ mod divergence_combo_cl_seq_loop;
 mod divergence_combo_comment_fill_indent;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
+#[path = "divergence-combo-deep-undo-stress-2.rs"]
+mod divergence_combo_deep_undo_stress_2;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
 mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-defstruct-eieio-interop.rs"]
@@ -2104,6 +2106,8 @@ mod divergence_combo_eieio_hash_struct;
 mod divergence_combo_eieio_inheritance_advice;
 #[path = "divergence-combo-eieio-inheritance-method.rs"]
 mod divergence_combo_eieio_inheritance_method;
+#[path = "divergence-combo-eieio-process-advice.rs"]
+mod divergence_combo_eieio_process_advice;
 #[path = "divergence-combo-encoding-buffer-marker.rs"]
 mod divergence_combo_encoding_buffer_marker;
 #[path = "divergence-combo-encoding-multibyte-char.rs"]

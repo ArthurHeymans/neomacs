@@ -4,6 +4,7 @@
 //! available on PATH (or via `NEOVM_FORCE_ORACLE_PATH`) and a Neomacs
 //! release binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH`).
 
+use colored::Colorize;
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -481,8 +482,10 @@ fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
     if neovm == oracle {
         return;
     }
+    let neo_label = "NEO Emacs:".red().bold().to_string();
+    let gnu_label = "GNU Emacs:".green().bold().to_string();
     panic!(
-        "oracle parity mismatch for form: {form}\n  \x1b[31;1mNEO Emacs:\x1b[0m  {neovm}\n  \x1b[32;1mGNU Emacs:\x1b[0m  {oracle}"
+        "oracle parity mismatch for form: {form}\n  {neo_label}  {neovm}\n  {gnu_label}  {oracle}"
     );
 }
 

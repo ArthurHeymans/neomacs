@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Oracle-backed Elisp parity tests for NeoVM"
 
 [dependencies]
+colored.workspace = true
 libc.workspace = true
 proptest.workspace = true
 tempfile.workspace = true
