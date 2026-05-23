@@ -2203,6 +2203,8 @@ mod divergence_combo_macro_gv;
 mod divergence_combo_mapconcat_seq_map_string_build;
 #[path = "divergence-combo-marker-insertion-type-overlay-undo.rs"]
 mod divergence_combo_marker_insertion_type_overlay_undo;
+#[path = "divergence-combo-marker-operations-overlay-undo.rs"]
+mod divergence_combo_marker_operations_overlay_undo;
 #[path = "divergence-combo-marker-point-region-undo.rs"]
 mod divergence_combo_marker_point_region_undo;
 #[path = "divergence-combo-marker-type-overlay-undo-narrow-buflocal.rs"]
