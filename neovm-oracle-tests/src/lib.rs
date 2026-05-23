@@ -2060,6 +2060,8 @@ mod divergence_combo_buflocal_narrow_closure_eval;
 mod divergence_combo_buflocal_narrow_marker;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
 mod divergence_combo_chartab_syntax_category;
+#[path = "divergence-combo-charwidth-display-fill.rs"]
+mod divergence_combo_charwidth_display_fill;
 #[path = "divergence-combo-cl-loop-seq-accumulate.rs"]
 mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-comment-fill-indent.rs"]
@@ -2158,6 +2160,8 @@ mod divergence_combo_stress_overlay_regex_undo;
 mod divergence_combo_subprocess_buffer;
 #[path = "divergence-combo-subprocess-tempbuf-encoding.rs"]
 mod divergence_combo_subprocess_tempbuf_encoding;
+#[path = "divergence-combo-subr-cl-lib-deep.rs"]
+mod divergence_combo_subr_cl_lib_deep;
 #[path = "divergence-combo-syntax-sexp-nav.rs"]
 mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-syntax-sexp-textprop-narrow.rs"]
