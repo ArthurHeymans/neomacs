@@ -2086,6 +2086,8 @@ mod divergence_hash_struct_records;
 mod divergence_help_apropos_completion;
 #[path = "divergence-image-operations.rs"]
 mod divergence_image_operations;
+#[path = "divergence-image-svg-deep.rs"]
+mod divergence_image_svg_deep;
 #[path = "divergence-image-widget-display.rs"]
 mod divergence_image_widget_display;
 #[path = "divergence-introspection-version.rs"]
@@ -2182,6 +2184,8 @@ mod divergence_stress_combo_2;
 mod divergence_stress_large_deep;
 #[path = "divergence-string-ops.rs"]
 mod divergence_string_ops;
+#[path = "divergence-string-ops-deep.rs"]
+mod divergence_string_ops_deep;
 #[path = "divergence-subr-bytecode-deep.rs"]
 mod divergence_subr_bytecode_deep;
 #[path = "divergence-symbol-reader-deep.rs"]
