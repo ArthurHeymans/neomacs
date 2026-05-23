@@ -2054,6 +2054,8 @@ mod divergence_display_table_glyph;
 mod divergence_eieio_method_deep;
 #[path = "divergence-eieio-oop.rs"]
 mod divergence_eieio_oop;
+#[path = "divergence-error-conditions-deep.rs"]
+mod divergence_error_conditions_deep;
 #[path = "divergence-error-signaling-deep.rs"]
 mod divergence_error_signaling_deep;
 #[path = "divergence-eval-deep-edge.rs"]
@@ -2176,6 +2178,8 @@ mod divergence_rx_pcase_pattern;
 mod divergence_rx_regex_builder;
 #[path = "divergence-search-charfold-occur.rs"]
 mod divergence_search_charfold_occur;
+#[path = "divergence-seq-cl-deep.rs"]
+mod divergence_seq_cl_deep;
 #[path = "divergence-sequence-collections.rs"]
 mod divergence_sequence_collections;
 #[path = "divergence-sort-type-predicates.rs"]
