@@ -1273,6 +1273,35 @@ fn scan_lists_depth_exits_containing_list() {
 }
 
 #[test]
+fn scan_lists_unbalanced_signal_carries_gnu_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("(foo (bar baz) quux)");
+    }
+
+    match builtin_scan_lists(
+        &mut eval,
+        vec![Value::fixnum(1), Value::fixnum(1), Value::fixnum(1)],
+    ) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "scan-error");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::string("Unbalanced parentheses"),
+                    Value::fixnum(1),
+                    Value::fixnum(21),
+                ]
+            );
+        }
+        other => panic!("expected scan-error signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn syntax_after_returns_descriptor_and_nil_out_of_range() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

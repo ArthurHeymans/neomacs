@@ -1044,13 +1044,14 @@ fn scan_lists_with_options(
     count: i64,
     initial_depth: i64,
     honor_properties: bool,
-) -> Result<Option<usize>, String> {
+) -> Result<Option<usize>, ScanListError> {
     let chars = buffer_chars_in_range(buf, 0, buf.total_bytes());
     let mut idx = from;
     let start = buf.point_min_char();
     let stop = buf.point_max_char();
     let mut depth = initial_depth;
     let min_depth = if depth > 0 { 0 } else { depth };
+    let mut last_good = from;
 
     if count > 0 {
         let mut remaining = count;
@@ -1061,6 +1062,9 @@ fn scan_lists_with_options(
                 let class =
                     effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties)
                         .class;
+                if depth == min_depth {
+                    last_good = idx;
+                }
                 idx += 1;
 
                 match class {
@@ -1078,9 +1082,7 @@ fn scan_lists_with_options(
                             break;
                         }
                         if depth < min_depth {
-                            return Err(
-                                "Scan error: containing expression ends prematurely".to_string()
-                            );
+                            return Err(ScanListError::containing_ends_prematurely(last_good, idx));
                         }
                     }
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
@@ -1093,11 +1095,12 @@ fn scan_lists_with_options(
                             honor_properties,
                             ch,
                             class,
-                        )?;
+                        )
+                        .map_err(|_| ScanListError::unbalanced(last_good, stop))?;
                     }
                     SyntaxClass::Escape | SyntaxClass::CharQuote => {
                         if idx >= stop {
-                            return Err("Scan error: unbalanced parentheses".to_string());
+                            return Err(ScanListError::unbalanced(last_good, stop));
                         }
                         idx += 1;
                     }
@@ -1106,7 +1109,7 @@ fn scan_lists_with_options(
             }
 
             if depth != 0 {
-                return Err("Scan error: unbalanced parentheses".to_string());
+                return Err(ScanListError::unbalanced(last_good, idx));
             }
             if !found {
                 return Ok(None);
@@ -1124,6 +1127,9 @@ fn scan_lists_with_options(
                 let class =
                     effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties)
                         .class;
+                if depth == min_depth {
+                    last_good = idx;
+                }
 
                 match class {
                     SyntaxClass::Close => {
@@ -1140,9 +1146,7 @@ fn scan_lists_with_options(
                             break;
                         }
                         if depth < min_depth {
-                            return Err(
-                                "Scan error: containing expression ends prematurely".to_string()
-                            );
+                            return Err(ScanListError::containing_ends_prematurely(last_good, idx));
                         }
                     }
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
@@ -1155,14 +1159,15 @@ fn scan_lists_with_options(
                             honor_properties,
                             ch,
                             class,
-                        )?;
+                        )
+                        .map_err(|_| ScanListError::unbalanced(last_good, start))?;
                     }
                     _ => {}
                 }
             }
 
             if depth != 0 {
-                return Err("Scan error: unbalanced parentheses".to_string());
+                return Err(ScanListError::unbalanced(last_good, idx));
             }
             if !found {
                 return Ok(None);
@@ -1172,6 +1177,39 @@ fn scan_lists_with_options(
         Ok(Some(idx))
     } else {
         Ok(Some(idx))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ScanListError {
+    message: &'static str,
+    last_good: usize,
+    at: usize,
+}
+
+impl ScanListError {
+    fn unbalanced(last_good: usize, at: usize) -> Self {
+        Self {
+            message: "Unbalanced parentheses",
+            last_good,
+            at,
+        }
+    }
+
+    fn containing_ends_prematurely(last_good: usize, at: usize) -> Self {
+        Self {
+            message: "Containing expression ends prematurely",
+            last_good,
+            at,
+        }
+    }
+
+    fn signal_data(&self) -> Vec<Value> {
+        vec![
+            Value::string(self.message),
+            Value::fixnum(self.last_good as i64 + 1),
+            Value::fixnum(self.at as i64 + 1),
+        ]
     }
 }
 
@@ -3273,7 +3311,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     match scan_lists_with_options(buf, &table, from_char, count, depth, honor_properties) {
         Ok(Some(new_char)) => Ok(Value::fixnum(new_char as i64 + 1)),
         Ok(None) => Ok(Value::NIL),
-        Err(msg) => Err(signal("scan-error", vec![Value::string(&msg)])),
+        Err(err) => Err(signal("scan-error", err.signal_data())),
     }
 }
 
