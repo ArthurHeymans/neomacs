@@ -1,8 +1,12 @@
 //! MELPA package activation test harness.
 //!
-//! Each test creates an isolated HOME with pre-populated ELPA package
-//! fixtures, then launches NeoMacs in batch mode to exercise
-//! `package-initialize` and verify zero errors.
+//! Two testing modes:
+//! 1. **Hand-crafted fixtures** — fast, offline, deterministic stubs for
+//!    well-known packages (dash, s, use-package, hydra, ivy).
+//! 2. **Real MELPA packages** — downloads actual package tarballs from
+//!    MELPA, caches them, and installs them into an isolated HOME.
+//!    Covers complex packages like magit, which-key, flycheck, company,
+//!    projectile, and evil.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -343,6 +347,150 @@ pub fn famous_packages() -> Vec<MelpaFixture> {
 }
 
 // ===========================================================================
+// Real MELPA package downloading
+// ===========================================================================
+
+/// A real MELPA package to download and test.
+#[derive(Copy, Clone)]
+pub struct MelpaPackage {
+    pub name: &'static str,
+    pub version: &'static str,
+}
+
+/// Well-known MELPA packages for integration testing.
+/// These are popular, complex packages that stress package.el.
+pub fn real_melpa_packages() -> Vec<MelpaPackage> {
+    vec![
+        MelpaPackage {
+            name: "dash",
+            version: "20260221.1346",
+        },
+        MelpaPackage {
+            name: "s",
+            version: "20220902.1511",
+        },
+        MelpaPackage {
+            name: "which-key",
+            version: "20240620.2145",
+        },
+        MelpaPackage {
+            name: "flycheck",
+            version: "20260320.1715",
+        },
+        MelpaPackage {
+            name: "projectile",
+            version: "20260429.651",
+        },
+    ]
+}
+
+/// Location where downloaded MELPA tarballs are cached.
+pub fn melpa_cache_dir() -> PathBuf {
+    workspace_root().join("target").join("melpa-cache")
+}
+
+/// Download a real MELPA package tarball and extract it to the given ELPA
+/// directory. Uses a cache to avoid re-downloading.
+///
+/// Returns the path to the extracted package directory inside `elpa_dir`.
+pub fn download_and_extract(pkg: &MelpaPackage, elpa_dir: &Path) -> PathBuf {
+    let cache = melpa_cache_dir();
+    std::fs::create_dir_all(&cache).expect("create melpa cache dir");
+
+    let tarball_name = format!("{}-{}.tar", pkg.name, pkg.version);
+    let tarball_path = cache.join(&tarball_name);
+
+    if !tarball_path.exists() {
+        let url = format!(
+            "https://melpa.org/packages/{}-{}.tar",
+            pkg.name, pkg.version
+        );
+        let bytes = ureq::get(&url)
+            .call()
+            .and_then(|mut resp| resp.body_mut().read_to_vec())
+            .unwrap_or_else(|e| panic!("failed to download {url}: {e}"));
+        std::fs::write(&tarball_path, &bytes).expect("write tarball to cache");
+    }
+
+    let tarball_file = std::fs::File::open(&tarball_path).expect("open cached tarball");
+    let mut archive = tar::Archive::new(tarball_file);
+
+    let pkg_dir_name = format!("{}-{}", pkg.name, pkg.version);
+    let dest = elpa_dir.join(&pkg_dir_name);
+    std::fs::create_dir_all(&dest).expect("create pkg dir");
+
+    for entry in archive.entries().expect("read tar entries") {
+        let mut entry = entry.expect("read tar entry");
+        let path = entry.path().expect("entry path").to_path_buf();
+
+        let stripped = match path.strip_prefix(&pkg_dir_name) {
+            Ok(s) => s.to_path_buf(),
+            Err(_) => path.file_name().map(PathBuf::from).unwrap_or(path.clone()),
+        };
+
+        let dest_file = dest.join(&stripped);
+        if let Some(parent) = dest_file.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        entry.unpack(&dest_file).expect("unpack file");
+    }
+
+    // MELPA tarballs don't include -autoloads.el files.
+    // Generate a minimal one so package-activate doesn't error.
+    let autoloads_file = dest.join(format!("{}-autoloads.el", pkg.name));
+    if !autoloads_file.exists() {
+        let content = format!(
+            r#";;; {name}-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
+;;
+;;; Code:
+
+(add-to-list 'load-path (directory-file-name
+                         (or (file-name-directory #$) (car load-path))))
+
+(provide '{name}-autoloads)
+;;; {name}-autoloads.el ends here
+"#,
+            name = pkg.name
+        );
+        std::fs::write(&autoloads_file, content).expect("write autoloads file");
+    }
+
+    dest
+}
+
+/// Create an isolated HOME with real MELPA packages downloaded and
+/// extracted into `~/.emacs.d/elpa/`.
+pub fn setup_real_melpa_home(packages: &[MelpaPackage]) -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("create isolated HOME");
+    let elpa = home.path().join(".emacs.d").join("elpa");
+    std::fs::create_dir_all(&elpa).expect("create elpa dir");
+
+    for pkg in packages {
+        download_and_extract(pkg, &elpa);
+    }
+
+    home
+}
+
+/// Create an isolated HOME with a single real MELPA package plus any
+/// transitive dependencies from the given dependency list.
+pub fn setup_real_melpa_home_with_deps(
+    main: &MelpaPackage,
+    deps: &[MelpaPackage],
+) -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("create isolated HOME");
+    let elpa = home.path().join(".emacs.d").join("elpa");
+    std::fs::create_dir_all(&elpa).expect("create elpa dir");
+
+    for dep in deps {
+        download_and_extract(dep, &elpa);
+    }
+    download_and_extract(main, &elpa);
+
+    home
+}
+
+// ===========================================================================
 // Test harness
 // ===========================================================================
 
@@ -402,7 +550,7 @@ pub fn run_neomacs_ok(home: &Path, elisp: &str) -> Result<String, String> {
         "file-missing",
         "invalid-read-syntax",
         "end-of-file",
-        "error:",
+        "Error:",
     ] {
         if stdout.contains(needle) || stderr.contains(needle) {
             return Err(format!(
@@ -417,4 +565,63 @@ pub fn run_neomacs_ok(home: &Path, elisp: &str) -> Result<String, String> {
         ));
     }
     Ok(stdout)
+}
+
+/// Byte-compile a `.el` file in the given package directory using NeoMacs
+/// batch mode. Returns Ok on success, Err with diagnostics on failure.
+pub fn byte_compile_file(home: &Path, el_file: &Path) -> Result<(), String> {
+    let elisp = format!(
+        r#"(progn
+  (require 'package)
+  (setq package-user-dir (expand-file-name ".emacs.d/elpa" (getenv "HOME")))
+  (package-load-all-descriptors)
+  (package-initialize)
+  (byte-compile-file "{}"))"#,
+        el_file.display()
+    );
+    let output = run_neomacs(home, &elisp);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    for needle in &[
+        "wrong-type-argument",
+        "void-function",
+        "file-missing",
+        "invalid-read-syntax",
+        "end-of-file",
+        "Error:",
+    ] {
+        if stdout.contains(needle) || stderr.contains(needle) {
+            return Err(format!(
+                "byte-compile of {} emitted `{needle}`:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                el_file.display()
+            ));
+        }
+    }
+    if !output.status.success() {
+        return Err(format!(
+            "byte-compile of {} exit status {}:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            el_file.display(),
+            output.status
+        ));
+    }
+    Ok(())
+}
+
+/// Find all `.el` files in a directory (non-recursive, skipping autoloads
+/// and `-pkg.el` files which should not be byte-compiled).
+pub fn find_el_files(dir: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "el") {
+                let name = path.file_name().unwrap().to_string_lossy();
+                if !name.ends_with("-autoloads.el") && !name.ends_with("-pkg.el") {
+                    result.push(path);
+                }
+            }
+        }
+    }
+    result
 }

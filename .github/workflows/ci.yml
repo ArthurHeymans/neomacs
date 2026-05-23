@@ -86,3 +86,6 @@ jobs:
 
       - name: Run tui tests for neomacs
         run: cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
+
+      - name: Run melpa package tests for neomacs
+        run: cargo nextest run -p neomacs-melpa-tests --release --no-fail-fast
