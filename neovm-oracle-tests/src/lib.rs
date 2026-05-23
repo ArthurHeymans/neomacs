@@ -2076,6 +2076,10 @@ mod divergence_dired_file_mgmt;
 mod divergence_display_engine;
 #[path = "divergence-display-table-glyph.rs"]
 mod divergence_display_table_glyph;
+#[path = "divergence-eieio-advanced-real.rs"]
+mod divergence_eieio_advanced_real;
+#[path = "divergence-eieio-keymap-real.rs"]
+mod divergence_eieio_keymap_real;
 #[path = "divergence-eieio-method-deep.rs"]
 mod divergence_eieio_method_deep;
 #[path = "divergence-eieio-oop.rs"]
