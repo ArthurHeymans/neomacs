@@ -2074,6 +2074,8 @@ mod divergence_combo_buflocal_narrow_marker;
 mod divergence_combo_chartab_syntax_category;
 #[path = "divergence-combo-charwidth-display-fill.rs"]
 mod divergence_combo_charwidth_display_fill;
+#[path = "divergence-combo-cl-loop-advanced-undo.rs"]
+mod divergence_combo_cl_loop_advanced_undo;
 #[path = "divergence-combo-cl-loop-seq-accumulate.rs"]
 mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
