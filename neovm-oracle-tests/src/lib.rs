@@ -2058,6 +2058,8 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_buflocal_narrow_marker;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
+#[path = "divergence-combo-defstruct-accessor-print.rs"]
+mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
@@ -2080,6 +2082,8 @@ mod divergence_combo_interop;
 mod divergence_combo_keymap_command;
 #[path = "divergence-combo-list-seq-map.rs"]
 mod divergence_combo_list_seq_map;
+#[path = "divergence-combo-loop-seq-generator.rs"]
+mod divergence_combo_loop_seq_generator;
 #[path = "divergence-combo-macro-compile-eval.rs"]
 mod divergence_combo_macro_compile_eval;
 #[path = "divergence-combo-macro-compiletime.rs"]
