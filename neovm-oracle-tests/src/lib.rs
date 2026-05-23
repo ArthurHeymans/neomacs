@@ -2056,6 +2056,8 @@ mod divergence_combo_advice_eieio_keymap;
 mod divergence_combo_arith_math_compare;
 #[path = "divergence-combo-buffer-overlay.rs"]
 mod divergence_combo_buffer_overlay;
+#[path = "divergence-combo-buffer-overlay-eieio.rs"]
+mod divergence_combo_buffer_overlay_eieio;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
 #[path = "divergence-combo-buflocal-narrow-closure-eval.rs"]
