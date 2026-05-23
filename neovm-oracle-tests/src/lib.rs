@@ -2076,6 +2076,8 @@ mod divergence_fill_abbrev_comment;
 mod divergence_fontlock_jitlock_highlight;
 #[path = "divergence-format-read-integers.rs"]
 mod divergence_format_read_integers;
+#[path = "divergence-format-specifiers.rs"]
+mod divergence_format_specifiers;
 #[path = "divergence-format-string-deep.rs"]
 mod divergence_format_string_deep;
 #[path = "divergence-frame-display-info.rs"]
@@ -2112,6 +2114,8 @@ mod divergence_load_native_comp;
 mod divergence_macro_expansion_stress;
 #[path = "divergence-macro-pcase-cllib.rs"]
 mod divergence_macro_pcase_cllib;
+#[path = "divergence-map-patterns.rs"]
+mod divergence_map_patterns;
 #[path = "divergence-marker-undo-deep.rs"]
 mod divergence_marker_undo_deep;
 #[path = "divergence-minibuf-completion-ring.rs"]
