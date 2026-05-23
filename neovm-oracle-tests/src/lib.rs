@@ -2232,6 +2232,8 @@ mod divergence_combo_subr_cl_lib_deep;
 mod divergence_combo_subr_seq_record;
 #[path = "divergence-combo-symbol-print-read.rs"]
 mod divergence_combo_symbol_print_read;
+#[path = "divergence-combo-syntax-motion-undo.rs"]
+mod divergence_combo_syntax_motion_undo;
 #[path = "divergence-combo-syntax-sexp-nav.rs"]
 mod divergence_combo_syntax_sexp_nav;
 #[path = "divergence-combo-syntax-sexp-textprop-narrow.rs"]
