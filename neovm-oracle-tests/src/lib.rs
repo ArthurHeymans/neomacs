@@ -2073,6 +2073,8 @@ mod divergence_combo_buflocal_dir_abbrev_undo;
 mod divergence_combo_buflocal_narrow_closure_eval;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
 mod divergence_combo_buflocal_narrow_marker;
+#[path = "divergence-combo-buflocal-indirect-kill-undo-evaporate.rs"]
+mod divergence_combo_buflocal_indirect_kill_undo_evaporate;
 mod divergence_combo_catch_throw_unwind_buffer_deep;
 mod divergence_combo_char_table_syntax_category_deep;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
@@ -2193,6 +2195,8 @@ mod divergence_combo_macro_gv;
 mod divergence_combo_mapconcat_seq_map_string_build;
 #[path = "divergence-combo-marker-point-region-undo.rs"]
 mod divergence_combo_marker_point_region_undo;
+#[path = "divergence-combo-marker-type-overlay-undo-narrow-buflocal.rs"]
+mod divergence_combo_marker_type_overlay_undo_narrow_buflocal;
 #[path = "divergence-combo-match-register-syntax.rs"]
 mod divergence_combo_match_register_syntax;
 #[path = "divergence-combo-mega-undo.rs"]
@@ -2229,6 +2233,8 @@ mod divergence_combo_plist_hash_symbol_eval_deep;
 mod divergence_combo_plist_symprop_face;
 #[path = "divergence-combo-print-read-charset.rs"]
 mod divergence_combo_print_read_charset;
+#[path = "divergence-combo-print-read-hash-record-closure-marker.rs"]
+mod divergence_combo_print_read_hash_record_closure_marker;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
 #[path = "divergence-combo-prop-only-undo-deep.rs"]
