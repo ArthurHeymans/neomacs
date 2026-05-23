@@ -2064,6 +2064,8 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_buffer_overlay_eieio;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
+#[path = "divergence-combo-buflocal-dir-abbrev-undo.rs"]
+mod divergence_combo_buflocal_dir_abbrev_undo;
 #[path = "divergence-combo-buflocal-narrow-closure-eval.rs"]
 mod divergence_combo_buflocal_narrow_closure_eval;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
@@ -2098,6 +2100,8 @@ mod divergence_combo_edge_cases;
 mod divergence_combo_edit_simulation;
 #[path = "divergence-combo-editing-session.rs"]
 mod divergence_combo_editing_session;
+#[path = "divergence-combo-eieio-deep-dispatch-undo.rs"]
+mod divergence_combo_eieio_deep_dispatch_undo;
 #[path = "divergence-combo-eieio-dispatch-deep.rs"]
 mod divergence_combo_eieio_dispatch_deep;
 #[path = "divergence-combo-eieio-error-binding.rs"]
