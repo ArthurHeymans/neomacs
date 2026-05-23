@@ -2090,6 +2090,8 @@ mod divergence_combo_format_string_char;
 mod divergence_combo_interop;
 #[path = "divergence-combo-keymap-command.rs"]
 mod divergence_combo_keymap_command;
+#[path = "divergence-combo-keymap-command-advice-error.rs"]
+mod divergence_combo_keymap_command_advice_error;
 #[path = "divergence-combo-list-seq-map.rs"]
 mod divergence_combo_list_seq_map;
 #[path = "divergence-combo-loop-seq-generator.rs"]
@@ -2116,6 +2118,8 @@ mod divergence_combo_process_pipe_filter;
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
 mod divergence_combo_read_eval_obarray;
+#[path = "divergence-combo-read-print-circle-hash-obarray.rs"]
+mod divergence_combo_read_print_circle_hash_obarray;
 #[path = "divergence-combo-read-print-hash.rs"]
 mod divergence_combo_read_print_hash;
 #[path = "divergence-combo-real-world.rs"]
