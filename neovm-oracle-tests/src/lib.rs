@@ -2196,6 +2196,8 @@ mod divergence_combo_plist_symprop_face;
 mod divergence_combo_print_read_charset;
 #[path = "divergence-combo-process-pipe-filter.rs"]
 mod divergence_combo_process_pipe_filter;
+#[path = "divergence-combo-prop-only-undo-deep.rs"]
+mod divergence_combo_prop_only_undo_deep;
 #[path = "divergence-combo-read-eval-circular.rs"]
 mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
