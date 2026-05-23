@@ -2331,6 +2331,8 @@ mod divergence_combo_textprop_search_undo;
 mod divergence_combo_textprop_special_undo;
 #[path = "divergence-combo-thing-at-point-marker-overlay-undo-narrow.rs"]
 mod divergence_combo_thing_at_point_marker_overlay_undo_narrow;
+#[path = "divergence-combo-timer-marker-overlay-undo-textprop.rs"]
+mod divergence_combo_timer_marker_overlay_undo_textprop;
 #[path = "divergence-combo-timer-process.rs"]
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-timer-process-time.rs"]
