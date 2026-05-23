@@ -2090,6 +2090,8 @@ mod divergence_format_string_deep;
 mod divergence_frame_display_info;
 #[path = "divergence-frame-font-display.rs"]
 mod divergence_frame_font_display;
+#[path = "divergence-funcall-apply-deep.rs"]
+mod divergence_funcall_apply_deep;
 #[path = "divergence-gc-memory-modules.rs"]
 mod divergence_gc_memory_modules;
 #[path = "divergence-hash-struct-records.rs"]
@@ -2194,6 +2196,8 @@ mod divergence_rx_regex_builder;
 mod divergence_scope_binding;
 #[path = "divergence-search-charfold-occur.rs"]
 mod divergence_search_charfold_occur;
+#[path = "divergence-search-match-deep.rs"]
+mod divergence_search_match_deep;
 #[path = "divergence-seq-cl-deep.rs"]
 mod divergence_seq_cl_deep;
 #[path = "divergence-sequence-collections.rs"]
