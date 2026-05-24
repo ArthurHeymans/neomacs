@@ -3194,3 +3194,13 @@ mod divergence_window_frame_real;
 mod divergence_window_geometry;
 #[path = "divergence-window-redisplay.rs"]
 mod divergence_window_redisplay;
+#[path = "divergence-combo-cl-eieio-change-class-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_change_class_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-with-slots-accessors-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_with_slots_accessors_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-generic-method-invocation-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_generic_method_invocation_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-initialization-lifecycle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_initialization_lifecycle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-print-clone-introspection-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_print_clone_introspection_marker_overlay_textprop_buflocal_narrow;

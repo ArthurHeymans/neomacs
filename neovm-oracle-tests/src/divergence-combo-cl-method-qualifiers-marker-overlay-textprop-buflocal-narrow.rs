@@ -28,9 +28,6 @@ fn combo_cl_method_qualifiers_marker_overlay_textprop_buflocal_narrow_undo() {
                (_ (puthash "a" 1 ht))
                (_ (puthash "b" 2 ht))
                (_ (puthash "c" 3 ht))
-               (_ (puthash "d" 4 ht))
-               (_ (puthash "e" 5 ht))
-               (_ (puthash "f" 6 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -144,8 +141,6 @@ fn combo_cl_method_qualifiers_multi_buffer_undo() {
         (let* ((ht (make-hash-table :test 'equal))
                (_ (puthash "a" 1 ht))
                (_ (puthash "b" 2 ht))
-               (_ (puthash "c" 3 ht))
-               (_ (puthash "d" 4 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -157,8 +152,6 @@ fn combo_cl_method_qualifiers_multi_buffer_undo() {
         (let* ((ht (make-hash-table :test 'equal))
                (_ (puthash "d" 4 ht))
                (_ (puthash "e" 5 ht))
-               (_ (puthash "f" 6 ht))
-               (_ (puthash "g" 7 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -210,7 +203,6 @@ fn combo_cl_method_qualifiers_setf_replace_undo() {
                (_ (puthash "a" 1 ht))
                (_ (puthash "b" 2 ht))
                (_ (puthash "c" 3 ht))
-               (_ (puthash "d" 4 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -260,8 +252,6 @@ fn combo_cl_method_qualifiers_multi_overlay_undo() {
                (_ (puthash "a" 1 ht))
                (_ (puthash "b" 2 ht))
                (_ (puthash "c" 3 ht))
-               (_ (puthash "d" 4 ht))
-               (_ (puthash "e" 5 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))

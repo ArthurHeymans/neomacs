@@ -25,8 +25,9 @@ fn combo_cl_add_method_marker_overlay_textprop_buflocal_narrow_undo() {
         (narrow-to-region 6 15)
         (undo-boundary)
         (let* ((ht (make-hash-table :test 'equal))
-               (_ (puthash "key1" "val1" ht))
-               (_ (puthash "key2" "val2" ht))
+               (_ (puthash "a" 1 ht))
+               (_ (puthash "b" 2 ht))
+               (_ (puthash "c" 3 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -78,6 +79,7 @@ fn combo_cl_add_method_clone_overlay_undo() {
           (let* ((ht (make-hash-table :test 'equal))
                  (_ (puthash "x" 10 ht))
                  (_ (puthash "y" 20 ht))
+                 (_ (puthash "z" 30 ht))
                  (result (cl-loop for k being the hash-keys of ht
                                   using (hash-values v)
                                   collect (list k v))))
@@ -138,6 +140,7 @@ fn combo_cl_add_method_multi_buffer_undo() {
         (undo-boundary)
         (let* ((ht (make-hash-table :test 'equal))
                (_ (puthash "a" 1 ht))
+               (_ (puthash "b" 2 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -148,6 +151,7 @@ fn combo_cl_add_method_multi_buffer_undo() {
         (undo-boundary)
         (let* ((ht (make-hash-table :test 'equal))
                (_ (puthash "d" 4 ht))
+               (_ (puthash "e" 5 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -196,8 +200,9 @@ fn combo_cl_add_method_setf_replace_undo() {
              (_ (set-marker m 8)))
         (undo-boundary)
         (let* ((ht (make-hash-table :test 'equal))
-               (_ (puthash "key1" "val1" ht))
-               (_ (puthash "key2" "val2" ht))
+               (_ (puthash "a" 1 ht))
+               (_ (puthash "b" 2 ht))
+               (_ (puthash "c" 3 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
@@ -244,8 +249,9 @@ fn combo_cl_add_method_multi_overlay_undo() {
              (_ (set-marker m 8)))
         (undo-boundary)
         (let* ((ht (make-hash-table :test 'equal))
-               (_ (puthash "key1" "val1" ht))
-               (_ (puthash "key2" "val2" ht))
+               (_ (puthash "a" 1 ht))
+               (_ (puthash "b" 2 ht))
+               (_ (puthash "c" 3 ht))
                (result (cl-loop for k being the hash-keys of ht
                                 using (hash-values v)
                                 collect (list k v))))
