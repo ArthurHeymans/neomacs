@@ -2,11 +2,10 @@
 //!
 //! Two testing modes:
 //! 1. **Hand-crafted fixtures** — fast, offline, deterministic stubs for
-//!    well-known packages (dash, s, use-package, hydra, ivy).
-//! 2. **Real MELPA packages** — downloads actual package tarballs from
-//!    MELPA, caches them, and installs them into an isolated HOME.
-//!    Covers complex packages like magit, which-key, flycheck, company,
-//!    projectile, and evil.
+//!    well-known packages (dash, s, use-package, hydra, ivy, seq, compat).
+//! 2. **Real MELPA packages** — uses Emacs's own `package-install` to
+//!    download and install from MELPA, exactly like a real user would.
+//!    Covers complex packages like which-key, flycheck, projectile.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -265,6 +264,90 @@ const IVY_AUTOLOADS: &str = r#";;; ivy-autoloads.el --- automatically extracted 
 const IVY_PKG: &str = r#"(define-package "ivy" "20231025.2311" "Incremental Vertical completYon." '((emacs "24.5")))
 "#;
 
+// -- seq (GNU ELPA, commonly depended on) -----------------------------------
+
+const SEQ_AUTOLOADS: &str = r#";;; seq-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
+;;
+;;; Code:
+
+(add-to-list 'load-path (directory-file-name
+                         (or (file-name-directory #$) (car load-path))))
+
+(autoload 'seq-map "seq" nil nil nil)
+(autoload 'seq-filter "seq" nil nil nil)
+(autoload 'seq-reduce "seq" nil nil nil)
+
+(provide 'seq-autoloads)
+;; Local Variables:
+;; no-byte-compile: t
+;; no-update-autoloads: t
+;; End:
+;;; seq-autoloads.el ends here
+"#;
+
+const SEQ_PKG: &str = r#"(define-package "seq" "2.24" "Sequence manipulation functions" '((emacs "25.1")))
+"#;
+
+const SEQ_EL: &str = r#";;; seq.el --- Sequence manipulation functions  -*- lexical-binding: t -*-
+
+(defun seq-map (function sequence)
+  "Apply FUNCTION to each element of SEQUENCE, and return the list of results."
+  (mapcar function sequence))
+
+(defun seq-filter (pred sequence)
+  "Return a list of elements of SEQUENCE for which PRED returns non-nil."
+  (let (result)
+    (seq-doseq (element sequence)
+      (when (funcall pred element)
+        (push element result)))
+    (nreverse result)))
+
+(defun seq-reduce (function sequence initial-value)
+  "Reduce SEQUENCE using FUNCTION with INITIAL-VALUE."
+  (let ((acc initial-value))
+    (seq-doseq (element sequence)
+      (setq acc (funcall function acc element)))
+    acc))
+
+(defmacro seq-doseq (spec &rest body)
+  "Loop over a sequence."
+  (declare (indent 1))
+  `(dolist (,spec ,@body)))
+
+(provide 'seq)
+;;; seq.el ends here
+"#;
+
+// -- compat (GNU ELPA, commonly depended on) --------------------------------
+
+const COMPAT_AUTOLOADS: &str = r#";;; compat-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
+;;
+;;; Code:
+
+(add-to-list 'load-path (directory-file-name
+                         (or (file-name-directory #$) (car load-path))))
+
+(provide 'compat-autoloads)
+;; Local Variables:
+;; no-byte-compile: t
+;; no-update-autoloads: t
+;; End:
+;;; compat-autoloads.el ends here
+"#;
+
+const COMPAT_PKG: &str = r#"(define-package "compat" "30.0.0.0" "Emacs Lisp Compatibility Library" '((emacs "24.4")))
+"#;
+
+const COMPAT_EL: &str = r#";;; compat.el --- Emacs Lisp Compatibility Library  -*- lexical-binding: t -*-
+
+(defun compat-assoc (key alist)
+  "Return the element of ALIST whose car equals KEY."
+  (assoc key alist))
+
+(provide 'compat)
+;;; compat.el ends here
+"#;
+
 // ===========================================================================
 // Fixture list
 // ===========================================================================
@@ -343,149 +426,96 @@ pub fn famous_packages() -> Vec<MelpaFixture> {
             files: &[("ivy-pkg.el", IVY_PKG), ("ivy-autoloads.el", IVY_AUTOLOADS)],
             requires: &[],
         },
-    ]
-}
-
-// ===========================================================================
-// Real MELPA package downloading
-// ===========================================================================
-
-/// A real MELPA package to download and test.
-#[derive(Copy, Clone)]
-pub struct MelpaPackage {
-    pub name: &'static str,
-    pub version: &'static str,
-}
-
-/// Well-known MELPA packages for integration testing.
-/// These are popular, complex packages that stress package.el.
-pub fn real_melpa_packages() -> Vec<MelpaPackage> {
-    vec![
-        MelpaPackage {
-            name: "dash",
-            version: "20260221.1346",
+        MelpaFixture {
+            name: "seq",
+            version: "2.24",
+            deps: &[],
+            files: &[
+                ("seq-pkg.el", SEQ_PKG),
+                ("seq-autoloads.el", SEQ_AUTOLOADS),
+                ("seq.el", SEQ_EL),
+            ],
+            requires: &[],
         },
-        MelpaPackage {
-            name: "s",
-            version: "20220902.1511",
-        },
-        MelpaPackage {
-            name: "which-key",
-            version: "20240620.2145",
-        },
-        MelpaPackage {
-            name: "flycheck",
-            version: "20260320.1715",
-        },
-        MelpaPackage {
-            name: "projectile",
-            version: "20260429.651",
+        MelpaFixture {
+            name: "compat",
+            version: "30.0.0.0",
+            deps: &[],
+            files: &[
+                ("compat-pkg.el", COMPAT_PKG),
+                ("compat-autoloads.el", COMPAT_AUTOLOADS),
+                ("compat.el", COMPAT_EL),
+            ],
+            requires: &[],
         },
     ]
 }
 
-/// Location where downloaded MELPA tarballs are cached.
-pub fn melpa_cache_dir() -> PathBuf {
-    workspace_root().join("target").join("melpa-cache")
-}
+// ===========================================================================
+// Real MELPA packages — installed via Emacs's own package.el
+// ===========================================================================
 
-/// Download a real MELPA package tarball and extract it to the given ELPA
-/// directory. Uses a cache to avoid re-downloading.
+/// A real MELPA package name to install via `package-install`.
+pub const REAL_MELPA_PACKAGES: &[&str] = &["dash", "s", "which-key", "flycheck", "projectile"];
+
+/// Build the Elisp prologue that configures package.el for MELPA.
 ///
-/// Returns the path to the extracted package directory inside `elpa_dir`.
-pub fn download_and_extract(pkg: &MelpaPackage, elpa_dir: &Path) -> PathBuf {
-    let cache = melpa_cache_dir();
-    std::fs::create_dir_all(&cache).expect("create melpa cache dir");
+/// Real users add MELPA to `package-archives`, call
+/// `package-refresh-contents`, and then `package-install`.  We mirror
+/// that flow exactly, letting `package-user-dir` default to
+/// `~/.emacs.d/elpa` just like Emacs does.
+fn elisp_package_prologue() -> String {
+    r#"(progn
+  (require 'package)
+  (setq package-archives '(("melpa" . "https://melpa.org/packages/")))
+  (setq package-check-signature nil)
+  (package-initialize))"#
+        .to_string()
+}
 
-    let tarball_name = format!("{}-{}.tar", pkg.name, pkg.version);
-    let tarball_path = cache.join(&tarball_name);
+/// Build Elisp to install a list of packages via `package-install`.
+fn elisp_install_packages(packages: &[&str]) -> String {
+    let prologue = elisp_package_prologue();
+    let installs: Vec<String> = packages
+        .iter()
+        .map(|p| format!("  (package-install '{p})"))
+        .collect();
+    format!(
+        "{prologue}\n  (package-refresh-contents)\n{}\n  (message \"INSTALL-OK\"))",
+        installs.join("\n")
+    )
+}
 
-    if !tarball_path.exists() {
-        let url = format!(
-            "https://melpa.org/packages/{}-{}.tar",
-            pkg.name, pkg.version
+/// Create an isolated HOME and install real MELPA packages using Emacs's
+/// own `package-install` — exactly like a real user would.
+///
+/// This exercises the full package.el workflow:
+///   1. `package-refresh-contents` — fetch MELPA archive
+///   2. `package-install` — download, byte-compile, install, generate autoloads
+///
+/// Returns the TempDir (the isolated HOME).
+pub fn setup_real_melpa_home(packages: &[&str]) -> tempfile::TempDir {
+    let home = tempfile::tempdir().expect("create isolated HOME");
+
+    let elisp = elisp_install_packages(packages);
+    let output = run_neomacs(home.path(), &elisp);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if !output.status.success() {
+        panic!(
+            "package-install failed for {:?}:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            packages
         );
-        let bytes = ureq::get(&url)
-            .call()
-            .and_then(|mut resp| resp.body_mut().read_to_vec())
-            .unwrap_or_else(|e| panic!("failed to download {url}: {e}"));
-        std::fs::write(&tarball_path, &bytes).expect("write tarball to cache");
     }
-
-    let tarball_file = std::fs::File::open(&tarball_path).expect("open cached tarball");
-    let mut archive = tar::Archive::new(tarball_file);
-
-    let pkg_dir_name = format!("{}-{}", pkg.name, pkg.version);
-    let dest = elpa_dir.join(&pkg_dir_name);
-    std::fs::create_dir_all(&dest).expect("create pkg dir");
-
-    for entry in archive.entries().expect("read tar entries") {
-        let mut entry = entry.expect("read tar entry");
-        let path = entry.path().expect("entry path").to_path_buf();
-
-        let stripped = match path.strip_prefix(&pkg_dir_name) {
-            Ok(s) => s.to_path_buf(),
-            Err(_) => path.file_name().map(PathBuf::from).unwrap_or(path.clone()),
-        };
-
-        let dest_file = dest.join(&stripped);
-        if let Some(parent) = dest_file.parent() {
-            std::fs::create_dir_all(parent).ok();
+    for needle in &["Error:", "error:", "wrong-type-argument", "void-function"] {
+        if stdout.contains(needle) || stderr.contains(needle) {
+            panic!(
+                "package-install for {:?} emitted `{needle}`:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                packages
+            );
         }
-        entry.unpack(&dest_file).expect("unpack file");
     }
-
-    // MELPA tarballs don't include -autoloads.el files.
-    // Generate a minimal one so package-activate doesn't error.
-    let autoloads_file = dest.join(format!("{}-autoloads.el", pkg.name));
-    if !autoloads_file.exists() {
-        let content = format!(
-            r#";;; {name}-autoloads.el --- automatically extracted autoloads  -*- lexical-binding: t -*-
-;;
-;;; Code:
-
-(add-to-list 'load-path (directory-file-name
-                         (or (file-name-directory #$) (car load-path))))
-
-(provide '{name}-autoloads)
-;;; {name}-autoloads.el ends here
-"#,
-            name = pkg.name
-        );
-        std::fs::write(&autoloads_file, content).expect("write autoloads file");
-    }
-
-    dest
-}
-
-/// Create an isolated HOME with real MELPA packages downloaded and
-/// extracted into `~/.emacs.d/elpa/`.
-pub fn setup_real_melpa_home(packages: &[MelpaPackage]) -> tempfile::TempDir {
-    let home = tempfile::tempdir().expect("create isolated HOME");
-    let elpa = home.path().join(".emacs.d").join("elpa");
-    std::fs::create_dir_all(&elpa).expect("create elpa dir");
-
-    for pkg in packages {
-        download_and_extract(pkg, &elpa);
-    }
-
-    home
-}
-
-/// Create an isolated HOME with a single real MELPA package plus any
-/// transitive dependencies from the given dependency list.
-pub fn setup_real_melpa_home_with_deps(
-    main: &MelpaPackage,
-    deps: &[MelpaPackage],
-) -> tempfile::TempDir {
-    let home = tempfile::tempdir().expect("create isolated HOME");
-    let elpa = home.path().join(".emacs.d").join("elpa");
-    std::fs::create_dir_all(&elpa).expect("create elpa dir");
-
-    for dep in deps {
-        download_and_extract(dep, &elpa);
-    }
-    download_and_extract(main, &elpa);
 
     home
 }
@@ -526,6 +556,48 @@ pub fn setup_isolated_home(fixtures: &[MelpaFixture]) -> tempfile::TempDir {
     }
 
     home
+}
+
+/// Run NeoMacs in batch mode with the given HOME, loading an Elisp file.
+/// Returns the process output for inspection.
+pub fn run_neomacs_script(home: &Path, script: &Path) -> std::process::Output {
+    Command::new(neomacs_binary())
+        .env("HOME", home)
+        .env("NEOMACS_RUNTIME_ROOT", workspace_root())
+        .args(["--batch", "-l", &script.display().to_string()])
+        .output()
+        .expect("run neomacs script")
+}
+
+/// Run a NeoMacs Elisp script and check that it exits successfully with no errors.
+pub fn run_neomacs_script_ok(home: &Path, script: &Path) -> Result<String, String> {
+    let output = run_neomacs_script(home, script);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    for needle in &[
+        "wrong-type-argument",
+        "void-function",
+        "file-missing",
+        "invalid-read-syntax",
+        "end-of-file",
+        "Error:",
+    ] {
+        if stdout.contains(needle) || stderr.contains(needle) {
+            return Err(format!(
+                "script {} emitted `{needle}`:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+                script.display()
+            ));
+        }
+    }
+    if !output.status.success() {
+        return Err(format!(
+            "script {} exit status {}:\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            script.display(),
+            output.status
+        ));
+    }
+    Ok(stdout)
 }
 
 /// Run NeoMacs in batch mode with the given HOME and Elisp forms.
@@ -573,8 +645,6 @@ pub fn byte_compile_file(home: &Path, el_file: &Path) -> Result<(), String> {
     let elisp = format!(
         r#"(progn
   (require 'package)
-  (setq package-user-dir (expand-file-name ".emacs.d/elpa" (getenv "HOME")))
-  (package-load-all-descriptors)
   (package-initialize)
   (byte-compile-file "{}"))"#,
         el_file.display()
@@ -624,4 +694,25 @@ pub fn find_el_files(dir: &Path) -> Vec<PathBuf> {
         }
     }
     result
+}
+
+/// Find the installed package directory for a given package name in the
+/// isolated elpa directory. Returns the full path to the `name-version`
+/// directory, or panics if not found.
+///
+/// Useful for real MELPA tests where the exact version is not known ahead
+/// of time since `package-install` always fetches the current version.
+pub fn find_installed_pkg_dir(home: &Path, pkg_name: &str) -> PathBuf {
+    let elpa = home.join(".emacs.d").join("elpa");
+    for entry in std::fs::read_dir(&elpa).expect("read elpa dir") {
+        let entry = entry.expect("elpa entry");
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(&format!("{pkg_name}-")) {
+            return entry.path();
+        }
+    }
+    panic!(
+        "installed package directory for {pkg_name} not found in {}",
+        elpa.display()
+    );
 }
