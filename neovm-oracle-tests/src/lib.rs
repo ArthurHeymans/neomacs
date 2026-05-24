@@ -3340,3 +3340,9 @@ mod divergence_combo_cl_eieio_replace_regexp_marker_overlay_textprop_buflocal_na
 mod divergence_combo_cl_eieio_chartable_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-line-ops-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_line_ops_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-hashtable-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_hashtable_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_obarray_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-prop-boundary-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_prop_boundary_marker_overlay_textprop_buflocal_narrow;
