@@ -259,6 +259,7 @@ fn emit_events_from_complete_prefix(
 /// Block until stdin has data available or `stop` is set.
 ///
 /// Returns `Ok(true)` when data is ready, `Ok(false)` when stopped.
+#[cfg(unix)]
 fn poll_stdin_blocking(stop: &AtomicBool) -> io::Result<bool> {
     let mut pollfd = libc::pollfd {
         fd: libc::STDIN_FILENO,
@@ -287,9 +288,18 @@ fn poll_stdin_blocking(stop: &AtomicBool) -> io::Result<bool> {
     }
 }
 
+#[cfg(not(unix))]
+fn poll_stdin_blocking(stop: &AtomicBool) -> io::Result<bool> {
+    while !stop.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_millis(50));
+    }
+    Ok(false)
+}
+
 /// Read available bytes from stdin into `buf`.
 ///
 /// Returns the number of bytes read, 0 on EOF, or an error.
+#[cfg(unix)]
 fn read_stdin_bytes(buf: &mut [u8]) -> io::Result<usize> {
     loop {
         let n = unsafe { libc::read(libc::STDIN_FILENO, buf.as_mut_ptr() as *mut _, buf.len()) };
@@ -308,10 +318,16 @@ fn read_stdin_bytes(buf: &mut [u8]) -> io::Result<usize> {
     }
 }
 
+#[cfg(not(unix))]
+fn read_stdin_bytes(_buf: &mut [u8]) -> io::Result<usize> {
+    Ok(0)
+}
+
 /// Read one batch of input events from stdin.
 ///
 /// Blocks until data arrives or `stop` is set, then reads all available
 /// bytes and converts them to `InputEvent::Key` events.
+#[cfg(unix)]
 fn read_batch_input_events(
     stop: &AtomicBool,
     decoder: &mut TtyInputDecoder,
@@ -327,6 +343,15 @@ fn read_batch_input_events(
     }
 }
 
+#[cfg(not(unix))]
+fn read_batch_input_events(
+    _stop: &AtomicBool,
+    _decoder: &mut TtyInputDecoder,
+) -> io::Result<Vec<InputEvent>> {
+    Ok(Vec::new())
+}
+
+#[cfg(unix)]
 fn read_tty_input(
     tx: crossbeam_channel::Sender<InputEvent>,
     stop: Arc<AtomicBool>,
@@ -353,6 +378,17 @@ fn read_tty_input(
                 break;
             }
         }
+    }
+}
+
+#[cfg(not(unix))]
+fn read_tty_input(
+    _tx: crossbeam_channel::Sender<InputEvent>,
+    stop: Arc<AtomicBool>,
+    _paused: Arc<AtomicBool>,
+) {
+    while !stop.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_millis(100));
     }
 }
 
