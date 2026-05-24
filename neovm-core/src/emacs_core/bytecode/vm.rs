@@ -251,15 +251,13 @@ impl<'a> Vm<'a> {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, Flow>,
     ) -> Result<T, Flow> {
-        self.ctx.bytecode_call_depth += 1;
-        let lisp_eval_depth = self.ctx.depth.saturating_add(self.ctx.bytecode_call_depth);
-        if lisp_eval_depth > self.ctx.max_depth {
+        self.ctx.depth += 1;
+        if self.ctx.depth > self.ctx.max_depth {
             if self.ctx.max_depth < 100 {
                 self.ctx.max_depth = 100;
             }
-            let lisp_eval_depth = self.ctx.depth.saturating_add(self.ctx.bytecode_call_depth);
-            if lisp_eval_depth > self.ctx.max_depth {
-                self.ctx.bytecode_call_depth -= 1;
+            if self.ctx.depth > self.ctx.max_depth {
+                self.ctx.depth -= 1;
                 return Err(signal(
                     "error",
                     vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
@@ -268,7 +266,7 @@ impl<'a> Vm<'a> {
         }
 
         let result = f(self);
-        self.ctx.bytecode_call_depth -= 1;
+        self.ctx.depth -= 1;
         result
     }
 

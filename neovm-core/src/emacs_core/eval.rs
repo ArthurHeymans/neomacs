@@ -1746,15 +1746,9 @@ pub struct Context {
     /// `needs_no_redisplay` path by skipping layout when none of the visible
     /// inputs changed.
     last_redisplay_signature: Option<RedisplaySignature>,
-    /// Recursion depth counter.
+    /// GNU `lisp_eval_depth`: one shared counter for interpreted cons-form
+    /// evaluation, Lisp-visible `funcall`, and bytecode `Bcall`.
     pub(crate) depth: usize,
-    /// Bytecode call depth counted for GNU `lisp_eval_depth` parity.
-    ///
-    /// Keep this separate from `depth`, which also drives the native Rust
-    /// stack-growth probe cadence.  GNU's `lisp_eval_depth` includes Bcall
-    /// frames, but Neomacs' stack-growth scheduling predates that accounting
-    /// and must not be perturbed by bytecode call frames.
-    pub(crate) bytecode_call_depth: usize,
     eval_counter: u64,
     /// Maximum recursion depth.
     pub(crate) max_depth: usize,
@@ -4515,7 +4509,6 @@ impl Context {
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
-            bytecode_call_depth: 0,
             eval_counter: 0,
             max_depth: 1600,
             gc_pending: false,
@@ -4690,7 +4683,6 @@ impl Context {
             redisplay_generation: 0,
             last_redisplay_signature: None,
             depth: 0,
-            bytecode_call_depth: 0,
             eval_counter: 0,
             max_depth: 1600,
             gc_pending: false,
@@ -6881,7 +6873,6 @@ impl Context {
         };
         self.condition_stack.clear();
         self.depth = 0;
-        self.bytecode_call_depth = 0;
         // Named-call resolution is a runtime memoization layer, not part of
         // GNU's persisted Lisp surface. If it survives bootstrap/pdump
         // boundaries it can disagree with restored function cells while still
@@ -6898,7 +6889,6 @@ impl Context {
             && self.vm_root_frames.is_empty()
             && self.condition_stack.is_empty()
             && self.depth == 0
-            && self.bytecode_call_depth == 0
     }
 
     #[cfg(test)]
@@ -7296,13 +7286,8 @@ impl Context {
     }
 
     fn enter_interpreted_eval_depth(&mut self) -> Result<(), Flow> {
-        self.enter_interpreted_eval_depth_with_extra(0)
-    }
-
-    fn enter_interpreted_eval_depth_with_extra(&mut self, extra_depth: usize) -> Result<(), Flow> {
         self.depth += 1;
-        let lisp_eval_depth = self.depth.saturating_add(extra_depth);
-        if lisp_eval_depth > self.max_depth
+        if self.depth > self.max_depth
             && let Some(v) = self.obarray.symbol_value("max-lisp-eval-depth")
             && let Some(n) = v.as_fixnum()
         {
@@ -7311,9 +7296,8 @@ impl Context {
                 self.max_depth = new_max;
             }
         }
-        let lisp_eval_depth = self.depth.saturating_add(extra_depth);
-        if lisp_eval_depth > self.max_depth {
-            let overflow_depth = lisp_eval_depth as i64;
+        if self.depth > self.max_depth {
+            let overflow_depth = self.depth as i64;
             self.depth -= 1;
             return Err(signal(
                 "excessive-lisp-nesting",
@@ -7969,15 +7953,9 @@ impl Context {
         rewrite_builtin_wrong_arity: bool,
     ) -> EvalResult {
         if super::builtins::is_canonical_symbol_id(sym_id) {
-            let invalid_fn = if self.subr_is_special_form_id(sym_id) {
-                Value::subr_from_sym_id(sym_id)
-            } else {
-                value_from_symbol_id(sym_id)
-            };
-            return self.apply_named_callable_by_id_core(
+            return self.apply_symbol_callable_untraced_resolved_id(
                 sym_id,
                 args,
-                invalid_fn,
                 rewrite_builtin_wrong_arity,
             );
         }
@@ -8001,7 +7979,7 @@ impl Context {
         }
 
         let function_is_callable = self.function_value_is_callable(&function);
-        let result = self.apply_untraced(function, args);
+        let result = self.funcall_general_untraced(function, args);
         match &result {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "invalid-function" && !function_is_callable =>
@@ -8009,6 +7987,46 @@ impl Context {
                 Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
             }
             _ => result,
+        }
+    }
+
+    fn apply_symbol_callable_untraced_resolved_id(
+        &mut self,
+        sym_id: SymId,
+        args: LispArgVec,
+        rewrite_builtin_wrong_arity: bool,
+    ) -> EvalResult {
+        match self.resolve_named_call_target_by_id(sym_id) {
+            NamedCallTarget::Obarray(func) => {
+                if super::autoload::is_autoload_value(&func) {
+                    return self.apply_named_autoload_callable_by_id(
+                        sym_id,
+                        func,
+                        args,
+                        rewrite_builtin_wrong_arity,
+                    );
+                }
+                let function_is_callable = self.function_value_is_callable(&func);
+                let result = self.funcall_general_untraced(func, args);
+                match &result {
+                    Err(Flow::Signal(sig))
+                        if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                    {
+                        Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                    }
+                    _ => result,
+                }
+            }
+            NamedCallTarget::Subr(func) => {
+                let Some((sym_id, entry)) = subr_entry_from_value(func) else {
+                    return Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]));
+                };
+                if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
+                    return Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]));
+                }
+                self.apply_subr_object_with_entry(sym_id, func, args, entry)
+            }
+            NamedCallTarget::Void => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
         }
     }
 
@@ -10248,15 +10266,9 @@ impl Context {
         function: Value,
         args: LispArgVec,
         record_backtrace: bool,
-        include_bytecode_depth: bool,
     ) -> EvalResult {
         self.maybe_quit_before_gc()?;
-        let extra_depth = if include_bytecode_depth {
-            self.bytecode_call_depth
-        } else {
-            0
-        };
-        self.enter_interpreted_eval_depth_with_extra(extra_depth)?;
+        self.enter_interpreted_eval_depth()?;
         let bt_count = self.specpdl.len();
         if record_backtrace {
             self.push_backtrace_frame(function, &args);
@@ -10281,20 +10293,21 @@ impl Context {
     where
         A: Into<LispArgVec>,
     {
-        self.apply_internal(function, args.into(), true, false)
+        self.apply_internal(function, args.into(), true)
     }
 
     /// Apply from GNU's Lisp-visible `apply` / `funcall` subrs.
     ///
-    /// GNU bytecode `Bcall` increments `lisp_eval_depth` before dispatching.
-    /// If the callee is the Lisp-visible `apply` or `funcall` subr, GNU then
-    /// enters `Ffuncall`, whose depth guard observes the active `Bcall`.
-    /// Neomacs tracks bytecode calls separately, so include that depth here.
+    /// GNU bytecode `Bcall` increments the same `lisp_eval_depth` counter
+    /// before dispatching. If the callee is Lisp-visible `apply` or
+    /// `funcall`, GNU then enters `Ffuncall`, whose depth guard observes the
+    /// active `Bcall`. Neomacs mirrors that by using the single shared
+    /// `Context::depth` counter for both interpreter and bytecode call sites.
     pub(crate) fn apply_from_lisp_funcall<A>(&mut self, function: Value, args: A) -> EvalResult
     where
         A: Into<LispArgVec>,
     {
-        self.apply_internal(function, args.into(), true, true)
+        self.apply_internal(function, args.into(), true)
     }
 
     #[inline]
@@ -10321,7 +10334,7 @@ impl Context {
     where
         A: Into<LispArgVec>,
     {
-        self.apply_internal(function, args.into(), false, false)
+        self.apply_internal(function, args.into(), false)
     }
 
     /// Apply FUNC to ARGS, but record FRAME_FUNCTION (not FUNC) in the

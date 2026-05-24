@@ -1690,7 +1690,7 @@ fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
 }
 
 #[test]
-fn vm_bcall_funcall_depth_reports_excessive_lisp_nesting_like_gnu() {
+fn vm_bcall_funcall_recursion_reports_bytecode_error_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_vm_runtime_harness();
     eval.set_max_depth(100);
@@ -1721,10 +1721,13 @@ fn vm_bcall_funcall_depth_reports_excessive_lisp_nesting_like_gnu() {
     };
     match result {
         Err(Flow::Signal(sig)) => {
-            assert_eq!(resolve_sym(sig.symbol), "excessive-lisp-nesting");
-            assert_eq!(sig.data, vec![Value::fixnum(101)]);
+            assert_eq!(resolve_sym(sig.symbol), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")]
+            );
         }
-        other => panic!("expected Ffuncall max-depth signal, got {other:?}"),
+        other => panic!("expected bytecode max-depth error, got {other:?}"),
     }
 }
 
