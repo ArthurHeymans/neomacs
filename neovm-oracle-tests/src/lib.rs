@@ -3294,3 +3294,9 @@ mod divergence_combo_cl_eieio_multi_buffer_marker_overlay_textprop_buflocal_narr
 mod divergence_combo_cl_eieio_buflocal_variables_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-file-io-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_file_io_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-defmethod-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_defmethod_dispatch_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-abbrev-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_abbrev_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-text-property-scan-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_text_property_scan_marker_overlay_textprop_buflocal_narrow;
