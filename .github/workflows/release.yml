@@ -77,25 +77,24 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Download linuxdeploy
-        run: |
-          curl -sL -o /tmp/linuxdeploy-x86_64.AppImage \
-            "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
-          chmod +x /tmp/linuxdeploy-x86_64.AppImage
+      - name: Install linuxdeploy
+        uses: AnimMouse/setup-appimage@v2
+        with:
+          filename: linuxdeploy
+          url: https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          cache_key: continuous
 
-      - name: Download appimagetool
-        run: |
-          curl -sL -o /tmp/appimagetool-x86_64.AppImage \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
-          chmod +x /tmp/appimagetool-x86_64.AppImage
+      - name: Install appimagetool
+        uses: AnimMouse/setup-appimage@v2
+        with:
+          filename: appimagetool
+          url: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          cache_key: continuous
 
       - name: Build release binaries
         run: cargo xtask fresh-build --release
 
       - name: Package AppImage
-        env:
-          LINUXDEPLOY_APPIMAGE: /tmp/linuxdeploy-x86_64.AppImage
-          APPIMAGETOOL_APPIMAGE: /tmp/appimagetool-x86_64.AppImage
         run: ./scripts/package-appimage.sh --skip-build --no-smoke
 
       - name: Create GitHub Release
