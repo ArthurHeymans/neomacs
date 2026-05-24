@@ -2132,6 +2132,8 @@ mod divergence_combo_condition_case_marker_overlay_undo;
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-deep-undo-stress-2.rs"]
 mod divergence_combo_deep_undo_stress_2;
+#[path = "divergence-combo-defalias-marker-overlay-undo.rs"]
+mod divergence_combo_defalias_marker_overlay_undo;
 mod divergence_combo_defmacro_eval_and_compile_expansion;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
 mod divergence_combo_defstruct_accessor_print;
@@ -2256,6 +2258,8 @@ mod divergence_combo_macro_eval_apply_closure;
 mod divergence_combo_macro_eval_buffer_undo;
 #[path = "divergence-combo-macro-gv.rs"]
 mod divergence_combo_macro_gv;
+#[path = "divergence-combo-make-local-var-marker-overlay.rs"]
+mod divergence_combo_make_local_var_marker_overlay;
 #[path = "divergence-combo-mapconcat-mapcar-seq-marker-overlay-undo.rs"]
 mod divergence_combo_mapconcat_mapcar_seq_marker_overlay_undo;
 mod divergence_combo_mapconcat_seq_map_string_build;
@@ -2313,6 +2317,8 @@ mod divergence_combo_overlay_advanced;
 mod divergence_combo_overlay_evaporate_priority_undo;
 #[path = "divergence-combo-overlay-invisible-marker-textprop.rs"]
 mod divergence_combo_overlay_invisible_marker_textprop;
+#[path = "divergence-combo-overlay-lifecycle-marker-undo.rs"]
+mod divergence_combo_overlay_lifecycle_marker_undo;
 #[path = "divergence-combo-overlay-priority-marker-undo.rs"]
 mod divergence_combo_overlay_priority_marker_undo;
 mod divergence_combo_overlay_priority_overlap_evaporate_deep;
@@ -2397,6 +2403,8 @@ mod divergence_combo_search_marker_undo;
 mod divergence_combo_seq_unique_sort_merge_deep;
 #[path = "divergence-combo-serialization.rs"]
 mod divergence_combo_serialization;
+#[path = "divergence-combo-set-text-props-marker-overlay.rs"]
+mod divergence_combo_set_text_props_marker_overlay;
 mod divergence_combo_setf_generalized_buffer_local_deep;
 #[path = "divergence-combo-setf-marker-overlay-textprop.rs"]
 mod divergence_combo_setf_marker_overlay_textprop;
@@ -2436,6 +2444,8 @@ mod divergence_combo_syntax_sexp_textprop_narrow;
 mod divergence_combo_syntax_table_marker_overlay_undo;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
+#[path = "divergence-combo-textprop-front-rear-sticky.rs"]
+mod divergence_combo_textprop_front_rear_sticky;
 #[path = "divergence-combo-textprop-interval-undo.rs"]
 mod divergence_combo_textprop_interval_undo;
 #[path = "divergence-combo-textprop-overlay-face.rs"]
