@@ -138,6 +138,10 @@ pub(crate) fn builtin_make_local_variable(
         return Err(signal("setting-constant", vec![args[0]]));
     }
 
+    if resolved == intern("buffer-undo-list") {
+        return Ok(args[0]);
+    }
+
     // Phase 10E: for FORWARDED BUFFER_OBJFWD symbols, just flip the
     // per-buffer local-flags bit on the current buffer. Mirrors GNU
     // `Fmake_local_variable` SYMBOL_FORWARDED arm at data.c:2263-2272:

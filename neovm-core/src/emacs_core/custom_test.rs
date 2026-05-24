@@ -856,6 +856,29 @@ fn make_local_variable_constant_and_keyword_payloads_match_oracle() {
     );
 }
 
+#[test]
+fn make_local_variable_preserves_buffer_undo_list_value() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_all(
+        r#"(let ((a (generate-new-buffer " undo-a"))
+                 (b (generate-new-buffer " undo-b")))
+             (unwind-protect
+                 (progn
+                   (with-current-buffer a
+                     (insert "x"))
+                   (list
+                    (with-current-buffer a buffer-undo-list)
+                    (with-current-buffer b buffer-undo-list)
+                    (with-current-buffer b
+                      (make-local-variable 'buffer-undo-list))
+                    (with-current-buffer a buffer-undo-list)
+                    (with-current-buffer b buffer-undo-list)))
+               (kill-buffer a)
+               (kill-buffer b)))"#,
+    );
+    assert_eq!(result[0], "OK (t t buffer-undo-list t t)");
+}
+
 // -- local-variable-p builtin ------------------------------------------
 
 #[test]
