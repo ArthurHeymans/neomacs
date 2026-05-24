@@ -12460,6 +12460,22 @@ fn bootstrap_pcase_complex_and_pred_guard() {
 }
 
 #[test]
+fn runtime_finalize_resets_gensym_counter_like_gnu_dump() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.set_variable("gensym-counter", Value::fixnum(62));
+    finalize_cached_bootstrap_eval(&mut eval, &runtime_project_root())
+        .expect("finalize runtime image");
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("gensym-counter")
+            .copied()
+            .expect("gensym-counter should be bound"),
+        Value::fixnum(0)
+    );
+}
+
+#[test]
 fn bootstrap_macroexpand1_vs_all_pcase() {
     crate::test_utils::init_test_tracing();
     let mut eval = partial_bootstrap_eval_until("emacs-lisp/cl-preloaded", true);

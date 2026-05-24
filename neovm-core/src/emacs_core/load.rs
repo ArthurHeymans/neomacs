@@ -3489,6 +3489,10 @@ fn finalize_cached_bootstrap_eval(
     clear_transient_runtime_features(eval);
     ensure_startup_compat_variables(eval, project_root);
     restore_cached_runtime_window_system_surface(eval);
+    // GNU subr.el defines this as 0 in the dumped image.  Bootstrap/loading
+    // code may have consumed gensyms before pdump serialization; do not expose
+    // that transient construction state to runtime Lisp.
+    eval.set_variable("gensym-counter", Value::fixnum(0));
 
     let lisp_dir = project_root.join("lisp");
     eval.set_variable(
