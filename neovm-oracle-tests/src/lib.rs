@@ -3330,3 +3330,7 @@ mod divergence_combo_cl_eieio_move_overlay_marker_overlay_textprop_buflocal_narr
 mod divergence_combo_cl_eieio_multi_buf_adv_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-deep-undo-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_deep_undo_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-adv-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_adv_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-save-excursion-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_save_excursion_marker_overlay_textprop_buflocal_narrow;
