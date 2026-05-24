@@ -319,6 +319,35 @@ fn builtin_coding_string_helpers_runtime_match_oracle_core_cases() {
 }
 
 #[test]
+fn encode_coding_string_extracts_multibyte_byte8_chars_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"Hello ");
+    let mut char_buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    for byte in [0xC3, 0xA9] {
+        let len = crate::emacs_core::emacs_char::char_string(
+            crate::emacs_core::emacs_char::byte8_to_char(byte),
+            &mut char_buf,
+        );
+        bytes.extend_from_slice(&char_buf[..len]);
+    }
+    let source = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
+
+    for coding in ["utf-8", "utf-8-emacs", "raw-text", "no-conversion"] {
+        let encoded = builtin_encode_coding_string(vec![source, Value::symbol(coding)])
+            .expect("encode-coding-string should evaluate");
+        let ls = encoded
+            .as_lisp_string()
+            .expect("encode-coding-string should return a string");
+        assert_eq!(ls.as_bytes(), b"Hello \xC3\xA9", "{coding}");
+        assert!(
+            !ls.is_multibyte(),
+            "{coding} result should be a unibyte byte string"
+        );
+    }
+}
+
+#[test]
 fn nil_coding_string_respects_nocopy_identity() {
     crate::test_utils::init_test_tracing();
     let source = Value::string("abc");

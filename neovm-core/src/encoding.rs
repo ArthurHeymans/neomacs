@@ -1049,7 +1049,12 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
         "utf-8" | "utf-8-emacs" | "undecided" | "prefer-utf-8"
     ) || is_byte_preserving_coding_system(coding_system)
     {
-        return encode_eol_bytes(s.as_bytes(), coding_system);
+        let bytes = if s.is_multibyte() {
+            crate::emacs_core::emacs_char::str_as_unibyte(s.as_bytes())
+        } else {
+            s.as_bytes().to_vec()
+        };
+        return encode_eol_bytes(&bytes, coding_system);
     }
 
     if matches!(
