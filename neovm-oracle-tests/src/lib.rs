@@ -3322,3 +3322,7 @@ mod divergence_combo_cl_eieio_tp_face_overlay_marker_overlay_textprop_buflocal_n
 mod divergence_combo_cl_eieio_bufsubstr_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-before-after-string-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_before_after_string_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-region-ops-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_region_ops_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-move-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_move_overlay_marker_overlay_textprop_buflocal_narrow;
