@@ -106,11 +106,25 @@ fn deficiency_advice_on_builtin_function() {
 
     assert_oracle_parity(
         "(progn\n\
+         (define-advice 1+ (:filter-return (ret))\n\
+         (if (numberp ret) (* ret 2) ret))\n\
+         (list (1+ 5)\n\
+         (1+ -1)))",
+    );
+}
+
+#[test]
+fn deficiency_malformed_builtin_advice_signals_invalid_function() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        "(condition-case nil\n\
+         (progn\n\
          (define-advice car (:filter-return (lambda (ret)\n\
          (if (numberp ret) (* ret 2) ret)))\n\
          car-double)\n\
-         (list (car '(5 . rest))\n\
-         (car '(hello . rest))))",
+         (car '(5 . rest)))\n\
+         (invalid-function 'invalid-function))",
     );
 }
 
