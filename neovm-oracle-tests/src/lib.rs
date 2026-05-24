@@ -3358,3 +3358,9 @@ mod divergence_combo_cl_eieio_slot_lifecycle_marker_overlay_textprop_buflocal_na
 mod divergence_combo_cl_eieio_method_combo_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-class-alloc-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_class_alloc_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-typep-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_typep_dispatch_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-bufswap-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_bufswap_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-advice-generic2-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_advice_generic2_marker_overlay_textprop_buflocal_narrow;
