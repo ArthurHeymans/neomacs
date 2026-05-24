@@ -3240,3 +3240,9 @@ mod divergence_combo_cl_eieio_condition_case_marker_overlay_textprop_buflocal_na
 mod divergence_combo_cl_eieio_kill_ring_yank_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-buffer-substring-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_buffer_substring_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-sort-seq-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_sort_seq_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-prin1-read-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_prin1_read_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-scan-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_scan_marker_overlay_textprop_buflocal_narrow;
