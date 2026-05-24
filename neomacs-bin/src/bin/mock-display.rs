@@ -860,53 +860,23 @@ fn mk(
 }
 
 // ===================================================================
-// Terminal helpers
+// Terminal helpers (cross-platform via crossterm)
 // ===================================================================
 
-#[cfg(unix)]
 fn setup_terminal() {
-    use std::os::unix::io::AsRawFd;
-    unsafe {
-        let mut raw = std::mem::zeroed::<libc::termios>();
-        libc::tcgetattr(io::stdin().as_raw_fd(), &mut raw);
-        libc::cfmakeraw(&mut raw);
-        libc::tcsetattr(io::stdin().as_raw_fd(), libc::TCSANOW, &raw);
-    }
+    let _ = crossterm::terminal::enable_raw_mode();
     print!("\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H");
     io::stdout().flush().unwrap();
 }
 
-#[cfg(unix)]
 fn restore_terminal() {
     print!("\x1b[?25h\x1b[?1049l");
     io::stdout().flush().unwrap();
+    let _ = crossterm::terminal::disable_raw_mode();
 }
 
-#[cfg(not(unix))]
-fn setup_terminal() {
-    print!("\x1b[2J\x1b[H");
-    io::stdout().flush().unwrap();
-}
-
-#[cfg(not(unix))]
-fn restore_terminal() {}
-
-#[cfg(unix)]
 fn query_terminal_size() -> Option<(u16, u16)> {
-    use std::os::unix::io::AsRawFd;
-    unsafe {
-        let mut winsz: libc::winsize = std::mem::zeroed();
-        if libc::ioctl(io::stdin().as_raw_fd(), libc::TIOCGWINSZ, &mut winsz) == 0 {
-            Some((winsz.ws_col, winsz.ws_row))
-        } else {
-            None
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn query_terminal_size() -> Option<(u16, u16)> {
-    None
+    crossterm::terminal::size().ok()
 }
 
 fn detect_dpi_scale() -> f32 {

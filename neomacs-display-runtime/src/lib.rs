@@ -15,6 +15,7 @@ pub mod backend;
 pub mod core;
 pub mod text;
 pub mod thread_comm;
+pub mod tty_input;
 mod window_icon;
 
 pub mod render_thread;

@@ -49,6 +49,9 @@ cfg-if.workspace = true
 crossbeam-channel.workspace = true
 os_pipe.workspace = true
 
+# Cross-platform TTY terminal I/O
+crossterm = "0.29"
+
 # FFI / system
 libc.workspace = true
 

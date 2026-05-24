@@ -3,8 +3,11 @@
 //! Mirrors GNU Emacs `src/term.c` (`init_tty`, `tty_default_color_cells`,
 //! `tty_default_color_mode`) and the environment probing that normally lives in
 //! `init_display_interactive` (`src/dispnew.c`).
+//!
+//! All terminal I/O is cross-platform via crossterm.
 
 use neovm_core::emacs_core::terminal::pure::TerminalRuntimeConfig;
+use std::io::Write;
 
 use super::{FrontendKind, StartupOptions};
 
@@ -93,81 +96,23 @@ fn terminal_size_from_env() -> Option<(u32, u32)> {
     terminal_size_from_env_values(std::env::var("COLUMNS").ok(), std::env::var("LINES").ok())
 }
 
-/// Query the terminal size in character cells.  Returns `None` if both the
-/// tty size query and the `COLUMNS`/`LINES` fallback fail.
-///
-/// This is the canonical copy; `tty_frontend` shared this function, and
-/// the TTY redisplay callback also uses it to drive resize detection.
-#[cfg(unix)]
+/// Query the terminal size in character cells via crossterm.
+/// Falls back to `COLUMNS`/`LINES` environment variables.
 pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
-    use std::mem::MaybeUninit;
-
-    unsafe {
-        // GNU term.c:init_tty gets the size from `fileno (tty->input)`.
-        // Try stdin first, then the output fds for terminal wrappers where
-        // only the write side carries a useful window size.
-        for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
-            let mut winsize = MaybeUninit::<libc::winsize>::uninit();
-            if libc::ioctl(fd, libc::TIOCGWINSZ, winsize.as_mut_ptr()) == 0 {
-                let winsize = winsize.assume_init();
-                if winsize.ws_col > 0 && winsize.ws_row > 0 {
-                    return Some((u32::from(winsize.ws_col), u32::from(winsize.ws_row)));
-                }
-            }
-        }
-    }
-    terminal_size_from_env()
-}
-
-#[cfg(not(unix))]
-pub fn query_terminal_size_cells() -> Option<(u32, u32)> {
-    terminal_size_from_env()
+    crossterm::terminal::size()
+        .ok()
+        .map(|(cols, rows)| (cols as u32, rows as u32))
+        .or_else(terminal_size_from_env)
 }
 
 // ── TTY terminal lifecycle (raw mode, alt screen) ────────────────────────
 
-/// Saved original termios for the TtyRif path. Stored globally so
-/// `tty_shutdown_terminal` can restore it even from a panic handler.
-#[cfg(unix)]
-static TTY_SAVED_TERMIOS: std::sync::Mutex<Option<libc::termios>> = std::sync::Mutex::new(None);
-
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
-#[cfg(unix)]
 pub fn tty_init_terminal() {
-    use std::io::Write;
-    use std::mem::MaybeUninit;
-
-    unsafe {
-        let mut original = MaybeUninit::<libc::termios>::uninit();
-        if libc::tcgetattr(libc::STDIN_FILENO, original.as_mut_ptr()) != 0 {
-            tracing::error!("tty_init_terminal: tcgetattr failed");
-            return;
-        }
-        let original = original.assume_init();
-
-        // Save for later restore
-        if let Ok(mut guard) = TTY_SAVED_TERMIOS.lock() {
-            *guard = Some(original);
-        }
-
-        let mut raw = original;
-        // Input: no break, no CR->NL, no parity, no strip, no start/stop
-        raw.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
-        // Output: disable post-processing
-        raw.c_oflag &= !libc::OPOST;
-        // Control: 8-bit chars
-        raw.c_cflag |= libc::CS8;
-        // Local: no echo, no canonical, no signals, no extended
-        raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::ISIG | libc::IEXTEN);
-        // Non-blocking reads
-        raw.c_cc[libc::VMIN] = 0;
-        raw.c_cc[libc::VTIME] = 0;
-
-        if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &raw) != 0 {
-            tracing::error!("tty_init_terminal: tcsetattr failed");
-            return;
-        }
+    if let Err(e) = crossterm::terminal::enable_raw_mode() {
+        tracing::error!("tty_init_terminal: enable_raw_mode failed: {}", e);
+        return;
     }
 
     // Enter alternate screen, hide cursor, clear
@@ -177,36 +122,20 @@ pub fn tty_init_terminal() {
     tracing::info!("TTY terminal initialized (raw mode + alt screen)");
 }
 
-#[cfg(not(unix))]
-pub fn tty_init_terminal() {
-    tracing::warn!("tty_init_terminal: not implemented on this platform");
-}
-
 /// Restore the terminal to its original state: show cursor, leave alt screen,
-/// reset SGR, restore saved termios.
-#[cfg(unix)]
+/// reset SGR, disable raw mode.
 pub fn tty_shutdown_terminal() {
-    use std::io::Write;
-
     // Show cursor, reset SGR, leave alternate screen
     let mut stdout = std::io::stdout();
     let _ = stdout.write_all(b"\x1b[0m\x1b[?25h\x1b[?1049l");
     let _ = stdout.flush();
 
-    // Restore termios
-    if let Ok(guard) = TTY_SAVED_TERMIOS.lock() {
-        if let Some(ref original) = *guard {
-            unsafe {
-                let _ = libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, original);
-            }
-        }
+    // Restore raw mode
+    if let Err(e) = crossterm::terminal::disable_raw_mode() {
+        tracing::warn!("tty_shutdown_terminal: disable_raw_mode failed: {}", e);
+    } else {
+        tracing::info!("TTY terminal restored");
     }
-    tracing::info!("TTY terminal restored");
-}
-
-#[cfg(not(unix))]
-pub fn tty_shutdown_terminal() {
-    tracing::warn!("tty_shutdown_terminal: not implemented on this platform");
 }
 
 /// Returns `true` when the session is an interactive TTY (not batch and

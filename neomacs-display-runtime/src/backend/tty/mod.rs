@@ -310,79 +310,9 @@ fn color_to_rgb8(c: &Color) -> (u8, u8, u8) {
     (r, g, b)
 }
 
-// ---------------------------------------------------------------------------
-// Raw mode helpers (POSIX)
-// ---------------------------------------------------------------------------
-
-/// Saved terminal state for restoring on shutdown.
-#[cfg(unix)]
-struct SavedTermios {
-    original: libc::termios,
-}
-
-#[cfg(unix)]
-impl SavedTermios {
-    /// Put the terminal into raw mode and return the saved state.
-    fn enable_raw_mode() -> io::Result<Self> {
-        use std::mem::MaybeUninit;
-        unsafe {
-            let mut original = MaybeUninit::<libc::termios>::uninit();
-            if libc::tcgetattr(libc::STDIN_FILENO, original.as_mut_ptr()) != 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let original = original.assume_init();
-
-            let mut raw = original;
-            // Input: no break, no CR→NL, no parity, no strip, no start/stop
-            raw.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
-            // Output: disable post-processing
-            raw.c_oflag &= !libc::OPOST;
-            // Control: 8-bit chars
-            raw.c_cflag |= libc::CS8;
-            // Local: no echo, no canonical, no signals, no extended
-            raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::ISIG | libc::IEXTEN);
-            // Read returns immediately with at least 1 byte or timeout
-            raw.c_cc[libc::VMIN] = 0;
-            raw.c_cc[libc::VTIME] = 0;
-
-            if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &raw) != 0 {
-                return Err(io::Error::last_os_error());
-            }
-
-            Ok(Self { original })
-        }
-    }
-
-    /// Restore the saved terminal state.
-    fn restore(&self) -> io::Result<()> {
-        unsafe {
-            if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, &self.original) != 0 {
-                return Err(io::Error::last_os_error());
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Query terminal size via ioctl(TIOCGWINSZ).
-#[cfg(unix)]
+/// Query terminal size via crossterm (cross-platform).
 fn get_terminal_size() -> Option<(u16, u16)> {
-    use std::mem::MaybeUninit;
-    unsafe {
-        let mut ws = MaybeUninit::<libc::winsize>::uninit();
-        if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, ws.as_mut_ptr()) == 0 {
-            let ws = ws.assume_init();
-            if ws.ws_col > 0 && ws.ws_row > 0 {
-                return Some((ws.ws_col, ws.ws_row));
-            }
-        }
-    }
-    None
-}
-
-#[cfg(not(unix))]
-fn get_terminal_size() -> Option<(u16, u16)> {
-    None
+    crossterm::terminal::size().ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -850,9 +780,8 @@ pub struct TtyBackend {
     /// Buffered output bytes to write on present()
     output_buf: Vec<u8>,
 
-    /// Saved terminal state for raw mode
-    #[cfg(unix)]
-    saved_termios: Option<SavedTermios>,
+    /// True when crossterm raw mode is active (so we can restore on shutdown)
+    raw_mode_enabled: bool,
 
     /// Cursor position to set after rendering (col, row) -- 0-based
     cursor_position: Option<(u16, u16)>,
@@ -883,8 +812,7 @@ impl TtyBackend {
             previous: TtyGrid::new(80, 24),
             force_full_render: true,
             output_buf: Vec::with_capacity(65536),
-            #[cfg(unix)]
-            saved_termios: None,
+            raw_mode_enabled: false,
             cursor_position: None,
             cursor_visible: false,
             cursor_shape: ansi::TerminalCursorShape::Block,
@@ -956,17 +884,14 @@ impl DisplayBackend for TtyBackend {
         self.previous
             .resize(self.width as usize, self.height as usize);
 
-        // Enter raw mode
-        #[cfg(unix)]
-        {
-            match SavedTermios::enable_raw_mode() {
-                Ok(saved) => self.saved_termios = Some(saved),
-                Err(e) => {
-                    return Err(DisplayError::Backend(format!(
-                        "Failed to enable raw mode: {}",
-                        e
-                    )));
-                }
+        // Enter raw mode (cross-platform via crossterm)
+        match crossterm::terminal::enable_raw_mode() {
+            Ok(()) => self.raw_mode_enabled = true,
+            Err(e) => {
+                return Err(DisplayError::Backend(format!(
+                    "Failed to enable raw mode: {}",
+                    e
+                )));
             }
         }
 
@@ -1009,14 +934,9 @@ impl DisplayBackend for TtyBackend {
         let _ = stdout.flush();
 
         // Restore terminal state
-        #[cfg(unix)]
-        if let Some(ref saved) = self.saved_termios {
-            let _ = saved.restore();
-        }
-
-        #[cfg(unix)]
-        {
-            self.saved_termios = None;
+        if self.raw_mode_enabled {
+            let _ = crossterm::terminal::disable_raw_mode();
+            self.raw_mode_enabled = false;
         }
 
         self.initialized = false;
