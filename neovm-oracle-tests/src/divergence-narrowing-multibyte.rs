@@ -183,7 +183,11 @@ fn divergence_get_buffer_create_vs_generate() {
         r#"(let ((a (get-buffer-create " *test-gbc*"))
         (b (generate-new-buffer " *test-gbc*")))
   (unwind-protect
-      (list (buffer-name a) (buffer-name b) (eq a b))
+      (list (buffer-name a)
+            (string-match-p "\\` \\*test-gbc\\*-[0-9]+\\'" (buffer-name b))
+            (not (eq a b))
+            (eq a (get-buffer " *test-gbc*"))
+            (eq b (get-buffer (buffer-name b))))
     (kill-buffer a)
     (kill-buffer b)))"#,
     );
