@@ -2108,8 +2108,12 @@ mod divergence_combo_chartab_syntax_category;
 #[path = "divergence-combo-charwidth-display-fill.rs"]
 mod divergence_combo_charwidth_display_fill;
 mod divergence_combo_circular_list_print_read_reverse;
+#[path = "divergence-combo-cl-block-return-marker-overlay.rs"]
+mod divergence_combo_cl_block_return_marker_overlay;
 #[path = "divergence-combo-cl-destructuring-marker-overlay.rs"]
 mod divergence_combo_cl_destructuring_marker_overlay;
+#[path = "divergence-combo-cl-flet-marker-overlay.rs"]
+mod divergence_combo_cl_flet_marker_overlay;
 mod divergence_combo_cl_labels_closure_mutation_deep;
 #[path = "divergence-combo-cl-letf-destructuring-marker-overlay-undo.rs"]
 mod divergence_combo_cl_letf_destructuring_marker_overlay_undo;
@@ -2122,11 +2126,17 @@ mod divergence_combo_cl_loop_destructuring_accumulate_deep;
 mod divergence_combo_cl_loop_seq_accumulate;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
 mod divergence_combo_cl_macs_buffer_deep;
+#[path = "divergence-combo-cl-multiple-value-marker-overlay.rs"]
+mod divergence_combo_cl_multiple_value_marker_overlay;
 mod divergence_combo_cl_pcase_destructure_guard_deep;
 #[path = "divergence-combo-cl-pcase-rx-thread.rs"]
 mod divergence_combo_cl_pcase_rx_thread;
+#[path = "divergence-combo-cl-progv-marker-overlay.rs"]
+mod divergence_combo_cl_progv_marker_overlay;
 #[path = "divergence-combo-cl-seq-loop.rs"]
 mod divergence_combo_cl_seq_loop;
+#[path = "divergence-combo-cl-tagbody-go-marker-overlay.rs"]
+mod divergence_combo_cl_tagbody_go_marker_overlay;
 #[path = "divergence-combo-coding-marker-overlay-undo-textprop.rs"]
 mod divergence_combo_coding_marker_overlay_undo_textprop;
 #[path = "divergence-combo-column-indent-tab-marker-overlay-undo.rs"]
