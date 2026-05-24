@@ -3246,3 +3246,9 @@ mod divergence_combo_cl_eieio_sort_seq_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_eieio_prin1_read_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-syntax-scan-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_syntax_scan_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-read-only-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_read_only_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-char-property-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_char_property_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-plist-alist-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_plist_alist_marker_overlay_textprop_buflocal_narrow;
