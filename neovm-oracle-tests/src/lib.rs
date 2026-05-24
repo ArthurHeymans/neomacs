@@ -2078,6 +2078,8 @@ mod divergence_combo_buffer_overlay;
 mod divergence_combo_buffer_overlay_eieio;
 #[path = "divergence-combo-buffer-string-erase-marker-overlay-undo.rs"]
 mod divergence_combo_buffer_string_erase_marker_overlay_undo;
+#[path = "divergence-combo-buffer-swap-text-marker-overlay.rs"]
+mod divergence_combo_buffer_swap_text_marker_overlay;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
 mod divergence_combo_buflocal_default_setq_kill_deep;
@@ -2095,6 +2097,8 @@ mod divergence_combo_buflocal_narrow_marker;
 mod divergence_combo_buflocal_setq_set_let_marker_overlay_undo;
 #[path = "divergence-combo-case-conversion-marker-overlay-undo.rs"]
 mod divergence_combo_case_conversion_marker_overlay_undo;
+#[path = "divergence-combo-catch-throw-marker-overlay-undo.rs"]
+mod divergence_combo_catch_throw_marker_overlay_undo;
 mod divergence_combo_catch_throw_unwind_buffer_deep;
 mod divergence_combo_char_table_syntax_category_deep;
 #[path = "divergence-combo-chartab-syntax-category.rs"]
@@ -2128,6 +2132,8 @@ mod divergence_combo_completion_try_all_completions_deep;
 mod divergence_combo_condition_case_error_marker_overlay_undo;
 #[path = "divergence-combo-condition-case-marker-overlay-undo.rs"]
 mod divergence_combo_condition_case_marker_overlay_undo;
+#[path = "divergence-combo-condition-catch-marker-overlay-undo.rs"]
+mod divergence_combo_condition_catch_marker_overlay_undo;
 #[path = "divergence-combo-data-pipeline.rs"]
 mod divergence_combo_data_pipeline;
 #[path = "divergence-combo-deep-undo-stress-2.rs"]
@@ -2151,6 +2157,8 @@ mod divergence_combo_defvar_local_setq_default_overlay;
 mod divergence_combo_defvar_set_default_multi_buffer_marker_overlay_undo;
 #[path = "divergence-combo-delete-char-whitespace-marker-overlay-undo.rs"]
 mod divergence_combo_delete_char_whitespace_marker_overlay_undo;
+#[path = "divergence-combo-dynamic-let-marker-overlay-undo.rs"]
+mod divergence_combo_dynamic_let_marker_overlay_undo;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
 mod divergence_combo_dynbind_closure_eval_obarray;
 #[path = "divergence-combo-edge-cases.rs"]
@@ -2385,6 +2393,8 @@ mod divergence_combo_regexp_match_replace_narrow_prop;
 mod divergence_combo_register_marker_overlay_undo;
 #[path = "divergence-combo-register-marker-overlay-undo-narrow.rs"]
 mod divergence_combo_register_marker_overlay_undo_narrow;
+#[path = "divergence-combo-remove-add-text-props-marker-overlay.rs"]
+mod divergence_combo_remove_add_text_props_marker_overlay;
 #[path = "divergence-combo-replace-string-regexp-marker-overlay-undo.rs"]
 mod divergence_combo_replace_string_regexp_marker_overlay_undo;
 #[path = "divergence-combo-require-featurep-marker-overlay-undo.rs"]
