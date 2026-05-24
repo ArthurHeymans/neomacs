@@ -3276,3 +3276,9 @@ mod divergence_combo_cl_eieio_composition_property_marker_overlay_textprop_buflo
 mod divergence_combo_cl_eieio_display_table_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-indent-fill-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_indent_fill_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-ppss-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_ppss_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-rectangle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_rectangle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-undo-list-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_undo_list_marker_overlay_textprop_buflocal_narrow;
