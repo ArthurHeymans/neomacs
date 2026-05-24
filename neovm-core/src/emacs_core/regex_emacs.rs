@@ -1006,10 +1006,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                                 .any(|entry| entry.assigned_group == Some(group))
                         {
                             return Err(RegexCompileError {
-                                message: format!(
-                                    "invalid back reference \\{group}: only {} groups defined",
-                                    buf.re_nsub
-                                ),
+                                message: "Invalid back reference".to_string(),
                             });
                         }
                         laststart = Some(bpos!());

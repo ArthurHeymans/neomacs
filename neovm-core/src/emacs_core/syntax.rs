@@ -1906,6 +1906,53 @@ fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
         .is_truthy()
 }
 
+fn maybe_syntax_propertize_for_scan(
+    eval: &mut super::eval::Context,
+    target_char_pos: usize,
+) -> EvalResult {
+    if !parse_sexp_lookup_properties_enabled(eval)
+        || eval
+            .obarray
+            .symbol_function("internal--syntax-propertize")
+            .is_none()
+    {
+        return Ok(Value::NIL);
+    }
+
+    let done = eval
+        .eval_symbol("syntax-propertize--done")
+        .unwrap_or(Value::fixnum(-1));
+    if let ValueKind::Fixnum(done) = done.kind()
+        && done >= target_char_pos as i64
+    {
+        return Ok(Value::NIL);
+    }
+
+    let before_modiff = eval
+        .buffers
+        .current_buffer()
+        .map(|buf| buf.chars_modified_tick())
+        .unwrap_or_default();
+    eval.apply(
+        Value::symbol("internal--syntax-propertize"),
+        vec![Value::fixnum(target_char_pos as i64)],
+    )?;
+    let after_modiff = eval
+        .buffers
+        .current_buffer()
+        .map(|buf| buf.chars_modified_tick())
+        .unwrap_or_default();
+    if after_modiff != before_modiff {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "internal--syntax-propertize modified the buffer!",
+            )],
+        ));
+    }
+    Ok(Value::NIL)
+}
+
 /// `(syntax-class-to-char CLASS)` — map syntax class code to descriptor char.
 pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
     if args.len() != 1 {
@@ -3183,13 +3230,21 @@ pub(crate) fn builtin_forward_sexp(
         }
     };
 
+    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    if honor_properties {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.point_max_char().saturating_add(1))
+            .unwrap_or(1);
+        maybe_syntax_propertize_for_scan(eval, target)?;
+    }
     let buf = eval
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point();
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
     let new_pos = match scan_sexps_with_options(buf, &table, from, count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?
     {
@@ -3226,13 +3281,21 @@ pub(crate) fn builtin_backward_sexp(
         }
     };
 
+    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    if honor_properties {
+        let target = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.point_max_char().saturating_add(1))
+            .unwrap_or(1);
+        maybe_syntax_propertize_for_scan(eval, target)?;
+    }
     let buf = eval
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point();
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
     // backward-sexp with positive count => scan_sexps with negative count
     let new_pos = match scan_sexps_with_options(buf, &table, from, -count, honor_properties)
         .map_err(|err| signal("scan-error", err.signal_data()))?

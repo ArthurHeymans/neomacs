@@ -695,7 +695,11 @@ impl BootstrapDisplayConfig {
     }
 }
 
-fn startup_dimensions(frontend: FrontendKind, frame_metrics: BootstrapFrameMetrics) -> (u32, u32) {
+fn startup_dimensions(
+    frontend: FrontendKind,
+    frame_metrics: BootstrapFrameMetrics,
+    noninteractive: bool,
+) -> (u32, u32) {
     match frontend {
         FrontendKind::Gui => {
             // GNU gui_figure_window_size seeds the first GUI frame from an
@@ -707,6 +711,12 @@ fn startup_dimensions(frontend: FrontendKind, frame_metrics: BootstrapFrameMetri
             (width.max(200), height.max(100))
         }
         FrontendKind::Tty => {
+            if noninteractive {
+                // GNU `make_frame` seeds the initial non-window frame with
+                // total size 80x25, then gives the root window 24 lines plus
+                // a one-line minibuffer.
+                return (80, 25);
+            }
             // TTY frames use 1x1 character cells (GNU Emacs frame.c:1184-1185),
             // so frame dimensions are in character cells, not pixels.
             let (cols, rows) = tty_init::query_terminal_size_cells().unwrap_or((80, 25));
@@ -2167,7 +2177,8 @@ pub fn run(mode: RuntimeMode) {
     // startup. GUI mode computes real pixel dimensions from font
     // metrics via bootstrap_frame_metrics().
     let frame_metrics = bootstrap_frame_metrics_for_frontend(startup.frontend);
-    let (width, height) = startup_dimensions(startup.frontend, frame_metrics);
+    let (width, height) =
+        startup_dimensions(startup.frontend, frame_metrics, startup.noninteractive);
 
     if startup.frontend == FrontendKind::Gui {
         run_gui_main_thread(mode, startup, width, height, bootstrap_display);

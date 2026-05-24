@@ -8,12 +8,12 @@ use super::{
     BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FrontendKind,
     PrimaryWindowDisplayHost, PrimaryWindowSize, RuntimeMode, StartupOptions,
     adopt_existing_primary_gui_frame, bootstrap_buffers, bootstrap_default_font_name,
-    bootstrap_display_config, bootstrap_frame_metrics, classify_early_cli_action,
-    configure_gnu_startup_state, face_height_to_pixels, parse_startup_options, publish_gui_frame,
-    raw_loadup_command_line, raw_loadup_startup_surface, render_fingerprint_text, render_help_text,
-    render_startup_image_error, render_version_text, run_gnu_startup,
-    runtime_mode_from_program_name, startup_dimensions, sync_live_gui_frame_titles,
-    sync_selected_gui_chrome_state,
+    bootstrap_display_config, bootstrap_frame_metrics, bootstrap_frame_metrics_for_frontend,
+    classify_early_cli_action, configure_gnu_startup_state, face_height_to_pixels,
+    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
+    render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
+    run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
+    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
 use neomacs_display_runtime::thread_comm::RenderCommand;
 use neovm_core::emacs_core::Context;
@@ -1649,9 +1649,18 @@ fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
 #[test]
 fn startup_dimensions_gui_matches_gnu_default_text_grid() {
     let metrics = bootstrap_frame_metrics();
-    let (width, height) = startup_dimensions(FrontendKind::Gui, metrics);
+    let (width, height) = startup_dimensions(FrontendKind::Gui, metrics, false);
     assert_eq!(width, (80.0 * metrics.char_width).round() as u32);
     assert_eq!(height, (36.0 * metrics.char_height).round() as u32);
+}
+
+#[test]
+fn startup_dimensions_noninteractive_tty_matches_gnu_initial_frame() {
+    let metrics = bootstrap_frame_metrics_for_frontend(FrontendKind::Tty);
+    assert_eq!(
+        startup_dimensions(FrontendKind::Tty, metrics, true),
+        (80, 25)
+    );
 }
 
 #[test]

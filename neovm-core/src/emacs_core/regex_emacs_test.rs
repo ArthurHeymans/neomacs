@@ -133,7 +133,7 @@ fn backreference_to_open_group_is_invalid_like_gnu() {
     let syn = DefaultSyntaxLookup;
     let err = search_pattern("\\([^ \t\n]+ \\1\\)", "hello hello", 0, false, &syn, 0)
         .expect_err("GNU signals invalid-regexp for a backreference before group end");
-    assert!(err.message.contains("invalid back reference"));
+    assert_eq!(err.message, "Invalid back reference");
 }
 
 #[test]
