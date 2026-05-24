@@ -2151,6 +2151,23 @@ fn begin_lambda_call_in_state(
             arglist,
             args,
         )?;
+    } else if !lexenv.is_nil() {
+        let old = std::mem::replace(lexenv, Value::NIL);
+        // GNU funcall_lambda computes a local `lexenv = Qnil` for dynamic
+        // lambdas and, before evaluating the body, specbinds
+        // Qinternal_interpreter_environment when that differs from the
+        // caller's environment.
+        specpdl.push(SpecBinding::LexicalEnv { old_lexenv: old });
+        bind_lambda_args_from_arglist(
+            obarray,
+            specpdl,
+            lexenv,
+            None,
+            specpdl_count,
+            fun,
+            arglist,
+            args,
+        )?;
     } else {
         bind_lambda_args_from_arglist(
             obarray,
@@ -2296,7 +2313,8 @@ fn finish_lambda_call_in_state(
     // Unwind all specpdl entries back to the count saved at begin.
     // For lexical closures, this pops the SpecBinding::LexicalEnv
     // entry (restoring self.lexenv) plus any dynamic bindings.
-    // For dynamic lambdas, this pops the specbind entries.
+    // For dynamic lambdas, this pops the specbind entries and, when the
+    // caller was lexical, the temporary nil lexical environment.
     // Mirrors GNU: unbind_to(count, val) in funcall_lambda.
     while specpdl.len() > state.specpdl_count {
         let binding = specpdl.pop().unwrap();

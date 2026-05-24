@@ -6953,6 +6953,28 @@ fn dynamic_binding_closure() {
 }
 
 #[test]
+fn dynamic_closure_clears_callers_lexical_environment() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_lexical_binding(true);
+
+    let result = format_eval_result(&ev.eval_str(
+        r#"
+        (let ((captured 'outer))
+          (let ((f (make-interpreted-closure
+                    '(x)
+                    '((let ((captured x))
+                        (lambda (y) (+ captured y))))
+                    nil)))
+            (let ((g (funcall f 10)))
+              (funcall g 5))))
+    "#,
+    ));
+
+    assert_eq!(result, "ERR (void-variable (captured))");
+}
+
+#[test]
 fn lexical_binding_special_var_stays_dynamic() {
     crate::test_utils::init_test_tracing();
     // defvar makes a variable special — it stays dynamically scoped
