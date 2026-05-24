@@ -2150,6 +2150,12 @@ mod divergence_combo_cl_check_type_marker_overlay;
 mod divergence_combo_cl_check_type_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-concatenate-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_concatenate_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-define-setf-expander-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_define_setf_expander_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-define-symbol-macro-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_define_symbol_macro_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-defsetf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_defsetf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-destructuring-marker-overlay.rs"]
 mod divergence_combo_cl_destructuring_marker_overlay;
 #[path = "divergence-combo-cl-do-complex-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2184,6 +2190,8 @@ mod divergence_combo_cl_flet_marker_overlay;
 mod divergence_combo_cl_flet_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-get-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_get_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-get-setf-method-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_get_setf_method_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-getf-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_getf_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_labels_closure_mutation_deep;
@@ -2293,6 +2301,8 @@ mod divergence_combo_cl_the_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_typecase_marker_overlay;
 #[path = "divergence-combo-cl-typecase-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_typecase_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-with-slots-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_with_slots_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-clone-narrow-marker-overlay-textprop.rs"]
 mod divergence_combo_clone_narrow_marker_overlay_textprop;
 #[path = "divergence-combo-coding-marker-overlay-undo-textprop.rs"]
