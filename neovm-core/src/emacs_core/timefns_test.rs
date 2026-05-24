@@ -757,6 +757,37 @@ fn builtin_time_convert_with_t() {
 }
 
 #[test]
+fn builtin_time_convert_float_preserves_gnu_binary_precision() {
+    crate::test_utils::init_test_tracing();
+
+    // GNU `decode_float_time' treats all significand bits as significant.
+    let result = builtin_time_convert(vec![Value::make_float(3.5), Value::T]).unwrap();
+    assert_eq!(result.cons_car().as_int(), Some(7_881_299_347_898_368));
+    assert_eq!(result.cons_cdr().as_int(), Some(2_251_799_813_685_248));
+
+    let result =
+        builtin_time_convert(vec![Value::make_float(1_760_000_000.123456), Value::T]).unwrap();
+    assert_eq!(result.cons_car().as_int(), Some(7_381_975_040_517_812));
+    assert_eq!(result.cons_cdr().as_int(), Some(4_194_304));
+
+    let result = builtin_time_convert(vec![Value::make_float(-0.1), Value::T]).unwrap();
+    assert_eq!(result.cons_car().as_int(), Some(-7_205_759_403_792_794));
+    assert_eq!(result.cons_cdr().as_int(), Some(72_057_594_037_927_936));
+
+    let result =
+        builtin_time_convert(vec![Value::make_float(-0.1), Value::symbol("list")]).unwrap();
+    assert_eq!(
+        list_to_vec(&result).unwrap(),
+        vec![
+            Value::fixnum(-1),
+            Value::fixnum(65_535),
+            Value::fixnum(899_999),
+            Value::fixnum(999_999),
+        ]
+    );
+}
+
+#[test]
 fn builtin_set_time_zone_rule_t() {
     crate::test_utils::init_test_tracing();
     let _guard = tz_test_lock();

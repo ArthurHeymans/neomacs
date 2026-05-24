@@ -12,6 +12,7 @@ use super::value::*;
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
+use malachite::integer::Integer;
 use std::cell::RefCell;
 use std::ffi::{CStr, OsString};
 use std::sync::{Mutex, OnceLock};
@@ -152,6 +153,32 @@ impl TimeMicros {
         Ok(TimeMicros { secs, usecs, psecs })
     }
 
+    fn from_exact_ticks_hz(ticks: &Integer, hz: &Integer) -> Result<TimeMicros, Flow> {
+        if hz <= &Integer::from(0) {
+            return Err(signal(
+                "error",
+                vec![Value::string("Invalid time specification")],
+            ));
+        }
+
+        let trillion = Integer::from(1_000_000_000_000i64);
+        let million = Integer::from(1_000_000i64);
+        let total_psecs = integer_div_floor(&(ticks * &trillion), hz);
+        let secs = integer_div_floor(&total_psecs, &trillion);
+        let rem_psecs = &total_psecs - &secs * &trillion;
+        let usecs = &rem_psecs / &million;
+        let psecs = &rem_psecs - &usecs * &million;
+
+        let secs = i64::try_from(&secs)
+            .map_err(|_| signal("error", vec![Value::string("Time value out of range")]))?;
+        let usecs = i64::try_from(&usecs)
+            .map_err(|_| signal("error", vec![Value::string("Time value out of range")]))?;
+        let psecs = i64::try_from(&psecs)
+            .map_err(|_| signal("error", vec![Value::string("Time value out of range")]))?;
+
+        Ok(TimeMicros { secs, usecs, psecs })
+    }
+
     fn to_ticks_hz(&self, hz: i64) -> Value {
         let ticks = self.secs as i128 * hz as i128
             + self.usecs as i128 * hz as i128 / 1_000_000
@@ -181,11 +208,12 @@ enum TimeInputForm {
     TicksHz,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct ParsedTime {
     time: TimeMicros,
     hz: i64,
     form: TimeInputForm,
+    exact_ticks_hz: Option<(Integer, Integer)>,
 }
 
 /// Parse a time value from a Lisp argument.
@@ -218,6 +246,7 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
             },
             hz: 1,
             form: TimeInputForm::Scalar,
+            exact_ticks_hz: None,
         });
     }
     match val.kind() {
@@ -225,6 +254,7 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
             time: TimeMicros::now(),
             hz: 1_000_000_000_000,
             form: TimeInputForm::List,
+            exact_ticks_hz: None,
         }),
         ValueKind::Fixnum(n) => Ok(ParsedTime {
             time: TimeMicros {
@@ -234,19 +264,24 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
             },
             hz: 1,
             form: TimeInputForm::Scalar,
+            exact_ticks_hz: Some((Integer::from(n), Integer::from(1))),
         }),
         ValueKind::Float => {
             let f = val.xfloat();
-            let secs = f.floor() as i64;
-            let usecs = ((f - f.floor()) * 1_000_000.0).round() as i64;
+            if !f.is_finite() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid time specification")],
+                ));
+            }
+            let (ticks, hz) = float_to_exact_ticks_hz(f)?;
+            let hz_i64 = i64::try_from(&hz)
+                .map_err(|_| signal("error", vec![Value::string("Time value out of range")]))?;
             Ok(ParsedTime {
-                time: TimeMicros {
-                    secs,
-                    usecs,
-                    psecs: 0,
-                },
-                hz: time_convert_default_hz(val),
+                time: TimeMicros::from_exact_ticks_hz(&ticks, &hz)?,
+                hz: hz_i64,
                 form: TimeInputForm::List,
+                exact_ticks_hz: Some((ticks, hz)),
             })
         }
         ValueKind::Cons => {
@@ -266,6 +301,7 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
                     time: TimeMicros::from_ticks_hz(ticks, hz)?,
                     hz,
                     form: TimeInputForm::TicksHz,
+                    exact_ticks_hz: Some((Integer::from(ticks), Integer::from(hz))),
                 });
             }
 
@@ -308,12 +344,53 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
                 },
                 hz: time_convert_default_hz(val),
                 form: TimeInputForm::List,
+                exact_ticks_hz: None,
             })
         }
         other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *val],
         )),
+    }
+}
+
+fn float_to_exact_ticks_hz(f: f64) -> Result<(Integer, Integer), Flow> {
+    if f == 0.0 {
+        return Ok((Integer::from(0), Integer::from(1)));
+    }
+
+    let bits = f.to_bits();
+    let sign = if bits >> 63 == 0 { 1i128 } else { -1i128 };
+    let exponent_bits = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1u64 << 52) - 1);
+    let (mantissa, unbiased_exponent) = if exponent_bits == 0 {
+        (Integer::from(fraction), -1022)
+    } else {
+        (Integer::from((1u64 << 52) | fraction), exponent_bits - 1023)
+    };
+    let scale = (52 - unbiased_exponent).max(0);
+
+    let mut ticks = if unbiased_exponent >= 52 {
+        let shift = (unbiased_exponent - 52) as u32;
+        mantissa << shift
+    } else {
+        mantissa
+    };
+    if sign < 0 {
+        ticks = -ticks;
+    }
+
+    let hz = Integer::from(1) << (scale as u32);
+    Ok((ticks, hz))
+}
+
+fn integer_div_floor(n: &Integer, d: &Integer) -> Integer {
+    let q = n / d;
+    let r = n - &q * d;
+    if r != 0 && n < &Integer::from(0) {
+        q - Integer::from(1)
+    } else {
+        q
     }
 }
 
@@ -334,12 +411,12 @@ fn time_hz_lcm(a: i64, b: i64) -> i64 {
     a.saturating_div(gcd).saturating_mul(b)
 }
 
-fn time_arithmetic_hz(a: ParsedTime, b: ParsedTime) -> i64 {
+fn time_arithmetic_hz(a: &ParsedTime, b: &ParsedTime) -> i64 {
     time_hz_lcm(a.hz, b.hz)
 }
 
 fn time_arithmetic_result(result: TimeMicros, a: ParsedTime, b: ParsedTime) -> Value {
-    let hz = time_arithmetic_hz(a, b);
+    let hz = time_arithmetic_hz(&a, &b);
     if hz == 1 {
         return Value::make_int(result.secs);
     }
@@ -1039,7 +1116,8 @@ pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
 ///   - `float`         -> float seconds
 pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
     expect_min_max_args("time-convert", &args, 1, 2)?;
-    let tm = parse_time(&args[0])?;
+    let parsed = parse_time_detailed(&args[0])?;
+    let tm = parsed.time;
 
     let form = if args.len() > 1 {
         &args[1]
@@ -1051,8 +1129,15 @@ pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
         ValueKind::Nil => Ok(tm.to_list()),
         ValueKind::T => {
             // GNU's default timestamp representation is (TICKS . HZ).
-            let hz = time_convert_default_hz(&args[0]);
-            Ok(tm.to_ticks_hz(hz))
+            let hz = parsed.hz;
+            if let Some((ticks, exact_hz)) = parsed.exact_ticks_hz {
+                Ok(Value::cons(
+                    Value::make_integer(ticks),
+                    Value::make_integer(exact_hz),
+                ))
+            } else {
+                Ok(tm.to_ticks_hz(hz))
+            }
         }
         ValueKind::Fixnum(hz) if hz > 0 => {
             // GNU accepts a positive integer FORM as an explicit HZ.
