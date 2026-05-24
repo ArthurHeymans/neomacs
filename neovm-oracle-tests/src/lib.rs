@@ -3312,3 +3312,9 @@ mod divergence_combo_cl_eieio_char_width_marker_overlay_textprop_buflocal_narrow
 mod divergence_combo_cl_eieio_invisibility_spec_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-jit-lock-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_jit_lock_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-overlay-stack-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_overlay_stack_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-type-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_type_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-tp-face-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_tp_face_overlay_marker_overlay_textprop_buflocal_narrow;
