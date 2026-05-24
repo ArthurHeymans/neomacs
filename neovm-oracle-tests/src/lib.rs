@@ -2050,6 +2050,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-abbrev-completion-syntax.rs"]
 mod divergence_combo_abbrev_completion_syntax;
+#[path = "divergence-combo-abbrev-marker-overlay-undo.rs"]
+mod divergence_combo_abbrev_marker_overlay_undo;
 #[path = "divergence-combo-abbrev-table-marker-overlay-undo.rs"]
 mod divergence_combo_abbrev_table_marker_overlay_undo;
 #[path = "divergence-combo-advice-defun-buffer-local-overlay-marker-undo.rs"]
@@ -2078,6 +2080,8 @@ mod divergence_combo_buffer_overlay_eieio;
 mod divergence_combo_buffer_string_erase_marker_overlay_undo;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
+#[path = "divergence-combo-buflocal-marker-overlay-undo.rs"]
+mod divergence_combo_buflocal_marker_overlay_undo;
 mod divergence_combo_buflocal_default_setq_kill_deep;
 #[path = "divergence-combo-buflocal-dir-abbrev-undo.rs"]
 mod divergence_combo_buflocal_dir_abbrev_undo;
@@ -2205,6 +2209,8 @@ mod divergence_combo_hook_run_add_remove_buffer_local;
 #[path = "divergence-combo-indent-fill-paragraph.rs"]
 mod divergence_combo_indent_fill_paragraph;
 mod divergence_combo_indirect_buffer_base_shared_deep;
+#[path = "divergence-combo-indirect-buffer-marker-overlay.rs"]
+mod divergence_combo_indirect_buffer_marker_overlay;
 #[path = "divergence-combo-insert-char-buffer-switch-marker-overlay-undo.rs"]
 mod divergence_combo_insert_char_buffer_switch_marker_overlay_undo;
 #[path = "divergence-combo-interactive-command-execute-marker-overlay-undo.rs"]
@@ -2357,6 +2363,8 @@ mod divergence_combo_regex_stress;
 mod divergence_combo_regexp_match_replace_narrow_prop;
 #[path = "divergence-combo-register-marker-overlay-undo-narrow.rs"]
 mod divergence_combo_register_marker_overlay_undo_narrow;
+#[path = "divergence-combo-register-marker-overlay-undo.rs"]
+mod divergence_combo_register_marker_overlay_undo;
 #[path = "divergence-combo-replace-string-regexp-marker-overlay-undo.rs"]
 mod divergence_combo_replace_string_regexp_marker_overlay_undo;
 #[path = "divergence-combo-require-featurep-marker-overlay-undo.rs"]
@@ -2408,6 +2416,8 @@ mod divergence_combo_syntax_sexp_nav;
 mod divergence_combo_syntax_sexp_textprop_narrow;
 #[path = "divergence-combo-syntax-table-marker-overlay-undo.rs"]
 mod divergence_combo_syntax_table_marker_overlay_undo;
+#[path = "divergence-combo-syntax-regex-overlay-narrow.rs"]
+mod divergence_combo_syntax_regex_overlay_narrow;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
 #[path = "divergence-combo-textprop-interval-undo.rs"]
