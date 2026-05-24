@@ -209,6 +209,50 @@ fn test_delete_records_marker_adjustments_for_primitive_undo() {
 }
 
 #[test]
+fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+  (insert "hello WORLD hello WORLD hello")
+  (let ((ov1 (make-overlay 1 12))
+        (ov2 (make-overlay 13 25)))
+    (undo-boundary)
+    (goto-char 1)
+    (while (re-search-forward "WORLD" nil t)
+      (replace-match "UNIVERSE" t t))
+    (let ((after-replace (list (overlay-start ov1) (overlay-end ov1)
+                               (overlay-start ov2) (overlay-end ov2))))
+      (primitive-undo 1 buffer-undo-list)
+      (list after-replace
+            (buffer-string)
+            (overlay-start ov1) (overlay-end ov1)
+            (overlay-start ov2) (overlay-end ov2)))))"#,
+        )
+        .expect("replace-match undo eval");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::list(vec![
+                Value::fixnum(1),
+                Value::fixnum(15),
+                Value::fixnum(16),
+                Value::fixnum(31),
+            ]),
+            Value::string("hello WORLD hello WORLD hello"),
+            Value::fixnum(1),
+            Value::fixnum(12),
+            Value::fixnum(13),
+            Value::fixnum(25),
+        ])
+    );
+}
+
+#[test]
 fn test_primitive_undo_reverts_raw_unibyte_deletion() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

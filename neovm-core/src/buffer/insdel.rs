@@ -411,17 +411,21 @@ impl Buffer {
         self.undo_prepare_change(start, old_pt_byte);
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
+            // GNU `replace_range` records the insertion before the deletion
+            // at FROM + old-length, so primitive-undo reinserts the old text
+            // before deleting the replacement.  That order keeps markers and
+            // overlay endpoints on opposite sides of the replacement distinct.
+            undo::undo_list_record_insert(
+                &mut ul,
+                end_char,
+                new_char_len,
+                self.undo_state.point_before_command_or_undo(),
+            );
             undo::undo_list_record_delete(
                 &mut ul,
                 start_char,
                 deleted_text,
                 old_pt,
-                self.undo_state.point_before_command_or_undo(),
-            );
-            undo::undo_list_record_insert(
-                &mut ul,
-                start_char,
-                new_char_len,
                 self.undo_state.point_before_command_or_undo(),
             );
             self.set_undo_list(ul);
