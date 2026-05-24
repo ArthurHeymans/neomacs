@@ -2903,6 +2903,57 @@ fn runtime_startup_strips_transient_rx_surface_like_gnu_dump() {
 }
 
 #[test]
+fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    let pre_startup_rendered = eval_rendered(
+        &mut eval,
+        r#"(list
+             (get 'function 'cl-deftype-satisfies)
+             (not (null (get 'function 'cl--class))))"#,
+    );
+    assert_eq!(pre_startup_rendered, "OK (functionp t)");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(list
+             (eq (intern-soft "&optional" obarray) '&optional)
+             (eq (intern-soft "&rest" obarray) '&rest)
+             (eq (intern-soft "," obarray) '\,)
+             (eq (intern-soft ",@" obarray) '\,@)
+             (get '\` 'pcase-macroexpander)
+             (fboundp '\`--pcase-macroexpander)
+             (autoloadp (symbol-function '\`--pcase-macroexpander))
+             (funcall (lambda (_tag &rest _) t) 'x)
+             (fboundp 'built-in-class-p)
+             (and (fboundp 'built-in-class-p)
+                  (built-in-class-p (get 'function 'cl--class)))
+             (get 'function 'cl-deftype-satisfies)
+             (not (null (get 'function 'cl--class)))
+             (let (seen)
+               (mapatoms (lambda (sym)
+                           (when (eq sym 'function)
+                             (setq seen
+                                   (list (get sym 'cl-deftype-satisfies)
+                                         (not (null (get sym 'cl--class))))))))
+               seen))"#,
+    );
+    assert_eq!(
+        rendered,
+        "OK (t t t t nil nil nil t t t functionp t (functionp t))"
+    );
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(condition-case err
+               (pcase '(cond (t 1))
+                 (`(cond . ,clauses) clauses)
+                 (_ 'no-match))
+             (error (list (car err) (cdr err))))"#,
+    );
+    assert_eq!(rendered, "OK ((t 1))");
+}
+
+#[test]
 fn bootstrap_runtime_execute_extended_command_exits_minibuffer_on_ret() {
     init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

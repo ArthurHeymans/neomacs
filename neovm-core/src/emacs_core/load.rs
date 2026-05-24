@@ -2695,6 +2695,7 @@ struct LoaddefsSurfaceState {
     property_keys: std::collections::BTreeSet<(String, String)>,
     keymap_defvar_forms: Vec<Value>,
     keymap_forms: Vec<LoaddefsKeymapReplayForm>,
+    symbol_names: std::collections::BTreeSet<String>,
 }
 
 struct LoaddefsKeymapReplayForm {
@@ -2792,28 +2793,28 @@ fn collect_source_surface(form: Value, state: &mut SourceFileSurfaceState) {
     }
 }
 
-fn collect_source_symbol_names(
+fn collect_value_symbol_names(
     value: Value,
-    state: &mut SourceFileSurfaceState,
+    symbol_names: &mut std::collections::BTreeSet<String>,
     seen: &mut std::collections::BTreeSet<usize>,
 ) {
     match value.kind() {
         ValueKind::Nil => {
-            state.symbol_names.insert("nil".to_string());
+            symbol_names.insert("nil".to_string());
         }
         ValueKind::T => {
-            state.symbol_names.insert("t".to_string());
+            symbol_names.insert("t".to_string());
         }
         ValueKind::Symbol(id) => {
-            state.symbol_names.insert(resolve_sym(id).to_string());
+            symbol_names.insert(resolve_sym(id).to_string());
         }
         ValueKind::Cons => {
             let key = value.bits();
             if !seen.insert(key) {
                 return;
             }
-            collect_source_symbol_names(value.cons_car(), state, seen);
-            collect_source_symbol_names(value.cons_cdr(), state, seen);
+            collect_value_symbol_names(value.cons_car(), symbol_names, seen);
+            collect_value_symbol_names(value.cons_cdr(), symbol_names, seen);
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             let key = value.bits();
@@ -2822,8 +2823,84 @@ fn collect_source_symbol_names(
             }
             if let Some(items) = value.as_vector_data() {
                 for item in items.iter().copied() {
-                    collect_source_symbol_names(item, state, seen);
+                    collect_value_symbol_names(item, symbol_names, seen);
                 }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::Record | VecLikeType::Lambda | VecLikeType::Macro) => {
+            let key = value.bits();
+            if !seen.insert(key) {
+                return;
+            }
+            if let Some(slots) = value.as_record_data().or_else(|| value.closure_slots()) {
+                for slot in slots.iter().copied() {
+                    collect_value_symbol_names(slot, symbol_names, seen);
+                }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::HashTable) => {
+            let key = value.bits();
+            if !seen.insert(key) {
+                return;
+            }
+            if let Some(table) = value.as_hash_table() {
+                for key_value in table.key_snapshots.values().copied() {
+                    collect_value_symbol_names(key_value, symbol_names, seen);
+                }
+                for value in table.data.values().copied() {
+                    collect_value_symbol_names(value, symbol_names, seen);
+                }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::ByteCode) => {
+            let key = value.bits();
+            if !seen.insert(key) {
+                return;
+            }
+            if let Some(bytecode) = value.get_bytecode_data() {
+                collect_value_symbol_names(bytecode.arglist, symbol_names, seen);
+                for constant in bytecode.constants.iter().copied() {
+                    collect_value_symbol_names(constant, symbol_names, seen);
+                }
+                if let Some(env) = bytecode.env {
+                    collect_value_symbol_names(env, symbol_names, seen);
+                }
+                if let Some(doc_form) = bytecode.doc_form {
+                    collect_value_symbol_names(doc_form, symbol_names, seen);
+                }
+                if let Some(interactive) = bytecode.interactive {
+                    collect_value_symbol_names(interactive, symbol_names, seen);
+                }
+                for slot in bytecode.extra_slots.iter().copied() {
+                    collect_value_symbol_names(slot, symbol_names, seen);
+                }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::CharTable) => {
+            let key = value.bits();
+            if !seen.insert(key) {
+                return;
+            }
+            if let Some(slots) = value.char_table_external_slots() {
+                for slot in slots {
+                    collect_value_symbol_names(slot, symbol_names, seen);
+                }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::SubCharTable) => {
+            let key = value.bits();
+            if !seen.insert(key) {
+                return;
+            }
+            if let Some(table) = value.as_sub_char_table_obj() {
+                for slot in table.contents.iter().copied() {
+                    collect_value_symbol_names(slot, symbol_names, seen);
+                }
+            }
+        }
+        ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
+            if let Some(symbol) = value.as_symbol_with_pos_sym() {
+                collect_value_symbol_names(symbol, symbol_names, seen);
             }
         }
         _ => {}
@@ -2860,7 +2937,11 @@ fn collect_source_surface_from_paths(
         })?;
 
         for form in forms {
-            collect_source_symbol_names(form, &mut state, &mut std::collections::BTreeSet::new());
+            collect_value_symbol_names(
+                form,
+                &mut state.symbol_names,
+                &mut std::collections::BTreeSet::new(),
+            );
             collect_source_surface(form, &mut state);
         }
     }
@@ -2906,6 +2987,11 @@ fn collect_loaddefs_autoload_args(
     }
 
     state.names.insert(name.clone());
+    collect_value_symbol_names(
+        expr,
+        &mut state.symbol_names,
+        &mut std::collections::BTreeSet::new(),
+    );
     let mut args = vec![Value::symbol(&name), file_value];
     for item in items.iter().skip(3).take(3) {
         let Some(value) = value_runtime_literal(*item) else {
@@ -2937,6 +3023,11 @@ fn collect_loaddefs_property_forms(
         return;
     };
     if names.contains(&name) {
+        collect_value_symbol_names(
+            expr,
+            &mut state.symbol_names,
+            &mut std::collections::BTreeSet::new(),
+        );
         state.property_forms.push(expr);
         if let Some(prop) = items.get(2).and_then(|v| value_symbol_name(*v)) {
             state.property_keys.insert((name, prop));
@@ -2961,6 +3052,11 @@ fn collect_loaddefs_keymap_forms(expr: Value, state: &mut LoaddefsSurfaceState) 
     let Some(target) = loaddefs_keymap_replay_target(expr) else {
         return;
     };
+    collect_value_symbol_names(
+        expr,
+        &mut state.symbol_names,
+        &mut std::collections::BTreeSet::new(),
+    );
     state
         .keymap_forms
         .push(LoaddefsKeymapReplayForm { target, form: expr });
@@ -2982,6 +3078,11 @@ fn collect_loaddefs_keymap_defvar_form(expr: Value, state: &mut LoaddefsSurfaceS
     if !name.ends_with("-map") {
         return;
     }
+    collect_value_symbol_names(
+        expr,
+        &mut state.symbol_names,
+        &mut std::collections::BTreeSet::new(),
+    );
     state.keymap_defvar_forms.push(expr);
 }
 
@@ -3150,6 +3251,37 @@ fn symbol_has_runtime_surface(eval: &super::eval::Context, id: super::intern::Sy
         || eval.obarray().boundp_id(id)
         || eval.obarray().symbol_function_id(id).is_some()
         || !eval.obarray().symbol_plist_id(id).is_nil()
+}
+
+fn runtime_reachable_symbol_names(
+    eval: &super::eval::Context,
+) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
+
+    for (id, _) in eval.obarray().iter_symbols() {
+        if let Some(value) = eval.obarray().symbol_value_id_copied(id) {
+            collect_value_symbol_names(value, &mut names, &mut seen);
+        }
+        if let Some(function) = eval.obarray().symbol_function_id(id) {
+            collect_value_symbol_names(function, &mut names, &mut seen);
+        }
+        collect_value_symbol_names(eval.obarray().symbol_plist_id(id), &mut names, &mut seen);
+    }
+
+    names
+}
+
+fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
+    // GNU's dump keeps reader, lambda-list, and pattern syntax markers
+    // interned even when they have no value/function/plist surface.  Later
+    // Lisp compares these symbols by identity, notably funcall_lambda's
+    // `&optional' / `&rest' handling and pcase's backquote expander.
+    name.starts_with('&')
+        || matches!(
+            name,
+            "," | ",@" | "`" | "." | "..." | "_" | "quote" | "function" | "lambda" | "closure"
+        )
 }
 
 pub(crate) fn apply_ldefs_boot_autoloads_for_names(
@@ -3333,10 +3465,20 @@ fn normalize_bootstrap_runtime_surface(
     for name in &runtime_source_state.face_names {
         super::font::clear_created_lisp_face(name);
     }
+    let reachable_symbol_names = runtime_reachable_symbol_names(eval);
     for name in &runtime_source_state.symbol_names {
+        if runtime_loaddefs_state.symbol_names.contains(name)
+            || runtime_loaded_state.symbol_names.contains(name)
+            || reachable_symbol_names.contains(name)
+        {
+            continue;
+        }
         let Some(id) = super::intern::lookup_interned(name) else {
             continue;
         };
+        if is_gnu_preloaded_syntax_symbol(name) {
+            continue;
+        }
         if !symbol_has_runtime_surface(eval, id) {
             eval.obarray_mut().unintern_id(id);
         }
