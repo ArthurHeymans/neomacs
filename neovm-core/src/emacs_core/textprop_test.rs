@@ -1494,6 +1494,25 @@ fn overlays_in_basic() {
 }
 
 #[test]
+fn overlays_in_empty_region_matches_gnu_boundary_rules() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    builtin_make_overlay(&mut eval, vec![Value::fixnum(3), Value::fixnum(3)]).unwrap();
+
+    let at_start = builtin_overlays_in(&mut eval, vec![Value::fixnum(1), Value::fixnum(1)])
+        .expect("overlays-in at start");
+    let inside = builtin_overlays_in(&mut eval, vec![Value::fixnum(3), Value::fixnum(3)])
+        .expect("overlays-in inside");
+    let at_end = builtin_overlays_in(&mut eval, vec![Value::fixnum(6), Value::fixnum(6)])
+        .expect("overlays-in at end");
+
+    assert!(at_start.is_nil());
+    assert_eq!(list_to_vec(&inside).expect("inside list").len(), 2);
+    assert!(at_end.is_nil());
+}
+
+#[test]
 fn next_previous_overlay_change_boundaries() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("abcd");

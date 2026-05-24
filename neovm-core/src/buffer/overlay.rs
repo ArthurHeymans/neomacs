@@ -655,7 +655,7 @@ fn overlay_overlaps_region(
             || (data.start == end && end == accessible_end);
     }
     if start == end {
-        return data.start <= start && start < data.end;
+        return data.start < start && start < data.end;
     }
     data.start < end && data.end > start
 }
