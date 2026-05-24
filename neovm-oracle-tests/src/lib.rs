@@ -2147,8 +2147,18 @@ mod divergence_combo_cl_pcase_destructure_guard_deep;
 mod divergence_combo_cl_pcase_rx_thread;
 #[path = "divergence-combo-cl-progv-marker-overlay.rs"]
 mod divergence_combo_cl_progv_marker_overlay;
+#[path = "divergence-combo-cl-psetf-marker-overlay.rs"]
+mod divergence_combo_cl_psetf_marker_overlay;
+#[path = "divergence-combo-cl-remf-marker-overlay.rs"]
+mod divergence_combo_cl_remf_marker_overlay;
+#[path = "divergence-combo-cl-rotatef-marker-overlay.rs"]
+mod divergence_combo_cl_rotatef_marker_overlay;
 #[path = "divergence-combo-cl-seq-loop.rs"]
 mod divergence_combo_cl_seq_loop;
+#[path = "divergence-combo-cl-shiftf-marker-overlay.rs"]
+mod divergence_combo_cl_shiftf_marker_overlay;
+#[path = "divergence-combo-cl-subst-marker-overlay.rs"]
+mod divergence_combo_cl_subst_marker_overlay;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay.rs"]
 mod divergence_combo_cl_symbol_macrolet_marker_overlay;
 #[path = "divergence-combo-cl-tagbody-go-marker-overlay.rs"]
