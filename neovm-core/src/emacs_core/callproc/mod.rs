@@ -451,6 +451,16 @@ fn configure_call_process_stdin(
     }
 }
 
+fn encode_call_process_region_string_input(input: &LispString) -> Vec<u8> {
+    crate::encoding::encode_lisp_string(input, "utf-8-unix")
+}
+
+fn encode_call_process_region_buffer_text(storage_text: String) -> Vec<u8> {
+    let emacs_bytes =
+        crate::emacs_core::string_escape::storage_string_to_buffer_bytes(&storage_text, true);
+    crate::emacs_core::emacs_char::str_as_unibyte(&emacs_bytes)
+}
+
 fn run_process_command_in_state(
     eval: &mut super::eval::Context,
     program: &LispString,
@@ -660,7 +670,10 @@ fn builtin_call_process_region_impl(
                     .current_buffer()
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 let len = buf.text.len();
-                (buf.text.text_range(0, len).into_bytes(), (0usize, len))
+                (
+                    encode_call_process_region_buffer_text(buf.text.text_range(0, len)),
+                    (0usize, len),
+                )
             };
             if delete {
                 let current_id = buffers
@@ -681,11 +694,11 @@ fn builtin_call_process_region_impl(
                     vec![Value::symbol("integer-or-marker-p"), args[0]],
                 ));
             }
-            args[0]
-                .as_lisp_string()
-                .expect("ValueKind::String must carry LispString payload")
-                .as_bytes()
-                .to_vec()
+            encode_call_process_region_string_input(
+                args[0]
+                    .as_lisp_string()
+                    .expect("ValueKind::String must carry LispString payload"),
+            )
         }
         _ => {
             let start = super::process::expect_int_or_marker(&args[0])?;
@@ -697,7 +710,9 @@ fn builtin_call_process_region_impl(
                 let (region_beg, region_end) =
                     super::process::checked_region_bytes(buf, start, end)?;
                 (
-                    buf.text.text_range(region_beg, region_end).into_bytes(),
+                    encode_call_process_region_buffer_text(
+                        buf.text.text_range(region_beg, region_end),
+                    ),
                     region_beg,
                     region_end,
                 )

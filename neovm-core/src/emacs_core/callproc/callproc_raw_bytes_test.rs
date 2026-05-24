@@ -125,6 +125,45 @@ fn builtin_call_process_region_preserves_raw_unibyte_string_input_bytes() {
     let _ = std::fs::remove_file(&out);
 }
 
+#[cfg(unix)]
+#[test]
+fn builtin_call_process_region_extracts_byte8_buffer_input_bytes() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let cat = find_bin("cat");
+    let out = raw_temp_path(b"neomacs-callproc-region-byte8-\xFD");
+    let _ = std::fs::remove_file(&out);
+
+    let buffer_id = eval.buffers.create_buffer("byte8-region-source");
+    assert!(eval.buffers.switch_current(buffer_id));
+    eval.buffers
+        .insert_lisp_string_into_buffer(
+            buffer_id,
+            &LispString::from_unibyte(vec![b'I', b':', b' ', 0xC3, 0xA9]),
+        )
+        .expect("insert byte8 source");
+
+    let result = builtin_call_process_region(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(6),
+            Value::string(cat),
+            Value::NIL,
+            Value::list(vec![Value::keyword(":file"), raw_path_value(&out)]),
+            Value::NIL,
+        ],
+    )
+    .expect("call-process-region");
+
+    assert_eq!(result.as_fixnum(), Some(0));
+    assert_eq!(
+        std::fs::read(&out).expect("read region output"),
+        b"I: \xC3\xA9"
+    );
+    let _ = std::fs::remove_file(&out);
+}
+
 #[test]
 fn shell_command_with_legacy_args_matches_gnu_mapconcat_shape() {
     crate::test_utils::init_test_tracing();
