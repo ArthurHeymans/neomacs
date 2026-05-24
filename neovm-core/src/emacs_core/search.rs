@@ -417,6 +417,7 @@ fn build_replacement_lisp_string(
     newtext: &crate::heap_types::LispString,
     literal: bool,
     md: &super::regex::MatchData,
+    preserve_substitution_properties: bool,
 ) -> Result<crate::heap_types::LispString, String> {
     const INVALID_BACKSLASH_MSG: &str = "Invalid use of `\\' in replacement text";
 
@@ -450,16 +451,24 @@ fn build_replacement_lisp_string(
             c if c == b'&' as u32 => {
                 if ch_start != last {
                     pieces.push(
-                        newtext
-                            .slice(last, ch_start)
-                            .expect("validated replacement literal slice"),
+                        lisp_string_slice_for_replace_match(
+                            newtext,
+                            last,
+                            ch_start,
+                            preserve_substitution_properties,
+                        )
+                        .expect("validated replacement literal slice"),
                     );
                 }
                 if let Some((start, end)) = match_group_to_byte_range(source, md, 0) {
                     pieces.push(
-                        source
-                            .slice(start, end)
-                            .expect("validated whole-match replacement slice"),
+                        lisp_string_slice_for_replace_match(
+                            source,
+                            start,
+                            end,
+                            preserve_substitution_properties,
+                        )
+                        .expect("validated whole-match replacement slice"),
                     );
                 }
                 last = pos;
@@ -467,26 +476,38 @@ fn build_replacement_lisp_string(
             c if (b'1' as u32..=b'9' as u32).contains(&c) => {
                 if ch_start != last {
                     pieces.push(
-                        newtext
-                            .slice(last, ch_start)
-                            .expect("validated replacement literal slice"),
+                        lisp_string_slice_for_replace_match(
+                            newtext,
+                            last,
+                            ch_start,
+                            preserve_substitution_properties,
+                        )
+                        .expect("validated replacement literal slice"),
                     );
                 }
                 let group = (c as u8 - b'0') as usize;
                 if let Some((start, end)) = match_group_to_byte_range(source, md, group) {
                     pieces.push(
-                        source
-                            .slice(start, end)
-                            .expect("validated submatch replacement slice"),
+                        lisp_string_slice_for_replace_match(
+                            source,
+                            start,
+                            end,
+                            preserve_substitution_properties,
+                        )
+                        .expect("validated submatch replacement slice"),
                     );
                 }
                 last = pos;
             }
             c if c == b'\\' as u32 => {
                 pieces.push(
-                    newtext
-                        .slice(last, next_start)
-                        .expect("validated escaped-backslash replacement slice"),
+                    lisp_string_slice_for_replace_match(
+                        newtext,
+                        last,
+                        next_start,
+                        preserve_substitution_properties,
+                    )
+                    .expect("validated escaped-backslash replacement slice"),
                 );
                 last = pos;
             }
@@ -500,9 +521,13 @@ fn build_replacement_lisp_string(
 
     if last < len {
         pieces.push(
-            newtext
-                .slice(last, len)
-                .expect("validated trailing replacement slice"),
+            lisp_string_slice_for_replace_match(
+                newtext,
+                last,
+                len,
+                preserve_substitution_properties,
+            )
+            .expect("validated trailing replacement slice"),
         );
     }
 
@@ -515,6 +540,19 @@ fn build_replacement_lisp_string(
     }
 }
 
+fn lisp_string_slice_for_replace_match(
+    string: &crate::heap_types::LispString,
+    start: usize,
+    end: usize,
+    preserve_properties: bool,
+) -> Option<crate::heap_types::LispString> {
+    if preserve_properties {
+        string.slice(start, end)
+    } else {
+        string.slice_no_properties(start, end)
+    }
+}
+
 pub(crate) fn replace_match_lisp_string_with_syntax(
     source: &crate::heap_types::LispString,
     newtext: &crate::heap_types::LispString,
@@ -522,6 +560,20 @@ pub(crate) fn replace_match_lisp_string_with_syntax(
     literal: bool,
     subexp: usize,
     match_data: &Option<super::regex::MatchData>,
+) -> Result<crate::heap_types::LispString, String> {
+    replace_match_lisp_string_with_syntax_and_properties(
+        source, newtext, fixedcase, literal, subexp, match_data, true,
+    )
+}
+
+fn replace_match_lisp_string_with_syntax_and_properties(
+    source: &crate::heap_types::LispString,
+    newtext: &crate::heap_types::LispString,
+    fixedcase: bool,
+    literal: bool,
+    subexp: usize,
+    match_data: &Option<super::regex::MatchData>,
+    preserve_substitution_properties: bool,
 ) -> Result<crate::heap_types::LispString, String> {
     let md = match match_data {
         Some(md) => md,
@@ -540,7 +592,13 @@ pub(crate) fn replace_match_lisp_string_with_syntax(
     let after = source
         .slice(byte_end, source.byte_len())
         .expect("validated replace-match suffix slice");
-    let mut replacement = build_replacement_lisp_string(source, newtext, literal, md)?;
+    let mut replacement = build_replacement_lisp_string(
+        source,
+        newtext,
+        literal,
+        md,
+        preserve_substitution_properties,
+    )?;
 
     if !fixedcase {
         let matched = source
@@ -610,13 +668,14 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     }
 
     let replacement_match_option = Some(replacement_match_data.clone());
-    let replacement = replace_match_lisp_string_with_syntax(
+    let replacement = replace_match_lisp_string_with_syntax_and_properties(
         &source,
         newtext,
         fixedcase,
         literal,
         subexp,
         &replacement_match_option,
+        false,
     )?;
     let replace_start = if replacement_match_data.searched_string.is_some() {
         super::regex::char_pos_to_byte_lisp_string(

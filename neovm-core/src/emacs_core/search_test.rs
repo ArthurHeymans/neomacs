@@ -47,6 +47,30 @@ fn call_replace_regexp_in_string(args: Vec<Value>) -> EvalResult {
     })
 }
 
+#[test]
+fn buffer_replace_match_backref_does_not_copy_source_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert "fooXXXbar")
+  (put-text-property 1 10 'group 'first)
+  (goto-char 1)
+  (re-search-forward "foo\\([A-Z]+\\)bar" nil t)
+  (replace-match "qux\\1baz")
+  (list (buffer-string)
+        (get-text-property 1 'group)
+        (get-text-property 4 'group)))"#,
+        )
+        .expect("replace-match form should evaluate");
+    let items = list_to_vec(&result).expect("expected list result");
+    assert_eq!(items.len(), 3);
+    assert_str(items[0], "quxXXXbaz");
+    assert!(items[1].is_nil());
+    assert!(items[2].is_nil());
+}
+
 fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
     SEARCH_TEST_CTX.with(|slot| {
         let mut new_ctx = Box::new(crate::emacs_core::eval::Context::new());
