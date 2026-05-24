@@ -2253,6 +2253,8 @@ mod divergence_combo_marker_type_overlay_undo_narrow_buflocal;
 mod divergence_combo_match_data_replace_marker_overlay_undo;
 #[path = "divergence-combo-match-register-syntax.rs"]
 mod divergence_combo_match_register_syntax;
+#[path = "divergence-combo-match-replace-regexp-looking-skip-marker-overlay-undo.rs"]
+mod divergence_combo_match_replace_regexp_looking_skip_marker_overlay_undo;
 #[path = "divergence-combo-match-string-data-marker-overlay-undo-replace.rs"]
 mod divergence_combo_match_string_data_marker_overlay_undo_replace;
 #[path = "divergence-combo-mega-all-subsystems-stress.rs"]
