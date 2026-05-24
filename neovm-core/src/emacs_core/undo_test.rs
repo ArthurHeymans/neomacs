@@ -253,6 +253,35 @@ fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
 }
 
 #[test]
+fn transpose_regions_undo_records_equal_regions_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+  (insert "AAA-BBB-CCC")
+  (let ((m (copy-marker 5 t)))
+    (undo-boundary)
+    (transpose-regions 1 3 5 7)
+    (let ((after (list (buffer-string) (marker-position m))))
+      (primitive-undo 1 buffer-undo-list)
+      (list after (buffer-string) (marker-position m)))))"#,
+        )
+        .expect("transpose undo eval");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::list(vec![Value::string("BBA-AAB-CCC"), Value::fixnum(1)]),
+            Value::string("AAA-BBB-CCC"),
+            Value::fixnum(3),
+        ])
+    );
+}
+
+#[test]
 fn test_primitive_undo_reverts_raw_unibyte_deletion() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

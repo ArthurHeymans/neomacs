@@ -695,20 +695,60 @@ impl Buffer {
         self.undo_prepare_change(start1_byte, self.pt_byte);
         let mut undo_list = self.get_undo_list();
         if !undo::undo_list_is_disabled(&undo_list) {
-            let deleted = lisp_string_from_buffer_bytes(old_span, self.get_multibyte());
-            undo::undo_list_record_delete(
-                &mut undo_list,
-                start1_char,
-                deleted,
-                self.pt,
-                self.undo_state.point_before_command_or_undo(),
-            );
-            undo::undo_list_record_insert(
-                &mut undo_list,
-                start1_char,
-                end2_char - start1_char,
-                self.undo_state.point_before_command_or_undo(),
-            );
+            let record_change = |undo_list: &mut crate::emacs_core::value::Value,
+                                 start_char: usize,
+                                 bytes: Vec<u8>,
+                                 len_chars: usize,
+                                 multibyte: bool,
+                                 pt: usize,
+                                 point_before| {
+                let deleted = lisp_string_from_buffer_bytes(bytes, multibyte);
+                undo::undo_list_record_delete(undo_list, start_char, deleted, pt, point_before);
+                undo::undo_list_record_insert(undo_list, start_char, len_chars, point_before);
+            };
+
+            if end1_char - start1_char == end2_char - start2_char {
+                if end1_char == start2_char {
+                    record_change(
+                        &mut undo_list,
+                        start1_char,
+                        old_span,
+                        end2_char - start1_char,
+                        self.get_multibyte(),
+                        self.pt,
+                        self.undo_state.point_before_command_or_undo(),
+                    );
+                } else {
+                    record_change(
+                        &mut undo_list,
+                        start1_char,
+                        region1.clone(),
+                        end1_char - start1_char,
+                        self.get_multibyte(),
+                        self.pt,
+                        self.undo_state.point_before_command_or_undo(),
+                    );
+                    record_change(
+                        &mut undo_list,
+                        start2_char,
+                        region2.clone(),
+                        end2_char - start2_char,
+                        self.get_multibyte(),
+                        self.pt,
+                        self.undo_state.point_before_command_or_undo(),
+                    );
+                }
+            } else {
+                record_change(
+                    &mut undo_list,
+                    start1_char,
+                    old_span,
+                    end2_char - start1_char,
+                    self.get_multibyte(),
+                    self.pt,
+                    self.undo_state.point_before_command_or_undo(),
+                );
+            }
             self.set_undo_list(undo_list);
         }
 
