@@ -62,7 +62,7 @@ jobs:
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: linux-x86_64-debug
+          shared-key: linux-x86_64
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
