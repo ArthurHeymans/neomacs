@@ -2886,6 +2886,23 @@ fn bootstrap_runtime_global_obarray_proxy_preserves_completion_semantics() {
 }
 
 #[test]
+fn runtime_startup_strips_transient_rx_surface_like_gnu_dump() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(list
+             (featurep 'rx)
+             (intern-soft "cat" obarray)
+             (intern-soft "can-break" obarray)
+             (fboundp 'rx)
+             (fboundp 'rx-to-string))"#,
+    );
+    assert_eq!(rendered, "OK (nil nil nil t t)");
+}
+
+#[test]
 fn bootstrap_runtime_execute_extended_command_exits_minibuffer_on_ret() {
     init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
