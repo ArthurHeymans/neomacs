@@ -6,7 +6,8 @@ use std::fmt::{self, Display, Formatter};
 
 use super::intern::{SymId, intern, resolve_sym};
 use super::print::PrintOptions;
-use super::value::{Value, ValueKind, VecLikeType};
+use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
+use super::value::{Value, ValueKind, VecLikeType, get_string_text_properties_for_value};
 use crate::emacs_core::eval::ResumeTarget;
 use crate::window::WindowId;
 
@@ -430,7 +431,7 @@ fn format_value_in_state(
     // are active. This ensures correct handling of shared structure, depth
     // limiting, and length limiting throughout the entire value tree.
     if options.print_circle || options.print_level.is_some() || options.print_length.is_some() {
-        return super::print::print_value_stateful(value, options);
+        return super::print::print_value_stateful_with_buffers(value, Some(buffers), options);
     }
     match value.kind() {
         ValueKind::Cons | ValueKind::Veclike(VecLikeType::Vector) => {
@@ -442,6 +443,9 @@ fn format_value_in_state(
                 format_value_in_state_slow(obarray, buffers, frames, threads, value, options);
             pop_format_cycle_object(pushed);
             rendered
+        }
+        ValueKind::String | ValueKind::Veclike(VecLikeType::Record) => {
+            format_value_in_state_slow(obarray, buffers, frames, threads, value, options)
         }
         _ => super::print::print_value_with_options(value, options),
     }
@@ -456,6 +460,29 @@ fn format_value_in_state_slow(
     options: PrintOptions,
 ) -> String {
     match value.kind() {
+        ValueKind::String => {
+            let ls = value.as_lisp_string().expect("checked string");
+            if options.print_noescape {
+                crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())
+            } else if let Some(runs) = get_string_text_properties_for_value(*value) {
+                let mut out = String::from("#(");
+                out.push_str(&format_lisp_string_emacs(ls, &options));
+                for run in runs {
+                    out.push(' ');
+                    out.push_str(&run.start.to_string());
+                    out.push(' ');
+                    out.push_str(&run.end.to_string());
+                    out.push(' ');
+                    out.push_str(&format_value_in_state(
+                        obarray, buffers, frames, threads, &run.plist, options,
+                    ));
+                }
+                out.push(')');
+                out
+            } else {
+                format_lisp_string_emacs(ls, &options)
+            }
+        }
         ValueKind::Cons => {
             if let Some(shorthand) =
                 format_list_shorthand_in_state(obarray, buffers, frames, threads, value, options)
@@ -485,6 +512,29 @@ fn format_value_in_state_slow(
                 ));
             }
             out.push(']');
+            out
+        }
+        ValueKind::Veclike(VecLikeType::Record) => {
+            let mut out = String::from("#s(");
+            let items = value.as_record_data().unwrap().clone();
+            for (idx, item) in items.iter().enumerate() {
+                if let Some(length) = options.print_length
+                    && idx as i64 >= length
+                {
+                    if idx > 0 {
+                        out.push(' ');
+                    }
+                    out.push_str("...");
+                    break;
+                }
+                if idx > 0 {
+                    out.push(' ');
+                }
+                out.push_str(&format_value_in_state(
+                    obarray, buffers, frames, threads, item, options,
+                ));
+            }
+            out.push(')');
             out
         }
         _ => super::print::print_value_with_options(value, options),
@@ -659,7 +709,8 @@ pub(crate) fn format_value_bytes_in_state_with_options(
     // Use the stateful printer when print-circle, print-level, or print-length
     // are active, then convert the result to bytes.
     if options.print_circle || options.print_level.is_some() || options.print_length.is_some() {
-        return super::print::print_value_stateful(value, options).into_bytes();
+        return super::print::print_value_stateful_with_buffers(value, Some(buffers), options)
+            .into_bytes();
     }
     match value.kind() {
         ValueKind::Cons => {
@@ -682,8 +733,54 @@ pub(crate) fn format_value_bytes_in_state_with_options(
             pop_format_cycle_object(pushed);
             rendered
         }
+        ValueKind::String => {
+            format_string_bytes_in_state(obarray, buffers, frames, threads, value, options)
+        }
+        ValueKind::Veclike(VecLikeType::Record) => {
+            if let Some(index) = format_cycle_stack_index(value) {
+                return format!("#{index}").into_bytes();
+            }
+            let pushed = push_format_cycle_object(value);
+            let rendered =
+                format_record_bytes_in_state(obarray, buffers, frames, threads, value, options);
+            pop_format_cycle_object(pushed);
+            rendered
+        }
         _ => super::print::print_value_bytes_with_options(value, options),
     }
+}
+
+fn format_string_bytes_in_state(
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
+    frames: &crate::window::FrameManager,
+    threads: &super::threads::ThreadManager,
+    value: &Value,
+    options: PrintOptions,
+) -> Vec<u8> {
+    let ls = value.as_lisp_string().expect("checked string");
+    if options.print_noescape {
+        return ls.as_bytes().to_vec();
+    }
+    let str_bytes = format_lisp_string_bytes_emacs(ls, &options);
+    let Some(runs) = get_string_text_properties_for_value(*value) else {
+        return str_bytes;
+    };
+    let mut out = Vec::new();
+    out.extend_from_slice(b"#(");
+    out.extend_from_slice(&str_bytes);
+    for run in runs {
+        out.push(b' ');
+        out.extend_from_slice(run.start.to_string().as_bytes());
+        out.push(b' ');
+        out.extend_from_slice(run.end.to_string().as_bytes());
+        out.push(b' ');
+        out.extend(format_value_bytes_in_state_with_options(
+            obarray, buffers, frames, threads, &run.plist, options,
+        ));
+    }
+    out.push(b')');
+    out
 }
 
 fn format_cons_bytes_in_state(
@@ -735,6 +832,41 @@ fn format_vector_bytes_in_state(
         ));
     }
     out.push(b']');
+    out
+}
+
+fn format_record_bytes_in_state(
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
+    frames: &crate::window::FrameManager,
+    threads: &super::threads::ThreadManager,
+    value: &Value,
+    options: PrintOptions,
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(b"#s(");
+    let Some(values) = value.as_record_data() else {
+        out.push(b')');
+        return out;
+    };
+    for (idx, item) in values.iter().enumerate() {
+        if let Some(length) = options.print_length
+            && idx as i64 >= length
+        {
+            if idx > 0 {
+                out.push(b' ');
+            }
+            out.extend_from_slice(b"...");
+            break;
+        }
+        if idx > 0 {
+            out.push(b' ');
+        }
+        out.extend(format_value_bytes_in_state_with_options(
+            obarray, buffers, frames, threads, item, options,
+        ));
+    }
+    out.push(b')');
     out
 }
 
