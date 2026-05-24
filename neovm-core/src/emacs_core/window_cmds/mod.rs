@@ -7272,6 +7272,9 @@ pub(crate) fn builtin_frame_parameter(
         "visibility" => {
             return Ok(if frame.visible { Value::T } else { Value::NIL });
         }
+        "font" if frame.effective_window_system().is_none() => {
+            return Ok(Value::string("tty"));
+        }
         // GNU frame.c:4117 — buffer-list frame parameter stored
         // directly from f->buffer_list (most-recently-shown first).
         "buffer-list" => {
@@ -7332,6 +7335,9 @@ pub(crate) fn builtin_frame_parameters(
         Value::symbol("visibility"),
         Value::bool_val(frame.visible),
     ));
+    if frame.effective_window_system().is_none() {
+        pairs.push(Value::cons(Value::symbol("font"), Value::string("tty")));
+    }
     // GNU frame.c:4117-4118 — buffer-list and buried-buffer-list are
     // stored as frame parameters.
     {
@@ -7358,6 +7364,11 @@ pub(crate) fn builtin_frame_parameters(
     }
     // User parameters.
     for (k, v) in &frame.parameters {
+        if frame.effective_window_system().is_none()
+            && k.as_symbol_name().is_some_and(|name| name == "font")
+        {
+            continue;
+        }
         pairs.push(Value::cons(*k, *v));
     }
     Ok(Value::list(pairs))

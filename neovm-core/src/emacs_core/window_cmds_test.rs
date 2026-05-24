@@ -4384,6 +4384,23 @@ fn frame_parameters_returns_alist() {
 }
 
 #[test]
+fn tty_frame_font_and_cursor_parameters_match_gnu_defaults() {
+    crate::test_utils::init_test_tracing();
+    let r = eval_one_with_frame(
+        r#"(let ((f (selected-frame)))
+             (list (frame-parameter f 'font)
+                   (cdr (assq 'font (frame-parameters f)))
+                   (frame-parameter f 'cursor-color)
+                   (frame-parameter f 'foreground-color)
+                   (frame-parameter f 'background-color)))"#,
+    );
+    assert_eq!(
+        r,
+        r#"OK ("tty" "tty" "white" "unspecified-fg" "unspecified-bg")"#
+    );
+}
+
+#[test]
 fn modify_frame_parameters_name() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(

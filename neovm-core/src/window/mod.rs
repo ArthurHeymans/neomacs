@@ -1532,7 +1532,7 @@ impl Frame {
                     Value::symbol("background-color"),
                     Value::string("unspecified-bg"),
                 );
-                params.insert(Value::symbol("cursor-color"), Value::string("black"));
+                params.insert(Value::symbol("cursor-color"), Value::string("white"));
                 // GNU terminal frames expose a numeric tab-bar-lines frame
                 // parameter even when the tab bar is disabled. Lisp window
                 // deletion code compares it with `>`, so nil is not compatible.
