@@ -3252,3 +3252,9 @@ mod divergence_combo_cl_eieio_read_only_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_eieio_char_property_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-plist-alist-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_plist_alist_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-change-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_change_hooks_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-invisible-intangible-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_invisible_intangible_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-evaporate-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_evaporate_overlay_textprop_buflocal_narrow;
