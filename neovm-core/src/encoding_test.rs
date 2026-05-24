@@ -348,6 +348,33 @@ fn encode_coding_string_extracts_multibyte_byte8_chars_like_gnu() {
 }
 
 #[test]
+fn decode_coding_string_extracts_multibyte_byte8_source_bytes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut bytes = Vec::new();
+    for byte in [0xC3, 0xA9] {
+        let mut char_buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+        let len = crate::emacs_core::emacs_char::char_string(
+            crate::emacs_core::emacs_char::byte8_to_char(byte),
+            &mut char_buf,
+        );
+        bytes.extend_from_slice(&char_buf[..len]);
+    }
+    let source = Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes));
+
+    let decoded = builtin_decode_coding_string(vec![source, Value::symbol("utf-8")])
+        .expect("decode-coding-string should evaluate");
+    let ls = decoded
+        .as_lisp_string()
+        .expect("decode-coding-string should return a string");
+    assert_eq!(
+        crate::emacs_core::builtins::lisp_string_char_codes(ls),
+        [0xE9]
+    );
+    assert_eq!(ls.schars(), 1);
+    assert_eq!(ls.as_bytes(), "é".as_bytes());
+}
+
+#[test]
 fn nil_coding_string_respects_nocopy_identity() {
     crate::test_utils::init_test_tracing();
     let source = Value::string("abc");

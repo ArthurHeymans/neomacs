@@ -1049,11 +1049,7 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
         "utf-8" | "utf-8-emacs" | "undecided" | "prefer-utf-8"
     ) || is_byte_preserving_coding_system(coding_system)
     {
-        let bytes = if s.is_multibyte() {
-            crate::emacs_core::emacs_char::str_as_unibyte(s.as_bytes())
-        } else {
-            s.as_bytes().to_vec()
-        };
+        let bytes = lisp_string_coding_source_bytes(s);
         return encode_eol_bytes(&bytes, coding_system);
     }
 
@@ -1182,28 +1178,12 @@ fn is_byte_preserving_coding_system(coding_system: &str) -> bool {
     )
 }
 
-fn storage_string_to_bytes(s: &str) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(s.len());
-    for ch in s.chars() {
-        let cp = ch as u32;
-        if cp <= 0x7F {
-            bytes.push(cp as u8);
-            continue;
-        }
-        if (RAW_BYTE_SENTINEL_MIN..=RAW_BYTE_SENTINEL_MAX).contains(&cp) {
-            bytes.push((cp - RAW_BYTE_SENTINEL_BASE) as u8);
-            continue;
-        }
-        if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&cp) {
-            bytes.push((cp - UNIBYTE_BYTE_SENTINEL_BASE) as u8);
-            continue;
-        }
-
-        let mut utf8 = [0u8; 4];
-        let encoded = ch.encode_utf8(&mut utf8);
-        bytes.extend_from_slice(encoded.as_bytes());
+fn lisp_string_coding_source_bytes(s: &crate::heap_types::LispString) -> Vec<u8> {
+    if s.is_multibyte() {
+        crate::emacs_core::emacs_char::str_as_unibyte(s.as_bytes())
+    } else {
+        s.as_bytes().to_vec()
     }
-    bytes
 }
 
 fn bytes_to_multibyte_raw_string(bytes: &[u8]) -> String {
@@ -1845,7 +1825,12 @@ pub(crate) fn builtin_decode_coding_string_with_known(
             ],
         ));
     }
-    let s = expect_string(&args[0])?;
+    let s = args[0].as_lisp_string().ok_or_else(|| {
+        signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        )
+    })?;
     let coding = match args[1].kind() {
         ValueKind::Nil => {
             return if coding_string_nocopy(&args) {
@@ -1863,7 +1848,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
         }
     };
     validate_coding_system(&coding, args[1], known)?;
-    let bytes = storage_string_to_bytes(&s);
+    let bytes = lisp_string_coding_source_bytes(s);
     if coding_string_nocopy(&args) && coding_string_trivial_ascii_nocopy(&bytes, &coding, false) {
         return Ok(args[0]);
     }
