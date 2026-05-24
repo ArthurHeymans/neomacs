@@ -79,7 +79,6 @@
         gst_all_1.gst-vaapi
         libva
         libselinux
-        libgccjit
         libGL
         vulkan-loader
         libxkbcommon
@@ -287,7 +286,6 @@
                 sqlite
                 gmp
                 alsa-lib
-                libgccjit
                 libsoup_3
                 libGL
                 vulkan-loader

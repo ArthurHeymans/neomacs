@@ -6508,9 +6508,8 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (null (comp--late-register-subr nil nil nil nil nil nil nil))
                  (null (comp--register-lambda nil nil nil nil nil nil nil))
                  (null (comp--register-subr nil nil nil nil nil nil nil))
-                 (comp--release-ctxt)
-                 (equal (comp-libgccjit-version) '(14 3 0))
-                 (comp-native-compiler-options-effective-p)
+                  (comp--release-ctxt)
+                  (comp-native-compiler-options-effective-p)
                  (comp-native-driver-options-effective-p)
                  (= (dbus--init-bus :session) 2)
                  (eq

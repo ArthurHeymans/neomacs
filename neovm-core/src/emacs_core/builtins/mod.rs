@@ -9168,12 +9168,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "comp-libgccjit-version",
-        |_ctx, args| super::comp::builtin_comp_libgccjit_version(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "comp-native-compiler-options-effective-p",
         |_ctx, args| super::comp::builtin_comp_native_compiler_options_effective_p(args),
         0,

@@ -2287,15 +2287,6 @@ one for the file name and another for its contents, followed by .eln.
 (fn FILENAME)"#,
     ),
     (
-        r#"comp-libgccjit-version"#,
-        r#"Return libgccjit version in use.
-
-The return value has the form (MAJOR MINOR PATCHLEVEL) or nil if
-unknown (before GCC version 10).
-
-(fn)"#,
-    ),
-    (
         r#"comp-native-compiler-options-effective-p"#,
         r#"Return t if `comp-native-compiler-options' is effective.
 

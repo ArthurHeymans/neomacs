@@ -150,16 +150,6 @@ pub(crate) fn builtin_comp_el_to_eln_rel_filename(args: Vec<Value>) -> EvalResul
     Ok(Value::string(out.display().to_string()))
 }
 
-/// `(comp-libgccjit-version)` -- report libgccjit version tuple.
-pub(crate) fn builtin_comp_libgccjit_version(args: Vec<Value>) -> EvalResult {
-    expect_args("comp-libgccjit-version", &args, 0)?;
-    Ok(Value::list(vec![
-        Value::fixnum(14),
-        Value::fixnum(3),
-        Value::fixnum(0),
-    ]))
-}
-
 /// `(comp-native-compiler-options-effective-p)` -- options are effective.
 pub(crate) fn builtin_comp_native_compiler_options_effective_p(args: Vec<Value>) -> EvalResult {
     expect_args("comp-native-compiler-options-effective-p", &args, 0)?;

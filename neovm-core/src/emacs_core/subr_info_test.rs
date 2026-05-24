@@ -791,7 +791,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("comp--subr-signature", 1, Some(1));
     assert_subr_arity("comp-el-to-eln-filename", 1, Some(2));
     assert_subr_arity("comp-el-to-eln-rel-filename", 1, Some(1));
-    assert_subr_arity("comp-libgccjit-version", 0, Some(0));
     assert_subr_arity("comp-native-compiler-options-effective-p", 0, Some(0));
     assert_subr_arity("comp-native-driver-options-effective-p", 0, Some(0));
     assert_subr_arity("define-fringe-bitmap", 2, Some(5));
