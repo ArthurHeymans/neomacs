@@ -1551,3 +1551,42 @@ fn text_quoting_style_variable_defaults_to_nil() {
         Some(&Value::NIL)
     );
 }
+
+#[test]
+fn find_operation_coding_system_validates_operation_target_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        eval.eval_str(r#"(find-operation-coding-system 'insert-file-contents "x")"#)
+            .expect("valid file target returns nil when file-coding-system-alist is nil"),
+        Value::NIL
+    );
+
+    let invalid = eval
+        .eval_str(r#"(find-operation-coding-system 'insert-file-contents (list "x"))"#)
+        .expect_err("GNU rejects non-string insert-file-contents targets");
+    match invalid {
+        crate::emacs_core::error::EvalError::Signal { symbol, data, .. } => {
+            assert_eq!(resolve_sym(symbol), "error");
+            assert_eq!(
+                data,
+                vec![Value::string(
+                    "Invalid argument 1 of operation ‘insert-file-contents’"
+                )]
+            );
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
+
+    let invalid_operation = eval
+        .eval_str(r#"(find-operation-coding-system 'not-an-operation "x")"#)
+        .expect_err("GNU rejects operations without target-idx");
+    match invalid_operation {
+        crate::emacs_core::error::EvalError::Signal { symbol, data, .. } => {
+            assert_eq!(resolve_sym(symbol), "error");
+            assert_eq!(data, vec![Value::string("Invalid first argument")]);
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
+}

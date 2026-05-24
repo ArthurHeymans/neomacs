@@ -6669,11 +6669,10 @@ fn pure_dispatch_coding_placeholder_cluster_matches_compat_contracts() {
     .expect("builtin encode-coding-region should evaluate");
     assert_eq!(encode_region, Value::fixnum(0));
 
-    let find_operation =
+    assert!(
         dispatch_builtin_pure("find-operation-coding-system", vec![Value::symbol("write")])
-            .expect("builtin find-operation-coding-system should resolve")
-            .expect("builtin find-operation-coding-system should evaluate");
-    assert!(find_operation.is_nil());
+            .is_none()
+    );
 
     assert!(
         dispatch_builtin_pure(

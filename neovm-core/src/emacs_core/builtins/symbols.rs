@@ -5384,7 +5384,10 @@ pub(crate) fn builtin_encode_coding_region(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_find_operation_coding_system(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_find_operation_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
             "wrong-number-of-arguments",
@@ -5394,6 +5397,139 @@ pub(crate) fn builtin_find_operation_coding_system(args: Vec<Value>) -> EvalResu
             ],
         ));
     }
+
+    if args.len() < 2 {
+        return Err(signal("error", vec![Value::string("Too few arguments")]));
+    }
+
+    let operation = args[0];
+    let Some(operation_id) = symbol_id_checked(&operation, eval.symbols_with_pos_enabled) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid first argument")],
+        ));
+    };
+    let Some(target_idx_value) = eval
+        .obarray()
+        .get_property_id(operation_id, intern("target-idx"))
+    else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid first argument")],
+        ));
+    };
+    let target_idx = match expect_fixnum(&target_idx_value) {
+        Ok(n) if n >= 0 => n as usize,
+        _ => {
+            return Err(signal(
+                "error",
+                vec![Value::string("Invalid first argument")],
+            ));
+        }
+    };
+
+    if args.len() <= target_idx + 1 {
+        let op_name = operation.as_symbol_name().unwrap_or("<unknown>");
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "Too few arguments for operation ‘{op_name}’"
+            ))],
+        ));
+    }
+
+    let mut target = args[target_idx + 1];
+    let valid_target = if target.is_string() {
+        true
+    } else if operation_id == intern("insert-file-contents")
+        && target.is_cons()
+        && target.cons_car().is_string()
+        && target.cons_cdr().is_buffer()
+    {
+        target = target.cons_car();
+        true
+    } else {
+        operation_id == intern("open-network-stream") && (target.is_fixnum() || target.is_t())
+    };
+
+    if !valid_target {
+        let op_name = operation.as_symbol_name().unwrap_or("<unknown>");
+        return Err(signal(
+            "error",
+            vec![Value::string(format!(
+                "Invalid argument {} of operation ‘{}’",
+                target_idx + 1,
+                op_name
+            ))],
+        ));
+    }
+
+    let chain_symbol = if operation_id == intern("insert-file-contents")
+        || operation_id == intern("write-region")
+    {
+        "file-coding-system-alist"
+    } else if operation_id == intern("open-network-stream") {
+        "network-coding-system-alist"
+    } else {
+        "process-coding-system-alist"
+    };
+
+    let chain = eval.visible_variable_value_or_nil(chain_symbol);
+    if chain.is_nil() {
+        return Ok(Value::NIL);
+    }
+
+    let mut cursor = chain;
+    while cursor.is_cons() {
+        let elt = cursor.cons_car();
+        if elt.is_cons() {
+            let key = elt.cons_car();
+            let matched = if target.is_string() && key.is_string() {
+                let result =
+                    super::search::builtin_string_match(eval, vec![key, target, Value::fixnum(0)])?;
+                !result.is_nil()
+            } else {
+                target.is_fixnum() && crate::emacs_core::value::eq_value(&target, &key)
+            };
+
+            if matched {
+                let val = elt.cons_cdr();
+                if val.is_cons() {
+                    return Ok(val);
+                }
+                if !val.is_symbol() {
+                    return Ok(Value::NIL);
+                }
+                if !crate::emacs_core::coding::builtin_coding_system_p(
+                    &eval.coding_systems,
+                    vec![val],
+                )?
+                .is_nil()
+                {
+                    return Ok(Value::cons(val, val));
+                }
+                if !builtin_fboundp_1(eval, val)?.is_nil() {
+                    let callback_args = Value::list(args.clone());
+                    let returned = eval.apply(val, vec![callback_args])?;
+                    if returned.is_cons() {
+                        return Ok(returned);
+                    }
+                    if returned.is_symbol()
+                        && !crate::emacs_core::coding::builtin_coding_system_p(
+                            &eval.coding_systems,
+                            vec![returned],
+                        )?
+                        .is_nil()
+                    {
+                        return Ok(Value::cons(returned, returned));
+                    }
+                }
+                return Ok(Value::NIL);
+            }
+        }
+        cursor = cursor.cons_cdr();
+    }
+
     Ok(Value::NIL)
 }
 

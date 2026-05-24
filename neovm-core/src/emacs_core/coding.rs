@@ -2574,6 +2574,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     defvar_lisp(obarray, "process-coding-system-alist", Value::NIL);
     // coding.c:12008 — DEFVAR_LISP (Vfile_coding_system_alist)
     defvar_lisp(obarray, "file-coding-system-alist", Value::NIL);
+
+    let target_idx = intern("target-idx");
+    for (operation, index) in [
+        ("insert-file-contents", 0),
+        ("write-region", 2),
+        ("call-process", 0),
+        ("call-process-region", 2),
+        ("start-process", 2),
+        ("open-network-stream", 3),
+    ] {
+        let _ = obarray.put_property_id(intern(operation), target_idx, Value::fixnum(index));
+    }
 }
 
 /// `(set-buffer-file-coding-system CODING-SYSTEM &optional FORCE NOMODIFY)` --

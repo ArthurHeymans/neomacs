@@ -5395,11 +5395,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         3,
         Some(4),
     );
-    ctx.defsubr(
-        "find-operation-coding-system",
-        |_ctx, args| builtin_find_operation_coding_system(args),
-        1,
-        None,
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "find-operation-coding-system",
+            builtin_find_operation_coding_system,
+            1,
+            None,
+        ),
     );
     ctx.defsubr(
         "iso-charset",
