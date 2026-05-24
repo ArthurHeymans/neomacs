@@ -6230,6 +6230,10 @@ fn funcall_and_apply_non_callable_symbol_edges() {
         "OK invalid-function"
     );
     assert_eq!(
+        eval_one("(condition-case err (funcall 'if) (error err))"),
+        "OK (invalid-function #<subr if>)"
+    );
+    assert_eq!(
         eval_one("(condition-case err (funcall (symbol-function 'if) t 1 2) (error (car err)))"),
         "OK invalid-function"
     );
@@ -6244,6 +6248,10 @@ fn funcall_and_apply_non_callable_symbol_edges() {
     assert_eq!(
         eval_one("(condition-case err (apply 'if '(t 1 2)) (error (car err)))"),
         "OK invalid-function"
+    );
+    assert_eq!(
+        eval_one("(condition-case err (apply 'if '(t 1 2)) (error err))"),
+        "OK (invalid-function #<subr if>)"
     );
 }
 

@@ -8022,7 +8022,7 @@ impl Context {
                     return Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]));
                 };
                 if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-                    return Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]));
+                    return Err(signal("invalid-function", vec![func]));
                 }
                 self.apply_subr_object_with_entry(sym_id, func, args, entry)
             }
