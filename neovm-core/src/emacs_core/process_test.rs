@@ -576,6 +576,63 @@ fn internal_default_process_filter_moves_stored_process_mark() {
 }
 
 #[test]
+fn internal_default_process_sentinel_inserts_status_at_process_mark() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let original = ev.buffers.current_buffer_id().expect("current buffer");
+    let buffer_id = ev.buffers.create_buffer("*proc-sentinel-mark*");
+    ev.buffers
+        .insert_into_buffer(buffer_id, "before-after")
+        .expect("insert process buffer text");
+    ev.buffers
+        .get_mut(buffer_id)
+        .expect("process buffer")
+        .goto_byte(6);
+
+    let pid = ev.processes.create_process(
+        "sentinel-proc".into(),
+        Value::make_buffer(buffer_id),
+        "prog".into(),
+        vec![],
+    );
+    ev.processes
+        .sync_process_mark(&mut ev.buffers, pid)
+        .expect("sync process mark");
+    let mark =
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+            .expect("process-mark before sentinel");
+    super::super::marker::builtin_set_marker_in_buffers(
+        &mut ev.buffers,
+        vec![mark, Value::fixnum(7), Value::make_buffer(buffer_id)],
+    )
+    .expect("move process mark");
+    ev.processes.get_mut(pid).expect("process").status = process_status_exit_value(0);
+
+    builtin_internal_default_process_sentinel(
+        &mut ev,
+        vec![Value::fixnum(pid as i64), Value::string("finished\n")],
+    )
+    .expect("default sentinel");
+
+    assert_eq!(ev.buffers.current_buffer_id(), Some(original));
+    assert_eq!(
+        ev.buffers
+            .get(buffer_id)
+            .expect("process buffer")
+            .buffer_string(),
+        "before\nProcess sentinel-proc finished\n-after"
+    );
+    let mark =
+        builtin_process_mark_impl(&ev.processes, &ev.buffers, vec![Value::fixnum(pid as i64)])
+            .expect("process-mark");
+    assert_eq!(
+        super::super::marker::marker_position_as_int_with_buffers(&ev.buffers, &mark)
+            .expect("marker-position"),
+        39
+    );
+}
+
+#[test]
 fn builtin_process_tty_name_uses_value_slot() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();

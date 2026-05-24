@@ -3417,15 +3417,95 @@ pub(crate) fn builtin_internal_default_process_sentinel(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_internal_default_process_sentinel_impl(&eval.processes, args)
-}
-
-pub(crate) fn builtin_internal_default_process_sentinel_impl(
-    processes: &ProcessManager,
-    args: Vec<Value>,
-) -> EvalResult {
     expect_args("internal-default-process-sentinel", &args, 2)?;
-    let _id = resolve_live_process_or_wrong_type_in_manager(processes, &args[0])?;
+    let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
+    let msg = expect_string_strict(&args[1])?;
+
+    let (buffer, mark, name, status_symbol) = match eval.processes.get_any(id) {
+        Some(proc) => (
+            proc.buffer,
+            proc.mark,
+            process_name_runtime(proc.name),
+            process_status_symbol_value(proc.status),
+        ),
+        None => return Err(signal_wrong_type_processp(args[0])),
+    };
+
+    if status_symbol.as_symbol_name() == Some("run") {
+        return Ok(Value::NIL);
+    }
+
+    let Some(buf_id) = buffer.as_buffer_id() else {
+        return Ok(Value::NIL);
+    };
+    if eval.buffers.get(buf_id).is_none() {
+        return Ok(Value::NIL);
+    }
+
+    let saved_current = eval.buffers.current_buffer_id();
+    let insert_pos = match super::marker::marker_position_as_int_with_buffers(&eval.buffers, &mark)
+    {
+        Ok(pos) => eval
+            .buffers
+            .get(buf_id)
+            .map(|b| b.lisp_pos_to_full_buffer_byte(pos))
+            .unwrap_or(0),
+        Err(_) => eval
+            .buffers
+            .get(buf_id)
+            .map(|b| b.total_bytes())
+            .unwrap_or(0),
+    };
+    let saved_pt = eval.buffers.get(buf_id).map(|b| b.pt_byte);
+    let old_read_only = eval.buffers.get(buf_id).map(|b| b.get_read_only());
+
+    eval.set_current_buffer_unrecorded(buf_id)?;
+    if let Some(buf) = eval.buffers.get_mut(buf_id) {
+        buf.set_read_only_value(false);
+        buf.goto_byte(insert_pos);
+    }
+
+    let text = format!("\nProcess {name} {msg}");
+    let _ = eval
+        .buffers
+        .insert_into_buffer_before_markers(buf_id, &text);
+
+    let new_mark = eval
+        .buffers
+        .get(buf_id)
+        .map(|b| b.pt_byte)
+        .unwrap_or(insert_pos + text.len());
+
+    if let (Some(buf), Some(ro)) = (eval.buffers.get_mut(buf_id), old_read_only) {
+        buf.set_read_only_value(ro);
+    }
+
+    let text_byte_len = new_mark.saturating_sub(insert_pos);
+    if let (Some(buf), Some(old_pt)) = (eval.buffers.get_mut(buf_id), saved_pt) {
+        let adjusted_pt = if old_pt >= insert_pos {
+            old_pt + text_byte_len
+        } else {
+            old_pt
+        };
+        buf.goto_byte(adjusted_pt);
+    }
+
+    if let Some(proc) = eval.processes.get_any_mut(id) {
+        let new_mark_pos = eval
+            .buffers
+            .get(buf_id)
+            .map(|b| Value::fixnum(b.text.emacs_byte_to_char(new_mark) as i64 + 1))
+            .unwrap_or(Value::NIL);
+        super::marker::builtin_set_marker_in_buffers(
+            &mut eval.buffers,
+            vec![proc.mark, new_mark_pos, proc.buffer],
+        )?;
+    }
+
+    if let Some(saved_id) = saved_current {
+        eval.restore_current_buffer_if_live(saved_id);
+    }
+
     Ok(Value::NIL)
 }
 
