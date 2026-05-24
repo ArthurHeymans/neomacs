@@ -3261,7 +3261,82 @@ fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
     name.starts_with('&')
         || matches!(
             name,
-            "," | ",@" | "`" | "." | "..." | "_" | "quote" | "function" | "lambda" | "closure"
+            "," | ",@"
+                | "`"
+                | "."
+                | "..."
+                | "_"
+                | "quote"
+                | "function"
+                | "lambda"
+                | "closure"
+                | "cl--class"
+                | "cl-deftype-satisfies"
+        )
+}
+
+fn is_gnu_preloaded_builtin_type_property(name: &str, prop: &str) -> bool {
+    // GNU's dumped image keeps the `cl-preloaded.el` built-in type graph
+    // live at runtime.  Some of the same symbols pass through compile-time
+    // cleanup paths because cl-lib helpers are transient, but their
+    // built-in class metadata is not transient: pcase, cl-generic, and type
+    // predicates inspect it directly.
+    matches!(prop, "cl--class" | "cl-deftype-satisfies")
+        && matches!(
+            name,
+            "t" | "atom"
+                | "tree-sitter-compiled-query"
+                | "tree-sitter-node"
+                | "tree-sitter-parser"
+                | "user-ptr"
+                | "font-object"
+                | "font-entity"
+                | "font-spec"
+                | "condvar"
+                | "mutex"
+                | "thread"
+                | "terminal"
+                | "hash-table"
+                | "frame"
+                | "buffer"
+                | "window"
+                | "process"
+                | "finalizer"
+                | "window-configuration"
+                | "overlay"
+                | "number-or-marker"
+                | "symbol"
+                | "obarray"
+                | "native-comp-unit"
+                | "sequence"
+                | "list"
+                | "array"
+                | "number"
+                | "float"
+                | "integer-or-marker"
+                | "integer"
+                | "marker"
+                | "bignum"
+                | "fixnum"
+                | "boolean"
+                | "symbol-with-pos"
+                | "vector"
+                | "record"
+                | "bool-vector"
+                | "char-table"
+                | "string"
+                | "null"
+                | "cons"
+                | "function"
+                | "compiled-function"
+                | "closure"
+                | "byte-code-function"
+                | "subr"
+                | "module-function"
+                | "interpreted-function"
+                | "special-form"
+                | "native-comp-function"
+                | "primitive-function"
         )
 }
 
@@ -3407,6 +3482,9 @@ fn normalize_bootstrap_runtime_surface(
         .chain(runtime_loaded_state.property_keys.iter())
         .chain(runtime_source_state.property_keys.iter())
     {
+        if is_gnu_preloaded_builtin_type_property(name, prop) {
+            continue;
+        }
         let _ = super::builtins::builtin_put(
             eval,
             vec![Value::symbol(name), Value::symbol(prop), Value::NIL],

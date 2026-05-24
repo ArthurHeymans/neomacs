@@ -49,6 +49,14 @@ fn compat_pcase_semantics_matches_gnu_emacs() {
             form: r#"(symbol-value 'gensym-counter)"#,
         },
         PcaseCase {
+            name: "pcase_backquote_pattern_macroexpand",
+            form: r#"(prin1-to-string
+ (macroexpand
+  '(pcase '(cond (t 1))
+     (`(cond . ,clauses) clauses)
+     (_ 'no-match))))"#,
+        },
+        PcaseCase {
             name: "pcase_backquote_pattern_eval",
             form: r#"(pcase '(cond (t 1))
   (`(cond . ,clauses) clauses)
