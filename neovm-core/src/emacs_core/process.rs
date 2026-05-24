@@ -4829,30 +4829,6 @@ pub(crate) fn builtin_start_file_process_shell_command(
     Ok(Value::fixnum(id as i64))
 }
 
-/// (open-network-stream NAME BUFFER HOST SERVICE &optional TYPE)
-///
-/// Thin wrapper around `make-network-process`.  TYPE is currently ignored.
-pub(crate) fn builtin_open_network_stream(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("open-network-stream", &args, 4)?;
-    let mnp_args = vec![
-        Value::keyword(":name"),
-        args[0],
-        Value::keyword(":buffer"),
-        args[1],
-        Value::keyword(":host"),
-        args[2],
-        Value::keyword(":service"),
-        args[3],
-    ];
-    // If TYPE (5th arg) is provided and non-nil, ignore it for now; GNU Emacs
-    // uses it for TLS negotiation which NeoVM stubs out.
-    let _ = args.get(4);
-    builtin_make_network_process(eval, mnp_args)
-}
-
 /// (call-process PROGRAM &optional INFILE DESTINATION DISPLAY &rest ARGS)
 ///
 /// Runs the command synchronously using `std::process::Command`, captures
