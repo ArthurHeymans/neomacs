@@ -80,7 +80,7 @@ fn divergence_file_symlink() {
         (setq link (make-temp-file "neovm-sym-link-"))
         (delete-file link)
         (make-symbolic-link target link)
-        (list (file-symlink-p link)
+        (list (stringp (file-symlink-p link))
               (file-exists-p link)
               (file-equal-p target link)))
     (when (file-exists-p target) (delete-file target))

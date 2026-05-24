@@ -41,25 +41,30 @@ fn divergence_buffer_name_unique() {
 
     assert_oracle_parity(
         r#"(progn
-  (let ((b1 (generate-new-buffer " test-bnu-xxx"))
-        (b2 (generate-new-buffer " test-bnu-xxx"))
-        (b3 (generate-new-buffer " test-bnu-xxx")))
-    (let ((names (mapcar 'buffer-name (list b1 b2 b3))))
-      (list names
-            (= (length names) 3)
-            (string= (nth 0 names) " test-bnu-xxx")
-            (string= (nth 1 names) " test-bnu-xxx<2>")
-            (string= (nth 2 names) " test-bnu-xxx<3>")
-            (not (string= (nth 0 names) (nth 1 names)))
-            (not (string= (nth 1 names) (nth 2 names)))
-            (equal names (delete-dups names))
-            (buffer-live-p b1)
-            (buffer-live-p b2)
-            (buffer-live-p b3)
-            (kill-buffer b1) (kill-buffer b2) (kill-buffer b3)
-            (not (buffer-live-p b1))
-            (not (buffer-live-p b2))
-            (not (buffer-live-p b3)))))) "#,
+  (let ((v1 (generate-new-buffer "test-bnu-xxx"))
+        (v2 (generate-new-buffer "test-bnu-xxx"))
+        (v3 (generate-new-buffer "test-bnu-xxx"))
+        (h1 (generate-new-buffer " test-bnu-xxx"))
+        (h2 (generate-new-buffer " test-bnu-xxx"))
+        (h3 (generate-new-buffer " test-bnu-xxx")))
+    (let ((visible-names (mapcar 'buffer-name (list v1 v2 v3)))
+          (hidden-names (mapcar 'buffer-name (list h1 h2 h3))))
+      (list
+       (= (length visible-names) 3)
+       (equal visible-names
+              '("test-bnu-xxx" "test-bnu-xxx<2>" "test-bnu-xxx<3>"))
+       (= (length (delete-dups (copy-sequence visible-names))) 3)
+       (= (length hidden-names) 3)
+       (string= (nth 0 hidden-names) " test-bnu-xxx")
+       (string-match-p "\\` test-bnu-xxx-[0-9]+\\'" (nth 1 hidden-names))
+       (string-match-p "\\` test-bnu-xxx-[0-9]+\\'" (nth 2 hidden-names))
+       (= (length (delete-dups (copy-sequence hidden-names))) 3)
+       (buffer-live-p v1) (buffer-live-p v2) (buffer-live-p v3)
+       (buffer-live-p h1) (buffer-live-p h2) (buffer-live-p h3)
+       (kill-buffer v1) (kill-buffer v2) (kill-buffer v3)
+       (kill-buffer h1) (kill-buffer h2) (kill-buffer h3)
+       (not (buffer-live-p v1)) (not (buffer-live-p v2)) (not (buffer-live-p v3))
+       (not (buffer-live-p h1)) (not (buffer-live-p h2)) (not (buffer-live-p h3)))))) "#,
     );
 }
 

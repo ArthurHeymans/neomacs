@@ -196,6 +196,17 @@ fn test_expand_file_name_tilde() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_expand_file_name_tilde_user() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(expand_file_name("~root/", Some("/tmp")), "/root/");
+    assert_eq!(
+        expand_file_name("~neomacs-definitely-missing-user/file", Some("/tmp")),
+        "/tmp/~neomacs-definitely-missing-user/file"
+    );
+}
+
 #[test]
 fn test_expand_file_name_dotdot() {
     crate::test_utils::init_test_tracing();

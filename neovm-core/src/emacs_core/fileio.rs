@@ -67,6 +67,8 @@ fn expand_file_name_with_home_inner(
         } else {
             name.to_string()
         }
+    } else if let Some((home, rest)) = expand_user_home_prefix(name) {
+        format!("{home}{rest}")
     } else {
         name.to_string()
     };
@@ -105,6 +107,43 @@ fn expand_file_name_with_home_inner(
         cleaned.push('/');
     }
     cleaned
+}
+
+fn expand_user_home_prefix(name: &str) -> Option<(String, &str)> {
+    let rest = name.strip_prefix('~')?;
+    let sep = rest.find('/').unwrap_or(rest.len());
+    if sep == 0 {
+        return None;
+    }
+    let user = &rest[..sep];
+    let home = user_homedir(user)?;
+    Some((home, &rest[sep..]))
+}
+
+fn user_homedir(user: &str) -> Option<String> {
+    #[cfg(unix)]
+    {
+        let user = CString::new(user).ok()?;
+        let passwd = unsafe { libc::getpwnam(user.as_ptr()) };
+        if passwd.is_null() {
+            return None;
+        }
+        let pw_dir = unsafe { (*passwd).pw_dir };
+        if pw_dir.is_null() {
+            return None;
+        }
+        let dir = unsafe { CStr::from_ptr(pw_dir) };
+        if !dir.to_bytes().starts_with(b"/") {
+            return None;
+        }
+        Some(dir.to_string_lossy().into_owned())
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = user;
+        None
+    }
 }
 
 /// Convert a Lisp file-name string to an OS path at the real filesystem boundary.

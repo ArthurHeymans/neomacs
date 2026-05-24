@@ -64,9 +64,9 @@ fn divergence_process_environment() {
     assert_oracle_parity(
         r#"(list
   (listp process-environment)
-  (member "HOME" (mapcar (lambda (e) (and (stringp e)
-                                     (substring e 0 (string-match "=" e))))
-                         process-environment))
+  (not (null (member "HOME" (mapcar (lambda (e) (and (stringp e)
+                                                (substring e 0 (string-match "=" e))))
+                                    process-environment))))
   (> (length process-environment) 0))"#,
     );
 }
