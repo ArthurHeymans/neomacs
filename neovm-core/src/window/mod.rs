@@ -1667,12 +1667,12 @@ impl Frame {
 
     /// Get the selected window.
     pub fn selected_window(&self) -> Option<&Window> {
-        self.root_window.find(self.selected_window)
+        self.find_window(self.selected_window)
     }
 
     /// Get a mutable reference to the selected window.
     pub fn selected_window_mut(&mut self) -> Option<&mut Window> {
-        self.root_window.find_mut(self.selected_window)
+        self.find_window_mut(self.selected_window)
     }
 
     /// Replace all leaf window buffer bindings for `old_id` with `new_id`.

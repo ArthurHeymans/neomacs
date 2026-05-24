@@ -3858,6 +3858,31 @@ fn bootstrap_runtime_read_key_sequence_from_input_rx_follows_help_describe_bindi
 }
 
 #[test]
+fn bootstrap_runtime_read_key_sequence_from_input_rx_follows_help_info_binding() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char_with_mods('h', crate::keyboard::Modifiers::ctrl()),
+    ))
+    .expect("queue C-h");
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('i'),
+    ))
+    .expect("queue i");
+    drop(tx);
+
+    eval.input_rx = Some(rx);
+    let (keys, binding) = eval
+        .read_key_sequence()
+        .expect("read C-h i sequence from input_rx");
+    assert_eq!(keys, vec![Value::fixnum(8), Value::fixnum('i' as i64)]);
+    assert_eq!(binding, Value::symbol("info"));
+}
+
+#[test]
 fn bootstrap_runtime_read_key_sequence_from_input_rx_follows_repeat_complex_command_binding() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

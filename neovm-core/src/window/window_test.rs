@@ -14,6 +14,28 @@ fn create_frame_and_window() {
 }
 
 #[test]
+fn selected_window_accessor_includes_minibuffer_leaf() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
+    let minibuffer = mgr
+        .get(fid)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("frame minibuffer");
+
+    {
+        let frame = mgr.get_mut(fid).expect("frame");
+        assert!(frame.select_window(minibuffer));
+    }
+
+    let frame = mgr.get(fid).expect("frame");
+    assert_eq!(
+        frame.selected_window().map(|window| window.id()),
+        Some(minibuffer)
+    );
+}
+
+#[test]
 fn deleting_child_frame_that_shares_minibuffer_does_not_delete_owner_minibuffer() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

@@ -678,7 +678,7 @@ pub fn list_keymap_lookup_one_t_ok(keymap: &Value, event: &Value) -> Value {
 /// `access_keymap_keyremap` calls `access_keymap` with autoloading enabled, so
 /// menu-item `:filter` properties must be evaluated by the keyboard runtime
 /// rather than discarded by the pure keymap lookup layer.
-pub(crate) fn list_keymap_lookup_one_unresolved(keymap: &Value, event: &Value) -> Value {
+pub fn list_keymap_lookup_one_unresolved(keymap: &Value, event: &Value) -> Value {
     list_keymap_access_unresolved(keymap, event, false, false)
 }
 
@@ -3255,6 +3255,71 @@ where
         }
         cursor = entry_cdr;
     }
+}
+
+/// Iterate over all bindings in a keymap and its embedded/parent keymaps.
+///
+/// This mirrors GNU `map_keymap`, which descends into embedded keymaps before
+/// continuing with the rest of the spine, then follows parent keymaps.  It is
+/// the shape used by `map_keymap_canonical` after `keymap-canonicalize` when
+/// building menu bars, where major modes such as Org store their menu-bar
+/// prefix as `(keymap (keymap ...) (keymap ...))`.
+pub fn list_keymap_for_each_binding_recursive<F>(keymap: &Value, mut f: F)
+where
+    F: FnMut(Value, Value),
+{
+    fn walk<F>(keymap: &Value, f: &mut F, depth: usize)
+    where
+        F: FnMut(Value, Value),
+    {
+        if depth > 64 {
+            return;
+        }
+
+        let Some(mut cursor) = keymap_binding_spine(keymap) else {
+            return;
+        };
+
+        let mut steps = 0usize;
+        while cursor.is_cons() {
+            steps += 1;
+            if steps > 100_000 {
+                break;
+            }
+
+            if is_list_keymap(&cursor) {
+                walk(&cursor, f, depth + 1);
+                break;
+            }
+
+            let entry_car = cursor.cons_car();
+            let entry_cdr = cursor.cons_cdr();
+
+            if is_list_keymap(&entry_car) {
+                walk(&entry_car, f, depth + 1);
+            } else if super::chartable::is_char_table(&entry_car) {
+                super::chartable::for_each_non_nil_char_table_run(&entry_car, &mut *f);
+            } else if entry_car.is_vector() {
+                if let Some(items) = entry_car.as_vector_data() {
+                    for (idx, binding) in items.iter().enumerate() {
+                        f(Value::fixnum(idx as i64), *binding);
+                    }
+                }
+            } else if entry_car.is_cons() {
+                let binding_car = entry_car.cons_car();
+                let binding_cdr = entry_car.cons_cdr();
+                f(binding_car, binding_cdr);
+            }
+
+            if is_list_keymap(&entry_cdr) {
+                walk(&entry_cdr, f, depth + 1);
+                break;
+            }
+            cursor = entry_cdr;
+        }
+    }
+
+    walk(keymap, &mut f, 0);
 }
 
 // ---------------------------------------------------------------------------

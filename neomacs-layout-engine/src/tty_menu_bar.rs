@@ -29,7 +29,7 @@ use neomacs_display_protocol::glyph_matrix::TtyMenuBarItem;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::keymap::{
-    list_keymap_for_each_binding, list_keymap_lookup_one, list_keymap_parent,
+    list_keymap_for_each_binding_recursive, list_keymap_lookup_one_unresolved, list_keymap_parent,
     menu_bar_active_keymaps_for_frame_read_only, menu_bar_active_keymaps_read_only,
 };
 use neovm_core::window::FrameId;
@@ -73,7 +73,7 @@ pub fn collect_tty_menu_bar_items_for_frame(
 /// append any new items into `items` (deduping by key).
 fn collect_from_keymap(eval: &Context, keymap: &Value, items: &mut Vec<TtyMenuBarItem>) {
     let menu_bar_sym = Value::symbol("menu-bar");
-    let raw_binding = list_keymap_lookup_one(keymap, &menu_bar_sym);
+    let raw_binding = list_keymap_lookup_one_unresolved(keymap, &menu_bar_sym);
     if raw_binding.is_nil() {
         return;
     }
@@ -100,7 +100,7 @@ fn collect_menu_bar_keymap_bindings(
     items: &mut Vec<TtyMenuBarItem>,
     seen_keys: &mut HashSet<String>,
 ) {
-    list_keymap_for_each_binding(menu_bar_keymap, |key, def| {
+    list_keymap_for_each_binding_recursive(menu_bar_keymap, |key, def| {
         let key_str = key_symbol_name(&key);
         if seen_keys.insert(key_str.clone()) {
             if let Some(label) = extract_menu_label(&def) {
