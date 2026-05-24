@@ -339,6 +339,29 @@ fn test_primitive_undo_restores_nil_text_property_value() {
 }
 
 #[test]
+fn test_primitive_undo_reinserts_string_text_properties() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let text = Value::string("abc");
+
+    let mut table = crate::buffer::text_props::TextPropertyTable::new();
+    table.put_property(0, 3, face, bold);
+    crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
+
+    let record = Value::cons(text, Value::fixnum(1));
+    let list = Value::cons(record, Value::NIL);
+    builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]).unwrap();
+
+    let buf = eval.buffers.current_buffer().expect("scratch buffer");
+    assert_eq!(buf.buffer_string(), "abc");
+    assert_eq!(buf.text.text_props_get_property(0, face), Some(bold));
+    assert_eq!(buf.text.text_props_get_property(2, face), Some(bold));
+}
+
+#[test]
 fn test_undo_no_args() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

@@ -3093,6 +3093,26 @@ fn insert_pieces_in_state(
     Ok(Value::NIL)
 }
 
+pub(crate) fn insert_string_value_in_current_buffer(
+    obarray: &crate::emacs_core::symbol::Obarray,
+    dynamic: &[OrderedRuntimeBindingMap],
+    buffers: &mut BufferManager,
+    value: Value,
+    before_markers: bool,
+    inherit: bool,
+) -> EvalResult {
+    let target_multibyte = current_buffer_multibyte(buffers)?;
+    let piece = buffer_insert_piece_from_string(value, target_multibyte)?;
+    insert_pieces_in_state(
+        obarray,
+        dynamic,
+        buffers,
+        vec![piece],
+        before_markers,
+        inherit,
+    )
+}
+
 pub(super) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(c as i64),

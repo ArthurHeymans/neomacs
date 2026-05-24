@@ -222,9 +222,6 @@ fn primitive_undo_inner(
                 }
                 // (TEXT . POS) string + int — undo a deletion by re-inserting.
                 (ValueKind::String, ValueKind::Fixnum(pos1)) => {
-                    let ls = car
-                        .as_lisp_string()
-                        .expect("ValueKind::String must carry LispString payload");
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         let apos1 = pos1.abs();
                         let point_min = buf.point_min_char() as i64 + 1;
@@ -273,7 +270,14 @@ fn primitive_undo_inner(
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         let clamped = char_pos1_to_byte_clamped(buf, apos1);
                         ctx.buffers.goto_buffer_byte(buf_id, clamped);
-                        ctx.buffers.insert_lisp_string_into_buffer(buf_id, ls);
+                        super::builtins::insert_string_value_in_current_buffer(
+                            &ctx.obarray,
+                            &[],
+                            &mut ctx.buffers,
+                            car,
+                            false,
+                            false,
+                        )?;
                         // If POS was negative, point should be at end of
                         // inserted text (which insert_into_buffer already does).
                         // If positive, move point back to start of insertion.
