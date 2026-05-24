@@ -2133,6 +2133,8 @@ mod divergence_combo_defstruct_record_type_of_marker_overlay_undo;
 mod divergence_combo_defun_defmacro_marker_overlay_undo;
 #[path = "divergence-combo-defvar-defconst-make-local-marker-overlay-undo.rs"]
 mod divergence_combo_defvar_defconst_make_local_marker_overlay_undo;
+#[path = "divergence-combo-defvar-set-default-multi-buffer-marker-overlay-undo.rs"]
+mod divergence_combo_defvar_set_default_multi_buffer_marker_overlay_undo;
 #[path = "divergence-combo-delete-char-whitespace-marker-overlay-undo.rs"]
 mod divergence_combo_delete_char_whitespace_marker_overlay_undo;
 #[path = "divergence-combo-dynbind-closure-eval-obarray.rs"]
