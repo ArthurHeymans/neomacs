@@ -485,7 +485,11 @@ fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
     let neo_label = "NEO Emacs:".red().bold().to_string();
     let gnu_label = "GNU Emacs:".green().bold().to_string();
     panic!(
-        "oracle parity mismatch for form: {form}\n  {neo_label}  {neovm}\n  {gnu_label}  {oracle}"
+        "oracle parity mismatch for form: {form}\n  {neo_label}  {neovm}\n  {gnu_label}  {oracle}\n  NEO debug (len={}): {:?}\n  GNU debug (len={}): {:?}",
+        neovm.len(),
+        neovm,
+        oracle.len(),
+        oracle
     );
 }
 

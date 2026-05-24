@@ -1012,6 +1012,36 @@ fn process_exit_status_initial() {
 }
 
 #[test]
+fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut processes = ProcessManager::new();
+    let pid = processes.create_process_lisp(
+        LispString::from_utf8("pty-lf"),
+        Value::NIL,
+        LispString::from_utf8(&sh),
+        vec![
+            LispString::from_utf8("-c"),
+            LispString::from_utf8("printf 'x\n'"),
+        ],
+    );
+    processes.spawn_child(pid, true).expect("spawn PTY process");
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    let mut output = String::new();
+    while std::time::Instant::now() < deadline && !output.contains('\n') {
+        if let Some(chunk) = processes.read_process_output(pid) {
+            output.push_str(&chunk);
+        }
+        processes.check_child_exit(pid);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    processes.kill_process(pid);
+
+    assert_eq!(output.as_bytes(), b"x\n");
+}
+
+#[test]
 fn process_list_test() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
