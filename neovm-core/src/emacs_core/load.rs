@@ -3254,10 +3254,14 @@ fn symbol_has_runtime_surface(eval: &super::eval::Context, id: super::intern::Sy
 }
 
 fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
-    // GNU's dump keeps reader, lambda-list, and pattern syntax markers
-    // interned even when they have no value/function/plist surface.  Later
-    // Lisp compares these symbols by identity, notably funcall_lambda's
-    // `&optional' / `&rest' handling and pcase's backquote expander.
+    // GNU's dump keeps reader, lambda-list, pattern, face-spec, cl-generic
+    // specializer, frame/action-alist, and some feature-name markers interned
+    // even when they have no value/function/plist surface.  Later Lisp compares
+    // these symbols by identity, notably funcall_lambda's `&optional' /
+    // `&rest' handling, pcase's backquote expander,
+    // `face-spec-set-match-display', `cl-generic-generalizers',
+    // `frame-width'/`frame-height' frame parameter lookup, and `require' of
+    // byte-compiled files whose constants were read during loadup.
     name.starts_with('&')
         || matches!(
             name,
@@ -3272,6 +3276,61 @@ fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
                 | "closure"
                 | "cl--class"
                 | "cl-deftype-satisfies"
+                | "head"
+                | "subclass"
+                | "eql"
+                | "derived-mode"
+                | "oclosure"
+                | "cl-defmethod"
+                | "width"
+                | "height"
+                | "unsplittable"
+                | "preserve-size"
+                | "body-function"
+                | "bump-use-time"
+                | "dedicated"
+                | "inhibit-switch-frame"
+                | "window-height"
+                | "window-width"
+                | "window-size"
+                | "body-chars"
+                | "text-pixels"
+                | "reuse"
+                | "window"
+                | "frame"
+                | "same"
+                | "other"
+                | "tab"
+                | "class"
+                | "min-colors"
+                | "background"
+                | "supports"
+                | "color"
+                | "light"
+                | "dark"
+                | "graphic"
+                | "tty"
+                | "x"
+                | "w32"
+                | "ns"
+                | "haiku"
+                | "pgtk"
+                | "motif"
+                | "gtk"
+                | "lucid"
+                | "x-toolkit"
+                | "icons"
+                | "gv"
+                | "cl-lib"
+                | "cl-macs"
+                | "ascii"
+                | "unicode"
+                | "unicode-bmp"
+                | "latin-iso8859-1"
+                | "iso-8859-1"
+                | "emacs"
+                | "eight-bit"
+                | "ucs"
         )
 }
 

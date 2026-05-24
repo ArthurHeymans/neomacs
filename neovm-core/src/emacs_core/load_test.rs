@@ -2924,10 +2924,36 @@ fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
              (get '\` 'pcase-macroexpander)
              (fboundp '\`--pcase-macroexpander)
              (autoloadp (symbol-function '\`--pcase-macroexpander))
-             (funcall (lambda (_tag &rest _) t) 'x)
+	             (funcall (lambda (_tag &rest _) t) 'x)
              (fboundp 'built-in-class-p)
              (and (fboundp 'built-in-class-p)
                   (built-in-class-p (get 'function 'cl--class)))
+             (eq (intern-soft "head" obarray) 'head)
+             (eq (intern-soft "subclass" obarray) 'subclass)
+             (eq (intern-soft "eql" obarray) 'eql)
+             (eq (intern-soft "derived-mode" obarray) 'derived-mode)
+             (eq (intern-soft "oclosure" obarray) 'oclosure)
+             (eq (intern-soft "cl-defmethod" obarray) 'cl-defmethod)
+             (eq (intern-soft "width" obarray) 'width)
+             (eq (intern-soft "height" obarray) 'height)
+             (eq (intern-soft "window" obarray) 'window)
+             (eq (intern-soft "frame" obarray) 'frame)
+             (eq (intern-soft "other" obarray) 'other)
+             (eq (intern-soft "reuse" obarray) 'reuse)
+             (eq (intern-soft "class" obarray) 'class)
+             (eq (intern-soft "min-colors" obarray) 'min-colors)
+             (eq (intern-soft "supports" obarray) 'supports)
+             (eq (intern-soft "x-toolkit" obarray) 'x-toolkit)
+             (eq (intern-soft "icons" obarray) 'icons)
+             (eq (intern-soft "gv" obarray) 'gv)
+             (eq (intern-soft "cl-lib" obarray) 'cl-lib)
+             (eq (intern-soft "cl-macs" obarray) 'cl-macs)
+             (eq (intern-soft "ascii" obarray) 'ascii)
+             (eq (intern-soft "unicode" obarray) 'unicode)
+             (eq (intern-soft "eight-bit" obarray) 'eight-bit)
+             (charsetp 'ascii)
+             (charsetp 'unicode)
+             (charsetp 'eight-bit)
              (get 'function 'cl-deftype-satisfies)
              (not (null (get 'function 'cl--class)))
              (let (seen)
@@ -2940,7 +2966,7 @@ fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
     );
     assert_eq!(
         rendered,
-        "OK (t t t t nil nil nil t t t functionp t (functionp t))"
+        "OK (t t t t nil nil nil t t t t t t t t t t t t t t t t t t t t t t t t t t t t t functionp t (functionp t))"
     );
     let rendered = eval_rendered(
         &mut eval,
