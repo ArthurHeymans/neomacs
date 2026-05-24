@@ -2050,6 +2050,8 @@ mod divergence_coding_charset_deep;
 mod divergence_coding_process;
 #[path = "divergence-combo-abbrev-completion-syntax.rs"]
 mod divergence_combo_abbrev_completion_syntax;
+#[path = "divergence-combo-abbrev-table-marker-overlay-undo.rs"]
+mod divergence_combo_abbrev_table_marker_overlay_undo;
 #[path = "divergence-combo-advice-defun-buffer-local-overlay-marker-undo.rs"]
 mod divergence_combo_advice_defun_buffer_local_overlay_marker_undo;
 #[path = "divergence-combo-advice-eieio-keymap.rs"]
