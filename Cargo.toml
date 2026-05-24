@@ -102,11 +102,11 @@ rusqlite = { version = "0.35", features = ["bundled"] }
 # module is built — we don't need MPFR (rationals/floats) here, since
 # elisp bignums are integers and elisp floats stay as f64.
 rug = { version = "1", default-features = false, features = ["integer", "std"] }
-# gmp-mpfr-sys is rug's underlying FFI crate. On Unix we enable
-# `use-system-libs` to link against the libgmp shipped by our nix
-# devShell (building from source needs `m4`). On Windows we build
-# from source since there's no system libgmp.
-gmp-mpfr-sys = { version = "1.7", default-features = false }
+# gmp-mpfr-sys is rug's underlying FFI crate. We enable `use-system-libs`
+# so it links against a pre-installed libgmp rather than building GMP from
+# source. On Linux/macOS that comes from the system package manager; on
+# Windows CI we install it via vcpkg (MSVC) or MSYS2 (MinGW) before building.
+gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-system-libs"] }
 
 # GPU / windowing
 winit = "0.30"
