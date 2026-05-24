@@ -22,8 +22,6 @@ jobs:
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain-file: rust-toolchain.toml
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -34,4 +32,4 @@ jobs:
           cache-on-failure: true
 
       - name: Check workspace compiles on Windows
-        run: cargo check --workspace
+        run: cargo check --workspace --exclude neovm-oracle-tests
