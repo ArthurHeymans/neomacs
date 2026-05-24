@@ -2057,6 +2057,8 @@ mod divergence_combo_advice_eieio_keymap;
 #[path = "divergence-combo-advice-eieio-undo-deep.rs"]
 mod divergence_combo_advice_eieio_undo_deep;
 mod divergence_combo_advice_filter_before_after_combo;
+#[path = "divergence-combo-advice-marker-overlay-undo.rs"]
+mod divergence_combo_advice_marker_overlay_undo;
 #[path = "divergence-combo-arith-math-compare.rs"]
 mod divergence_combo_arith_math_compare;
 mod divergence_combo_bool_vector_bitwise_operations_deep;
