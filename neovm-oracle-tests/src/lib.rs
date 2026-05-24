@@ -2152,6 +2152,8 @@ mod divergence_combo_cl_ecase_marker_overlay;
 mod divergence_combo_cl_etypecase_marker_overlay;
 #[path = "divergence-combo-cl-flet-marker-overlay.rs"]
 mod divergence_combo_cl_flet_marker_overlay;
+#[path = "divergence-combo-cl-flet-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_flet_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_labels_closure_mutation_deep;
 #[path = "divergence-combo-cl-letf-destructuring-marker-overlay-undo.rs"]
 mod divergence_combo_cl_letf_destructuring_marker_overlay_undo;
@@ -2166,6 +2168,8 @@ mod divergence_combo_cl_loop_seq_accumulate;
 mod divergence_combo_cl_macrolet_marker_overlay;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
 mod divergence_combo_cl_macs_buffer_deep;
+#[path = "divergence-combo-cl-multiple-value-bind-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_multiple_value_bind_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-multiple-value-marker-overlay.rs"]
 mod divergence_combo_cl_multiple_value_marker_overlay;
 mod divergence_combo_cl_pcase_destructure_guard_deep;
@@ -2173,6 +2177,8 @@ mod divergence_combo_cl_pcase_destructure_guard_deep;
 mod divergence_combo_cl_pcase_rx_thread;
 #[path = "divergence-combo-cl-progv-marker-overlay.rs"]
 mod divergence_combo_cl_progv_marker_overlay;
+#[path = "divergence-combo-cl-progv-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_progv_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-psetf-marker-overlay.rs"]
 mod divergence_combo_cl_psetf_marker_overlay;
 #[path = "divergence-combo-cl-remf-marker-overlay.rs"]
@@ -2187,8 +2193,12 @@ mod divergence_combo_cl_shiftf_marker_overlay;
 mod divergence_combo_cl_subst_marker_overlay;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay.rs"]
 mod divergence_combo_cl_symbol_macrolet_marker_overlay;
+#[path = "divergence-combo-cl-symbol-macrolet-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_symbol_macrolet_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-tagbody-go-marker-overlay.rs"]
 mod divergence_combo_cl_tagbody_go_marker_overlay;
+#[path = "divergence-combo-cl-tagbody-go-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_tagbody_go_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-the-marker-overlay.rs"]
 mod divergence_combo_cl_the_marker_overlay;
 #[path = "divergence-combo-cl-typecase-marker-overlay.rs"]
