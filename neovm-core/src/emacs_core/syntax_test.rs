@@ -1364,6 +1364,59 @@ fn scan_sexps_returns_nil_when_count_not_exhausted_at_boundary() {
 }
 
 #[test]
+fn scan_sexps_unbalanced_signal_carries_gnu_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("(foo (bar baz)");
+    }
+
+    match builtin_scan_sexps(&mut eval, vec![Value::fixnum(1), Value::fixnum(1)]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "scan-error");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::string("Unbalanced parentheses"),
+                    Value::fixnum(1),
+                    Value::fixnum(15),
+                ]
+            );
+        }
+        other => panic!("expected scan-error signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn forward_sexp_unexpected_close_signal_carries_gnu_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert(")");
+        buf.goto_byte(buf.point_min());
+    }
+
+    match builtin_forward_sexp(&mut eval, vec![Value::fixnum(1)]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "scan-error");
+            assert_eq!(
+                sig.data,
+                vec![
+                    Value::string("Containing expression ends prematurely"),
+                    Value::fixnum(1),
+                    Value::fixnum(2),
+                ]
+            );
+        }
+        other => panic!("expected scan-error signal, got {other:?}"),
+    }
+}
+
+#[test]
 fn forward_sexp_stops_at_narrowing_boundary_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

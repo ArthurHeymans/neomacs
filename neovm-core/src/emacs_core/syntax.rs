@@ -888,7 +888,7 @@ pub fn scan_sexps(
     from: usize,
     count: i64,
 ) -> Result<usize, String> {
-    match scan_sexps_with_options(buf, table, from, count, false)? {
+    match scan_sexps_with_options(buf, table, from, count, false).map_err(|err| err.message)? {
         Some(pos) => Ok(pos),
         None if count < 0 => Ok(buf.point_min()),
         None => Ok(buf.point_max()),
@@ -901,7 +901,7 @@ fn scan_sexps_with_options(
     from: usize,
     count: i64,
     honor_properties: bool,
-) -> Result<Option<usize>, String> {
+) -> Result<Option<usize>, ScanListError> {
     if count == 0 {
         return Ok(Some(from));
     }
@@ -1189,31 +1189,31 @@ fn scan_lists_with_options(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ScanListError {
-    message: &'static str,
+    message: String,
     last_good: usize,
     at: usize,
 }
 
 impl ScanListError {
-    fn unbalanced(last_good: usize, at: usize) -> Self {
+    fn new(message: impl Into<String>, last_good: usize, at: usize) -> Self {
         Self {
-            message: "Unbalanced parentheses",
+            message: message.into(),
             last_good,
             at,
         }
     }
 
+    fn unbalanced(last_good: usize, at: usize) -> Self {
+        Self::new("Unbalanced parentheses", last_good, at)
+    }
+
     fn containing_ends_prematurely(last_good: usize, at: usize) -> Self {
-        Self {
-            message: "Containing expression ends prematurely",
-            last_good,
-            at,
-        }
+        Self::new("Containing expression ends prematurely", last_good, at)
     }
 
     fn signal_data(&self) -> Vec<Value> {
         vec![
-            Value::string(self.message),
+            Value::string(&self.message),
             Value::fixnum(self.last_good as i64 + 1),
             Value::fixnum(self.at as i64 + 1),
         ]
@@ -1228,7 +1228,7 @@ fn scan_sexp_forward(
     start: usize,
     table: &SyntaxTable,
     honor_properties: bool,
-) -> Result<usize, String> {
+) -> Result<usize, ScanListError> {
     let mut idx = start;
 
     // Skip whitespace and comments
@@ -1247,7 +1247,7 @@ fn scan_sexp_forward(
     }
 
     if idx >= len {
-        return Err("Scan error: unbalanced parentheses".to_string());
+        return Err(ScanListError::unbalanced(start, idx));
     }
 
     let ch = chars[idx];
@@ -1257,7 +1257,6 @@ fn scan_sexp_forward(
     match syn {
         SyntaxClass::Open => {
             // Find matching close, respecting nesting.
-            let close_char = syn_entry.matching_char.unwrap_or(')');
             let mut depth = 1i32;
             idx += 1;
             while idx < len && depth > 0 {
@@ -1304,16 +1303,11 @@ fn scan_sexp_forward(
                 idx += 1;
             }
             if depth != 0 {
-                return Err(format!(
-                    "Scan error: unbalanced parentheses (looking for '{}')",
-                    close_char
-                ));
+                return Err(ScanListError::unbalanced(start, idx));
             }
             Ok(idx)
         }
-        SyntaxClass::Close => {
-            Err("Scan error: unbalanced parentheses (unexpected close)".to_string())
-        }
+        SyntaxClass::Close => Err(ScanListError::containing_ends_prematurely(start, idx + 1)),
         SyntaxClass::StringDelim | SyntaxClass::StringFence => {
             // Scan to matching string delimiter.
             // StringFence always pairs with itself (like `"` but independent).
@@ -1332,7 +1326,7 @@ fn scan_sexp_forward(
                 idx += 1;
             }
             if idx >= len {
-                return Err("Scan error: unterminated string".to_string());
+                return Err(ScanListError::unbalanced(start, idx));
             }
             Ok(idx + 1) // past closing delim
         }
@@ -1371,7 +1365,7 @@ fn scan_sexp_forward(
                 idx += 1;
             }
             if idx >= len {
-                return Err("Scan error: unterminated math delimiter".to_string());
+                return Err(ScanListError::unbalanced(start, idx));
             }
             Ok(idx + 1)
         }
@@ -1390,7 +1384,7 @@ fn scan_sexp_backward(
     start_bound: usize,
     table: &SyntaxTable,
     honor_properties: bool,
-) -> Result<usize, String> {
+) -> Result<usize, ScanListError> {
     let mut idx = start;
 
     // Skip whitespace and comments backward
@@ -1415,7 +1409,7 @@ fn scan_sexp_backward(
     }
 
     if idx == start_bound {
-        return Err("Scan error: beginning of buffer".to_string());
+        return Err(ScanListError::unbalanced(idx, start));
     }
 
     idx -= 1; // move to the character we're examining
@@ -1426,7 +1420,6 @@ fn scan_sexp_backward(
     match syn {
         SyntaxClass::Close => {
             // Find matching open, respecting nesting.
-            let open_char = syn_entry.matching_char.unwrap_or('(');
             let mut depth = 1i32;
             while idx > start_bound && depth > 0 {
                 idx -= 1;
@@ -1468,21 +1461,16 @@ fn scan_sexp_backward(
                 }
             }
             if depth != 0 {
-                return Err(format!(
-                    "Scan error: unbalanced parentheses (looking for '{}')",
-                    open_char
-                ));
+                return Err(ScanListError::unbalanced(idx, start));
             }
             Ok(idx)
         }
-        SyntaxClass::Open => {
-            Err("Scan error: unbalanced parentheses (unexpected open)".to_string())
-        }
+        SyntaxClass::Open => Err(ScanListError::containing_ends_prematurely(idx, start)),
         SyntaxClass::StringDelim | SyntaxClass::StringFence => {
             // Scan backward to matching string delimiter.
             let delim_class = syn;
             if idx == start_bound {
-                return Err("Scan error: unterminated string".to_string());
+                return Err(ScanListError::unbalanced(idx, start));
             }
             idx -= 1;
             while idx > start_bound {
@@ -1497,7 +1485,7 @@ fn scan_sexp_backward(
             let c = chars[idx];
             let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
             if !(s == delim_class && (syn == SyntaxClass::StringFence || c == ch)) {
-                return Err("Scan error: unterminated string".to_string());
+                return Err(ScanListError::unbalanced(idx, start));
             }
             Ok(idx)
         }
@@ -1527,14 +1515,14 @@ fn scan_sexp_backward(
         SyntaxClass::Math => {
             let delim = ch;
             if idx == start_bound {
-                return Err("Scan error: unterminated math delimiter".to_string());
+                return Err(ScanListError::unbalanced(idx, start));
             }
             idx -= 1;
             while idx > start_bound && chars[idx] != delim {
                 idx -= 1;
             }
             if chars[idx] != delim {
-                return Err("Scan error: unterminated math delimiter".to_string());
+                return Err(ScanListError::unbalanced(idx, start));
             }
             Ok(idx)
         }
@@ -3203,7 +3191,7 @@ pub(crate) fn builtin_forward_sexp(
     let from = buf.point();
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
     let new_pos = match scan_sexps_with_options(buf, &table, from, count, honor_properties)
-        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?
+        .map_err(|err| signal("scan-error", err.signal_data()))?
     {
         Some(pos) => pos,
         None if count < 0 => buf.point_min(),
@@ -3247,7 +3235,7 @@ pub(crate) fn builtin_backward_sexp(
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
     // backward-sexp with positive count => scan_sexps with negative count
     let new_pos = match scan_sexps_with_options(buf, &table, from, -count, honor_properties)
-        .map_err(|msg| signal("scan-error", vec![Value::string(&msg)]))?
+        .map_err(|err| signal("scan-error", err.signal_data()))?
     {
         Some(pos) => pos,
         None if count < 0 => buf.point_max(),
@@ -3371,7 +3359,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
             buf.text.emacs_byte_to_char(new_byte) as i64 + 1,
         )),
         Ok(None) => Ok(Value::NIL),
-        Err(msg) => Err(signal("scan-error", vec![Value::string(&msg)])),
+        Err(err) => Err(signal("scan-error", err.signal_data())),
     }
 }
 
