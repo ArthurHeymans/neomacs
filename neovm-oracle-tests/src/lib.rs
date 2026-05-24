@@ -2116,6 +2116,14 @@ mod divergence_combo_cl_block_return_marker_overlay;
 mod divergence_combo_cl_check_type_marker_overlay;
 #[path = "divergence-combo-cl-destructuring-marker-overlay.rs"]
 mod divergence_combo_cl_destructuring_marker_overlay;
+#[path = "divergence-combo-cl-do-marker-overlay.rs"]
+mod divergence_combo_cl_do_marker_overlay;
+#[path = "divergence-combo-cl-do-star-marker-overlay.rs"]
+mod divergence_combo_cl_do_star_marker_overlay;
+#[path = "divergence-combo-cl-ecase-marker-overlay.rs"]
+mod divergence_combo_cl_ecase_marker_overlay;
+#[path = "divergence-combo-cl-etypecase-marker-overlay.rs"]
+mod divergence_combo_cl_etypecase_marker_overlay;
 #[path = "divergence-combo-cl-flet-marker-overlay.rs"]
 mod divergence_combo_cl_flet_marker_overlay;
 mod divergence_combo_cl_labels_closure_mutation_deep;
@@ -2147,6 +2155,8 @@ mod divergence_combo_cl_symbol_macrolet_marker_overlay;
 mod divergence_combo_cl_tagbody_go_marker_overlay;
 #[path = "divergence-combo-cl-the-marker-overlay.rs"]
 mod divergence_combo_cl_the_marker_overlay;
+#[path = "divergence-combo-cl-typecase-marker-overlay.rs"]
+mod divergence_combo_cl_typecase_marker_overlay;
 #[path = "divergence-combo-coding-marker-overlay-undo-textprop.rs"]
 mod divergence_combo_coding_marker_overlay_undo_textprop;
 #[path = "divergence-combo-column-indent-tab-marker-overlay-undo.rs"]
