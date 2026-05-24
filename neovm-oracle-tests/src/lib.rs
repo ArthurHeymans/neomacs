@@ -2357,6 +2357,8 @@ mod divergence_combo_regex_stress;
 mod divergence_combo_regexp_match_replace_narrow_prop;
 #[path = "divergence-combo-register-marker-overlay-undo-narrow.rs"]
 mod divergence_combo_register_marker_overlay_undo_narrow;
+#[path = "divergence-combo-replace-string-regexp-marker-overlay-undo.rs"]
+mod divergence_combo_replace_string_regexp_marker_overlay_undo;
 #[path = "divergence-combo-require-featurep-marker-overlay-undo.rs"]
 mod divergence_combo_require_featurep_marker_overlay_undo;
 #[path = "divergence-combo-ring-marker-overlay-undo.rs"]
