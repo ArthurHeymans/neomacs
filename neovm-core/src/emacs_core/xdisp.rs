@@ -334,7 +334,7 @@ pub(crate) fn finish_format_mode_line_in_eval(
         eval.set_current_buffer_unrecorded(buffer_id)?;
     }
 
-    let result = if args[0].is_nil() {
+    let result = if args[0].is_nil() || eval.noninteractive() {
         Value::string("")
     } else {
         let format_val = args[0];
@@ -418,7 +418,7 @@ pub(crate) fn builtin_format_mode_line_in_vm_runtime(
         shared.set_current_buffer_unrecorded(buffer_id)?;
     }
 
-    let result = if args[0].is_nil() {
+    let result = if args[0].is_nil() || shared.noninteractive() {
         Value::string("")
     } else {
         let format_val = args[0];

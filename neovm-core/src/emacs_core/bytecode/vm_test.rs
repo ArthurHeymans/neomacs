@@ -96,6 +96,21 @@ fn vm_eval_with_init_str(src: &str, init: impl FnOnce(&mut Context)) -> String {
     crate::emacs_core::error::format_eval_result(&result)
 }
 
+fn vm_eval_interactive_str(src: &str) -> String {
+    let mut eval = Context::new_vm_runtime_harness();
+    eval.set_variable("noninteractive", Value::NIL);
+    let result = eval.eval_str(src);
+    crate::emacs_core::error::format_eval_result(&result)
+}
+
+fn vm_eval_interactive_with_init_str(src: &str, init: impl FnOnce(&mut Context)) -> String {
+    let mut eval = Context::new_vm_runtime_harness();
+    eval.set_variable("noninteractive", Value::NIL);
+    init(&mut eval);
+    let result = eval.eval_str(src);
+    crate::emacs_core::error::format_eval_result(&result)
+}
+
 fn vm_bootstrap_eval_with_init_str(src: &str, init: impl FnOnce(&mut Context)) -> String {
     let mut eval = crate::test_utils::runtime_startup_context();
     init(&mut eval);
@@ -6729,10 +6744,19 @@ fn vm_map_char_table_uses_direct_dispatch() {
 }
 
 #[test]
+fn vm_format_mode_line_noninteractive_matches_gnu_batch_noop() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(r#"(list (stringp (format-mode-line "%b")) (length (format-mode-line "%b")))"#),
+        r#"OK (t 0)"#
+    );
+}
+
+#[test]
 fn vm_format_mode_line_uses_shared_state_and_falls_back_for_eval_forms() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-fmt-mode-line")))
                  (set-window-buffer w b)
@@ -6751,7 +6775,7 @@ fn vm_format_mode_line_uses_shared_state_and_falls_back_for_eval_forms() {
 fn vm_format_mode_line_symbol_conditional_uses_only_selected_branch() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let ((mode-line-flag t))
                  (list
                   (format-mode-line
@@ -6773,7 +6797,7 @@ fn vm_format_mode_line_symbol_conditional_uses_only_selected_branch() {
 fn vm_format_mode_line_string_valued_symbols_render_literally() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-fmt-mode-line-literal")))
                  (set-window-buffer w b)
@@ -6789,7 +6813,7 @@ fn vm_format_mode_line_string_valued_symbols_render_literally() {
 fn vm_format_mode_line_fixnum_elements_pad_and_truncate_tail() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "xy")))
                  (set-window-buffer w b)
@@ -6804,7 +6828,7 @@ fn vm_format_mode_line_fixnum_elements_pad_and_truncate_tail() {
 fn vm_format_mode_line_percent_specs_keep_gnu_field_width_and_dash_semantics() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "xy")))
                  (set-window-buffer w b)
@@ -6819,7 +6843,7 @@ fn vm_format_mode_line_percent_specs_keep_gnu_field_width_and_dash_semantics() {
 fn vm_format_mode_line_respects_risky_local_variable_for_eval_forms() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let ((unsafe-mode-line '(:eval (error "boom")))
                       (trusted-mode-line '(:eval "ok")))
                  (put 'trusted-mode-line 'risky-local-variable t)
@@ -6834,7 +6858,7 @@ fn vm_format_mode_line_respects_risky_local_variable_for_eval_forms() {
 fn vm_format_mode_line_propertize_preserves_text_properties() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((s (format-mode-line '(:propertize "abc" face bold help-echo "h")))
                       (props (text-properties-at 1 s)))
                  (list (substring-no-properties s)
@@ -6849,7 +6873,7 @@ fn vm_format_mode_line_propertize_preserves_text_properties() {
 fn vm_format_mode_line_percent_specs_preserve_source_string_text_properties() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-prop-buffer")))
                  (set-window-buffer w b)
@@ -6872,7 +6896,7 @@ fn vm_format_mode_line_percent_specs_preserve_source_string_text_properties() {
 fn vm_format_mode_line_status_specs_match_gnu_buffer_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-status-buffer")))
                  (set-window-buffer w b)
@@ -6894,7 +6918,7 @@ fn vm_format_mode_line_status_specs_match_gnu_buffer_state() {
 fn vm_format_mode_line_face_argument_merges_explicit_faces_and_can_drop_props() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((with-face (format-mode-line
                                 '((:propertize "a" face italic) "b")
                                 'bold))
@@ -6917,7 +6941,7 @@ fn vm_format_mode_line_face_argument_merges_explicit_faces_and_can_drop_props() 
 fn vm_format_mode_line_fixnum_padding_does_not_inherit_inner_properties() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((s (format-mode-line '(5 (:propertize "x" face bold))))
                       (props0 (text-properties-at 0 s))
                       (props1 (text-properties-at 1 s)))
@@ -6933,13 +6957,13 @@ fn vm_format_mode_line_fixnum_padding_does_not_inherit_inner_properties() {
 fn vm_format_mode_line_recursive_depth_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_with_init_str(r#"(format-mode-line "%[|%]")"#, |eval| {
+        vm_eval_interactive_with_init_str(r#"(format-mode-line "%[|%]")"#, |eval| {
             eval.command_loop.recursive_depth = 4;
         }),
         r#"OK "[[[|]]]""#
     );
     assert_eq!(
-        vm_eval_with_init_str(r#"(format-mode-line "%[|%]")"#, |eval| {
+        vm_eval_interactive_with_init_str(r#"(format-mode-line "%[|%]")"#, |eval| {
             eval.command_loop.recursive_depth = 7;
         }),
         r#"OK "[[[... | ...]]]""#
@@ -6950,7 +6974,7 @@ fn vm_format_mode_line_recursive_depth_specs_match_gnu() {
 fn vm_format_mode_line_size_and_process_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_with_init_str(
+        vm_eval_interactive_with_init_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-mode-line-metadata")))
                  (set-window-buffer w b)
@@ -6973,7 +6997,7 @@ fn vm_format_mode_line_size_and_process_specs_match_gnu() {
         r#"OK ("1536|1.5k|run" "1536|1.5k|run")"#
     );
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-mode-line-no-process")))
                  (set-window-buffer w b)
@@ -6990,7 +7014,7 @@ fn vm_format_mode_line_size_and_process_specs_match_gnu() {
 fn vm_format_mode_line_column_and_mode_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-col-mode")))
                  (set-window-buffer w b)
@@ -7008,7 +7032,7 @@ fn vm_format_mode_line_column_and_mode_specs_match_gnu() {
 fn vm_format_mode_line_coding_and_remote_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-coding-remote")))
                  (set-window-buffer w b)
@@ -7026,7 +7050,7 @@ fn vm_format_mode_line_position_o_and_q_specs() {
     crate::test_utils::init_test_tracing();
     // With content and window covering the full buffer → "All"
     assert_eq!(
-        vm_eval_str(
+        vm_eval_interactive_str(
             r#"(let* ((w (selected-window))
                       (b (get-buffer-create "vm-pos-oq")))
                  (set-window-buffer w b)

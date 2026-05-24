@@ -7,6 +7,12 @@ use crate::emacs_core::value::{
     set_string_text_properties_for_value,
 };
 
+fn interactive_context() -> Context {
+    let mut eval = Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+    eval
+}
+
 #[test]
 fn test_register_bootstrap_vars_include_tab_bar_display_vars() {
     crate::test_utils::init_test_tracing();
@@ -87,7 +93,7 @@ fn test_format_mode_line() {
 #[test]
 fn test_format_mode_line_eval_optional_designators() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-format", 80, 24, buffer_id);
     let window_id = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
@@ -137,6 +143,25 @@ fn test_format_mode_line_eval_optional_designators() {
 }
 
 #[test]
+fn test_format_mode_line_noninteractive_returns_empty_after_validation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let rendered = builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%b")]).unwrap();
+    assert_eq!(rendered, Value::string(""));
+
+    let err = builtin_format_mode_line_ctx(
+        &mut eval,
+        vec![Value::string("%b"), Value::NIL, Value::string("x")],
+    )
+    .unwrap_err();
+    match err {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected wrong-type-argument, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_resolve_live_window_display_context_uses_selected_window_buffer_point() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -171,7 +196,7 @@ fn test_resolve_live_window_display_context_uses_selected_window_buffer_point() 
 #[test]
 fn test_format_mode_line_eval_uses_explicit_buffer_instead_of_current_buffer() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let saved_current = eval.buffers.current_buffer_id().expect("current buffer");
     let other_id = eval.buffers.create_buffer("*other*");
 
@@ -193,7 +218,7 @@ fn test_format_mode_line_eval_uses_explicit_buffer_instead_of_current_buffer() {
 #[test]
 fn test_format_mode_line_eval_uses_window_buffer_instead_of_current_buffer() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let saved_current = eval.buffers.current_buffer_id().expect("current buffer");
     let frame_id = eval
         .frames
@@ -230,7 +255,7 @@ fn test_format_mode_line_eval_uses_window_buffer_instead_of_current_buffer() {
 #[test]
 fn test_format_mode_line_in_state_uses_buffer_local_symbols_and_restores_buffer() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let saved_current = eval.buffers.current_buffer_id().expect("current buffer");
     let other_id = eval.buffers.create_buffer("*mode-line*");
     eval.buffers
@@ -282,7 +307,7 @@ fn test_format_mode_line_in_state_uses_buffer_local_symbols_and_restores_buffer(
 #[test]
 fn test_format_mode_line_eval_keeps_shared_buffer_context_around_eval_forms() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let saved_current = eval.buffers.current_buffer_id().expect("current buffer");
     let other_id = eval.buffers.create_buffer("*mode-line-eval*");
     eval.buffers
@@ -310,7 +335,7 @@ fn test_format_mode_line_eval_keeps_shared_buffer_context_around_eval_forms() {
 #[test]
 fn test_format_mode_line_in_state_with_eval_keeps_shared_buffer_context_around_eval_forms() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let saved_current = eval.buffers.current_buffer_id().expect("current buffer");
     let other_id = eval.buffers.create_buffer("*mode-line-shared-eval*");
     eval.buffers
@@ -349,7 +374,7 @@ fn test_format_mode_line_in_state_with_eval_keeps_shared_buffer_context_around_e
 #[test]
 fn test_format_mode_line_preserves_raw_unibyte_literal_segments() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
 
     let rendered = builtin_format_mode_line_ctx(&mut eval, vec![Value::list(vec![raw])])
@@ -364,7 +389,7 @@ fn test_format_mode_line_preserves_raw_unibyte_literal_segments() {
 #[test]
 fn test_format_mode_line_symbol_conditional_uses_only_selected_branch() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     eval.obarray.set_symbol_value("mode-line-flag", Value::T);
 
     let then_rendered = builtin_format_mode_line_ctx(
@@ -401,7 +426,7 @@ fn test_format_mode_line_symbol_conditional_uses_only_selected_branch() {
 #[test]
 fn test_format_mode_line_string_valued_symbols_render_literally() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let other_id = eval.buffers.create_buffer("*mode-line-literal*");
     eval.buffers
         .set_buffer_local_property(other_id, "mode-name", Value::string("%b"))
@@ -429,7 +454,7 @@ fn test_format_mode_line_string_valued_symbols_render_literally() {
 #[test]
 fn test_format_mode_line_fixnum_elements_pad_and_truncate_tail() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let other_id = eval.buffers.create_buffer("xy");
 
     let rendered = format_mode_line_from_state(
@@ -458,7 +483,7 @@ fn test_format_mode_line_fixnum_elements_pad_and_truncate_tail() {
 #[test]
 fn test_format_mode_line_percent_specs_keep_gnu_field_width_and_dash_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let other_id = eval.buffers.create_buffer("xy");
 
     let rendered = format_mode_line_from_state(
@@ -483,7 +508,7 @@ fn test_format_mode_line_percent_specs_keep_gnu_field_width_and_dash_semantics()
 #[test]
 fn test_format_mode_line_respects_risky_local_variable_for_eval_forms() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     eval.obarray.set_symbol_value(
         "unsafe-mode-line",
         Value::list(vec![
@@ -512,7 +537,7 @@ fn test_format_mode_line_respects_risky_local_variable_for_eval_forms() {
 #[test]
 fn test_format_mode_line_propertize_preserves_text_properties() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let rendered = builtin_format_mode_line_ctx(
         &mut eval,
         vec![Value::list(vec![
@@ -543,7 +568,7 @@ fn test_format_mode_line_propertize_preserves_text_properties() {
 #[test]
 fn test_format_mode_line_percent_specs_preserve_source_string_text_properties() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("fmt-prop-buffer");
     eval.buffers.set_current(buffer_id);
 
@@ -594,7 +619,7 @@ fn test_format_mode_line_percent_specs_preserve_source_string_text_properties() 
 #[test]
 fn test_format_mode_line_status_specs_match_gnu_buffer_state() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("status-buffer");
     eval.buffers.set_current(buffer_id);
     {
@@ -623,7 +648,7 @@ fn test_format_mode_line_status_specs_match_gnu_buffer_state() {
 #[test]
 fn test_format_mode_line_face_argument_adds_default_face_and_merges_explicit_face() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let rendered = builtin_format_mode_line_ctx(
         &mut eval,
         vec![
@@ -661,7 +686,7 @@ fn test_format_mode_line_face_argument_adds_default_face_and_merges_explicit_fac
 #[test]
 fn test_format_mode_line_integer_face_argument_discards_text_properties() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let rendered = builtin_format_mode_line_ctx(
         &mut eval,
         vec![
@@ -689,7 +714,7 @@ fn test_format_mode_line_integer_face_argument_discards_text_properties() {
 #[test]
 fn test_format_mode_line_fixnum_padding_does_not_inherit_inner_properties() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let rendered = builtin_format_mode_line_ctx(
         &mut eval,
         vec![Value::list(vec![
@@ -718,7 +743,7 @@ fn test_format_mode_line_fixnum_padding_does_not_inherit_inner_properties() {
 #[test]
 fn test_format_mode_line_recursive_depth_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
 
     eval.command_loop.recursive_depth = 4;
     let shallow =
@@ -734,7 +759,7 @@ fn test_format_mode_line_recursive_depth_specs_match_gnu() {
 #[test]
 fn test_format_mode_line_size_and_process_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("mode-line-metadata");
     eval.buffers.set_current(buffer_id);
     {
@@ -760,7 +785,7 @@ fn test_format_mode_line_size_and_process_specs_match_gnu() {
 #[test]
 fn test_format_mode_line_column_c_and_big_c_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("col-test");
     eval.buffers.set_current(buffer_id);
     {
@@ -778,7 +803,7 @@ fn test_format_mode_line_column_c_and_big_c_specs_match_gnu() {
 #[test]
 fn test_format_mode_line_major_mode_name_spec_matches_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("mode-test");
     eval.buffers.set_current(buffer_id);
     eval.buffers
@@ -800,7 +825,7 @@ fn test_format_mode_line_major_mode_name_spec_matches_gnu() {
 #[test]
 fn test_format_mode_line_major_mode_name_preserves_raw_unibyte_value() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("raw-mode-test");
     eval.buffers.set_current(buffer_id);
     let raw_mode = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
@@ -822,7 +847,7 @@ fn test_format_mode_line_major_mode_name_preserves_raw_unibyte_value() {
 #[test]
 fn test_format_mode_line_frame_name_f_spec_prefers_title_and_preserves_raw_unibyte_value() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("frame-title-test");
     eval.buffers.set_current(buffer_id);
 
@@ -847,7 +872,7 @@ fn test_format_mode_line_frame_name_f_spec_prefers_title_and_preserves_raw_uniby
 #[test]
 fn test_format_mode_line_frame_name_f_spec_defaults_to_emacs_without_frame() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let rendered =
         builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%F")]).expect("frame name");
     assert_eq!(rendered, Value::string("Emacs"));
@@ -856,7 +881,7 @@ fn test_format_mode_line_frame_name_f_spec_defaults_to_emacs_without_frame() {
 #[test]
 fn test_format_mode_line_frame_name_f_spec_uses_emacs_for_gui_frame_without_explicit_name() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("frame-name-default-test");
     eval.buffers.set_current(buffer_id);
 
@@ -874,7 +899,7 @@ fn test_format_mode_line_frame_name_f_spec_uses_emacs_for_gui_frame_without_expl
 #[test]
 fn test_format_mode_line_remote_at_spec_matches_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("remote-test");
     eval.buffers.set_current(buffer_id);
 
@@ -902,7 +927,7 @@ fn test_format_mode_line_remote_at_spec_matches_gnu() {
 #[test]
 fn test_format_mode_line_remote_at_spec_accepts_raw_unibyte_default_directory() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("remote-raw-test");
     eval.buffers.set_current(buffer_id);
     let mut remote_dir = b"/ssh:host:/home/user".to_vec();
@@ -923,7 +948,7 @@ fn test_format_mode_line_remote_at_spec_accepts_raw_unibyte_default_directory() 
 #[test]
 fn test_format_mode_line_coding_system_z_and_big_z_specs_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("coding-test");
     eval.buffers.set_current(buffer_id);
 
@@ -955,7 +980,7 @@ fn test_format_mode_line_coding_system_z_and_big_z_specs_match_gnu() {
 #[test]
 fn test_format_mode_line_big_z_preserves_raw_unibyte_eol_indicator() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("coding-raw-eol-test");
     eval.buffers.set_current(buffer_id);
 
@@ -983,7 +1008,7 @@ fn test_format_mode_line_big_z_preserves_raw_unibyte_eol_indicator() {
 #[test]
 fn test_format_mode_line_tty_z_uses_live_coding_manager_state() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("tty-coding-test");
     eval.buffers.set_current(buffer_id);
     eval.frames
@@ -1009,7 +1034,7 @@ fn test_format_mode_line_tty_z_uses_live_coding_manager_state() {
 #[test]
 fn test_format_mode_line_tty_z_reads_visible_buffer_file_coding_value_without_local_flag() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("tty-coding-visible-slot-test");
     eval.buffers.set_current(buffer_id);
     eval.frames
@@ -1039,7 +1064,7 @@ fn test_format_mode_line_tty_z_reads_visible_buffer_file_coding_value_without_lo
 #[test]
 fn test_format_mode_line_tty_big_z_uses_live_coding_manager_state_and_eol_indicator() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("tty-coding-big-z-test");
     eval.buffers.set_current(buffer_id);
     eval.frames
@@ -1065,7 +1090,7 @@ fn test_format_mode_line_tty_big_z_uses_live_coding_manager_state_and_eol_indica
 #[test]
 fn test_format_mode_line_propertize_display_min_width_matches_gnu_spacing() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let display = Value::list(vec![
         Value::symbol("min-width"),
         Value::list(vec![Value::make_float(6.0)]),
@@ -1084,7 +1109,7 @@ fn test_format_mode_line_propertize_display_min_width_matches_gnu_spacing() {
 #[test]
 fn test_format_mode_line_position_o_and_q_specs() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buffer_id = eval.buffers.create_buffer("pos-test");
     eval.buffers.set_current(buffer_id);
 
@@ -1162,7 +1187,7 @@ fn test_format_mode_line_position_o_and_q_specs() {
 #[test]
 fn test_format_mode_line_percent_specs_use_window_buffer_and_completed_window_end() {
     crate::test_utils::init_test_tracing();
-    let mut eval = Context::new();
+    let mut eval = interactive_context();
     let target_id = eval.buffers.create_buffer("window-target");
     {
         let buffer = eval.buffers.get_mut(target_id).expect("target buffer");
@@ -1299,7 +1324,7 @@ fn test_window_text_pixel_size_arg_validation() {
 #[test]
 fn test_window_text_pixel_size_eval_window_validation() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
@@ -1322,7 +1347,7 @@ fn test_window_text_pixel_size_eval_window_validation() {
 #[test]
 fn test_window_text_pixel_size_tty_frame_uses_char_cell_metrics() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
     {
@@ -1358,7 +1383,7 @@ fn test_window_text_pixel_size_tty_frame_uses_char_cell_metrics() {
 #[test]
 fn test_window_text_pixel_size_matches_gnu_trailing_line_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
     {
@@ -1446,7 +1471,7 @@ fn test_pos_visible_in_window_p() {
 #[test]
 fn test_pos_visible_in_window_p_eval_window_validation() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let err = builtin_pos_visible_in_window_p_ctx(&mut eval, vec![Value::NIL, Value::string("x")])
         .unwrap_err();
     match err {
@@ -1474,7 +1499,7 @@ fn test_pos_visible_in_window_p_eval_window_validation() {
 #[test]
 fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     eval.set_variable("noninteractive", Value::NIL);
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-pos", 160, 64, buf_id);
@@ -1517,7 +1542,8 @@ fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() 
 #[test]
 fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
+    eval.set_variable("noninteractive", Value::T);
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-batch-pos", 160, 64, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
@@ -1541,7 +1567,7 @@ fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
 #[test]
 fn test_window_line_height_eval_returns_live_gui_row_metrics() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval
         .frames
@@ -1587,7 +1613,7 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
 #[test]
 fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-posn", 160, 64, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
@@ -1653,7 +1679,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
 #[test]
 fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-posn-xy", 160, 64, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
@@ -1725,7 +1751,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
 #[test]
 fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval
         .frame_manager_mut()
@@ -1813,7 +1839,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
 #[test]
 fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval
         .frame_manager_mut()
@@ -2093,7 +2119,7 @@ fn test_tool_bar_height() {
 #[test]
 fn test_tool_bar_height_eval_frame_validation() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
 
@@ -2136,7 +2162,7 @@ fn test_tab_bar_height() {
 #[test]
 fn test_tab_bar_height_eval_frame_validation() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
 
@@ -2154,7 +2180,7 @@ fn test_tab_bar_height_eval_frame_validation() {
 #[test]
 fn test_tab_bar_height_eval_reflects_tab_bar_lines_and_pixels() {
     crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
+    let mut eval = interactive_context();
     let frame_id = super::super::window_cmds::ensure_selected_frame_id(&mut eval);
     {
         let frame = eval.frames.get_mut(frame_id).expect("selected frame");
