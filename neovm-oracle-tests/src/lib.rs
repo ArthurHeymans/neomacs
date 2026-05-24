@@ -3228,3 +3228,9 @@ mod divergence_combo_cl_eieio_print_circle_marker_overlay_textprop_buflocal_narr
 mod divergence_combo_cl_eieio_marker_insertion_types_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-loop-pcase-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_loop_pcase_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-excursion-restriction-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_excursion_restriction_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-textprop-search-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_textprop_search_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-regex-multibyte-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_regex_multibyte_marker_overlay_textprop_buflocal_narrow;
