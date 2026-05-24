@@ -2212,6 +2212,8 @@ mod divergence_combo_keymap_command;
 mod divergence_combo_keymap_command_advice_error;
 mod divergence_combo_keymap_define_lookup_where_is;
 mod divergence_combo_kill_ring_yank_undo_proprs_deep;
+#[path = "divergence-combo-kill-yank-marker-overlay-undo.rs"]
+mod divergence_combo_kill_yank_marker_overlay_undo;
 #[path = "divergence-combo-lambda-funcall-apply-closure-marker-overlay-undo.rs"]
 mod divergence_combo_lambda_funcall_apply_closure_marker_overlay_undo;
 #[path = "divergence-combo-line-number-count-marker-overlay-undo.rs"]
