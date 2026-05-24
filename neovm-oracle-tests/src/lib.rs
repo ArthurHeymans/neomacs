@@ -2134,6 +2134,8 @@ mod divergence_combo_charwidth_display_fill;
 mod divergence_combo_circular_list_print_read_reverse;
 #[path = "divergence-combo-cl-add-method-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_add_method_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-add-method-setf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_add_method_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-adjoin-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_adjoin_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-advanced-mapping-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2166,6 +2168,8 @@ mod divergence_combo_cl_class_precedence_marker_overlay_textprop_buflocal_narrow
 mod divergence_combo_cl_coerce_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-compute-applicable-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_compute_applicable_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-compute-applicable-setf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_compute_applicable_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-concatenate-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_concatenate_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-defclass-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2216,6 +2220,8 @@ mod divergence_combo_cl_find_class_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_find_class_of_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-find-method-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_find_method_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-find-method-setf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_find_method_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-flet-marker-overlay.rs"]
 mod divergence_combo_cl_flet_marker_overlay;
 #[path = "divergence-combo-cl-flet-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2268,6 +2274,8 @@ mod divergence_combo_cl_method_combination_setf_marker_overlay_textprop_buflocal
 mod divergence_combo_cl_method_function_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-method-qualifiers-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_method_qualifiers_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-method-qualifiers-setf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_method_qualifiers_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-multiple-value-bind-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_multiple_value_bind_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-multiple-value-marker-overlay.rs"]
@@ -2315,6 +2323,8 @@ mod divergence_combo_cl_remf_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_remove_delete_if_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-remove-method-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_remove_method_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-remove-method-setf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_remove_method_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-replace-reverse-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_replace_reverse_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-rotatef-marker-overlay.rs"]
