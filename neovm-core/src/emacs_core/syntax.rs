@@ -907,26 +907,31 @@ fn scan_sexps_with_options(
     }
 
     let chars = buffer_chars_in_range(buf, 0, buf.total_bytes());
-    let total_chars = chars.len();
+    let start_bound = buf.point_min_char();
+    let stop_bound = buf.point_max_char();
 
     // Convert byte position to char index.
-    let mut idx = buf.text.emacs_byte_to_char(from);
+    let mut idx = buf
+        .text
+        .emacs_byte_to_char(from)
+        .clamp(start_bound, stop_bound);
 
     if count > 0 {
         for _ in 0..count {
-            idx = skip_sexp_ignored_forward(buf, &chars, idx, table, honor_properties);
-            if idx >= total_chars {
+            idx = skip_sexp_ignored_forward(buf, &chars, idx, stop_bound, table, honor_properties);
+            if idx >= stop_bound {
                 return Ok(None);
             }
-            idx = scan_sexp_forward(buf, &chars, total_chars, idx, table, honor_properties)?;
+            idx = scan_sexp_forward(buf, &chars, stop_bound, idx, table, honor_properties)?;
         }
     } else {
         for _ in 0..(-count) {
-            idx = skip_sexp_ignored_backward(buf, &chars, idx, table, honor_properties);
-            if idx == 0 {
+            idx =
+                skip_sexp_ignored_backward(buf, &chars, idx, start_bound, table, honor_properties);
+            if idx <= start_bound {
                 return Ok(None);
             }
-            idx = scan_sexp_backward(buf, &chars, idx, table, honor_properties)?;
+            idx = scan_sexp_backward(buf, &chars, idx, start_bound, table, honor_properties)?;
         }
     }
 
@@ -948,10 +953,11 @@ fn skip_sexp_ignored_forward(
     buf: &Buffer,
     chars: &[char],
     mut idx: usize,
+    stop: usize,
     table: &SyntaxTable,
     honor_properties: bool,
 ) -> usize {
-    while idx < chars.len()
+    while idx < stop
         && is_sexp_ignored_syntax(
             effective_syntax_entry_for_abs_char(buf, table, chars[idx], idx, honor_properties)
                 .class,
@@ -966,10 +972,11 @@ fn skip_sexp_ignored_backward(
     buf: &Buffer,
     chars: &[char],
     mut idx: usize,
+    start: usize,
     table: &SyntaxTable,
     honor_properties: bool,
 ) -> usize {
-    while idx > 0
+    while idx > start
         && is_sexp_ignored_syntax(
             effective_syntax_entry_for_abs_char(
                 buf,
@@ -1380,13 +1387,14 @@ fn scan_sexp_backward(
     buf: &Buffer,
     chars: &[char],
     start: usize,
+    start_bound: usize,
     table: &SyntaxTable,
     honor_properties: bool,
 ) -> Result<usize, String> {
     let mut idx = start;
 
     // Skip whitespace and comments backward
-    while idx > 0
+    while idx > start_bound
         && matches!(
             effective_syntax_entry_for_abs_char(
                 buf,
@@ -1406,7 +1414,7 @@ fn scan_sexp_backward(
         idx -= 1;
     }
 
-    if idx == 0 {
+    if idx == start_bound {
         return Err("Scan error: beginning of buffer".to_string());
     }
 
@@ -1420,7 +1428,7 @@ fn scan_sexp_backward(
             // Find matching open, respecting nesting.
             let open_char = syn_entry.matching_char.unwrap_or('(');
             let mut depth = 1i32;
-            while idx > 0 && depth > 0 {
+            while idx > start_bound && depth > 0 {
                 idx -= 1;
                 let c = chars[idx];
                 let s =
@@ -1435,9 +1443,9 @@ fn scan_sexp_backward(
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
                         // Skip over string contents backward
                         let delim_class = s;
-                        if idx > 0 {
+                        if idx > start_bound {
                             idx -= 1;
-                            while idx > 0 {
+                            while idx > start_bound {
                                 let sc = effective_syntax_entry_for_abs_char(
                                     buf,
                                     table,
@@ -1473,11 +1481,11 @@ fn scan_sexp_backward(
         SyntaxClass::StringDelim | SyntaxClass::StringFence => {
             // Scan backward to matching string delimiter.
             let delim_class = syn;
-            if idx == 0 {
+            if idx == start_bound {
                 return Err("Scan error: unterminated string".to_string());
             }
             idx -= 1;
-            while idx > 0 {
+            while idx > start_bound {
                 let c = chars[idx];
                 let s =
                     effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
@@ -1495,7 +1503,7 @@ fn scan_sexp_backward(
         }
         SyntaxClass::Word | SyntaxClass::Symbol => {
             // Scan backward over word/symbol chars.
-            while idx > 0
+            while idx > start_bound
                 && matches!(
                     effective_syntax_entry_for_abs_char(
                         buf,
@@ -1518,11 +1526,11 @@ fn scan_sexp_backward(
         }
         SyntaxClass::Math => {
             let delim = ch;
-            if idx == 0 {
+            if idx == start_bound {
                 return Err("Scan error: unterminated math delimiter".to_string());
             }
             idx -= 1;
-            while idx > 0 && chars[idx] != delim {
+            while idx > start_bound && chars[idx] != delim {
                 idx -= 1;
             }
             if chars[idx] != delim {

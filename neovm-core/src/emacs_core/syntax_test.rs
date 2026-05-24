@@ -1364,6 +1364,29 @@ fn scan_sexps_returns_nil_when_count_not_exhausted_at_boundary() {
 }
 
 #[test]
+fn forward_sexp_stops_at_narrowing_boundary_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.delete_region(buf.point_min(), buf.point_max());
+        buf.insert("(aaa (bbb (ccc) ddd) eee)");
+        buf.narrow_to_byte_region(5, 20);
+        buf.goto_byte(buf.point_min());
+    }
+
+    builtin_forward_sexp(&mut eval, vec![Value::fixnum(3)]).unwrap();
+
+    let point = eval
+        .buffers
+        .current_buffer()
+        .expect("current buffer")
+        .point_char() as i64
+        + 1;
+    assert_eq!(point, 21);
+}
+
+#[test]
 fn parse_partial_sexp_baseline_shapes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
