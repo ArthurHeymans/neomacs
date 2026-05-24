@@ -2111,6 +2111,8 @@ mod divergence_combo_cl_pcase_rx_thread;
 mod divergence_combo_cl_seq_loop;
 #[path = "divergence-combo-coding-marker-overlay-undo-textprop.rs"]
 mod divergence_combo_coding_marker_overlay_undo_textprop;
+#[path = "divergence-combo-column-indent-tab-marker-overlay-undo.rs"]
+mod divergence_combo_column_indent_tab_marker_overlay_undo;
 #[path = "divergence-combo-comment-fill-indent.rs"]
 mod divergence_combo_comment_fill_indent;
 mod divergence_combo_completion_try_all_completions_deep;
