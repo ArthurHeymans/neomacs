@@ -1,16 +1,16 @@
-//! Combo: cl-no-next-method + marker + overlay + textprop + buflocal + narrow + undo.
-//! Tests no-next-method with buffer state.
+//! Combo: cl-no-applicable-method + marker + overlay + textprop + buflocal + narrow + undo.
+//! Tests no-applicable-method with buffer state.
 
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-fn combo_cl_no_next_method_marker_overlay_textprop_buflocal_narrow_undo() {
+fn combo_cl_no_applicable_method_marker_overlay_textprop_buflocal_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
         r#"(progn
-  (let ((buf (generate-new-buffer "nnb")))
+  (let ((buf (generate-new-buffer "nab")))
     (with-current-buffer buf
       (insert "AAAA-BBBB-CCCC-DDDD")
       (put-text-property 1 5 'z 'a)
@@ -54,12 +54,12 @@ fn combo_cl_no_next_method_marker_overlay_textprop_buflocal_narrow_undo() {
 }
 
 #[test]
-fn combo_cl_no_next_method_clone_overlay_undo() {
+fn combo_cl_no_applicable_method_clone_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
         r#"(progn
-  (let ((buf (generate-new-buffer "nnc")))
+  (let ((buf (generate-new-buffer "nac")))
     (with-current-buffer buf
       (insert "AAAA-BBBB-CCCC-DDDD")
       (put-text-property 1 5 'z 'a)
@@ -71,7 +71,7 @@ fn combo_cl_no_next_method_clone_overlay_undo() {
              (_ (overlay-put ov 'face 'highlight))
              (m (make-marker))
              (_ (set-marker m 8))
-             (clone (clone-buffer "nnc-clone")))
+             (clone (clone-buffer "nac-clone")))
         (with-current-buffer clone
           (setq-local my-var 'cloned)
           (narrow-to-region 6 15)
@@ -107,13 +107,13 @@ fn combo_cl_no_next_method_clone_overlay_undo() {
 }
 
 #[test]
-fn combo_cl_no_next_method_multi_buffer_undo() {
+fn combo_cl_no_applicable_method_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
         r#"(progn
-  (let ((b1 (generate-new-buffer "nn1"))
-        (b2 (generate-new-buffer "nn2")))
+  (let ((b1 (generate-new-buffer "na1"))
+        (b2 (generate-new-buffer "na2")))
     (with-current-buffer b1
       (insert "AAAA-BBBB-CCCC")
       (put-text-property 1 5 'z 'a)
@@ -181,7 +181,7 @@ fn combo_cl_no_next_method_multi_buffer_undo() {
 }
 
 #[test]
-fn combo_cl_no_next_method_setf_replace_undo() {
+fn combo_cl_no_applicable_method_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
@@ -227,7 +227,7 @@ fn combo_cl_no_next_method_setf_replace_undo() {
 }
 
 #[test]
-fn combo_cl_no_next_method_multi_overlay_undo() {
+fn combo_cl_no_applicable_method_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(

@@ -79,6 +79,7 @@ fn combo_cl_find_method_clone_overlay_undo() {
           (let* ((ht (make-hash-table :test 'equal))
                  (_ (puthash "x" 10 ht))
                  (_ (puthash "y" 20 ht))
+                 (_ (puthash "z" 30 ht))
                  (result (cl-loop for k being the hash-keys of ht
                                   using (hash-values v)
                                   collect (list k v))))

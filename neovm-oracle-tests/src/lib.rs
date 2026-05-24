@@ -2294,6 +2294,8 @@ mod divergence_combo_cl_multiple_value_bind_marker_overlay_textprop_buflocal_nar
 mod divergence_combo_cl_multiple_value_marker_overlay;
 #[path = "divergence-combo-cl-no-applicable-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_no_applicable_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-no-applicable-method-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_no_applicable_method_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-no-applicable-method-setf-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_no_applicable_method_setf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-no-next-method-marker-overlay-textprop-buflocal-narrow.rs"]
