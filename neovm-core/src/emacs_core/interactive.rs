@@ -3891,7 +3891,9 @@ fn collect_where_is_sequences_value(
             }
             let mut sequence = map_prefix.clone();
             sequence.push(event);
-            out.push(sequence);
+            if !out.iter().any(|existing| *existing == sequence) {
+                out.push(sequence);
+            }
         }
     }
 
