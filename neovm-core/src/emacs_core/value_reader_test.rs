@@ -266,6 +266,30 @@ fn string_hex_escape() {
 }
 
 #[test]
+fn string_short_hex_escape_uses_gnu_raw_byte_character() {
+    crate::test_utils::init_test_tracing();
+    let v = read1(r#""\xc3\xa9B""#);
+    let string = v.as_lisp_string().expect("string literal");
+    assert!(string.is_multibyte());
+    assert_eq!(
+        crate::emacs_core::builtins::lisp_string_char_codes(string),
+        vec![crate::emacs_core::emacs_char::byte8_to_char(0xC3), 0xA9B]
+    );
+}
+
+#[test]
+fn string_short_octal_escape_uses_gnu_raw_byte_character() {
+    crate::test_utils::init_test_tracing();
+    let v = read1(r#""\303\u0100""#);
+    let string = v.as_lisp_string().expect("string literal");
+    assert!(string.is_multibyte());
+    assert_eq!(
+        crate::emacs_core::builtins::lisp_string_char_codes(string),
+        vec![crate::emacs_core::emacs_char::byte8_to_char(0xC3), 0x100]
+    );
+}
+
+#[test]
 fn string_unicode_escape() {
     crate::test_utils::init_test_tracing();
     let v = read1(r#""\u0041""#);

@@ -434,6 +434,29 @@ fn list_keymap_define_and_lookup() {
 }
 
 #[test]
+fn list_keymap_define_inserts_bindings_before_prompt_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let prompt = Value::string("Test Menu");
+    let km = Value::cons(Value::symbol("keymap"), Value::cons(prompt, Value::NIL));
+
+    list_keymap_define(km, Value::fixnum('a' as i64), Value::symbol("cmd-a"));
+    list_keymap_define(km, Value::fixnum('b' as i64), Value::symbol("cmd-b"));
+    list_keymap_define(km, Value::fixnum(1), Value::symbol("cmd-c"));
+
+    let first = km.cons_cdr().cons_car();
+    let second = km.cons_cdr().cons_cdr().cons_car();
+    let fourth = km.cons_cdr().cons_cdr().cons_cdr().cons_cdr().cons_car();
+
+    assert_eq!(first.cons_car(), Value::fixnum(1));
+    assert_eq!(first.cons_cdr().as_symbol_name(), Some("cmd-c"));
+    assert_eq!(second.cons_car(), Value::fixnum('b' as i64));
+    assert_eq!(
+        fourth.as_lisp_string().unwrap().as_utf8_str(),
+        Some("Test Menu")
+    );
+}
+
+#[test]
 fn list_keymap_parent_chain() {
     crate::test_utils::init_test_tracing();
     let parent = make_sparse_list_keymap();
@@ -570,29 +593,24 @@ fn list_keymap_copy_preserves_direct_sparse_parent_without_inlining_parent_bindi
 }
 
 #[test]
-fn store_in_keymap_preserves_string_prompt_when_prepending_binding() {
-    // Regression: doom-dashboard / evil-collection lose their
-    // `[normal-state]` aux keymap prompt because the first define-key
-    // on a keymap with a string prompt used to insert the new binding
-    // BEFORE the prompt, hiding it from `keymap-prompt`. After this
-    // fix, prompts survive define-key.
+fn store_in_keymap_keeps_prompt_reachable_after_gnu_ordered_prepend() {
     crate::test_utils::init_test_tracing();
     let prompt = Value::string("Auxiliary keymap for Normal state");
     let map = Value::list(vec![Value::symbol("keymap"), prompt]);
 
     list_keymap_define(map, Value::fixnum('x' as i64), Value::symbol("foo"));
 
-    // Prompt must still be the cadr of the keymap.
+    // GNU `store_in_keymap` prepends ordinary bindings before prompt strings;
+    // `keymap-prompt` still finds the prompt by scanning the keymap spine.
     let cdr = map.cons_cdr();
     assert!(cdr.is_cons(), "expected non-empty cdr after define-key");
     let head = cdr.cons_car();
-    assert!(
-        head.is_string(),
-        "expected first cdr element to remain the prompt string after \
-         define-key, got {head:?}"
-    );
+    assert_eq!(head.cons_car(), Value::fixnum('x' as i64));
+    assert_eq!(head.cons_cdr().as_symbol_name(), Some("foo"));
+    let prompt_tail = cdr.cons_cdr();
+    assert!(prompt_tail.is_cons(), "expected prompt after binding");
     assert_eq!(
-        head.as_utf8_str(),
+        prompt_tail.cons_car().as_utf8_str(),
         Some("Auxiliary keymap for Normal state"),
         "prompt string was clobbered or replaced"
     );

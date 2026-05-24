@@ -818,14 +818,17 @@ impl<'a> Reader<'a> {
                             }
                         }
                         x if x == b'x' as u32 => {
-                            let (hex, _digit_count) = self.read_hex_digits()?;
+                            let (mut hex, digit_count) = self.read_hex_digits()?;
                             if hex <= emacs_char::MAX_CHAR {
+                                if digit_count < 3 && (0x80..0x100).contains(&hex) {
+                                    hex = emacs_char::byte8_to_char(hex as u8);
+                                }
                                 let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
                                 let len = emacs_char::char_string(hex, &mut tmp);
                                 buf.extend_from_slice(&tmp[..len]);
                                 if let Some(bytes) = unibyte_buf.as_mut() {
-                                    if hex <= 0xFF {
-                                        bytes.push(hex as u8);
+                                    if let Some(byte) = emacs_char::char_to_byte_safe(hex) {
+                                        bytes.push(byte);
                                     } else {
                                         unibyte_buf = None;
                                     }
@@ -895,12 +898,15 @@ impl<'a> Reader<'a> {
                                 }
                             }
                             if val <= emacs_char::MAX_CHAR {
+                                if (0x80..0x100).contains(&val) {
+                                    val = emacs_char::byte8_to_char(val as u8);
+                                }
                                 let mut tmp = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
                                 let len = emacs_char::char_string(val, &mut tmp);
                                 buf.extend_from_slice(&tmp[..len]);
                                 if let Some(bytes) = unibyte_buf.as_mut() {
-                                    if val <= 0xFF {
-                                        bytes.push(val as u8);
+                                    if let Some(byte) = emacs_char::char_to_byte_safe(val) {
+                                        bytes.push(byte);
                                     } else {
                                         unibyte_buf = None;
                                     }
