@@ -2063,6 +2063,8 @@ mod divergence_combo_advice_eieio_undo_deep;
 mod divergence_combo_advice_filter_before_after_combo;
 #[path = "divergence-combo-advice-marker-overlay-undo.rs"]
 mod divergence_combo_advice_marker_overlay_undo;
+#[path = "divergence-combo-all-six-subsystems.rs"]
+mod divergence_combo_all_six_subsystems;
 #[path = "divergence-combo-apply-partially-marker-overlay.rs"]
 mod divergence_combo_apply_partially_marker_overlay;
 #[path = "divergence-combo-arith-math-compare.rs"]
@@ -2093,6 +2095,8 @@ mod divergence_combo_buflocal_default_setq_kill_deep;
 mod divergence_combo_buflocal_dir_abbrev_undo;
 #[path = "divergence-combo-buflocal-indirect-kill-undo-evaporate.rs"]
 mod divergence_combo_buflocal_indirect_kill_undo_evaporate;
+#[path = "divergence-combo-buflocal-marker-overlay-textprop-narrow-clone.rs"]
+mod divergence_combo_buflocal_marker_overlay_textprop_narrow_clone;
 #[path = "divergence-combo-buflocal-marker-overlay-undo.rs"]
 mod divergence_combo_buflocal_marker_overlay_undo;
 #[path = "divergence-combo-buflocal-multi-buffer-marker-overlay.rs"]
@@ -2339,6 +2343,8 @@ mod divergence_combo_marker_insertion_type_overlay_undo;
 mod divergence_combo_marker_multi_replace_overlay;
 #[path = "divergence-combo-marker-operations-overlay-undo.rs"]
 mod divergence_combo_marker_operations_overlay_undo;
+#[path = "divergence-combo-marker-overlay-textprop-buflocal-narrow-setf.rs"]
+mod divergence_combo_marker_overlay_textprop_buflocal_narrow_setf;
 #[path = "divergence-combo-marker-point-region-undo.rs"]
 mod divergence_combo_marker_point_region_undo;
 #[path = "divergence-combo-marker-type-overlay-undo-narrow-buflocal.rs"]
@@ -2395,6 +2401,10 @@ mod divergence_combo_overlay_evaporate_priority_undo;
 mod divergence_combo_overlay_invisible_marker_textprop;
 #[path = "divergence-combo-overlay-lifecycle-marker-undo.rs"]
 mod divergence_combo_overlay_lifecycle_marker_undo;
+#[path = "divergence-combo-overlay-marker-textprop-buflocal-clone.rs"]
+mod divergence_combo_overlay_marker_textprop_buflocal_clone;
+#[path = "divergence-combo-overlay-marker-textprop-buflocal-clone-replace.rs"]
+mod divergence_combo_overlay_marker_textprop_buflocal_clone_replace;
 #[path = "divergence-combo-overlay-priority-marker-undo.rs"]
 mod divergence_combo_overlay_priority_marker_undo;
 mod divergence_combo_overlay_priority_overlap_evaporate_deep;
