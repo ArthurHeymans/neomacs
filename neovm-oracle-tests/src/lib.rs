@@ -2170,6 +2170,8 @@ mod divergence_combo_error_condition_unwind;
 mod divergence_combo_error_recovery;
 #[path = "divergence-combo-eval-error-scope.rs"]
 mod divergence_combo_eval_error_scope;
+#[path = "divergence-combo-eval-marker-overlay-undo.rs"]
+mod divergence_combo_eval_marker_overlay_undo;
 #[path = "divergence-combo-excursion-marker-bufswitch.rs"]
 mod divergence_combo_excursion_marker_bufswitch;
 mod divergence_combo_excursion_restriction_buffer_switch_deep;
