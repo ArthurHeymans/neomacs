@@ -3204,3 +3204,13 @@ mod divergence_combo_cl_eieio_generic_method_invocation_marker_overlay_textprop_
 mod divergence_combo_cl_eieio_initialization_lifecycle_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-print-clone-introspection-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_print_clone_introspection_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-error-recovery-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_error_recovery_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-multiple-inheritance-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_multiple_inheritance_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-advice-generic-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_advice_generic_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-hash-objects-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_hash_objects_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-defstruct-interop-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_defstruct_interop_marker_overlay_textprop_buflocal_narrow;
