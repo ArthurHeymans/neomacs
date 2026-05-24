@@ -2353,6 +2353,8 @@ mod divergence_combo_regexp_match_replace_narrow_prop;
 mod divergence_combo_register_marker_overlay_undo_narrow;
 #[path = "divergence-combo-require-featurep-marker-overlay-undo.rs"]
 mod divergence_combo_require_featurep_marker_overlay_undo;
+#[path = "divergence-combo-ring-marker-overlay-undo.rs"]
+mod divergence_combo_ring_marker_overlay_undo;
 mod divergence_combo_rx_regexp_composition_deep;
 #[path = "divergence-combo-save-restriction-excursion-marker-overlay-undo.rs"]
 mod divergence_combo_save_restriction_excursion_marker_overlay_undo;
