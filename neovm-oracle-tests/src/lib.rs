@@ -2084,6 +2084,8 @@ mod divergence_combo_buffer_string_erase_marker_overlay_undo;
 mod divergence_combo_buffer_swap_text_marker_overlay;
 #[path = "divergence-combo-buflocal-clone-multi-var-overlay.rs"]
 mod divergence_combo_buflocal_clone_multi_var_overlay;
+#[path = "divergence-combo-buflocal-clone-narrow-marker-overlay.rs"]
+mod divergence_combo_buflocal_clone_narrow_marker_overlay;
 #[path = "divergence-combo-buflocal-closure-advice.rs"]
 mod divergence_combo_buflocal_closure_advice;
 mod divergence_combo_buflocal_default_setq_kill_deep;
@@ -2099,6 +2101,8 @@ mod divergence_combo_buflocal_multi_buffer_marker_overlay;
 mod divergence_combo_buflocal_narrow_closure_eval;
 #[path = "divergence-combo-buflocal-narrow-marker.rs"]
 mod divergence_combo_buflocal_narrow_marker;
+#[path = "divergence-combo-buflocal-narrow-textprop-marker-overlay.rs"]
+mod divergence_combo_buflocal_narrow_textprop_marker_overlay;
 #[path = "divergence-combo-buflocal-setq-set-let-marker-overlay-undo.rs"]
 mod divergence_combo_buflocal_setq_set_let_marker_overlay_undo;
 #[path = "divergence-combo-case-conversion-marker-overlay-undo.rs"]
@@ -2365,6 +2369,8 @@ mod divergence_combo_motion_marker_overlay_undo;
 mod divergence_combo_multi_replace_narrow_marker_overlay;
 #[path = "divergence-combo-multibyte-coding-undo.rs"]
 mod divergence_combo_multibyte_coding_undo;
+#[path = "divergence-combo-narrow-clone-buflocal-marker-overlay.rs"]
+mod divergence_combo_narrow_clone_buflocal_marker_overlay;
 #[path = "divergence-combo-narrow-marker-overlay-mega.rs"]
 mod divergence_combo_narrow_marker_overlay_mega;
 #[path = "divergence-combo-narrow-widen-restriction-marker-overlay-undo.rs"]
@@ -2522,8 +2528,12 @@ mod divergence_combo_syntax_sexp_textprop_narrow;
 mod divergence_combo_syntax_table_marker_overlay_undo;
 #[path = "divergence-combo-text-editing.rs"]
 mod divergence_combo_text_editing;
+#[path = "divergence-combo-textprop-buflocal-narrow-marker-overlay.rs"]
+mod divergence_combo_textprop_buflocal_narrow_marker_overlay;
 #[path = "divergence-combo-textprop-change-undo-marker.rs"]
 mod divergence_combo_textprop_change_undo_marker;
+#[path = "divergence-combo-textprop-clone-buflocal-marker-overlay.rs"]
+mod divergence_combo_textprop_clone_buflocal_marker_overlay;
 #[path = "divergence-combo-textprop-front-rear-sticky.rs"]
 mod divergence_combo_textprop_front_rear_sticky;
 #[path = "divergence-combo-textprop-interval-undo.rs"]
