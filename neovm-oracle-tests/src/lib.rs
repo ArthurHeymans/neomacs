@@ -2136,6 +2136,8 @@ mod divergence_combo_circular_list_print_read_reverse;
 mod divergence_combo_cl_adjoin_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-advanced-mapping-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_advanced_mapping_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-allocate-instance-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_allocate_instance_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-assert-marker-overlay.rs"]
 mod divergence_combo_cl_assert_marker_overlay;
 #[path = "divergence-combo-cl-assert-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2234,6 +2236,8 @@ mod divergence_combo_cl_macrolet_marker_overlay;
 mod divergence_combo_cl_macrolet_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-macs-buffer-deep.rs"]
 mod divergence_combo_cl_macs_buffer_deep;
+#[path = "divergence-combo-cl-make-instance-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_make_instance_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-merge-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_merge_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-multiple-value-bind-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -2289,6 +2293,12 @@ mod divergence_combo_cl_shared_initialize_marker_overlay_textprop_buflocal_narro
 mod divergence_combo_cl_shiftf_marker_overlay;
 #[path = "divergence-combo-cl-shiftf-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_shiftf_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-slot-boundp-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_slot_boundp_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-slot-exists-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_slot_exists_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-slot-makunbound-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_slot_makunbound_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-slot-value-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_slot_value_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-sort-marker-overlay-textprop-buflocal-narrow.rs"]
