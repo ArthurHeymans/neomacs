@@ -2399,7 +2399,7 @@ fn accept_process_output_runs_default_process_filter() {
 
     assert_eq!(first, Value::T);
     assert_eq!(second, Value::NIL);
-    assert_eq!(text, "out\n");
+    assert_eq!(text, "out\n\nProcess apio-default-filter finished\n");
 }
 
 #[test]

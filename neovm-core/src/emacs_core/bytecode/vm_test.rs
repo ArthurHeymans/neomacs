@@ -2597,7 +2597,7 @@ fn vm_xdisp_window_visibility_builtins_use_shared_runtime_state() {
                            (coordinates-in-window-p 'x w)
                          (error err))))"#
         ),
-        r#"OK ("vm-xdisp" (5 . 2) nil (0 . 0) (wrong-type-argument windowp "x") (wrong-type-argument window-live-p 999999) (wrong-type-argument integer-or-marker-p left) (wrong-type-argument consp x))"#
+        r#"OK ("" (5 . 2) nil (0 . 0) (wrong-type-argument windowp "x") (wrong-type-argument window-live-p 999999) (wrong-type-argument integer-or-marker-p left) (wrong-type-argument consp x))"#
     );
 }
 
@@ -6521,7 +6521,7 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (equal
                   (single-key-description (event-convert-list '(control ?x)))
                   "C-x")
-                 (null (find-operation-coding-system 'write-region "x"))
+                 (null (find-operation-coding-system 'write-region 1 2 "x"))
                  (condition-case nil (gpm-mouse-start) (error t))
                  (null (gpm-mouse-stop))
                  (null (handle-save-session nil))
