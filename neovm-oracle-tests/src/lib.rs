@@ -2303,6 +2303,8 @@ mod divergence_combo_operations;
 mod divergence_combo_overlap_undo_deep;
 #[path = "divergence-combo-overlay-advanced.rs"]
 mod divergence_combo_overlay_advanced;
+#[path = "divergence-combo-overlay-invisible-marker-textprop.rs"]
+mod divergence_combo_overlay_invisible_marker_textprop;
 #[path = "divergence-combo-overlay-priority-marker-undo.rs"]
 mod divergence_combo_overlay_priority_marker_undo;
 mod divergence_combo_overlay_priority_overlap_evaporate_deep;
@@ -2310,6 +2312,8 @@ mod divergence_combo_overlay_priority_overlap_evaporate_deep;
 mod divergence_combo_overlay_textprop_marker_mega;
 #[path = "divergence-combo-overlay-textprop-narrow-undo.rs"]
 mod divergence_combo_overlay_textprop_narrow_undo;
+#[path = "divergence-combo-paragraph-fill-marker-overlay.rs"]
+mod divergence_combo_paragraph_fill_marker_overlay;
 #[path = "divergence-combo-pcase-marker-overlay-undo-textprop.rs"]
 mod divergence_combo_pcase_marker_overlay_undo_textprop;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
@@ -2342,6 +2346,8 @@ mod divergence_combo_read_eval_circular;
 #[path = "divergence-combo-read-eval-obarray.rs"]
 mod divergence_combo_read_eval_obarray;
 mod divergence_combo_read_eval_prin1_obarray_roundtrip;
+#[path = "divergence-combo-read-only-textprop-marker-overlay.rs"]
+mod divergence_combo_read_only_textprop_marker_overlay;
 #[path = "divergence-combo-read-print-circle-hash-obarray.rs"]
 mod divergence_combo_read_print_circle_hash_obarray;
 #[path = "divergence-combo-read-print-hash.rs"]
@@ -2384,6 +2390,8 @@ mod divergence_combo_seq_unique_sort_merge_deep;
 #[path = "divergence-combo-serialization.rs"]
 mod divergence_combo_serialization;
 mod divergence_combo_setf_generalized_buffer_local_deep;
+#[path = "divergence-combo-setf-marker-overlay-textprop.rs"]
+mod divergence_combo_setf_marker_overlay_textprop;
 #[path = "divergence-combo-sort-marker-overlay-undo.rs"]
 mod divergence_combo_sort_marker_overlay_undo;
 #[path = "divergence-combo-stdlib.rs"]
@@ -2478,6 +2486,8 @@ mod divergence_combo_window_point_marker_scroll;
 #[path = "divergence-combo-window-spatial.rs"]
 mod divergence_combo_window_spatial;
 mod divergence_combo_with_temp_buffer_insert_props_deep;
+#[path = "divergence-combo-word-move-syntax-marker-overlay.rs"]
+mod divergence_combo_word_move_syntax_marker_overlay;
 #[path = "divergence-compat-legacy.rs"]
 mod divergence_compat_legacy;
 #[path = "divergence-completion-frameworks.rs"]
