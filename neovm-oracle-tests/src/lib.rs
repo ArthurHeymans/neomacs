@@ -2391,6 +2391,8 @@ mod divergence_combo_timer_marker_overlay_undo_textprop;
 mod divergence_combo_timer_process;
 #[path = "divergence-combo-timer-process-time.rs"]
 mod divergence_combo_timer_process_time;
+#[path = "divergence-combo-transpose-indent-fill-marker-overlay-undo.rs"]
+mod divergence_combo_transpose_indent_fill_marker_overlay_undo;
 #[path = "divergence-combo-type-coercion.rs"]
 mod divergence_combo_type_coercion;
 #[path = "divergence-combo-undo-boundary-deep.rs"]
