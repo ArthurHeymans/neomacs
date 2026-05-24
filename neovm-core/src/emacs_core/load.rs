@@ -3253,25 +3253,6 @@ fn symbol_has_runtime_surface(eval: &super::eval::Context, id: super::intern::Sy
         || !eval.obarray().symbol_plist_id(id).is_nil()
 }
 
-fn runtime_reachable_symbol_names(
-    eval: &super::eval::Context,
-) -> std::collections::BTreeSet<String> {
-    let mut names = std::collections::BTreeSet::new();
-    let mut seen = std::collections::BTreeSet::new();
-
-    for (id, _) in eval.obarray().iter_symbols() {
-        if let Some(value) = eval.obarray().symbol_value_id_copied(id) {
-            collect_value_symbol_names(value, &mut names, &mut seen);
-        }
-        if let Some(function) = eval.obarray().symbol_function_id(id) {
-            collect_value_symbol_names(function, &mut names, &mut seen);
-        }
-        collect_value_symbol_names(eval.obarray().symbol_plist_id(id), &mut names, &mut seen);
-    }
-
-    names
-}
-
 fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
     // GNU's dump keeps reader, lambda-list, and pattern syntax markers
     // interned even when they have no value/function/plist surface.  Later
@@ -3465,11 +3446,9 @@ fn normalize_bootstrap_runtime_surface(
     for name in &runtime_source_state.face_names {
         super::font::clear_created_lisp_face(name);
     }
-    let reachable_symbol_names = runtime_reachable_symbol_names(eval);
     for name in &runtime_source_state.symbol_names {
         if runtime_loaddefs_state.symbol_names.contains(name)
             || runtime_loaded_state.symbol_names.contains(name)
-            || reachable_symbol_names.contains(name)
         {
             continue;
         }
