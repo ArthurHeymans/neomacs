@@ -2903,6 +2903,9 @@ fn buffer_text_property_undo_runs(
     if start >= end {
         return Vec::new();
     }
+    if undo::undo_list_is_disabled(&buf.get_undo_list()) {
+        return Vec::new();
+    }
 
     let char_start = buf.text.buf_bytepos_to_charpos(start);
     let char_end = buf.text.buf_bytepos_to_charpos(end);
@@ -2910,26 +2913,38 @@ fn buffer_text_property_undo_runs(
         return Vec::new();
     }
 
-    let interval_runs = buf.text.text_props_object_interval_runs(buf.total_chars());
-    if interval_runs.is_empty() {
-        return vec![TextPropertyUndoRun {
-            char_start,
+    let mut runs = Vec::new();
+    let mut cursor = char_start;
+    let _ = buf.text.text_props_try_for_each_interval_in_range(
+        start,
+        end,
+        |interval_start, interval_end, plist| {
+            let clipped_start = interval_start.max(char_start);
+            let clipped_end = interval_end.min(char_end);
+            if clipped_start >= clipped_end {
+                return Ok::<(), ()>(());
+            }
+            if cursor < clipped_start {
+                runs.push(TextPropertyUndoRun {
+                    char_start: cursor,
+                    char_end: clipped_start,
+                    plist: Vec::new(),
+                });
+            }
+            runs.push(TextPropertyUndoRun {
+                char_start: clipped_start,
+                char_end: clipped_end,
+                plist: plist.to_vec(),
+            });
+            cursor = clipped_end;
+            Ok(())
+        },
+    );
+    if cursor < char_end {
+        runs.push(TextPropertyUndoRun {
+            char_start: cursor,
             char_end,
             plist: Vec::new(),
-        }];
-    }
-
-    let mut runs = Vec::new();
-    for (interval_start, interval_end, plist) in interval_runs {
-        let clipped_start = interval_start.max(char_start);
-        let clipped_end = interval_end.min(char_end);
-        if clipped_start >= clipped_end {
-            continue;
-        }
-        runs.push(TextPropertyUndoRun {
-            char_start: clipped_start,
-            char_end: clipped_end,
-            plist,
         });
     }
     runs
