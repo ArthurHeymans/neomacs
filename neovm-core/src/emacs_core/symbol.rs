@@ -548,6 +548,7 @@ impl Obarray {
                 return;
             }
             sym.interned_global = true;
+            sym.flags.set_interned(SymbolInterned::InternedInInitial);
             let name = resolve_sym_lisp_string(id);
             if name.as_bytes().first().is_some_and(|byte| *byte == b':') {
                 // Match GNU lread.c intern_sym: keywords interned in the
@@ -578,6 +579,7 @@ impl Obarray {
             return false;
         }
         sym.interned_global = false;
+        sym.flags.set_interned(SymbolInterned::Uninterned);
         self.global_member_count = self.global_member_count.saturating_sub(1);
         true
     }
@@ -2101,6 +2103,7 @@ impl Obarray {
     pub fn unintern_id(&mut self, id: SymId) -> bool {
         let removed_symbol = self.clear_global_member(id);
         if removed_symbol {
+            crate::emacs_core::intern::unintern_canonical_id(id);
             self.function_epoch = self.function_epoch.wrapping_add(1);
         }
         removed_symbol

@@ -15,6 +15,7 @@ use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::heap_types::LispString;
 use crate::tagged::value::TaggedValue;
@@ -439,6 +440,21 @@ impl SymbolRegistry {
         self.canonical_by_name.get(&name).copied()
     }
 
+    fn unintern_canonical_symbol(&mut self, id: SymId) -> bool {
+        let Some(slot) = self.symbols.get_mut(id.0 as usize) else {
+            return false;
+        };
+        if !slot.canonical {
+            return false;
+        }
+        if self.canonical_by_name.get(&slot.name).copied() != Some(id) {
+            return false;
+        }
+        self.canonical_by_name.remove(&slot.name);
+        slot.canonical = false;
+        true
+    }
+
     fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>, heap_id: usize) {
         roots.extend(
             self.symbols
@@ -476,6 +492,11 @@ fn global_symbol_registry() -> &'static RwLock<SymbolRegistry> {
     GLOBAL_SYMBOL_REGISTRY.get_or_init(|| RwLock::new(SymbolRegistry::new()))
 }
 
+fn symbol_registry_epoch() -> &'static AtomicU64 {
+    static SYMBOL_REGISTRY_EPOCH: AtomicU64 = AtomicU64::new(0);
+    &SYMBOL_REGISTRY_EPOCH
+}
+
 pub(crate) fn dump_runtime_interner() -> DumpedSymbolTable {
     let registry = global_symbol_registry().read();
     registry.dump_symbol_table()
@@ -493,6 +514,7 @@ pub(crate) fn restore_runtime_interner(
 /// Intern a string using the global runtime symbol registry.
 #[inline]
 pub fn intern(s: &str) -> SymId {
+    ensure_thread_local_cache_epoch_current();
     if let Some(sym_id) = thread_local_interned_str(s) {
         return sym_id;
     }
@@ -548,6 +570,7 @@ pub fn lookup_interned_lisp_string(s: &LispString) -> Option<SymId> {
 
 #[inline]
 pub fn is_canonical_id(id: SymId) -> bool {
+    ensure_thread_local_cache_epoch_current();
     if let Some(is_canonical) = thread_local_is_canonical(id) {
         return is_canonical;
     }
@@ -583,6 +606,7 @@ pub(crate) fn is_keyword_id(id: SymId) -> bool {
 
 #[inline]
 pub fn resolve_sym_metadata(id: SymId) -> (&'static str, bool) {
+    ensure_thread_local_cache_epoch_current();
     if let Some(is_canonical) = thread_local_is_canonical(id) {
         if is_canonical {
             if let Some(name) = thread_local_resolve(id) {
@@ -627,6 +651,7 @@ pub(crate) fn resolve_name_lisp_string(id: NameId) -> &'static LispString {
 
 #[inline]
 pub(crate) fn canonical_symbol_for_name(id: NameId) -> Option<SymId> {
+    ensure_thread_local_cache_epoch_current();
     if let Some(sym_id) = thread_local_canonical_symbol_for_name(id) {
         return Some(sym_id);
     }
@@ -640,6 +665,7 @@ pub(crate) fn canonical_symbol_for_name(id: NameId) -> Option<SymId> {
 /// Resolve a SymId to its string using the global runtime symbol registry.
 #[inline]
 pub fn resolve_sym(id: SymId) -> &'static str {
+    ensure_thread_local_cache_epoch_current();
     if let Some(is_canonical) = thread_local_is_canonical(id) {
         if is_canonical {
             if let Some(s) = thread_local_resolve(id) {
@@ -666,6 +692,25 @@ pub fn resolve_sym_lisp_string(id: SymId) -> &'static LispString {
     registry.resolve_lisp_string(id)
 }
 
+/// Remove ID from the process-global canonical name map.
+///
+/// GNU `unintern` unlinks a symbol object from the obarray and marks that
+/// object uninterned; a later `intern` of the same name allocates a distinct
+/// symbol.  Neomacs keeps symbol objects in a process-global registry, so the
+/// obarray layer must explicitly remove the registry's canonical name mapping
+/// when the initial obarray uninterns a canonical symbol.
+pub(crate) fn unintern_canonical_id(id: SymId) -> bool {
+    let changed = {
+        let mut registry = global_symbol_registry().write();
+        registry.unintern_canonical_symbol(id)
+    };
+    if changed {
+        symbol_registry_epoch().fetch_add(1, Ordering::AcqRel);
+        ensure_thread_local_cache_epoch_current();
+    }
+    changed
+}
+
 #[inline]
 pub fn resolve_sym_name_value(id: SymId) -> Option<TaggedValue> {
     let registry = global_symbol_registry().read();
@@ -688,12 +733,30 @@ pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>, heap_id
 // is monotonic and stable for the lifetime of the process.
 
 thread_local! {
+    static THREAD_CACHE_EPOCH: RefCell<u64> = const { RefCell::new(0) };
     static INTERN_STR_CACHE: RefCell<FxHashMap<String, SymId>> = RefCell::new(FxHashMap::default());
     static SYM_NAME_CACHE: RefCell<Vec<Option<&'static str>>> = const { RefCell::new(Vec::new()) };
     static SYM_NAME_ID_CACHE: RefCell<Vec<Option<NameId>>> = const { RefCell::new(Vec::new()) };
     static SYM_CANONICAL_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
     static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<Option<SymId>>> = const { RefCell::new(Vec::new()) };
     static SYM_KEYWORD_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
+}
+
+fn ensure_thread_local_cache_epoch_current() {
+    let current = symbol_registry_epoch().load(Ordering::Acquire);
+    THREAD_CACHE_EPOCH.with(|epoch| {
+        let mut epoch = epoch.borrow_mut();
+        if *epoch == current {
+            return;
+        }
+        *epoch = current;
+        INTERN_STR_CACHE.with(|cache| cache.borrow_mut().clear());
+        SYM_NAME_CACHE.with(|cache| cache.borrow_mut().clear());
+        SYM_NAME_ID_CACHE.with(|cache| cache.borrow_mut().clear());
+        SYM_CANONICAL_CACHE.with(|cache| cache.borrow_mut().clear());
+        NAME_CANONICAL_SYMBOL_CACHE.with(|cache| cache.borrow_mut().clear());
+        SYM_KEYWORD_CACHE.with(|cache| cache.borrow_mut().clear());
+    });
 }
 
 #[inline]

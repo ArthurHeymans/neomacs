@@ -4,6 +4,7 @@ use crate::emacs_core::builtins::{
     builtin_remhash,
 };
 use crate::emacs_core::intern::{intern, intern_uninterned, lookup_interned};
+use crate::heap_types::LispString;
 
 #[test]
 fn hash_table_keys_values_basics() {
@@ -335,6 +336,29 @@ fn unintern_symbol_argument_removes_only_the_exact_symbol() {
         .expect("unintern should remove exact canonical symbol");
     assert_eq!(removed_canonical, Value::T);
     assert!(eval.obarray().intern_soft(name).is_none());
+}
+
+#[test]
+fn intern_after_unintern_allocates_fresh_symbol_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let name = "vm-unintern-fresh-symbol-after-remove";
+    let original = eval
+        .obarray_mut()
+        .intern_lisp_string(&LispString::from_utf8(name));
+
+    let removed = builtin_unintern(&mut eval, vec![Value::from_sym_id(original)])
+        .expect("unintern should remove exact canonical symbol");
+    assert_eq!(removed, Value::T);
+
+    let reinterned = eval
+        .obarray_mut()
+        .intern_lisp_string(&LispString::from_utf8(name));
+    assert_ne!(
+        original, reinterned,
+        "GNU unintern marks the old symbol uninterned; a later intern creates a new object"
+    );
+    assert!(eval.obarray().intern_soft(name).is_some());
 }
 
 #[test]
