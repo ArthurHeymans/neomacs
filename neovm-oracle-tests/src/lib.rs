@@ -3222,3 +3222,9 @@ mod divergence_combo_cl_eieio_symbol_obarray_marker_overlay_textprop_buflocal_na
 mod divergence_combo_cl_eieio_macro_eval_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-dynamic-operations-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_dynamic_operations_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-print-circle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_print_circle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-insertion-types-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_insertion_types_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-loop-pcase-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_loop_pcase_marker_overlay_textprop_buflocal_narrow;
