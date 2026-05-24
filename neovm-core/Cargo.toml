@@ -40,8 +40,10 @@ rustls-pki-types.workspace = true
 arboard.workspace = true
 parking_lot.workspace = true
 rug.workspace = true
-gmp-mpfr-sys.workspace = true
 unicode_names2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+gmp-mpfr-sys = { workspace = true, features = ["use-system-libs"] }
 encoding_rs.workspace = true
 flate2.workspace = true
 rusqlite.workspace = true
