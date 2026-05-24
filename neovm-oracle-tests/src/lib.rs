@@ -2186,6 +2186,8 @@ mod divergence_combo_cl_macs_buffer_deep;
 mod divergence_combo_cl_multiple_value_bind_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-multiple-value-marker-overlay.rs"]
 mod divergence_combo_cl_multiple_value_marker_overlay;
+#[path = "divergence-combo-cl-nsubst-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_nsubst_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_pcase_destructure_guard_deep;
 #[path = "divergence-combo-cl-pcase-rx-thread.rs"]
 mod divergence_combo_cl_pcase_rx_thread;
@@ -2199,14 +2201,22 @@ mod divergence_combo_cl_psetf_marker_overlay;
 mod divergence_combo_cl_psetf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-remf-marker-overlay.rs"]
 mod divergence_combo_cl_remf_marker_overlay;
+#[path = "divergence-combo-cl-remf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_remf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-rotatef-marker-overlay.rs"]
 mod divergence_combo_cl_rotatef_marker_overlay;
+#[path = "divergence-combo-cl-rotatef-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_rotatef_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-seq-loop.rs"]
 mod divergence_combo_cl_seq_loop;
 #[path = "divergence-combo-cl-shiftf-marker-overlay.rs"]
 mod divergence_combo_cl_shiftf_marker_overlay;
+#[path = "divergence-combo-cl-shiftf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_shiftf_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-subst-marker-overlay.rs"]
 mod divergence_combo_cl_subst_marker_overlay;
+#[path = "divergence-combo-cl-subst-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_subst_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay.rs"]
 mod divergence_combo_cl_symbol_macrolet_marker_overlay;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay-textprop-buflocal-narrow.rs"]
