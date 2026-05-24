@@ -3214,3 +3214,11 @@ mod divergence_combo_cl_eieio_advice_generic_marker_overlay_textprop_buflocal_na
 mod divergence_combo_cl_eieio_hash_objects_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-eieio-defstruct-interop-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_eieio_defstruct_interop_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-unwind-protect-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_unwind_protect_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-symbol-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_symbol_obarray_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-macro-eval-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_macro_eval_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-dynamic-operations-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_dynamic_operations_marker_overlay_textprop_buflocal_narrow;
