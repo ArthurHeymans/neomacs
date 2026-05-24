@@ -32,4 +32,4 @@ jobs:
           cache-on-failure: true
 
       - name: Check workspace compiles on Windows
-        run: cargo check --workspace --exclude neovm-oracle-tests
+        run: cargo check --workspace --exclude neovm-oracle-tests --exclude neomacs-tui-tests
