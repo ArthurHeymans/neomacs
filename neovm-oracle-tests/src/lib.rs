@@ -2099,6 +2099,8 @@ mod divergence_combo_buflocal_indirect_kill_undo_evaporate;
 mod divergence_combo_buflocal_marker_overlay_textprop_clone_narrow_setf;
 #[path = "divergence-combo-buflocal-marker-overlay-textprop-clone-narrow-setf-replace.rs"]
 mod divergence_combo_buflocal_marker_overlay_textprop_clone_narrow_setf_replace;
+#[path = "divergence-combo-buflocal-marker-overlay-textprop-clone-narrow-setf-replace-undo.rs"]
+mod divergence_combo_buflocal_marker_overlay_textprop_clone_narrow_setf_replace_undo;
 #[path = "divergence-combo-buflocal-marker-overlay-textprop-narrow-clone.rs"]
 mod divergence_combo_buflocal_marker_overlay_textprop_narrow_clone;
 #[path = "divergence-combo-buflocal-marker-overlay-undo.rs"]
@@ -2353,6 +2355,8 @@ mod divergence_combo_marker_operations_overlay_undo;
 mod divergence_combo_marker_overlay_textprop_buflocal_narrow_clone_replace;
 #[path = "divergence-combo-marker-overlay-textprop-buflocal-narrow-clone-setf-replace.rs"]
 mod divergence_combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace;
+#[path = "divergence-combo-marker-overlay-textprop-buflocal-narrow-clone-setf-replace-undo.rs"]
+mod divergence_combo_marker_overlay_textprop_buflocal_narrow_clone_setf_replace_undo;
 #[path = "divergence-combo-marker-overlay-textprop-buflocal-narrow-setf.rs"]
 mod divergence_combo_marker_overlay_textprop_buflocal_narrow_setf;
 #[path = "divergence-combo-marker-point-region-undo.rs"]
@@ -2393,6 +2397,8 @@ mod divergence_combo_narrow_marker_overlay_mega;
 mod divergence_combo_narrow_widen_restriction_marker_overlay_undo;
 #[path = "divergence-combo-newline-open-line-marker-overlay-undo.rs"]
 mod divergence_combo_newline_open_line_marker_overlay_undo;
+#[path = "divergence-combo-nine-subsystems.rs"]
+mod divergence_combo_nine_subsystems;
 mod divergence_combo_number_bignum_float_edge_deep;
 mod divergence_combo_obarray_intern_symbol_deep;
 #[path = "divergence-combo-obarray-mapatoms-symbol-marker-overlay-undo.rs"]
@@ -2417,12 +2423,16 @@ mod divergence_combo_overlay_marker_textprop_buflocal_clone;
 mod divergence_combo_overlay_marker_textprop_buflocal_clone_narrow;
 #[path = "divergence-combo-overlay-marker-textprop-buflocal-clone-narrow-setf-replace.rs"]
 mod divergence_combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace;
+#[path = "divergence-combo-overlay-marker-textprop-buflocal-clone-narrow-setf-replace-undo.rs"]
+mod divergence_combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo;
 #[path = "divergence-combo-overlay-marker-textprop-buflocal-clone-replace.rs"]
 mod divergence_combo_overlay_marker_textprop_buflocal_clone_replace;
 #[path = "divergence-combo-overlay-marker-textprop-buflocal-narrow-clone-setf.rs"]
 mod divergence_combo_overlay_marker_textprop_buflocal_narrow_clone_setf;
 #[path = "divergence-combo-overlay-marker-textprop-buflocal-narrow-clone-setf-replace.rs"]
 mod divergence_combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace;
+#[path = "divergence-combo-overlay-marker-textprop-buflocal-narrow-clone-setf-replace-undo.rs"]
+mod divergence_combo_overlay_marker_textprop_buflocal_narrow_clone_setf_replace_undo;
 #[path = "divergence-combo-overlay-priority-marker-undo.rs"]
 mod divergence_combo_overlay_priority_marker_undo;
 mod divergence_combo_overlay_priority_overlap_evaporate_deep;
