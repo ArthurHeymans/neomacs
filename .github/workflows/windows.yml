@@ -31,5 +31,5 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
-      - name: Build workspace on Windows
-        run: cargo build --bin neomacs
+      - name: Build neomacs on Windows (no video/neo-term)
+        run: cargo build --bin neomacs --no-default-features
