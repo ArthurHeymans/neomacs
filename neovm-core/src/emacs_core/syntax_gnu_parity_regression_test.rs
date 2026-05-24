@@ -54,6 +54,28 @@ fn goto(ctx: &mut Context, pos: i64) {
     call(ctx, "goto-char", vec![fixnum(pos)]);
 }
 
+#[test]
+fn forward_sexp_syntax_propertize_reads_buffer_local_lookup_flag() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (progn
+          (setq-local parse-sexp-lookup-properties t)
+          (setq-local syntax-propertize-function (lambda (_start _end)))
+          (insert "(foo bar|baz quux)")
+          (put-text-property 9 10 'syntax-table '(1))
+          (goto-char 2)
+          (forward-sexp 1)
+          (list parse-sexp-lookup-properties
+                (fboundp 'internal--syntax-propertize)
+                syntax-propertize--done
+                (text-properties-at 9)
+                (buffer-string)))
+        "#,
+    );
+    assert_eq!(result, "OK (t t 19 nil \"(foo bar|baz quux)\")");
+}
+
 // --- char-syntax --------------------------------------------------------
 
 #[test]

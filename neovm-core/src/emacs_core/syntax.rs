@@ -1899,9 +1899,7 @@ fn effective_syntax_entry_for_abs_char(
 }
 
 fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
-    ctx.obarray
-        .symbol_value("parse-sexp-lookup-properties")
-        .copied()
+    ctx.eval_symbol("parse-sexp-lookup-properties")
         .unwrap_or(Value::NIL)
         .is_truthy()
 }
@@ -3355,6 +3353,16 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         }
     };
 
+    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
+    if honor_properties {
+        let target = ctx
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.point_max_char().saturating_add(1))
+            .unwrap_or(1);
+        maybe_syntax_propertize_for_scan(ctx, target)?;
+    }
+
     let buf = ctx
         .buffers
         .current_buffer()
@@ -3366,7 +3374,6 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let clipped_from = from.clamp(point_min, point_max);
     let from_char = (clipped_from - 1) as usize;
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
     match scan_lists_with_options(buf, &table, from_char, count, depth, honor_properties) {
         Ok(Some(new_char)) => Ok(Value::fixnum(new_char as i64 + 1)),
         Ok(None) => Ok(Value::NIL),
@@ -3405,6 +3412,16 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         }
     };
 
+    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
+    if honor_properties {
+        let target = ctx
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.point_max_char().saturating_add(1))
+            .unwrap_or(1);
+        maybe_syntax_propertize_for_scan(ctx, target)?;
+    }
+
     let buf = ctx
         .buffers
         .current_buffer()
@@ -3416,7 +3433,6 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         .text
         .char_to_emacs_byte(from_char.min(buf.text.char_count()));
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
     match scan_sexps_with_options(buf, &table, from_byte, count, honor_properties) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(
             buf.text.emacs_byte_to_char(new_byte) as i64 + 1,
