@@ -128,6 +128,15 @@ fn test_backreference() {
 }
 
 #[test]
+fn backreference_to_open_group_is_invalid_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    let err = search_pattern("\\([^ \t\n]+ \\1\\)", "hello hello", 0, false, &syn, 0)
+        .expect_err("GNU signals invalid-regexp for a backreference before group end");
+    assert!(err.message.contains("invalid back reference"));
+}
+
+#[test]
 fn test_alternation() {
     crate::test_utils::init_test_tracing();
     let syn = DefaultSyntaxLookup;

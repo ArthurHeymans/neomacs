@@ -1000,7 +1000,11 @@ pub(crate) fn regex_compile_lisp_with_translation(
                     // \1-\9 — backreference
                     b'1'..=b'9' => {
                         let group = (c2 - b'0') as usize;
-                        if group > buf.re_nsub {
+                        if group > buf.re_nsub
+                            || compile_stack
+                                .iter()
+                                .any(|entry| entry.assigned_group == Some(group))
+                        {
                             return Err(RegexCompileError {
                                 message: format!(
                                     "invalid back reference \\{group}: only {} groups defined",
