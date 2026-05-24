@@ -2063,6 +2063,8 @@ mod divergence_combo_advice_eieio_undo_deep;
 mod divergence_combo_advice_filter_before_after_combo;
 #[path = "divergence-combo-advice-marker-overlay-undo.rs"]
 mod divergence_combo_advice_marker_overlay_undo;
+#[path = "divergence-combo-apply-partially-marker-overlay.rs"]
+mod divergence_combo_apply_partially_marker_overlay;
 #[path = "divergence-combo-arith-math-compare.rs"]
 mod divergence_combo_arith_math_compare;
 mod divergence_combo_bool_vector_bitwise_operations_deep;
@@ -2106,9 +2108,13 @@ mod divergence_combo_chartab_syntax_category;
 #[path = "divergence-combo-charwidth-display-fill.rs"]
 mod divergence_combo_charwidth_display_fill;
 mod divergence_combo_circular_list_print_read_reverse;
+#[path = "divergence-combo-cl-destructuring-marker-overlay.rs"]
+mod divergence_combo_cl_destructuring_marker_overlay;
 mod divergence_combo_cl_labels_closure_mutation_deep;
 #[path = "divergence-combo-cl-letf-destructuring-marker-overlay-undo.rs"]
 mod divergence_combo_cl_letf_destructuring_marker_overlay_undo;
+#[path = "divergence-combo-cl-letf-marker-overlay-undo.rs"]
+mod divergence_combo_cl_letf_marker_overlay_undo;
 #[path = "divergence-combo-cl-loop-advanced-undo.rs"]
 mod divergence_combo_cl_loop_advanced_undo;
 mod divergence_combo_cl_loop_destructuring_accumulate_deep;
@@ -2141,6 +2147,8 @@ mod divergence_combo_deep_undo_stress_2;
 #[path = "divergence-combo-defalias-marker-overlay-undo.rs"]
 mod divergence_combo_defalias_marker_overlay_undo;
 mod divergence_combo_defmacro_eval_and_compile_expansion;
+#[path = "divergence-combo-defmacro-marker-overlay-undo.rs"]
+mod divergence_combo_defmacro_marker_overlay_undo;
 #[path = "divergence-combo-defstruct-accessor-print.rs"]
 mod divergence_combo_defstruct_accessor_print;
 #[path = "divergence-combo-defstruct-eieio-interop.rs"]
@@ -2336,6 +2344,8 @@ mod divergence_combo_overlay_textprop_marker_mega;
 mod divergence_combo_overlay_textprop_narrow_undo;
 #[path = "divergence-combo-paragraph-fill-marker-overlay.rs"]
 mod divergence_combo_paragraph_fill_marker_overlay;
+#[path = "divergence-combo-pcase-let-marker-overlay-undo.rs"]
+mod divergence_combo_pcase_let_marker_overlay_undo;
 #[path = "divergence-combo-pcase-marker-overlay-undo-textprop.rs"]
 mod divergence_combo_pcase_marker_overlay_undo_textprop;
 #[path = "divergence-combo-pcase-thread-rx.rs"]
