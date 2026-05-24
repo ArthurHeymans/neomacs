@@ -8,3 +8,5 @@ publish = false
 
 [dependencies]
 tempfile = "3"
+ureq = "3"
+tar = "0.4"
