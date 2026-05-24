@@ -2222,6 +2222,8 @@ mod divergence_combo_kill_ring_yank_undo_proprs_deep;
 mod divergence_combo_kill_yank_marker_overlay_undo;
 #[path = "divergence-combo-lambda-funcall-apply-closure-marker-overlay-undo.rs"]
 mod divergence_combo_lambda_funcall_apply_closure_marker_overlay_undo;
+#[path = "divergence-combo-letrec-clflet-clmacrolet-marker-overlay-undo.rs"]
+mod divergence_combo_letrec_clflet_clmacrolet_marker_overlay_undo;
 #[path = "divergence-combo-line-number-count-marker-overlay-undo.rs"]
 mod divergence_combo_line_number_count_marker_overlay_undo;
 #[path = "divergence-combo-list-seq-map.rs"]
