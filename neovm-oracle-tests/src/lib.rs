@@ -2344,6 +2344,8 @@ mod divergence_combo_seq_unique_sort_merge_deep;
 #[path = "divergence-combo-serialization.rs"]
 mod divergence_combo_serialization;
 mod divergence_combo_setf_generalized_buffer_local_deep;
+#[path = "divergence-combo-sort-marker-overlay-undo.rs"]
+mod divergence_combo_sort_marker_overlay_undo;
 #[path = "divergence-combo-stdlib.rs"]
 mod divergence_combo_stdlib;
 #[path = "divergence-combo-stress.rs"]
