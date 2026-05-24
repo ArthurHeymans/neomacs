@@ -32,4 +32,4 @@ jobs:
           cache-on-failure: true
 
       - name: Build workspace on Windows
-        run: cargo build --workspace
+        run: cargo build
