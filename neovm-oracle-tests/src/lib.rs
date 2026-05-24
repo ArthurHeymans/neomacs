@@ -2182,6 +2182,10 @@ mod divergence_combo_cl_fill_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_flet_marker_overlay;
 #[path = "divergence-combo-cl-flet-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_flet_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-get-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_get_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-getf-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_getf_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_labels_closure_mutation_deep;
 #[path = "divergence-combo-cl-letf-destructuring-marker-overlay-undo.rs"]
 mod divergence_combo_cl_letf_destructuring_marker_overlay_undo;
@@ -2267,10 +2271,16 @@ mod divergence_combo_cl_subst_marker_overlay;
 mod divergence_combo_cl_subst_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-substitute-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_substitute_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-symbol-function-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_symbol_function_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay.rs"]
 mod divergence_combo_cl_symbol_macrolet_marker_overlay;
 #[path = "divergence-combo-cl-symbol-macrolet-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_symbol_macrolet_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-symbol-name-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_symbol_name_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-symbol-plist-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_symbol_plist_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-tagbody-go-marker-overlay.rs"]
 mod divergence_combo_cl_tagbody_go_marker_overlay;
 #[path = "divergence-combo-cl-tagbody-go-marker-overlay-textprop-buflocal-narrow.rs"]
