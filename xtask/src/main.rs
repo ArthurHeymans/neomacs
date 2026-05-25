@@ -1,3 +1,4 @@
+use flate2::read::GzDecoder;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -6,7 +7,7 @@ use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::fs;
-use std::io::{ErrorKind, Seek, SeekFrom, Write as IoWrite};
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::time::Instant;
@@ -1658,22 +1659,15 @@ fn run_gunzip_awk_to_output(
 ) -> Result<()> {
     ensure_output_parent(options, output)?;
     make_output_writable(options, output)?;
-    let gunzip = tool_program("gunzip");
     let awk = tool_program("awk");
-    let gunzip_args = vec![OsString::from("-c"), input.as_os_str().to_os_string()];
-    print_command(gunzip.as_os_str(), &gunzip_args);
+    print_gzip_decompress_command(input);
     let awk_args = vec![OsString::from("-f"), script.as_os_str().to_os_string()];
     print_redirected_command(awk.as_os_str(), &awk_args, None, output);
     if options.dry_run {
         return Ok(());
     }
 
-    let gunzip_output = Command::new(&gunzip)
-        .args(gunzip_args.iter().map(OsString::as_os_str))
-        .output()?;
-    if !gunzip_output.status.success() {
-        return Err(command_failure(&gunzip, &gunzip_args, gunzip_output.status).into());
-    }
+    let decoded = read_gzip_file(input)?;
 
     let output_file = fs::File::create(output)?;
     let mut child = Command::new(&awk)
@@ -1685,12 +1679,18 @@ fn run_gunzip_awk_to_output(
         .stdin
         .take()
         .expect("awk child stdin should be piped")
-        .write_all(&gunzip_output.stdout)?;
+        .write_all(&decoded)?;
     let status = child.wait()?;
     if !status.success() {
         return Err(redirected_command_failure(&awk, &awk_args, None, output, status).into());
     }
     Ok(())
+}
+
+fn read_gzip_file(path: &Path) -> Result<Vec<u8>> {
+    let mut decoded = Vec::new();
+    GzDecoder::new(fs::File::open(path)?).read_to_end(&mut decoded)?;
+    Ok(decoded)
 }
 
 fn run_sed_unicode_data_to_output(
@@ -2490,6 +2490,10 @@ fn print_command(program: &OsStr, args: &[OsString]) {
         rendered.push_str(&shell_quote(arg.as_os_str()));
     }
     println!("{rendered}");
+}
+
+fn print_gzip_decompress_command(input: &Path) {
+    println!("+ decompress gzip {}", shell_quote(input.as_os_str()));
 }
 
 fn print_redirected_command(
