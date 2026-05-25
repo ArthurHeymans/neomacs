@@ -183,9 +183,19 @@ jobs:
           $devel = "$env:RUNNER_TEMP\gstreamer-devel.msi"
           Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $runtime
           Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-devel-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $devel
-          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $runtime, "/qn", "ADDLOCAL=ALL")
-          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $devel, "/qn", "ADDLOCAL=ALL")
-          $gstRoot = "C:\gstreamer\1.0\msvc_x86_64"
+          $installRoot = "C:\gstreamer\1.0\msvc_x86_64"
+          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $runtime, "/qn", "INSTALLLEVEL=1000", "INSTALLDIR=$installRoot")
+          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $devel, "/qn", "INSTALLLEVEL=1000", "INSTALLDIR=$installRoot")
+          $searchRoots = @("C:\gstreamer", "${env:ProgramFiles}\gstreamer", "${env:ProgramFiles(x86)}\gstreamer") |
+            Where-Object { Test-Path $_ }
+          $glibPc = $searchRoots |
+            ForEach-Object { Get-ChildItem -Path $_ -Filter glib-2.0.pc -Recurse -ErrorAction SilentlyContinue } |
+            Select-Object -First 1
+          if (-not $glibPc) {
+            $searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Depth 4 -ErrorAction SilentlyContinue }
+            throw "glib-2.0.pc not found after installing GStreamer devel MSI"
+          }
+          $gstRoot = Split-Path -Parent (Split-Path -Parent $glibPc.FullName)
           $pkgConfig = "$gstRoot\bin\pkg-config.exe"
           if (-not (Test-Path $pkgConfig)) {
             choco install pkgconfiglite -y
