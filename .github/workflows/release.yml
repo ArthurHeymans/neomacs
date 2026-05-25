@@ -132,23 +132,13 @@ jobs:
           save-if: true
           cache-on-failure: true
 
-      - name: Build release binaries
-        run: cargo xtask fresh-build --release
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: neomacs-macos
-          path: |
-            target/release/neomacs
-            target/release/temacs
+      - name: Build and package release
+        run: ./scripts/package-release.sh --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/release/neomacs
-            target/release/temacs
+          files: dist/neomacs-*.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -194,25 +184,16 @@ jobs:
           save-if: true
           cache-on-failure: true
 
-      - name: Build release binaries
+      - name: Build and package release
+        shell: bash
         env:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
-        run: cargo xtask fresh-build --release
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: neomacs-windows
-          path: |
-            target/release/neomacs.exe
-            target/release/temacs.exe
+        run: ./scripts/package-release.sh --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            target/release/neomacs.exe
-            target/release/temacs.exe
+          files: dist/neomacs-*.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
