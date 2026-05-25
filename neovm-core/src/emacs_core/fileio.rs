@@ -2684,66 +2684,91 @@ fn set_file_times_compat(
     timestamp: Option<(i64, i64)>,
     nofollow: bool,
 ) -> Result<(), Flow> {
-    #[cfg(unix)]
-    {
-        let c_path = CString::new(filename.as_bytes()).map_err(|_| {
-            signal(
+    let path = Path::new(filename);
+
+    if nofollow {
+        #[cfg(unix)]
+        {
+            let c_path = CString::new(filename.as_bytes()).map_err(|_| {
+                signal(
+                    "file-error",
+                    vec![
+                        Value::string("Setting file times"),
+                        Value::string("embedded NUL in file name"),
+                        Value::string(filename),
+                    ],
+                )
+            })?;
+
+            let mut ts = [
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+            ];
+            if let Some((secs, nanos)) = timestamp {
+                ts[0].tv_sec = secs as libc::time_t;
+                ts[1].tv_sec = secs as libc::time_t;
+                ts[0].tv_nsec = nanos as libc::c_long;
+                ts[1].tv_nsec = nanos as libc::c_long;
+            } else {
+                ts[0].tv_nsec = libc::UTIME_NOW as libc::c_long;
+                ts[1].tv_nsec = libc::UTIME_NOW as libc::c_long;
+            }
+            let result = unsafe {
+                libc::utimensat(
+                    libc::AT_FDCWD,
+                    c_path.as_ptr(),
+                    ts.as_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if result != 0 {
+                return Err(signal_file_action_error(
+                    std::io::Error::last_os_error(),
+                    "Setting file times",
+                    filename,
+                ));
+            }
+            return Ok(());
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = timestamp;
+            return Err(signal(
                 "file-error",
                 vec![
                     Value::string("Setting file times"),
-                    Value::string("embedded NUL in file name"),
+                    Value::string("nofollow is unsupported on this platform"),
                     Value::string(filename),
                 ],
-            )
-        })?;
-
-        let mut ts = [
-            libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-        ];
-        if let Some((secs, nanos)) = timestamp {
-            ts[0].tv_sec = secs as libc::time_t;
-            ts[1].tv_sec = secs as libc::time_t;
-            ts[0].tv_nsec = nanos as libc::c_long;
-            ts[1].tv_nsec = nanos as libc::c_long;
-        } else {
-            ts[0].tv_nsec = libc::UTIME_NOW as libc::c_long;
-            ts[1].tv_nsec = libc::UTIME_NOW as libc::c_long;
-        }
-        let flags = if nofollow {
-            libc::AT_SYMLINK_NOFOLLOW
-        } else {
-            0
-        };
-        let result =
-            unsafe { libc::utimensat(libc::AT_FDCWD, c_path.as_ptr(), ts.as_ptr(), flags) };
-        if result != 0 {
-            return Err(signal_file_action_error(
-                std::io::Error::last_os_error(),
-                "Setting file times",
-                filename,
             ));
         }
-        Ok(())
     }
-    #[cfg(not(unix))]
-    {
-        let _ = (timestamp, nofollow);
-        Err(signal(
-            "file-error",
-            vec![
-                Value::string("Setting file times"),
-                Value::string("set-file-times is unsupported on this platform"),
-                Value::string(filename),
-            ],
-        ))
-    }
+
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .map_err(|e| signal_file_action_error(e, "Setting file times", filename))?;
+
+    let times = build_file_times(timestamp);
+    file.set_times(times)
+        .map_err(|e| signal_file_action_error(e, "Setting file times", filename))
+}
+
+fn build_file_times(timestamp: Option<(i64, i64)>) -> std::fs::FileTimes {
+    let mut times = std::fs::FileTimes::new();
+    let t = if let Some((secs, nanos)) = timestamp {
+        std::time::UNIX_EPOCH + std::time::Duration::new(secs as u64, nanos as u32)
+    } else {
+        std::time::SystemTime::now()
+    };
+    times = times.set_accessed(t).set_modified(t);
+    times
 }
 
 fn set_file_times_path(
@@ -2751,51 +2776,58 @@ fn set_file_times_path(
     timestamp: Option<(i64, i64)>,
     nofollow: bool,
 ) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        let c_path = path_to_cstring(path).map_err(|_| {
-            std::io::Error::new(ErrorKind::InvalidInput, "embedded NUL in file name")
-        })?;
+    if nofollow {
+        #[cfg(unix)]
+        {
+            let c_path = path_to_cstring(path).map_err(|_| {
+                std::io::Error::new(ErrorKind::InvalidInput, "embedded NUL in file name")
+            })?;
 
-        let mut ts = [
-            libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-        ];
-        if let Some((secs, nanos)) = timestamp {
-            ts[0].tv_sec = secs as libc::time_t;
-            ts[1].tv_sec = secs as libc::time_t;
-            ts[0].tv_nsec = nanos as libc::c_long;
-            ts[1].tv_nsec = nanos as libc::c_long;
-        } else {
-            ts[0].tv_nsec = libc::UTIME_NOW as libc::c_long;
-            ts[1].tv_nsec = libc::UTIME_NOW as libc::c_long;
+            let mut ts = [
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+                libc::timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+            ];
+            if let Some((secs, nanos)) = timestamp {
+                ts[0].tv_sec = secs as libc::time_t;
+                ts[1].tv_sec = secs as libc::time_t;
+                ts[0].tv_nsec = nanos as libc::c_long;
+                ts[1].tv_nsec = nanos as libc::c_long;
+            } else {
+                ts[0].tv_nsec = libc::UTIME_NOW as libc::c_long;
+                ts[1].tv_nsec = libc::UTIME_NOW as libc::c_long;
+            }
+            let result = unsafe {
+                libc::utimensat(
+                    libc::AT_FDCWD,
+                    c_path.as_ptr(),
+                    ts.as_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if result == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
         }
-        let flags = if nofollow {
-            libc::AT_SYMLINK_NOFOLLOW
-        } else {
-            0
-        };
-        let result =
-            unsafe { libc::utimensat(libc::AT_FDCWD, c_path.as_ptr(), ts.as_ptr(), flags) };
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(std::io::Error::last_os_error())
+        #[cfg(not(unix))]
+        {
+            let _ = (path, timestamp);
+            Err(std::io::Error::new(
+                ErrorKind::Unsupported,
+                "nofollow set-file-times is unsupported on this platform",
+            ))
         }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (path, timestamp, nofollow);
-        Err(std::io::Error::new(
-            ErrorKind::Unsupported,
-            "set-file-times is unsupported on this platform",
-        ))
+    } else {
+        let file = fs::OpenOptions::new().write(true).open(path)?;
+        let times = build_file_times(timestamp);
+        file.set_times(times)
     }
 }
 
