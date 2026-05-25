@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-appimage:
-    name: build AppImage
+  build-linux:
+    name: build Linux
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -59,7 +59,8 @@ jobs:
             libsqlite3-dev \
             libxml2-dev \
             gnutls-bin \
-            libgnutls28-dev
+            libgnutls28-dev \
+            rpm
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -99,11 +100,20 @@ jobs:
       - name: Package AppImage
         run: ./scripts/package-appimage.sh --skip-build --no-smoke
 
-      - name: Upload AppImage artifact
+      - name: Package .deb
+        run: ./scripts/package-deb.sh --skip-build --no-smoke
+
+      - name: Package .rpm
+        run: ./scripts/package-rpm.sh --skip-build --no-smoke
+
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: dist/*.AppImage
+          name: linux-packages
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
           if-no-files-found: error
 
   build-macos:
@@ -206,7 +216,7 @@ jobs:
 
   create-release:
     name: create release
-    needs: [build-appimage, build-macos, build-windows]
+    needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -218,7 +228,7 @@ jobs:
       - name: Generate .sha256 sidecar files
         run: |
           cd dist
-          for f in *.AppImage *.dmg *.exe; do
+            for f in *.AppImage *.deb *.rpm *.dmg *.exe; do
             [ -f "$f" ] || continue
             sha256sum "$f" > "${f}.sha256"
           done
