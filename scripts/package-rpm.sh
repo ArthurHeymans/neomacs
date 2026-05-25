@@ -105,9 +105,12 @@ install -d "$payload/usr/share/icons/hicolor/128x128/apps"
 install -d "$payload/usr/share/doc/neomacs"
 
 install -m 0755 "$release_tree/bin/neomacs" "$payload/usr/bin/neomacs"
+extra_bin_files=""
 for bin in neomacs-temacs bootstrap-neomacs mock-display; do
   if [[ -x "$release_tree/bin/$bin" ]]; then
     install -m 0755 "$release_tree/bin/$bin" "$payload/usr/bin/$bin"
+    extra_bin_files="${extra_bin_files}/usr/bin/${bin}
+"
   fi
 done
 
@@ -160,7 +163,7 @@ cp -a %{_sourcedir}/neomacs-payload/. %{buildroot}/
 %license /usr/share/doc/neomacs/COPYING
 /usr/bin/neomacs
 /usr/bin/neomacs.pdump
-/usr/share/neomacs/
+${extra_bin_files}/usr/share/neomacs/
 /usr/share/applications/neomacs.desktop
 /usr/share/icons/hicolor/128x128/apps/neomacs.png
 
@@ -177,6 +180,7 @@ SPEC
 
 rpmbuild -bb \
   --define "_topdir $rpm_topdir" \
+  --define "_dbpath $rpm_topdir/rpmdb" \
   --target "$rpm_arch" \
   "$rpm_topdir/SPECS/neomacs.spec"
 
