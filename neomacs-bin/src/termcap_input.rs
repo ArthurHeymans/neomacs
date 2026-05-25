@@ -7,13 +7,17 @@
 //! wrap the terminfo-derived ESC prefix map.  Doom/Evil relies on exactly that
 //! ordering when it installs its ESC `menu-item :filter`.
 
+#[cfg(not(windows))]
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_char;
+#[cfg(not(windows))]
+use std::os::raw::c_int;
 
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::list_keymap_define_seq_in_obarray;
 use neovm_core::emacs_core::{Context, Value};
 
+#[cfg(not(windows))]
 #[cfg_attr(target_os = "linux", link(name = "ncursesw"))]
 #[cfg_attr(target_os = "macos", link(name = "ncurses"))]
 unsafe extern "C" {
@@ -101,13 +105,23 @@ const XTERM_FALLBACK_KEYS: &[(&[u8], &str)] = &[
     (b"\x1b[21~", "f10"),
 ];
 
-struct TermcapDatabase {
+trait TerminalCapabilityDatabase {
+    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>>;
+}
+
+fn open_terminal_capability_database(term: &str) -> Option<Box<dyn TerminalCapabilityDatabase>> {
+    open_platform_terminal_capability_database(term)
+}
+
+#[cfg(not(windows))]
+struct UnixTermcapDatabase {
     _termcap_buffer: Vec<c_char>,
     _string_area: Vec<c_char>,
     string_area_ptr: *mut c_char,
 }
 
-impl TermcapDatabase {
+#[cfg(not(windows))]
+impl UnixTermcapDatabase {
     fn open(term: &str) -> Option<Self> {
         let term = CString::new(term).ok()?;
         let mut termcap_buffer = vec![0 as c_char; 16384];
@@ -123,7 +137,10 @@ impl TermcapDatabase {
             string_area_ptr,
         })
     }
+}
 
+#[cfg(not(windows))]
+impl TerminalCapabilityDatabase for UnixTermcapDatabase {
     fn get_string(&mut self, cap: &str) -> Option<Vec<u8>> {
         let cap = CString::new(cap).ok()?;
         let raw = unsafe { tgetstr(cap.as_ptr(), &mut self.string_area_ptr) };
@@ -135,6 +152,24 @@ impl TermcapDatabase {
     }
 }
 
+#[cfg(not(windows))]
+fn open_platform_terminal_capability_database(
+    term: &str,
+) -> Option<Box<dyn TerminalCapabilityDatabase>> {
+    UnixTermcapDatabase::open(term)
+        .map(|database| Box::new(database) as Box<dyn TerminalCapabilityDatabase>)
+}
+
+#[cfg(windows)]
+fn open_platform_terminal_capability_database(
+    _term: &str,
+) -> Option<Box<dyn TerminalCapabilityDatabase>> {
+    // GNU Emacs' native Windows console backend does not link termcap.
+    // nt/inc/ms-w32.h redirects tgetstr to sys_tgetstr, and
+    // src/w32console.c implements that hook as a NULL capability lookup.
+    None
+}
+
 pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
     let Some(term) = std::env::var("TERM")
         .ok()
@@ -142,7 +177,7 @@ pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
     else {
         return;
     };
-    let Some(mut db) = TermcapDatabase::open(&term) else {
+    let Some(mut db) = open_terminal_capability_database(&term) else {
         tracing::debug!("term_get_fkeys: no termcap/terminfo database for TERM={term:?}");
         return;
     };
@@ -187,10 +222,10 @@ pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
         }
     }
 
-    conditional_reassign(eval, input_decode_map, &mut db, "%5", "kN", "next");
-    conditional_reassign(eval, input_decode_map, &mut db, "%8", "kP", "prior");
-    conditional_reassign(eval, input_decode_map, &mut db, "kD", "kI", "insert");
-    conditional_reassign(eval, input_decode_map, &mut db, "@7", "kH", "end");
+    conditional_reassign(eval, input_decode_map, db.as_mut(), "%5", "kN", "next");
+    conditional_reassign(eval, input_decode_map, db.as_mut(), "%8", "kP", "prior");
+    conditional_reassign(eval, input_decode_map, db.as_mut(), "kD", "kI", "insert");
+    conditional_reassign(eval, input_decode_map, db.as_mut(), "@7", "kH", "end");
 
     if xterm_compatible_term(&term) {
         seed_xterm_fallback_keys(eval, input_decode_map);
@@ -231,7 +266,7 @@ fn define_terminal_key(eval: &mut Context, keymap: Value, sequence: &[u8], name:
 fn conditional_reassign(
     eval: &mut Context,
     keymap: Value,
-    db: &mut TermcapDatabase,
+    db: &mut dyn TerminalCapabilityDatabase,
     missing_cap: &str,
     fallback_cap: &str,
     name: &str,
