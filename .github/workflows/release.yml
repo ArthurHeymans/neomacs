@@ -173,16 +173,19 @@ jobs:
         with:
           toolchain: 1.95.0
 
-      - name: Cache vcpkg GMP
-        id: cache-vcpkg-gmp
+      - name: Cache vcpkg system libraries
+        id: cache-vcpkg-system-libs
         uses: actions/cache@v5
         with:
           path: C:\vcpkg\installed\x64-windows-static
-          key: vcpkg-gmp-x64-windows-static-v1
+          key: vcpkg-system-libs-x64-windows-static-v1
 
-      - name: Install GMP via vcpkg
-        if: steps.cache-vcpkg-gmp.outputs.cache-hit != 'true'
-        run: vcpkg install gmp:x64-windows-static
+      - name: Install pkg-config
+        run: choco install pkgconfiglite -y
+
+      - name: Install system libraries via vcpkg
+        if: steps.cache-vcpkg-system-libs.outputs.cache-hit != 'true'
+        run: vcpkg install gmp:x64-windows-static glib:x64-windows-static "gstreamer[plugins-base]:x64-windows-static"
 
       - name: Set pkg-config path for vcpkg
         shell: powershell
