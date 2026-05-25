@@ -7,12 +7,6 @@ use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
 use std::sync::Mutex;
 
-#[cfg(unix)]
-unsafe extern "C" {
-    fn random() -> libc::c_long;
-    fn srandom(seed: libc::c_uint);
-}
-
 // ===========================================================================
 // Arithmetic
 // ===========================================================================
@@ -1668,27 +1662,41 @@ fn emacs_random_fixnum_bits() -> u32 {
     62
 }
 
-#[cfg(unix)]
+use std::cell::Cell;
+
+thread_local! {
+    static RANDOM_STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };
+}
+
+fn xorshift64() -> u64 {
+    RANDOM_STATE.with(|s| {
+        let mut x = s.get();
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        s.set(x);
+        x
+    })
+}
+
 fn emacs_get_random_unlocked() -> i64 {
     const RAND_BITS: u32 = 31;
     const EMACS_INT_WIDTH: u32 = 64;
     let fixnum_bits = emacs_random_fixnum_bits();
     let mut val: u64 = 0;
     for _ in 0..fixnum_bits.div_ceil(RAND_BITS) {
-        let r = unsafe { random() as u64 };
+        let r = xorshift64();
         val = r ^ (val << RAND_BITS) ^ (val >> (EMACS_INT_WIDTH - RAND_BITS));
     }
     val ^= val >> (EMACS_INT_WIDTH - fixnum_bits);
     (val & emacs_intmask()) as i64
 }
 
-#[cfg(unix)]
 pub(crate) fn emacs_get_random() -> i64 {
     let _guard = emacs_random_lock().lock().expect("random lock poisoned");
     emacs_get_random_unlocked()
 }
 
-#[cfg(unix)]
 fn emacs_get_random_fixnum(limit: i64) -> i64 {
     let lim = limit as u64;
     let intmask = emacs_intmask();
@@ -1704,65 +1712,15 @@ fn emacs_get_random_fixnum(limit: i64) -> i64 {
     }
 }
 
-#[cfg(unix)]
 fn emacs_seed_random(seed: &[u8]) {
     let _guard = emacs_random_lock().lock().expect("random lock poisoned");
-    let mut arg = [0u8; std::mem::size_of::<u32>()];
-    for (index, byte) in seed.iter().enumerate() {
-        arg[index % arg.len()] ^= *byte;
-    }
-    let seed = u32::from_ne_bytes(arg);
-    unsafe {
-        srandom(seed);
-    }
-}
-
-#[cfg(unix)]
-fn emacs_init_random() {
-    let seed = (std::process::id() as u64)
-        ^ (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() ^ u64::from(d.subsec_nanos()))
-            .unwrap_or(0));
-    let bytes = seed.to_ne_bytes();
-    emacs_seed_random(&bytes);
-}
-
-#[cfg(not(unix))]
-pub(crate) fn emacs_get_random() -> i64 {
-    use std::cell::Cell;
-    thread_local! {
-        static STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };
-    }
-    STATE.with(|s| {
-        let mut x = s.get();
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        s.set(x);
-        (x as i64) & (i64::MAX >> 2)
-    })
-}
-
-#[cfg(not(unix))]
-fn emacs_get_random_fixnum(limit: i64) -> i64 {
-    emacs_get_random().unsigned_abs() as i64 % limit
-}
-
-#[cfg(not(unix))]
-fn emacs_seed_random(seed: &[u8]) {
-    use std::cell::Cell;
-    thread_local! {
-        static STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };
-    }
     let mut arg = 0u64;
     for (index, byte) in seed.iter().enumerate() {
         arg ^= u64::from(*byte) << ((index % 8) * 8);
     }
-    STATE.with(|state| state.set(arg));
+    RANDOM_STATE.with(|state| state.set(arg));
 }
 
-#[cfg(not(unix))]
 fn emacs_init_random() {
     let seed = (std::process::id() as u64)
         ^ (std::time::SystemTime::now()
