@@ -2,7 +2,6 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
 use std::fmt::Write as _;
 
 use super::chartable::{bool_vector_length, char_table_external_slots};
@@ -2150,18 +2149,18 @@ pub(crate) fn format_float_with_output_format(f: f64, output_format: Option<Valu
         return format_float(f);
     }
 
-    let Some((format, width)) = parse_float_output_format(output_format) else {
+    let Some((precision, spec, width)) = parse_float_output_format(output_format) else {
         return format_float(f);
     };
 
-    let Some(mut text) = snprintf_float(&format, f) else {
+    let Some(mut text) = format_float_printf(precision, spec, f) else {
         return format_float(f);
     };
     finish_float_output_format(&mut text, width);
     text
 }
 
-fn parse_float_output_format(value: Option<Value>) -> Option<(CString, i32)> {
+fn parse_float_output_format(value: Option<Value>) -> Option<(usize, u8, i32)> {
     let bytes = value?.as_lisp_string()?.as_bytes();
     let nul = bytes
         .iter()
@@ -2188,7 +2187,8 @@ fn parse_float_output_format(value: Option<Value>) -> Option<(CString, i32)> {
         }
     }
 
-    if !matches!(format.get(index), Some(b'e' | b'f' | b'g')) {
+    let spec = *format.get(index)?;
+    if !matches!(spec, b'e' | b'f' | b'g') {
         return None;
     }
     index += 1;
@@ -2196,40 +2196,32 @@ fn parse_float_output_format(value: Option<Value>) -> Option<(CString, i32)> {
         return None;
     }
 
-    CString::new(format).ok().map(|format| (format, width))
+    let precision = if width > 0 { width as usize } else { 6 };
+    Some((precision, spec, width))
 }
 
-fn snprintf_float(format: &CString, f: f64) -> Option<String> {
-    let mut buffer = vec![0u8; 128];
-    let len = unsafe {
-        libc::snprintf(
-            buffer.as_mut_ptr().cast::<libc::c_char>(),
-            buffer.len(),
-            format.as_ptr(),
-            f,
-        )
-    };
-    if len < 0 {
-        return None;
-    }
-    let len = len as usize;
-    if len >= buffer.len() {
-        buffer.resize(len + 1, 0);
-        let retry = unsafe {
-            libc::snprintf(
-                buffer.as_mut_ptr().cast::<libc::c_char>(),
-                buffer.len(),
-                format.as_ptr(),
-                f,
-            )
-        };
-        if retry < 0 {
-            return None;
+fn format_float_printf(precision: usize, spec: u8, f: f64) -> Option<String> {
+    match spec {
+        b'e' => Some(format!("{:.prec$e}", f, prec = precision)),
+        b'f' => Some(format!("{:.prec$}", f, prec = precision)),
+        b'g' => {
+            let exp_form = format!("{:.prec$e}", f, prec = precision);
+            let fix_form = format!("{:.prec$}", f, prec = precision);
+            let chosen = if exp_form.len() <= fix_form.len() {
+                &exp_form
+            } else {
+                &fix_form
+            };
+            let trimmed = chosen.trim_end_matches('0');
+            let trimmed = if trimmed.ends_with('.') {
+                &trimmed[..trimmed.len() - 1]
+            } else {
+                trimmed
+            };
+            Some(trimmed.to_string())
         }
+        _ => None,
     }
-
-    let bytes = unsafe { CStr::from_ptr(buffer.as_ptr().cast::<libc::c_char>()) }.to_bytes();
-    Some(String::from_utf8_lossy(bytes).into_owned())
 }
 
 fn finish_float_output_format(text: &mut String, width: i32) {
