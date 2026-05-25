@@ -1,5 +1,10 @@
 //! Context — special forms, function application, and dispatch.
 
+#[cfg(unix)]
+pub type WakeupFd = std::os::unix::io::RawFd;
+#[cfg(windows)]
+pub type WakeupFd = std::os::windows::io::RawHandle;
+
 use std::cell::{Cell, RefCell};
 use std::collections::{HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -1706,8 +1711,7 @@ pub struct Context {
     /// writes to when input is available.  Used by `wait_for_input()` with
     /// `pselect()`/`poll()` to multiplex input with process I/O and timers.
     /// `None` in batch mode.
-    #[cfg(unix)]
-    pub wakeup_fd: Option<std::os::unix::io::RawFd>,
+    pub wakeup_fd: Option<WakeupFd>,
     /// Cross-thread quit signal. The input-bridge thread flips this to
     /// `true` when it observes a `quit-char` keystroke; the evaluator
     /// drains it from `maybe_quit` into `Vquit_flag` on its next poll.
@@ -2437,10 +2441,7 @@ impl Context {
         ev.kmacro = KmacroManager::new();
         ev.command_loop = crate::keyboard::CommandLoop::default();
         ev.input_rx = None;
-        #[cfg(unix)]
-        {
-            ev.wakeup_fd = None;
-        }
+        ev.wakeup_fd = None;
         ev.redisplay_fn = None;
         ev.display_host = None;
         ev.coding_systems = CodingSystemManager::new();
@@ -4498,7 +4499,6 @@ impl Context {
             kmacro: KmacroManager::new(),
             command_loop,
             input_rx: None,
-            #[cfg(unix)]
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
@@ -4672,7 +4672,6 @@ impl Context {
             kmacro,
             command_loop: crate::keyboard::CommandLoop::new(),
             input_rx: None,
-            #[cfg(unix)]
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
@@ -5088,11 +5087,10 @@ impl Context {
     /// # Arguments
     /// * `input_rx` — Receiver end of the crossbeam channel from the render thread
     /// * `wakeup_fd` — Read end of the wakeup pipe (render thread writes to signal input)
-    #[cfg(unix)]
     pub fn init_input_system(
         &mut self,
         input_rx: crossbeam_channel::Receiver<crate::keyboard::InputEvent>,
-        wakeup_fd: std::os::unix::io::RawFd,
+        wakeup_fd: WakeupFd,
     ) {
         self.input_rx = Some(input_rx);
         self.wakeup_fd = Some(wakeup_fd);
