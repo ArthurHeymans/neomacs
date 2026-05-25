@@ -1657,30 +1657,13 @@ fn emacs_random_fixnum_bits() -> u32 {
     62
 }
 
-use std::cell::Cell;
-
-thread_local! {
-    static RANDOM_STATE: Cell<u64> = const { Cell::new(0x12345678_9abcdef0) };
-}
-
-fn xorshift64() -> u64 {
-    RANDOM_STATE.with(|s| {
-        let mut x = s.get();
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        s.set(x);
-        x
-    })
-}
-
 fn emacs_get_random_unlocked() -> i64 {
     const RAND_BITS: u32 = 31;
     const EMACS_INT_WIDTH: u32 = 64;
     let fixnum_bits = emacs_random_fixnum_bits();
     let mut val: u64 = 0;
     for _ in 0..fixnum_bits.div_ceil(RAND_BITS) {
-        let r = xorshift64();
+        let r = platform_random_word();
         val = r ^ (val << RAND_BITS) ^ (val >> (EMACS_INT_WIDTH - RAND_BITS));
     }
     val ^= val >> (EMACS_INT_WIDTH - fixnum_bits);
@@ -1709,20 +1692,71 @@ fn emacs_get_random_fixnum(limit: i64) -> i64 {
 
 fn emacs_seed_random(seed: &[u8]) {
     let _guard = emacs_random_lock().lock().expect("random lock poisoned");
-    let mut arg = 0u64;
+    let mut arg = 0u32;
     for (index, byte) in seed.iter().enumerate() {
-        arg ^= u64::from(*byte) << ((index % 8) * 8);
+        arg ^= u32::from(*byte) << ((index % 4) * 8);
     }
-    RANDOM_STATE.with(|state| state.set(arg));
+    platform_seed_random(arg);
 }
 
 fn emacs_init_random() {
-    let seed = (std::process::id() as u64)
+    let seed = (std::process::id() as u32)
         ^ (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() ^ u64::from(d.subsec_nanos()))
+            .map(|d| (d.as_secs() as u32) ^ d.subsec_nanos())
             .unwrap_or(0));
     emacs_seed_random(&seed.to_ne_bytes());
+}
+
+#[cfg(unix)]
+fn platform_seed_random(seed: u32) {
+    // GNU sysdep.c uses srandom/random when HAVE_RANDOM is available, with
+    // `unsigned int random_seed`.  Unix platforms we support provide that API.
+    unsafe { c_random::srandom(seed as libc::c_uint) };
+}
+
+#[cfg(unix)]
+fn platform_random_word() -> u64 {
+    unsafe { c_random::random() as u64 }
+}
+
+#[cfg(unix)]
+mod c_random {
+    unsafe extern "C" {
+        pub(super) fn srandom(seed: libc::c_uint);
+        pub(super) fn random() -> libc::c_long;
+    }
+}
+
+#[cfg(not(unix))]
+mod fallback_random {
+    use std::cell::Cell;
+
+    thread_local! {
+        static RANDOM_STATE: Cell<u32> = const { Cell::new(0x1234_5678) };
+    }
+
+    pub(super) fn seed(seed: u32) {
+        RANDOM_STATE.with(|state| state.set(seed));
+    }
+
+    pub(super) fn next() -> u64 {
+        RANDOM_STATE.with(|state| {
+            let next = state.get().wrapping_mul(1103515245).wrapping_add(12345);
+            state.set(next);
+            u64::from((next >> 16) & 0x7fff)
+        })
+    }
+}
+
+#[cfg(not(unix))]
+fn platform_seed_random(seed: u32) {
+    fallback_random::seed(seed);
+}
+
+#[cfg(not(unix))]
+fn platform_random_word() -> u64 {
+    fallback_random::next()
 }
 
 pub(crate) fn builtin_isnan(args: Vec<Value>) -> EvalResult {

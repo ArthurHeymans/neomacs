@@ -7,6 +7,7 @@ use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
+use std::io::Write;
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -881,7 +882,7 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
 ) -> Result<(), Flow> {
     expect_min_args("read-from-minibuffer", args, 1)?;
     expect_max_args("read-from-minibuffer", args, 7)?;
-    let _prompt = expect_string(&args[0])?;
+    let prompt = expect_string(&args[0])?;
     if let Some(initial) = args.get(1) {
         expect_initial_input_stringish(initial)?;
     }
@@ -889,6 +890,8 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
     if runtime.has_input_receiver() {
         Ok(())
     } else {
+        print!("{prompt}");
+        let _ = std::io::stdout().flush();
         Err(stdin_end_of_file_error())
     }
 }
