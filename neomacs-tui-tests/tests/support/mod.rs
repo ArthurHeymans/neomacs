@@ -340,7 +340,13 @@ pub fn dump_pair_grids(label: &str, gnu: &TuiSession, neo: &TuiSession) {
 /// Send `C-h` then a help sub-key, waiting for the prefix to appear.
 pub fn send_help_sequence(gnu: &mut TuiSession, neo: &mut TuiSession, key: &str) {
     send_both(gnu, neo, "C-h");
-    let prefix_ready = |grid: &[String]| grid.iter().any(|row| row.contains("C-h-"));
+    let prefix_ready = |grid: &[String]| {
+        grid.iter().any(|row| {
+            row.contains("C-h-")
+                || row.contains("C-h (Type ? for further options")
+                || row.contains("C-h (Type C-h for more help")
+        })
+    };
     gnu.read_until(Duration::from_secs(6), prefix_ready);
     neo.read_until(Duration::from_secs(8), prefix_ready);
     read_both(gnu, neo, Duration::from_millis(300));
