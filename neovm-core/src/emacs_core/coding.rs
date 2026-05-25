@@ -693,6 +693,35 @@ impl CodingSystemManager {
         canonical_runtime_name(self, name)
     }
 
+    pub(crate) fn contains_runtime_symbol(&self, symbol: SymId) -> bool {
+        self.systems.iter().any(|(name, info)| {
+            *name == symbol
+                || info.name == symbol
+                || info.coding_type == symbol
+                || info.charset_list.contains(&symbol)
+                || info.post_read_conversion == Some(symbol)
+                || info.pre_write_conversion == Some(symbol)
+                || info.properties.contains_key(&symbol)
+                || info
+                    .int_properties
+                    .values()
+                    .any(|value| matches!(value.kind(), ValueKind::Symbol(id) if id == symbol))
+                || info
+                    .properties
+                    .values()
+                    .any(|value| matches!(value.kind(), ValueKind::Symbol(id) if id == symbol))
+        }) || self
+            .aliases
+            .iter()
+            .any(|(alias, target)| *alias == symbol || *target == symbol)
+            || self.alias_order.iter().any(|(base, aliases)| {
+                *base == symbol || aliases.iter().any(|alias| *alias == symbol)
+            })
+            || self.priority.contains(&symbol)
+            || self.keyboard_coding == symbol
+            || self.terminal_coding == symbol
+    }
+
     /// Return the canonical coding system with EOL detected from file bytes.
     pub(crate) fn canonical_name_for_detected_eol(
         &self,

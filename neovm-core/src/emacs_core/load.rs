@@ -3016,7 +3016,7 @@ fn collect_loaddefs_property_forms(
     let Some(head_name) = head.as_symbol_name() else {
         return;
     };
-    if head_name != "function-put" && head_name != "put" {
+    if head_name != "function-put" && head_name != "put" && head_name != "define-symbol-prop" {
         return;
     }
     let Some(name) = items.get(1).and_then(|v| value_quoted_symbol_name(*v)) else {
@@ -3251,6 +3251,7 @@ fn symbol_has_runtime_surface(eval: &super::eval::Context, id: super::intern::Sy
         || eval.obarray().boundp_id(id)
         || eval.obarray().symbol_function_id(id).is_some()
         || !eval.obarray().symbol_plist_id(id).is_nil()
+        || eval.coding_systems.contains_runtime_symbol(id)
 }
 
 fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
@@ -3277,6 +3278,8 @@ fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
                 | "cl--class"
                 | "cl-deftype-satisfies"
                 | "head"
+                | "app"
+                | "pred"
                 | "subclass"
                 | "eql"
                 | "derived-mode"
@@ -3700,6 +3703,144 @@ fn normalize_bootstrap_runtime_surface(
                 }
                 eval_runtime_form(eval, replay.form)?;
             }
+        }
+        Ok(())
+    })();
+    eval.restore_specpdl_roots(roots);
+    result?;
+
+    Ok(())
+}
+
+pub(crate) fn normalize_final_dump_runtime_surface(
+    eval: &mut super::eval::Context,
+) -> Result<(), EvalError> {
+    let project_root = runtime_project_root();
+    let runtime_loaddefs_state = runtime_loaddefs_restore_state(&project_root).map_err(|e| {
+        tracing::error!("runtime_loaddefs_restore_state failed: {e:?}");
+        e
+    })?;
+    let runtime_source_state =
+        runtime_source_bootstrap_surface_state(&project_root).map_err(|e| {
+            tracing::error!("runtime_source_bootstrap_surface_state failed: {e:?}");
+            e
+        })?;
+
+    let mut stripped_features = TRANSIENT_RUNTIME_FEATURES
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect::<std::collections::BTreeSet<_>>();
+    stripped_features.extend(runtime_source_state.features.iter().cloned());
+    for feature in &stripped_features {
+        eval.remove_feature(feature);
+    }
+    clear_transient_runtime_features(eval);
+
+    for (name, prop) in runtime_loaddefs_state
+        .property_keys
+        .iter()
+        .chain(runtime_source_state.property_keys.iter())
+    {
+        if is_gnu_preloaded_builtin_type_property(name, prop) {
+            continue;
+        }
+        let _ = super::builtins::builtin_put(
+            eval,
+            vec![Value::symbol(name), Value::symbol(prop), Value::NIL],
+        );
+    }
+
+    for name in &runtime_loaddefs_state.names {
+        eval.obarray_mut().fmakunbound(name);
+        eval.autoloads.remove(name);
+        let _ = super::builtins::builtin_put(
+            eval,
+            vec![
+                Value::symbol(name),
+                Value::symbol("autoload-macro"),
+                Value::NIL,
+            ],
+        );
+    }
+    for name in &runtime_source_state.function_names {
+        if runtime_loaddefs_state.names.contains(name) {
+            continue;
+        }
+        eval.obarray_mut().fmakunbound(name);
+        eval.autoloads.remove(name);
+        let _ = super::builtins::builtin_put(
+            eval,
+            vec![
+                Value::symbol(name),
+                Value::symbol("autoload-macro"),
+                Value::NIL,
+            ],
+        );
+    }
+    for name in &runtime_source_state.variable_names {
+        eval.obarray_mut().makunbound(name);
+    }
+    for name in &runtime_source_state.face_names {
+        super::font::clear_created_lisp_face(name);
+    }
+
+    let autoload_entries = eval.autoloads.entries_snapshot();
+    for (name, _) in &autoload_entries {
+        if runtime_loaddefs_state.names.contains(name) {
+            eval.autoloads.remove(name);
+            let _ = super::builtins::builtin_put(
+                eval,
+                vec![
+                    Value::symbol(name),
+                    Value::symbol("autoload-macro"),
+                    Value::NIL,
+                ],
+            );
+        }
+    }
+
+    // GNU's dumper does not keep the source-loaded `icons', `pcase', and `rx'
+    // implementations in the final image; loadup keeps only their generated
+    // loaddefs surface.  Neomacs' source-surface parser also interns symbols
+    // globally, so strip no-surface parser leftovers after removing the source
+    // definitions, while preserving symbols referenced by restored loaddefs.
+    for name in &runtime_source_state.symbol_names {
+        if runtime_loaddefs_state.symbol_names.contains(name) {
+            continue;
+        }
+        let Some(id) = super::intern::lookup_interned(name) else {
+            continue;
+        };
+        if is_gnu_preloaded_syntax_symbol(name) {
+            continue;
+        }
+        if !symbol_has_runtime_surface(eval, id) {
+            eval.obarray_mut().unintern_id(id);
+        }
+    }
+
+    let roots = eval.save_specpdl_roots();
+    for args in &runtime_loaddefs_state.autoload_args {
+        for v in args {
+            eval.push_specpdl_root(*v);
+        }
+    }
+    for form in &runtime_loaddefs_state.keymap_defvar_forms {
+        eval.push_specpdl_root(*form);
+    }
+    for form in &runtime_loaddefs_state.property_forms {
+        eval.push_specpdl_root(*form);
+    }
+    for replay in &runtime_loaddefs_state.keymap_forms {
+        eval.push_specpdl_root(replay.form);
+    }
+
+    let result: Result<(), EvalError> = (|| {
+        for args in &runtime_loaddefs_state.autoload_args {
+            super::autoload::builtin_autoload(eval, args.clone()).map_err(map_flow)?;
+        }
+        for form in &runtime_loaddefs_state.property_forms {
+            eval_runtime_form(eval, *form)?;
         }
         Ok(())
     })();

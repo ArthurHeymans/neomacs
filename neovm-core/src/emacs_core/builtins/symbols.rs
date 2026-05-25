@@ -5323,6 +5323,33 @@ pub(crate) fn builtin_dump_emacs_portable(
             .as_deref(),
     );
     let dump_path = std::path::Path::new(&expanded_path);
+    let is_final_dump = dump_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| matches!(name, "emacs.pdmp" | "neomacs.pdump"));
+    if is_final_dump {
+        crate::emacs_core::load::normalize_final_dump_runtime_surface(ctx).map_err(
+            |err| match err {
+                crate::emacs_core::error::EvalError::Signal {
+                    symbol,
+                    data,
+                    raw_data,
+                } => crate::emacs_core::error::Flow::Signal(Box::new(
+                    crate::emacs_core::error::SignalData {
+                        symbol,
+                        data,
+                        raw_data,
+                        suppress_signal_hook: false,
+                        selected_resume: None,
+                        search_complete: false,
+                    },
+                )),
+                crate::emacs_core::error::EvalError::UncaughtThrow { tag, value } => {
+                    crate::emacs_core::error::Flow::Throw { tag, value }
+                }
+            },
+        )?;
+    }
     let saved_post_gc_hook = ctx
         .obarray()
         .symbol_value("post-gc-hook")

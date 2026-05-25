@@ -2903,6 +2903,33 @@ fn runtime_startup_strips_transient_rx_surface_like_gnu_dump() {
 }
 
 #[test]
+fn final_dump_cleanup_preserves_gnu_loaddefs_and_runtime_manager_symbols() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    crate::emacs_core::load::normalize_final_dump_runtime_surface(&mut eval)
+        .expect("final dump cleanup");
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(list
+             (coding-system-p 'tibetan)
+             (featurep 'pcase)
+             (fboundp 'pcase--u)
+             (get 'seq 'pcase-macroexpander)
+             (featurep 'rx)
+             (boundp 'rx--builtin-symbols)
+             (intern-soft "cat" obarray)
+             (intern-soft "can-break" obarray)
+             (intern-soft "pred" obarray)
+             (intern-soft "app" obarray))"#,
+    );
+    assert_eq!(
+        rendered,
+        "OK (t nil nil seq--pcase-macroexpander nil nil nil nil pred app)"
+    );
+}
+
+#[test]
 fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
