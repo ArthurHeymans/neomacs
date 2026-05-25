@@ -50,6 +50,26 @@ fn source_bootstrap_path(rel: &str) -> PathBuf {
     bootstrap_lisp_root().join(rel)
 }
 
+#[cfg(windows)]
+#[test]
+fn bootstrap_load_path_entries_use_gnu_windows_file_name_syntax() {
+    crate::test_utils::init_test_tracing();
+    let temp = tempdir().expect("tempdir");
+    let lisp_dir = temp.path().join("lisp");
+    std::fs::create_dir_all(&lisp_dir).expect("create lisp dir");
+    let entries = bootstrap_load_path_entries(&lisp_dir);
+    let first = entries
+        .first()
+        .and_then(Value::as_lisp_string)
+        .map(crate::emacs_core::builtins::runtime_string_from_lisp_string)
+        .expect("load-path should include lisp root");
+    assert!(
+        !first.contains('\\'),
+        "Lisp-visible load-path entry should use GNU Windows separators: {first}"
+    );
+    assert!(first.ends_with("/lisp"));
+}
+
 fn load_neomacs_gui_term_layer_for_test(eval: &mut Context) {
     let load_path = get_load_path(eval.obarray());
     for library in ["term/common-win", "term/neo-win"] {

@@ -2504,9 +2504,9 @@ impl Drop for BootstrapCacheWriteLock {
 }
 
 fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root: &Path) {
-    let etc_dir = format!("{}/", project_root.join("etc").to_string_lossy());
-    let source_dir = format!("{}/", project_root.to_string_lossy());
-    let temporary_file_directory = std::env::temp_dir().to_string_lossy().to_string();
+    let etc_dir = lisp_directory_name_from_host_path(&project_root.join("etc"));
+    let source_dir = lisp_directory_name_from_host_path(project_root);
+    let temporary_file_directory = lisp_directory_name_from_host_path(&std::env::temp_dir());
     let path_separator = if cfg!(windows) { ";" } else { ":" };
     let process_environment = Value::list(
         std::env::vars()
@@ -3978,15 +3978,15 @@ fn finalize_cached_bootstrap_eval(
     let etc_dir = project_root.join("etc");
     eval.set_variable(
         "data-directory",
-        Value::unibyte_string(format!("{}/", etc_dir.to_string_lossy())),
+        Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
     );
     eval.set_variable(
         "source-directory",
-        Value::unibyte_string(format!("{}/", project_root.to_string_lossy())),
+        Value::unibyte_string(lisp_directory_name_from_host_path(project_root)),
     );
     eval.set_variable(
         "installation-directory",
-        Value::unibyte_string(format!("{}/", project_root.to_string_lossy())),
+        Value::unibyte_string(lisp_directory_name_from_host_path(project_root)),
     );
 
     // Mirror GNU `init_buffer` (`src/buffer.c:4923`): after loading
@@ -3998,11 +3998,10 @@ fn finalize_cached_bootstrap_eval(
     // setting just the current buffer's slot via `set_variable`,
     // which routes through the FORWARDED dispatch.
     if let Ok(cwd) = std::env::current_dir() {
-        let mut cwd_string = cwd.to_string_lossy().into_owned();
-        if !cwd_string.ends_with('/') {
-            cwd_string.push('/');
-        }
-        eval.set_variable("default-directory", Value::unibyte_string(cwd_string));
+        eval.set_variable(
+            "default-directory",
+            Value::unibyte_string(lisp_directory_name_from_host_path(&cwd)),
+        );
     }
 
     // GNU's dumped image reaches `normal-top-level` with
@@ -4027,10 +4026,20 @@ pub(crate) fn bootstrap_load_path_entries(lisp_dir: &Path) -> Vec<Value> {
             lisp_dir.join(sub)
         };
         if dir.is_dir() {
-            load_path_entries.push(Value::string(dir.to_string_lossy().to_string()));
+            load_path_entries.push(Value::string(
+                crate::emacs_core::fileio::host_path_to_lisp_file_name_string(&dir),
+            ));
         }
     }
     load_path_entries
+}
+
+fn lisp_directory_name_from_host_path(path: &Path) -> String {
+    let mut name = crate::emacs_core::fileio::host_path_to_lisp_file_name_string(path);
+    if !name.ends_with('/') {
+        name.push('/');
+    }
+    name
 }
 
 pub(crate) fn runtime_bootstrap_load_path() -> Vec<String> {
@@ -4310,16 +4319,16 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         let etc_dir = project_root.join("etc");
         eval.set_variable(
             "data-directory",
-            Value::unibyte_string(format!("{}/", etc_dir.to_string_lossy())),
+            Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
         );
         // source-directory: top-level source tree
         eval.set_variable(
             "source-directory",
-            Value::unibyte_string(format!("{}/", project_root.to_string_lossy())),
+            Value::unibyte_string(lisp_directory_name_from_host_path(&project_root)),
         );
         eval.set_variable(
             "installation-directory",
-            Value::unibyte_string(format!("{}/", project_root.to_string_lossy())),
+            Value::unibyte_string(lisp_directory_name_from_host_path(&project_root)),
         );
 
         // exec-path: list of dirs from PATH env var (C: callproc.c init_callproc_1)

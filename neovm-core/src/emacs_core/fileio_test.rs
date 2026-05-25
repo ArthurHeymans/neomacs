@@ -179,6 +179,32 @@ fn test_expand_file_name_absolute() {
     assert_eq!(result, "/usr/bin/ls");
 }
 
+#[cfg(windows)]
+#[test]
+fn test_expand_file_name_accepts_gnu_windows_absolute_paths() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        expand_file_name("emacs-lisp", Some(r"D:\a\neomacs\neomacs\lisp")),
+        "D:/a/neomacs/neomacs/lisp/emacs-lisp"
+    );
+    assert_eq!(
+        expand_file_name(r"D:\a\neomacs\neomacs\lisp", None),
+        "D:/a/neomacs/neomacs/lisp"
+    );
+    assert!(file_name_absolute_p("D:/a/neomacs"));
+    assert!(file_name_absolute_p(r"D:\a\neomacs"));
+}
+
+#[cfg(windows)]
+#[test]
+fn host_paths_are_exposed_to_lisp_with_gnu_windows_separators() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        host_path_to_lisp_file_name_string(std::path::Path::new(r"D:\a\neomacs\neomacs\lisp")),
+        "D:/a/neomacs/neomacs/lisp"
+    );
+}
+
 #[test]
 fn test_expand_file_name_relative() {
     crate::test_utils::init_test_tracing();

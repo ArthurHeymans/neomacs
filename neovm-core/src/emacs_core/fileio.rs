@@ -50,6 +50,15 @@ fn expand_file_name_with_home_inner(
     home_override: Option<&str>,
     expand_default_dir: bool,
 ) -> String {
+    #[cfg(windows)]
+    let name_normalized = name.replace('\\', "/");
+    #[cfg(windows)]
+    let name = name_normalized.as_str();
+    #[cfg(windows)]
+    let default_dir_normalized = default_dir.map(|dir| dir.replace('\\', "/"));
+    #[cfg(windows)]
+    let default_dir = default_dir_normalized.as_deref();
+
     // Handle ~ expansion
     let expanded = if name.starts_with("~/") {
         if let Some(home) = home_override {
@@ -75,8 +84,8 @@ fn expand_file_name_with_home_inner(
 
     let preserve_trailing_slash = expanded.ends_with('/');
 
-    // If already absolute, just clean it up
-    if expanded.starts_with('/') {
+    // If already absolute, just clean it up.
+    if file_name_absolute_p(&expanded) {
         let mut cleaned = clean_path(&expanded);
         if preserve_trailing_slash && !cleaned.ends_with('/') {
             cleaned.push('/');
@@ -159,8 +168,42 @@ pub(crate) fn lisp_file_name_to_path_buf(filename: &crate::heap_types::LispStrin
 
     #[cfg(not(unix))]
     {
-        PathBuf::from(crate::emacs_core::builtins::runtime_string_from_lisp_string(filename))
+        let name = crate::emacs_core::builtins::runtime_string_from_lisp_string(filename);
+        PathBuf::from(lisp_file_name_to_host_path_string(&name))
     }
+}
+
+#[cfg(not(unix))]
+fn lisp_file_name_to_host_path_string(filename: &str) -> String {
+    #[cfg(windows)]
+    {
+        filename.replace('/', "\\")
+    }
+
+    #[cfg(not(windows))]
+    {
+        filename.to_string()
+    }
+}
+
+#[cfg(windows)]
+fn host_path_to_lisp_file_name_string_inner(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+#[cfg(not(windows))]
+fn host_path_to_lisp_file_name_string_inner(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+/// Convert a host path spelling into GNU's Lisp-visible file-name syntax.
+///
+/// GNU's Windows port presents file names to Lisp with `/` directory
+/// separators, and converts to DOS separators only at the system-call layer
+/// (`dostounix_filename`, `unixtodos_filename`, `map_w32_filename`).  Keep the
+/// same boundary in Rust code that seeds Lisp variables from host paths.
+pub(crate) fn host_path_to_lisp_file_name_string(path: &Path) -> String {
+    host_path_to_lisp_file_name_string_inner(path)
 }
 
 /// Convert an OS path back to a Lisp file-name string at the filesystem boundary.
@@ -176,7 +219,7 @@ pub(crate) fn path_to_lisp_file_name(path: &Path) -> crate::heap_types::LispStri
     #[cfg(not(unix))]
     {
         crate::emacs_core::builtins::runtime_string_to_lisp_string(
-            path.to_string_lossy().as_ref(),
+            &host_path_to_lisp_file_name_string(path),
             true,
         )
     }
@@ -486,6 +529,20 @@ fn user_homedir_absolute_p(name: &[u8]) -> bool {
 }
 
 fn file_name_absolute_bytes_p(filename: &[u8]) -> bool {
+    #[cfg(windows)]
+    {
+        if matches!(
+            filename,
+            [drive, b':', sep, ..] if drive.is_ascii_alphabetic() && (*sep == b'/' || *sep == b'\\')
+        ) {
+            return true;
+        }
+        if matches!(filename, [b'/', b'/', third, ..] if *third != b'/')
+            || matches!(filename, [b'\\', b'\\', third, ..] if *third != b'\\')
+        {
+            return true;
+        }
+    }
     match filename {
         [b'/', ..] => true,
         [b'~'] => true,
