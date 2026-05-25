@@ -189,8 +189,14 @@ jobs:
           $pkgConfig = "$gstRoot\bin\pkg-config.exe"
           if (-not (Test-Path $pkgConfig)) {
             choco install pkgconfiglite -y
-            $pkgConfig = "pkg-config"
+            $pkgConfig = (Get-Command pkg-config.exe -All |
+              Where-Object { $_.Source -notmatch "\\Git\\" } |
+              Select-Object -First 1 -ExpandProperty Source)
+            if (-not $pkgConfig) {
+              throw "pkg-config.exe not found after installing pkgconfiglite"
+            }
           }
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $pkgConfig)
           Add-Content -Path $env:GITHUB_PATH -Value "$gstRoot\bin"
           Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_ROOT_X86_64=$gstRoot\"
           Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG=$pkgConfig"
@@ -216,11 +222,14 @@ jobs:
         shell: bash
         run: |
           gst_root_posix="$(cygpath -u "$GSTREAMER_ROOT_X86_64")"
-          export PATH="$gst_root_posix/bin:$PATH"
-          export PKG_CONFIG="$gst_root_posix/bin/pkg-config.exe"
-          export PKG_CONFIG_PATH="$gst_root_posix/lib/pkgconfig"
-          export PKG_CONFIG_LIBDIR="$gst_root_posix/lib/pkgconfig"
+          pkg_config_posix="$(cygpath -u "$PKG_CONFIG")"
+          export PATH="$(dirname "$pkg_config_posix"):$gst_root_posix/bin:$PATH"
+          export PKG_CONFIG="$pkg_config_posix"
+          export PKG_CONFIG_PATH="$(cygpath -m "$GSTREAMER_ROOT_X86_64")/lib/pkgconfig"
+          export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+          "$PKG_CONFIG" --version
           "$PKG_CONFIG" --modversion glib-2.0
+          "$PKG_CONFIG" --modversion gstreamer-1.0
           ./scripts/package-windows-installer.sh --no-smoke
 
       - name: Upload .exe artifact
