@@ -99,13 +99,12 @@ jobs:
       - name: Package AppImage
         run: ./scripts/package-appimage.sh --skip-build --no-smoke
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/neomacs-*-x86_64-unknown-linux-gnu.AppImage
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
 
   build-macos:
     name: build macOS
@@ -139,13 +138,12 @@ jobs:
       - name: Build and package .app + .dmg
         run: ./scripts/package-macos-app.sh --no-smoke
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/neomacs-*.dmg
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
 
   build-windows:
     name: build Windows
@@ -199,10 +197,37 @@ jobs:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
         run: ./scripts/package-windows-installer.sh --no-smoke
 
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/*.exe
+          if-no-files-found: error
+
+  create-release:
+    name: create release
+    needs: [build-appimage, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate .sha256 sidecar files
+        run: |
+          cd dist
+          for f in *.AppImage *.dmg *.exe; do
+            [ -f "$f" ] || continue
+            sha256sum "$f" > "${f}.sha256"
+          done
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/neomacs-*.exe
+          name: NEO Emacs ${{ github.ref_name }}
+          files: dist/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
