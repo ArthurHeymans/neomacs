@@ -1,10 +1,11 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
+use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 use std::sync::Arc;
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_os = "linux")]
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 #[cfg(target_os = "linux")]
@@ -20,12 +21,16 @@ use crate::backend::wpe::sys::platform as plat;
 
 impl RenderApp {
     /// Initialize wgpu with the window
-    pub(super) fn init_wgpu(&mut self, window: Arc<Window>) {
+    pub(super) fn init_wgpu(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         tracing::info!("Initializing wgpu for render thread");
 
-        // Create wgpu instance
-        let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_descriptor.backends = wgpu::Backends::all();
+        // GLES presentation needs the compositor/display handle, especially on Wayland.
+        let instance_descriptor =
+            crate::wgpu_instance_descriptor_with_display(event_loop.owned_display_handle());
+        tracing::info!(
+            "wgpu requested backends: {:?}",
+            instance_descriptor.backends
+        );
         let instance = wgpu::Instance::new(instance_descriptor);
 
         // Create surface from window
@@ -135,11 +140,14 @@ impl RenderApp {
             format
         );
 
-        self.adapter = Some(adapter);
+        self.gpu = Some(RenderGpuContext {
+            instance,
+            adapter,
+            device: device.clone(),
+            queue: queue.clone(),
+        });
         self.surface = Some(surface);
         self.surface_config = Some(config);
-        self.device = Some(device.clone());
-        self.queue = Some(queue);
         self.renderer = Some(renderer);
         self.glyph_atlas = Some(glyph_atlas);
 
@@ -183,12 +191,12 @@ impl RenderApp {
         self.height = height;
 
         // Reconfigure surface
-        if let (Some(surface), Some(config), Some(device)) =
-            (&self.surface, &mut self.surface_config, &self.device)
+        if let (Some(surface), Some(config), Some(gpu)) =
+            (&self.surface, &mut self.surface_config, &self.gpu)
         {
             config.width = width;
             config.height = height;
-            surface.configure(device, config);
+            surface.configure(&gpu.device, config);
         }
 
         // Resize renderer

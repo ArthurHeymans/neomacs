@@ -1,5 +1,7 @@
 use super::RenderApp;
-use super::state::{effective_window_scale_factor, window_size_from_emacs_pixels};
+use super::state::{
+    RenderGpuContext, effective_window_scale_factor, window_size_from_emacs_pixels,
+};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::thread_comm::InputEvent;
 use std::sync::Arc;
@@ -125,7 +127,7 @@ impl RenderApp {
                     );
 
                     // Initialize wgpu with the window
-                    self.init_wgpu(window.clone());
+                    self.init_wgpu(event_loop, window.clone());
 
                     // Enable IME input for CJK and compose support
                     window.set_ime_allowed(true);
@@ -164,9 +166,13 @@ impl RenderApp {
         }
 
         // Process multi-window creates/destroys
-        if let (Some(device), Some(adapter)) = (&self.device, &self.adapter) {
-            self.multi_windows
-                .process_creates(event_loop, device, adapter);
+        if let Some(gpu) = &self.gpu {
+            self.multi_windows.process_creates(
+                event_loop,
+                &gpu.instance,
+                &gpu.device,
+                &gpu.adapter,
+            );
         }
         self.multi_windows.process_destroys();
 
@@ -336,16 +342,22 @@ impl RenderApp {
         // Drop surface (holds wl_surface proxy if on Wayland)
         drop(self.surface.take());
         self.surface_config = None;
-        // Drop device and queue
-        drop(self.device.take());
-        drop(self.queue.take());
         // Drop multi-window state (secondary surfaces)
         self.multi_windows.destroy_all();
         // Leak the adapter to prevent eglTerminate crash on Wayland.
         // The adapter's Drop triggers eglTerminate → dri2_teardown_wayland which
         // SEGVs if the Wayland connection is already gone. Since we're exiting,
         // the OS will reclaim all GPU/EGL resources.
-        if let Some(adapter) = self.adapter.take() {
+        if let Some(gpu) = self.gpu.take() {
+            let RenderGpuContext {
+                instance,
+                adapter,
+                device,
+                queue,
+            } = gpu;
+            drop(device);
+            drop(queue);
+            drop(instance);
             std::mem::forget(adapter);
         }
 

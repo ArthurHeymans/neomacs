@@ -54,7 +54,7 @@ impl RenderApp {
                         height: emacs_h,
                         emacs_frame_id: 0,
                     });
-                } else if let Some(device) = self.device.clone() {
+                } else if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
                     if let Some(ws) = self.multi_windows.get_mut(emacs_fid) {
                         ws.handle_resize(&device, size.width, size.height);
                         let (emacs_w, emacs_h) =

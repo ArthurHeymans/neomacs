@@ -1295,8 +1295,7 @@ impl WgpuRenderer {
         height: u32,
     ) -> Result<Self, String> {
         // Create wgpu instance
-        let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_descriptor.backends = wgpu::Backends::all();
+        let instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
         let instance = wgpu::Instance::new(instance_descriptor);
 
         // Request adapter
