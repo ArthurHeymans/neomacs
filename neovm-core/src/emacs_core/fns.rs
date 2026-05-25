@@ -72,16 +72,8 @@ unsafe fn collation_errno() -> libc::c_int {
     unsafe { *collation_errno_location() }
 }
 
-#[cfg(unix)]
 fn collation_errno_message(errno: libc::c_int) -> String {
-    let ptr = unsafe { libc::strerror(errno) };
-    if ptr.is_null() {
-        format!("Unknown error {errno}")
-    } else {
-        unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned()
-    }
+    std::io::Error::from_raw_os_error(errno).to_string()
 }
 
 // ---------------------------------------------------------------------------
