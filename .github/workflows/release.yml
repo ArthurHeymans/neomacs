@@ -102,7 +102,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/neomacs-linux-x86_64.AppImage
+          files: dist/neomacs-*-x86_64-unknown-linux-gnu.AppImage
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
