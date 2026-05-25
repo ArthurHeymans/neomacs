@@ -79,6 +79,7 @@ jobs:
           msystem: MINGW64
           update: false
           cache: true
+          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gmp
