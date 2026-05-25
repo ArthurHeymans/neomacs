@@ -12597,6 +12597,25 @@ fn runtime_finalize_resets_gensym_counter_like_gnu_dump() {
 }
 
 #[test]
+fn runtime_cleanup_preserves_symbols_referenced_by_live_values() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let symbol_id = intern("choice");
+    let symbol = Value::from_sym_id(symbol_id);
+    let live_value = Value::list(vec![symbol]);
+
+    eval.obarray_mut().materialize_read_symbols(live_value);
+    eval.obarray_mut()
+        .set_symbol_value("custom-face-attributes", live_value);
+
+    let referenced = collect_runtime_referenced_symbol_names(&eval);
+    assert!(
+        symbol_has_runtime_surface_or_reference(&eval, symbol_id, &referenced),
+        "GNU keeps symbols interned when preloaded live data references them"
+    );
+}
+
+#[test]
 fn bootstrap_macroexpand1_vs_all_pcase() {
     crate::test_utils::init_test_tracing();
     let mut eval = partial_bootstrap_eval_until("emacs-lisp/cl-preloaded", true);

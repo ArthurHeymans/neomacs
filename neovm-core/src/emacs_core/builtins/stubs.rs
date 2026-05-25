@@ -2331,18 +2331,96 @@ fn file_notify_error(message: &str, detail: Option<String>, object: Option<Value
     crate::emacs_core::error::signal_with_data("file-notify-error", raw_data)
 }
 
-fn extract_watch_id(value: &Value) -> Option<i64> {
+fn inotify_unknown_aspect_error(aspect: Value) -> Flow {
+    file_notify_error(
+        "Unknown aspect",
+        Some("Invalid argument".to_string()),
+        Some(aspect),
+    )
+}
+
+fn inotify_invalid_descriptor_error(descriptor: Value, detail: &str) -> Flow {
+    file_notify_error(
+        "Invalid descriptor ",
+        Some(detail.to_string()),
+        Some(descriptor),
+    )
+}
+
+fn inotify_aspect_symbol_valid(name: &str) -> bool {
+    matches!(
+        name,
+        "access"
+            | "attrib"
+            | "close-write"
+            | "close-nowrite"
+            | "create"
+            | "delete"
+            | "delete-self"
+            | "modify"
+            | "move-self"
+            | "moved-from"
+            | "moved-to"
+            | "open"
+            | "move"
+            | "close"
+            | "dont-follow"
+            | "onlydir"
+            | "ignored"
+            | "unmount"
+            | "all-events"
+            | "t"
+    )
+}
+
+fn validate_inotify_aspect(aspect: Value) -> Result<(), Flow> {
+    if aspect.is_nil() {
+        return Ok(());
+    }
+    if let Some(name) = aspect.as_symbol_name() {
+        return if inotify_aspect_symbol_valid(name) {
+            Ok(())
+        } else {
+            Err(inotify_unknown_aspect_error(aspect))
+        };
+    }
+    if !aspect.is_cons() {
+        return Err(inotify_unknown_aspect_error(aspect));
+    }
+
+    let mut rest = aspect;
+    while rest.is_cons() {
+        let item = rest.cons_car();
+        let Some(name) = item.as_symbol_name() else {
+            return Err(inotify_unknown_aspect_error(item));
+        };
+        if !inotify_aspect_symbol_valid(name) {
+            return Err(inotify_unknown_aspect_error(item));
+        }
+        rest = rest.cons_cdr();
+    }
+    if !rest.is_nil() {
+        return Err(inotify_unknown_aspect_error(rest));
+    }
+    Ok(())
+}
+
+fn extract_valid_watch_id(value: Value) -> Option<i64> {
     if !value.is_cons() {
         return None;
     }
-    let car = value.cons_car();
-    let id = car.as_int()?;
-    if id >= 0 { Some(id) } else { None }
+    let id = value.cons_car().as_int()?;
+    let generation = value.cons_cdr().as_int()?;
+    if id >= 0 && generation >= 0 {
+        Some(id)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-valid-p", &args, 1)?;
-    let Some(id) = extract_watch_id(&args[0]) else {
+    let Some(id) = extract_valid_watch_id(args[0]) else {
         return Ok(Value::NIL);
     };
     FILE_NOTIFY_STATE.with(|slot| {
@@ -2354,12 +2432,20 @@ pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
     let filename = expect_strict_string(&args[0])?;
+    validate_inotify_aspect(args[1])?;
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
         state.ensure_watcher()?;
 
         let path = std::path::Path::new(&filename);
+        if !path.exists() {
+            return Err(file_notify_error(
+                "Could not add watch for file",
+                Some("No such file or directory".to_string()),
+                Some(args[0]),
+            ));
+        }
         if let Some(ref mut watcher) = state.watcher {
             watcher
                 .watch(path, notify::RecursiveMode::NonRecursive)
@@ -2385,8 +2471,13 @@ pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-rm-watch", &args, 1)?;
 
-    let Some(id) = extract_watch_id(&args[0]) else {
-        return Err(file_notify_error("Invalid descriptor", None, Some(args[0])));
+    let detail = if args[0].is_cons() {
+        "Invalid argument"
+    } else {
+        "No such file or directory"
+    };
+    let Some(id) = extract_valid_watch_id(args[0]) else {
+        return Err(inotify_invalid_descriptor_error(args[0], detail));
     };
 
     FILE_NOTIFY_STATE.with(|slot| {

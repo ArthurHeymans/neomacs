@@ -3227,6 +3227,37 @@ fn symbol_has_runtime_surface(eval: &super::eval::Context, id: super::intern::Sy
         || eval.coding_systems.contains_runtime_symbol(id)
 }
 
+fn collect_runtime_referenced_symbol_names(
+    eval: &super::eval::Context,
+) -> std::collections::BTreeSet<String> {
+    let mut symbol_names = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
+
+    for id in eval.obarray().global_member_ids().collect::<Vec<_>>() {
+        if let Some(value) = eval.obarray().symbol_value_id(id).copied() {
+            collect_value_symbol_names(value, &mut symbol_names, &mut seen);
+        }
+        if let Some(function) = eval.obarray().symbol_function_id(id) {
+            collect_value_symbol_names(function, &mut symbol_names, &mut seen);
+        }
+        let plist = eval.obarray().symbol_plist_id(id);
+        if !plist.is_nil() {
+            collect_value_symbol_names(plist, &mut symbol_names, &mut seen);
+        }
+    }
+
+    symbol_names
+}
+
+fn symbol_has_runtime_surface_or_reference(
+    eval: &super::eval::Context,
+    id: super::intern::SymId,
+    referenced_symbol_names: &std::collections::BTreeSet<String>,
+) -> bool {
+    symbol_has_runtime_surface(eval, id)
+        || referenced_symbol_names.contains(super::intern::resolve_sym(id))
+}
+
 fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
     // GNU's dump keeps reader, lambda-list, pattern, face-spec, cl-generic
     // specializer, frame/action-alist, and some feature-name markers interned
@@ -3559,6 +3590,7 @@ fn normalize_bootstrap_runtime_surface(
     for name in &runtime_source_state.face_names {
         super::font::clear_created_lisp_face(name);
     }
+    let referenced_symbol_names = collect_runtime_referenced_symbol_names(eval);
     for name in &runtime_source_state.symbol_names {
         if runtime_loaddefs_state.symbol_names.contains(name)
             || runtime_loaded_state.symbol_names.contains(name)
@@ -3571,7 +3603,7 @@ fn normalize_bootstrap_runtime_surface(
         if is_gnu_preloaded_syntax_symbol(name) {
             continue;
         }
-        if !symbol_has_runtime_surface(eval, id) {
+        if !symbol_has_runtime_surface_or_reference(eval, id, &referenced_symbol_names) {
             eval.obarray_mut().unintern_id(id);
         }
     }
@@ -3777,6 +3809,7 @@ pub(crate) fn normalize_final_dump_runtime_surface(
     // loaddefs surface.  Neomacs' source-surface parser also interns symbols
     // globally, so strip no-surface parser leftovers after removing the source
     // definitions, while preserving symbols referenced by restored loaddefs.
+    let referenced_symbol_names = collect_runtime_referenced_symbol_names(eval);
     for name in &runtime_source_state.symbol_names {
         if runtime_loaddefs_state.symbol_names.contains(name) {
             continue;
@@ -3787,7 +3820,7 @@ pub(crate) fn normalize_final_dump_runtime_surface(
         if is_gnu_preloaded_syntax_symbol(name) {
             continue;
         }
-        if !symbol_has_runtime_surface(eval, id) {
+        if !symbol_has_runtime_surface_or_reference(eval, id, &referenced_symbol_names) {
             eval.obarray_mut().unintern_id(id);
         }
     }
