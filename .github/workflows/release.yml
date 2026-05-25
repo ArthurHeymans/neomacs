@@ -224,12 +224,13 @@ jobs:
           gst_root_posix="$(cygpath -u "$GSTREAMER_ROOT_X86_64")"
           pkg_config_posix="$(cygpath -u "$PKG_CONFIG")"
           export PATH="$(dirname "$pkg_config_posix"):$gst_root_posix/bin:$PATH"
-          export PKG_CONFIG="$pkg_config_posix"
-          export PKG_CONFIG_PATH="$(cygpath -m "$GSTREAMER_ROOT_X86_64")/lib/pkgconfig"
+          export PKG_CONFIG="$(cygpath -w "$PKG_CONFIG")"
+          export PKG_CONFIG_PATH="$(cygpath -w "$gst_root_posix/lib/pkgconfig")"
           export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
-          "$PKG_CONFIG" --version
-          "$PKG_CONFIG" --modversion glib-2.0
-          "$PKG_CONFIG" --modversion gstreamer-1.0
+          find "$gst_root_posix" -name 'glib-2.0.pc' -o -name 'gstreamer-1.0.pc'
+          "$pkg_config_posix" --version
+          "$pkg_config_posix" --modversion glib-2.0
+          "$pkg_config_posix" --modversion gstreamer-1.0
           ./scripts/package-windows-installer.sh --no-smoke
 
       - name: Upload .exe artifact
