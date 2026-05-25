@@ -294,7 +294,7 @@ fn parse_replace_regexp_subexp_start_lisp(
     Ok((subexp as usize, start))
 }
 
-fn storage_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
+pub(crate) fn storage_string_from_lisp_string(string: &crate::heap_types::LispString) -> String {
     crate::emacs_core::string_escape::emacs_bytes_to_storage_string(
         string.as_bytes(),
         string.is_multibyte(),

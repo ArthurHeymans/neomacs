@@ -710,29 +710,24 @@ pub(crate) fn upcase_initials_string(s: &str) -> String {
 /// See audit findings #14 and #20 in `drafts/regex-search-audit.md`:
 /// the old code used Rust's Unicode `is_alphanumeric()` and ignored
 /// `case-symbols-as-words` entirely.
-pub(crate) fn apply_replace_match_case(replacement: &str, matched: &str) -> String {
-    apply_replace_match_case_with(replacement, matched, default_is_word_char)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ReplaceMatchCaseAction {
+    NoChange,
+    AllCaps,
+    CapInitial,
 }
 
-/// Like `apply_replace_match_case`, but lets the caller supply the
-/// predicate used for the "previous character is a word constituent"
-/// check. Use this from paths that have a buffer syntax table in
-/// scope so per-mode definitions of word constituents apply.
-pub(crate) fn apply_replace_match_case_with<F>(
-    replacement: &str,
+pub(crate) fn replace_match_case_action(matched: &str) -> ReplaceMatchCaseAction {
+    replace_match_case_action_with(matched, default_is_word_char)
+}
+
+pub(crate) fn replace_match_case_action_with<F>(
     matched: &str,
     mut is_word_char: F,
-) -> String
+) -> ReplaceMatchCaseAction
 where
     F: FnMut(char) -> bool,
 {
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    enum CaseAction {
-        NoChange,
-        AllCaps,
-        CapInitial,
-    }
-
     let mut some_multiletter_word = false;
     let mut some_lowercase = false;
     let mut some_uppercase = false;
@@ -759,20 +754,39 @@ where
         prev_is_word = is_word_char(ch);
     }
 
-    let case_action = if !some_lowercase && some_multiletter_word {
-        CaseAction::AllCaps
+    if !some_lowercase && some_multiletter_word {
+        ReplaceMatchCaseAction::AllCaps
     } else if !some_nonuppercase_initial && some_multiletter_word {
-        CaseAction::CapInitial
+        ReplaceMatchCaseAction::CapInitial
     } else if !some_nonuppercase_initial && some_uppercase {
-        CaseAction::AllCaps
+        ReplaceMatchCaseAction::AllCaps
     } else {
-        CaseAction::NoChange
-    };
+        ReplaceMatchCaseAction::NoChange
+    }
+}
+
+pub(crate) fn apply_replace_match_case(replacement: &str, matched: &str) -> String {
+    apply_replace_match_case_with(replacement, matched, default_is_word_char)
+}
+
+/// Like `apply_replace_match_case`, but lets the caller supply the
+/// predicate used for the "previous character is a word constituent"
+/// check. Use this from paths that have a buffer syntax table in
+/// scope so per-mode definitions of word constituents apply.
+pub(crate) fn apply_replace_match_case_with<F>(
+    replacement: &str,
+    matched: &str,
+    is_word_char: F,
+) -> String
+where
+    F: FnMut(char) -> bool,
+{
+    let case_action = replace_match_case_action_with(matched, is_word_char);
 
     match case_action {
-        CaseAction::NoChange => replacement.to_string(),
-        CaseAction::AllCaps => replacement.to_uppercase(),
-        CaseAction::CapInitial => upcase_initials_string(replacement),
+        ReplaceMatchCaseAction::NoChange => replacement.to_string(),
+        ReplaceMatchCaseAction::AllCaps => replacement.to_uppercase(),
+        ReplaceMatchCaseAction::CapInitial => upcase_initials_string(replacement),
     }
 }
 

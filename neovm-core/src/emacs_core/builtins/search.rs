@@ -1771,11 +1771,11 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (oldstart, oldend, replacement) = {
+    let (oldstart, oldend, replacement, case_action) = {
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        crate::emacs_core::search::compute_buffer_replacement_lisp_string(
+        let replacement = crate::emacs_core::search::compute_buffer_replacement_lisp_string(
             buf,
             newtext_lisp,
             fixedcase,
@@ -1789,7 +1789,16 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             } else {
                 signal("error", vec![Value::string(msg)])
             }
-        })?
+        })?;
+        let case_action = if fixedcase {
+            crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
+        } else {
+            let matched = buf.buffer_substring_lisp_string(replacement.0, replacement.1);
+            crate::emacs_core::casefiddle::replace_match_case_action(
+                &crate::emacs_core::search::storage_string_from_lisp_string(&matched),
+            )
+        };
+        (replacement.0, replacement.1, replacement.2, case_action)
     };
     let replacement_len = replacement.sbytes();
 
@@ -1801,6 +1810,30 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         &replacement,
     )?;
     let newend = oldstart + replacement_len;
+    if case_action != crate::emacs_core::casefiddle::ReplaceMatchCaseAction::NoChange
+        && oldstart < newend
+        && let Some(buf) = buffers.get_mut(current_id)
+    {
+        let start_char = buf.text.emacs_byte_to_char(oldstart);
+        let cased_text = buf.buffer_substring_lisp_string(oldstart, newend);
+        let mut undo_list = buf.get_undo_list();
+        if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
+            crate::buffer::undo::undo_list_record_delete(
+                &mut undo_list,
+                start_char,
+                cased_text.clone(),
+                start_char + cased_text.schars(),
+                None,
+            );
+            crate::buffer::undo::undo_list_record_insert(
+                &mut undo_list,
+                start_char,
+                cased_text.schars(),
+                None,
+            );
+            buf.set_undo_list(undo_list);
+        }
+    }
     update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
     Ok(Value::NIL)
 }
