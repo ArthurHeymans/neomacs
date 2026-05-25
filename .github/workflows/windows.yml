@@ -61,6 +61,7 @@ jobs:
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: always
+      RUSTUP_TOOLCHAIN: 1.95.0-x86_64-pc-windows-gnu
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -69,10 +70,6 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0-x86_64-pc-windows-gnu
-
-      - name: Remove rust-toolchain.toml (would force MSVC)
-        shell: bash
-        run: rm -f rust-toolchain.toml
 
       - name: Setup MSYS2 and install MinGW GMP
         uses: msys2/setup-msys2@v2
