@@ -50,6 +50,15 @@ fn source_bootstrap_path(rel: &str) -> PathBuf {
     bootstrap_lisp_root().join(rel)
 }
 
+fn load_neomacs_gui_term_layer_for_test(eval: &mut Context) {
+    let load_path = get_load_path(eval.obarray());
+    for library in ["term/common-win", "term/neo-win"] {
+        let path = find_file_in_load_path(library, &load_path)
+            .unwrap_or_else(|| panic!("find {library} in load-path"));
+        load_file(eval, &path).unwrap_or_else(|err| panic!("load {library}: {err:?}"));
+    }
+}
+
 fn copy_source_fixture(dir: &std::path::Path, rel: &str) -> PathBuf {
     let source = source_bootstrap_path(rel);
     let copied = dir.join(rel);
@@ -6032,23 +6041,26 @@ fn bootstrap_runtime_match_data_returns_marker_handles_for_buffer_search() {
 }
 
 #[test]
-fn bootstrap_neomacs_runtime_loads_neo_term_layer() {
+fn bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_with_features(&["neomacs"])
         .expect("neomacs bootstrap evaluator");
     assert!(eval.feature_present("neomacs"));
-    assert!(eval.feature_present("neo-win"));
+    assert!(!eval.feature_present("neo-win"));
     assert!(!eval.feature_present("x-win"));
+    assert!(eval.obarray().intern_soft("hook-on").is_none());
+    assert!(eval.obarray().intern_soft("hook-off").is_none());
+    assert!(eval.obarray().intern_soft("minor-MODE-hook").is_none());
 }
 
 #[test]
-fn bootstrap_neomacs_gui_runtime_loads_x_and_neo_term_layers() {
+fn bootstrap_neomacs_x_runtime_keeps_neo_term_layer_runtime_only() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_with_features(&["neomacs", "x"])
         .expect("neomacs+x bootstrap evaluator");
     assert!(eval.feature_present("neomacs"));
     assert!(eval.feature_present("x"));
-    assert!(eval.feature_present("neo-win"));
+    assert!(!eval.feature_present("neo-win"));
     assert!(eval.feature_present("x-win"));
 }
 
@@ -6057,6 +6069,7 @@ fn bootstrap_neomacs_cursor_blink_setup_keeps_lisp_timers_stopped() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_with_features(&["neomacs", "x"])
         .expect("neomacs+x bootstrap evaluator");
+    load_neomacs_gui_term_layer_for_test(&mut eval);
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");
 
     let rendered = eval_rendered(

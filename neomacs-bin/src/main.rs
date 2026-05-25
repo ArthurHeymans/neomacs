@@ -48,9 +48,10 @@ use neovm_core::emacs_core::eval::{
     ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
     WebKitResolveSource,
 };
-use neovm_core::emacs_core::load::LoadupDumpMode;
-use neovm_core::emacs_core::load::LoadupStartupSurface;
-use neovm_core::emacs_core::load::RuntimeImageRole;
+use neovm_core::emacs_core::load::{
+    LoadupDumpMode, LoadupStartupSurface, RuntimeImageRole, find_file_in_load_path, get_load_path,
+    load_file,
+};
 #[cfg(test)]
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
@@ -1830,6 +1831,26 @@ fn raw_loadup_startup_surface(
     }
 }
 
+fn load_neomacs_gui_term_layer(evaluator: &mut Context) {
+    if evaluator
+        .eval_str("(featurep 'neo-win)")
+        .is_ok_and(|value| !value.is_nil())
+    {
+        return;
+    }
+
+    let load_path = get_load_path(evaluator.obarray());
+    for library in ["term/common-win", "term/neo-win"] {
+        let Some(path) = find_file_in_load_path(library, &load_path) else {
+            panic!("required GUI terminal library should be found: {library}");
+        };
+        tracing::info!("Loading Neomacs GUI terminal layer: {library}");
+        load_file(evaluator, &path).unwrap_or_else(|err| {
+            panic!("failed to load {library}: {err:?}");
+        });
+    }
+}
+
 fn run_gui_main_thread(
     mode: RuntimeMode,
     startup: StartupOptions,
@@ -1967,6 +1988,7 @@ fn run_gui_evaluator_worker(
     reset_terminal_host();
     reset_terminal_runtime();
     evaluator.set_variable("dump-mode", Value::NIL);
+    load_neomacs_gui_term_layer(&mut evaluator);
     tracing::info!("GUI evaluator context initialized");
 
     let _bootstrap = bootstrap_buffers(&mut evaluator, width, height, bootstrap_display);

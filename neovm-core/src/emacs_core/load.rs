@@ -2115,7 +2115,8 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // refreshes caches after the GNU-matching `cl-lib` runtime surface fix. V19
 // stops serializing dynamic load context bindings as top-level values. V20
 // marks keyboard-translate-table special like GNU's DEFVAR_KBOARD.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 20;
+// V21 keeps Neomacs' GUI terminal library out of the dumped batch surface.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 21;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
@@ -4398,22 +4399,6 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         // If loadup.el set a shutdown request (via kill-emacs at the end
         // of the dump flow), clear it so the caller gets a usable evaluator.
         eval.shutdown_request = None;
-
-        // For neomacs builds, load term/neo-win after loadup.el completes.
-        // loadup.el handles `(featurep 'x)` which loads term/x-win, but
-        // NeoVM's neomacs feature needs term/neo-win instead/additionally.
-        if bootstrap_features.iter().any(|f| f == "neomacs") && !eval.feature_present("x") {
-            let load_path = get_load_path(&eval.obarray());
-            for neo_file in &["term/common-win", "term/neo-win"] {
-                if let Some(path) = find_file_in_load_path(neo_file, &load_path) {
-                    tracing::info!("LOADING (neomacs): {neo_file} ...");
-                    if let Err(e) = load_file(&mut eval, &path) {
-                        tracing::error!("FAIL (neomacs): {neo_file} => {e:?}");
-                        return Err(e);
-                    }
-                }
-            }
-        }
 
         tracing::info!("\n=== LOADUP BOOTSTRAP COMPLETE ===");
 
