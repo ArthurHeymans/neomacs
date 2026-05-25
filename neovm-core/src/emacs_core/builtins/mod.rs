@@ -552,6 +552,7 @@ pub(crate) use strings::*;
 pub(crate) use types::*;
 
 mod buffers;
+mod file_notify;
 pub(crate) mod higher_order;
 mod hooks;
 pub(crate) mod keymaps;
@@ -562,6 +563,7 @@ pub(crate) mod symbols;
 mod treesit;
 
 pub(crate) use buffers::*;
+pub(crate) use file_notify::*;
 pub(crate) use higher_order::*;
 pub(crate) use hooks::*;
 pub(crate) use keymaps::*;
