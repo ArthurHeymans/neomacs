@@ -61,9 +61,6 @@ jobs:
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: always
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -75,15 +72,21 @@ jobs:
 
       - name: Setup MSYS2 and install MinGW GMP
         uses: msys2/setup-msys2@v2
+        id: msys2
         with:
           msystem: MINGW64
           update: false
           cache: true
-          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gmp
             mingw-w64-x86_64-pkg-config
+
+      - name: Add MinGW to PATH
+        shell: powershell
+        run: |
+          $msys2 = "${{ steps.msys2.outputs.msys2-location }}"
+          Add-Content -Path $env:GITHUB_PATH -Value "$msys2\mingw64\bin"
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
