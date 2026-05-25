@@ -12,6 +12,7 @@
 //! macros, bytecode, buffers, markers, overlays, records, etc.
 
 use super::value::TaggedValue;
+use malachite::integer::Integer;
 
 // ---------------------------------------------------------------------------
 // ConsCell — no header, minimal size
@@ -143,8 +144,8 @@ pub enum VecLikeType {
     Subr = 12,
     /// Arbitrary-precision integer (like GNU's PVEC_BIGNUM).
     /// Mirrors `struct Lisp_Bignum` in `src/bignum.h`, which wraps an
-    /// `mpz_t`. NeoMacs wraps `rug::Integer` (which itself wraps the
-    /// same `mpz_t` from libgmp).
+    /// `mpz_t`. NeoMacs wraps `malachite::Integer` (a pure-Rust bignum
+    /// derived from GMP/FLINT algorithms).
     Bignum = 13,
     /// Symbol with source position (like GNU's PVEC_SYMBOL_WITH_POS).
     /// Wraps a bare symbol + byte offset for byte-compiler diagnostics.
@@ -626,14 +627,14 @@ pub struct SubrObj {
 /// `struct Lisp_Bignum` in `src/bignum.h`).
 ///
 /// GNU stores an `mpz_t` directly inside the struct. NeoMacs wraps
-/// `rug::Integer`, which itself owns an `mpz_t` (from libgmp). The GC
-/// has no Lisp_Object children to trace — the only owned resource is
-/// the GMP-managed limb buffer, which is freed when `Drop` runs in
-/// `free_gc_object`.
+/// `malachite::Integer`, a pure-Rust bignum derived from GMP/FLINT
+/// algorithms. The GC has no Lisp_Object children to trace — the only
+/// owned resource is the `Integer`'s internal limb buffer, which is
+/// freed when `Drop` runs in `free_gc_object`.
 #[repr(C)]
 pub struct BignumObj {
     pub header: VecLikeHeader,
-    pub value: rug::Integer,
+    pub value: Integer,
 }
 
 /// A symbol annotated with its source byte offset.

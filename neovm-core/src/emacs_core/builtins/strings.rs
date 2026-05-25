@@ -3,6 +3,12 @@ use crate::emacs_core::value::{
     ValueKind, VecLikeType, get_string_text_properties_table_for_value,
     set_string_text_properties_table_for_value,
 };
+use malachite::base::num::arithmetic::traits::Abs;
+use malachite::base::num::basic::traits::Zero;
+use malachite::base::num::conversion::traits::{FromStringBase, RoundingFrom, ToStringBase};
+use malachite::base::rounding_modes::RoundingMode;
+use malachite::integer::Integer;
+use std::str::FromStr;
 
 // ===========================================================================
 // String operations
@@ -542,10 +548,10 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
                     token
                 };
                 if let Ok(n) = int_token.parse::<i64>() {
-                    return Ok(Value::make_integer(rug::Integer::from(n)));
+                    return Ok(Value::make_integer(Integer::from(n)));
                 }
-                if let Ok(parsed) = rug::Integer::parse(int_token) {
-                    return Ok(Value::make_integer(rug::Integer::from(parsed)));
+                if let Ok(parsed) = int_token.parse::<Integer>() {
+                    return Ok(Value::make_integer(parsed));
                 }
             }
         }
@@ -574,20 +580,20 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
         if pos > digit_start {
             let token = &s[digit_start..pos];
             if let Ok(parsed) = i64::from_str_radix(token, base as u32) {
-                return Ok(Value::make_integer(rug::Integer::from(if negative {
+                return Ok(Value::make_integer(Integer::from(if negative {
                     -parsed
                 } else {
                     parsed
                 })));
             }
-            // Overflow — fall back to GMP for bignum literal in given base.
+            // Overflow — fall back to bignum for literal in given base.
             let mut signed = String::with_capacity(token.len() + 1);
             if negative {
                 signed.push('-');
             }
             signed.push_str(token);
-            if let Ok(parsed) = rug::Integer::parse_radix(&signed, base as i32) {
-                return Ok(Value::make_integer(rug::Integer::from(parsed)));
+            if let Some(parsed) = Integer::from_string_base(base as u8, &signed) {
+                return Ok(Value::make_integer(parsed));
             }
         }
     }
@@ -595,8 +601,7 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(number-to-string NUMBER)` — mirrors GNU `Fnumber_to_string`
-/// (`src/data.c`). Bignums format via `rug::Integer`'s Display, which
-/// uses `mpz_get_str` under the hood.
+/// (`src/data.c`). Bignums format via `malachite::Integer`'s Display.
 pub(crate) fn builtin_number_to_string(
     ctx: &crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1222,22 +1227,22 @@ fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
 }
 
 /// Format a bignum for `%d` / `%o` / `%x` / `%X` specs. Mirrors the
-/// `format_int_spec` fixnum path but uses `rug::Integer::to_string_radix`
-/// for the underlying numeric conversion. The flag/width/precision
-/// handling is identical.
-fn format_bignum_spec(n: &rug::Integer, spec: &FormatSpec) -> String {
-    let negative = n.cmp0().is_lt();
-    let abs = rug::Integer::from(n.abs_ref());
+/// `format_int_spec` fixnum path but uses `malachite::Integer`'s
+/// `ToStringBase` trait for the underlying numeric conversion. The
+/// flag/width/precision handling is identical.
+fn format_bignum_spec(n: &Integer, spec: &FormatSpec) -> String {
+    let negative = *n < Integer::from(0);
+    let abs = n.clone().abs();
     let mut digits = match spec.conversion {
-        'b' | 'B' => abs.to_string_radix(2),
-        'o' => abs.to_string_radix(8),
-        'x' | 'X' => abs.to_string_radix(16),
+        'b' | 'B' => abs.to_string_base(2),
+        'o' => abs.to_string_base(8),
+        'x' | 'X' => abs.to_string_base(16),
         _ => abs.to_string(),
     };
     if spec.conversion == 'X' {
         digits.make_ascii_uppercase();
     }
-    format_integer_digits(digits, negative, n.cmp0().is_eq(), spec)
+    format_integer_digits(digits, negative, *n == Integer::ZERO, spec)
 }
 
 fn format_integer_float_spec(f: f64, spec: &FormatSpec) -> Result<String, Flow> {
@@ -1252,7 +1257,7 @@ fn format_integer_float_spec(f: f64, spec: &FormatSpec) -> Result<String, Flow> 
         return Ok(apply_width(text, spec));
     }
 
-    let big = rug::Integer::from_f64(f.trunc()).ok_or_else(format_spec_type_mismatch_error)?;
+    let big = Integer::rounding_from(f.trunc(), RoundingMode::Down).0;
     Ok(format_bignum_spec(&big, spec))
 }
 

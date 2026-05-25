@@ -1,4 +1,9 @@
+use malachite::base::num::arithmetic::traits::Abs;
+use malachite::base::num::conversion::traits::{FromStringBase, RoundingFrom};
+use malachite::base::rounding_modes::RoundingMode;
+use malachite::integer::Integer;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use neovm_compiler::diagnostic::Diagnostic;
 use neovm_compiler::expand_value;
@@ -2687,7 +2692,7 @@ impl Interpreter<'_, '_, '_> {
             "subr-arity" => self.subr_1(name, args, |s| {
                 // Returns (MIN . MAX) for any subr. Use (0 . many) as default.
                 let min_arity = LispValue::expect_fixnum(0);
-                let many = s.runtime.bignum(rug::Integer::from(i64::MAX));
+                let many = s.runtime.bignum(Integer::from(i64::MAX));
                 Some(s.runtime.cons(min_arity, many))
             }),
             "subrp" => self
@@ -2719,7 +2724,7 @@ impl Interpreter<'_, '_, '_> {
             "evenp" | "cl-evenp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
-                    Some(bool_value(val.is_even()))
+                    Some(bool_value(val & Integer::from(1) == Integer::from(0)))
                 } else {
                     let val = self.fixnum_arg(name, args[0])?;
                     Some(bool_value(val % 2 == 0))
@@ -2728,7 +2733,7 @@ impl Interpreter<'_, '_, '_> {
             "oddp" | "cl-oddp" => self.exact_arity(name, args, 1).and_then(|_| {
                 if self.runtime.is_bignum(args[0]) {
                     let val = self.bignum_arg(name, args[0])?;
-                    Some(bool_value(val.is_odd()))
+                    Some(bool_value(val & Integer::from(1) != Integer::from(0)))
                 } else {
                     let val = self.fixnum_arg(name, args[0])?;
                     Some(bool_value(val % 2 != 0))
@@ -2794,10 +2799,10 @@ impl Interpreter<'_, '_, '_> {
                 }
                 if self.has_bignum_arg(args) {
                     let init = self.bignum_arg(name, args[0])?;
-                    let op: fn(&rug::Integer, &rug::Integer) -> rug::Integer = match name {
-                        "logand" => |a, b| rug::Integer::from(a & b),
-                        "logior" => |a, b| rug::Integer::from(a | b),
-                        "logxor" => |a, b| rug::Integer::from(a ^ b),
+                    let op: fn(&Integer, &Integer) -> Integer = match name {
+                        "logand" => |a, b| a & b,
+                        "logior" => |a, b| a | b,
+                        "logxor" => |a, b| a ^ b,
                         _ => unreachable!(),
                     };
                     let mut result = init;
@@ -2885,8 +2890,8 @@ impl Interpreter<'_, '_, '_> {
                         }
                         return Some(LispValue::NIL);
                     }
-                    let exp_u32: u32 = exp.to_u32().unwrap_or(u32::MAX);
-                    let mut result = rug::Integer::from(1);
+                    let exp_u32: u32 = u32::try_from(&exp).unwrap_or(u32::MAX);
+                    let mut result = Integer::from(1);
                     let mut count = 0u32;
                     while count < exp_u32 {
                         result *= &base;
@@ -3368,7 +3373,7 @@ impl Interpreter<'_, '_, '_> {
                     Some(self.runtime.float(value + 1.0))
                 } else if self.runtime.is_bignum(args[0]) {
                     let value = self.bignum_arg(name, args[0])?;
-                    Some(self.runtime.bignum(value + 1))
+                    Some(self.runtime.bignum(value + Integer::from(1)))
                 } else {
                     let value = self.fixnum_arg(name, args[0])?;
                     value.checked_add(1).and_then(|v| self.fixnum(v, name))
@@ -3380,7 +3385,7 @@ impl Interpreter<'_, '_, '_> {
                     Some(self.runtime.float(value - 1.0))
                 } else if self.runtime.is_bignum(args[0]) {
                     let value = self.bignum_arg(name, args[0])?;
-                    Some(self.runtime.bignum(value - 1))
+                    Some(self.runtime.bignum(value - Integer::from(1)))
                 } else {
                     let value = self.fixnum_arg(name, args[0])?;
                     value.checked_sub(1).and_then(|v| self.fixnum(v, name))
@@ -3479,8 +3484,8 @@ impl Interpreter<'_, '_, '_> {
                         });
                         return None;
                     }
-                    let result = rug::Integer::from(&dividend % &divisor);
-                    let zero = rug::Integer::new();
+                    let result = &dividend % &divisor;
+                    let zero = Integer::from(0);
                     if result != zero && (dividend < 0) != (divisor < 0) {
                         Some(self.runtime.bignum(result + divisor))
                     } else {
@@ -4433,7 +4438,7 @@ impl Interpreter<'_, '_, '_> {
     fn fixnum_value(&mut self, value: i64, _context: &str) -> Option<LispValue> {
         match LispValue::from_fixnum(value) {
             Some(value) => Some(value),
-            None => Some(self.runtime.bignum(rug::Integer::from(value))),
+            None => Some(self.runtime.bignum(Integer::from(value))),
         }
     }
 
@@ -6022,8 +6027,8 @@ impl Interpreter<'_, '_, '_> {
             let end = self.bignum_arg("number-sequence", to)?;
             let step = match step {
                 Some(s) => self.bignum_arg("number-sequence", s)?,
-                None if end >= start => rug::Integer::from(1),
-                None => rug::Integer::from(-1),
+                None if end >= start => Integer::from(1),
+                None => Integer::from(-1),
             };
             if step == 0 {
                 self.error("primitive `number-sequence` step must be non-zero");
@@ -6843,7 +6848,7 @@ impl Interpreter<'_, '_, '_> {
         match i64::from_str_radix(contents, radix) {
             Ok(n) => self.fixnum(n, "string-to-number"),
             Err(_) => {
-                if let Ok(n) = rug::Integer::from_str_radix(contents, radix as i32) {
+                if let Some(n) = Integer::from_string_base(radix as u8, contents) {
                     Some(self.runtime.bignum(n))
                 } else {
                     self.fixnum(0, "string-to-number")
@@ -7492,11 +7497,11 @@ impl Interpreter<'_, '_, '_> {
                 match acc.checked_add(value) {
                     Some(v) => acc = v,
                     None => {
-                        let mut bignum_acc = rug::Integer::from(acc);
-                        bignum_acc += rug::Integer::from(value);
+                        let mut bignum_acc = Integer::from(acc);
+                        bignum_acc += Integer::from(value);
                         for arg in &args[i + 1..] {
                             let value = self.fixnum_arg("+", *arg)?;
-                            bignum_acc += rug::Integer::from(value);
+                            bignum_acc += Integer::from(value);
                         }
                         return Some(self.runtime.bignum(bignum_acc));
                     }
@@ -7533,11 +7538,11 @@ impl Interpreter<'_, '_, '_> {
                 match acc.checked_mul(value) {
                     Some(v) => acc = v,
                     None => {
-                        let mut bignum_acc = rug::Integer::from(acc);
-                        bignum_acc *= rug::Integer::from(value);
+                        let mut bignum_acc = Integer::from(acc);
+                        bignum_acc *= Integer::from(value);
                         for arg in &args[i + 1..] {
                             let value = self.fixnum_arg("*", *arg)?;
-                            bignum_acc *= rug::Integer::from(value);
+                            bignum_acc *= Integer::from(value);
                         }
                         return Some(self.runtime.bignum(bignum_acc));
                     }
@@ -7584,13 +7589,13 @@ impl Interpreter<'_, '_, '_> {
             match value {
                 Some(value) => self.fixnum(value, "-"),
                 None => {
-                    let mut bignum_acc = rug::Integer::from(first);
+                    let mut bignum_acc = Integer::from(first);
                     if rest.is_empty() {
                         bignum_acc = -bignum_acc;
                     } else {
                         for v in rest {
                             let v = self.fixnum_arg("-", *v)?;
-                            bignum_acc -= rug::Integer::from(v);
+                            bignum_acc -= Integer::from(v);
                         }
                     }
                     Some(self.runtime.bignum(bignum_acc))
@@ -7687,7 +7692,7 @@ impl Interpreter<'_, '_, '_> {
             let values = args
                 .iter()
                 .map(|value| self.bignum_arg("comparison", *value))
-                .collect::<Option<Vec<rug::Integer>>>()?;
+                .collect::<Option<Vec<Integer>>>()?;
             // Use exact Integer comparison for bignums (f64 would lose precision)
             Some(bool_value(values.windows(2).all(|pair| {
                 compare(
@@ -7737,7 +7742,7 @@ impl Interpreter<'_, '_, '_> {
         }
         if self.runtime.is_bignum(value) {
             if let Some(n) = self.runtime.as_integer(value) {
-                return Some(n.to_f64());
+                return Some(f64::rounding_from(&n, RoundingMode::Nearest).0);
             }
         }
         self.error(format!("primitive `{name}` expected a number"));
@@ -7752,7 +7757,7 @@ impl Interpreter<'_, '_, '_> {
         args.iter().any(|v| self.runtime.is_bignum(*v))
     }
 
-    fn bignum_arg(&mut self, name: &str, value: LispValue) -> Option<rug::Integer> {
+    fn bignum_arg(&mut self, name: &str, value: LispValue) -> Option<Integer> {
         self.runtime.as_integer(value).or_else(|| {
             self.error(format!(
                 "primitive `{name}` expected an integer, got a float or non-number"
@@ -7765,7 +7770,7 @@ impl Interpreter<'_, '_, '_> {
         if let Some(value) = LispValue::from_fixnum(value) {
             return Some(value);
         }
-        Some(self.runtime.bignum(rug::Integer::from(value)))
+        Some(self.runtime.bignum(Integer::from(value)))
     }
 
     fn exact_arity(&mut self, name: &str, args: &[LispValue], arity: usize) -> Option<()> {
@@ -8620,7 +8625,7 @@ fn macro_value_to_lisp(
             }
         }
         MacroValue::Int(n) => {
-            LispValue::from_fixnum(*n).unwrap_or_else(|| rt.bignum(rug::Integer::from(*n)))
+            LispValue::from_fixnum(*n).unwrap_or_else(|| rt.bignum(Integer::from(*n)))
         }
         MacroValue::Float(f) => rt.float(*f),
         MacroValue::String(s) => rt.string(s.clone()),

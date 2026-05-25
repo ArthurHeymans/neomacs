@@ -21,6 +21,7 @@
 //! - `t`    = Symbol(1) = `0x8` (intern "t" as SymId(1))
 //! - `Qunbound` = noncanonical Symbol(2), matching GNU's symbol sentinel.
 
+use malachite::integer::Integer;
 use std::cell::RefCell;
 use std::fmt;
 
@@ -414,7 +415,7 @@ impl TaggedValue {
         self.veclike_type() == Some(super::header::VecLikeType::Bignum)
     }
 
-    /// Get a borrowed reference to the underlying `rug::Integer`.
+    /// Get a borrowed reference to the underlying `malachite::Integer`.
     /// Returns `None` if this value isn't a bignum.
     ///
     /// # Safety / lifetime
@@ -424,12 +425,12 @@ impl TaggedValue {
     /// caller must avoid GC across the borrow. This matches the
     /// existing `as_str` / `xfloat` pattern.
     #[inline]
-    pub fn as_bignum(self) -> Option<&'static rug::Integer> {
+    pub fn as_bignum(self) -> Option<&'static Integer> {
         if self.is_bignum() {
             let ptr = (self.0 & !TAG_MASK) as *const BignumObj;
             // Safety: tag check ensures this is a BignumObj allocated
             // through `alloc_bignum`, which puts a `VecLikeHeader` at
-            // offset 0 followed by `value: rug::Integer`.
+            // offset 0 followed by `value: Integer`.
             Some(unsafe { &(*ptr).value })
         } else {
             None

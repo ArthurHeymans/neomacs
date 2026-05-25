@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 use super::error::{EvalResult, Flow, signal};
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::gc_trace::GcTrace;
+use malachite::base::num::conversion::traits::RoundingFrom;
+use malachite::base::rounding_modes::RoundingMode;
 
 // ---------------------------------------------------------------------------
 // Timer types
@@ -298,7 +300,9 @@ fn expect_number(value: &Value) -> Result<f64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(value.xfloat()),
-        ValueKind::Veclike(VecLikeType::Bignum) => Ok(value.as_bignum().unwrap().to_f64()),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(f64::rounding_from(value.as_bignum().unwrap(), RoundingMode::Nearest).0)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *value],

@@ -5,6 +5,7 @@
 #![allow(non_camel_case_types)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
+use malachite::integer::Integer;
 use std::collections::HashMap;
 use std::ffi::{CStr, c_void};
 use std::sync::Mutex;
@@ -833,7 +834,7 @@ unsafe extern "C" fn module_extract_integer(env: *mut emacs_env, arg: emacs_valu
         return n;
     }
     if let Some(big) = val.as_bignum() {
-        if let Some(n) = big.to_i64() {
+        if let Ok(n) = i64::try_from(big) {
             return n;
         }
         unsafe {
@@ -1383,18 +1384,13 @@ unsafe extern "C" fn module_extract_big_integer(
     }
     if val.veclike_type() == Some(VecLikeType::Bignum) {
         let b = val.as_bignum().unwrap();
-        let signum = b.cmp0();
-        let is_neg = signum.is_lt();
-        let abs_b = if is_neg {
-            rug::Integer::from(-b)
-        } else {
-            b.clone()
-        };
+        let is_neg = *b < Integer::from(0);
+        let abs_b = if is_neg { -b.clone() } else { b.clone() };
         unsafe {
             if !sign.is_null() {
-                *sign = if signum.is_gt() {
+                *sign = if *b > Integer::from(0) {
                     1
-                } else if signum.is_lt() {
+                } else if is_neg {
                     -1
                 } else {
                     0
@@ -1404,8 +1400,8 @@ unsafe extern "C" fn module_extract_big_integer(
         if count.is_null() {
             return true;
         }
-        let digits = abs_b.to_digits::<u8>(rug::integer::Order::LsfLe);
-        let num_limbs = (digits.len() + 7) / 8;
+        let limbs = abs_b.to_twos_complement_limbs_asc();
+        let num_limbs = limbs.len();
         if magnitude.is_null() {
             unsafe {
                 *count = num_limbs as isize;
@@ -1429,13 +1425,7 @@ unsafe extern "C" fn module_extract_big_integer(
         }
         unsafe {
             *count = num_limbs as isize;
-            let mut padded = digits.clone();
-            padded.resize(num_limbs * 8, 0);
-            for (i, chunk) in padded.chunks_exact(8).enumerate() {
-                let mut limb: u64 = 0;
-                for (j, &byte) in chunk.iter().enumerate() {
-                    limb |= (byte as u64) << (j * 8);
-                }
+            for (i, &limb) in limbs.iter().enumerate() {
                 *magnitude.add(i) = limb;
             }
         }
@@ -1470,13 +1460,7 @@ unsafe extern "C" fn module_make_big_integer(
     if magnitude.is_null() || count < 0 {
         return std::ptr::null_mut();
     }
-    let mut bytes = Vec::with_capacity(count as usize * 8);
-    for i in 0..count as usize {
-        let limb = unsafe { *magnitude.add(i) };
-        for j in 0..8 {
-            bytes.push(((limb >> (j * 8)) & 0xFF) as u8);
-        }
-    }
+    let limbs = unsafe { std::slice::from_raw_parts(magnitude, count as usize) };
     if count <= 1 {
         let single = unsafe { *magnitude };
         if single <= i64::MAX as u64 {
@@ -1488,7 +1472,7 @@ unsafe extern "C" fn module_make_big_integer(
             return lisp_to_value(env, Value::make_int(v));
         }
     }
-    let b = rug::Integer::from_digits(&bytes, rug::integer::Order::LsfLe);
+    let b = Integer::from_twos_complement_limbs_asc(limbs);
     let val = Value::make_integer(if sign >= 0 { b } else { -b });
     lisp_to_value(env, val)
 }
@@ -2156,7 +2140,7 @@ mod tests {
     fn module_extract_big_integer_reports_too_small_buffer() {
         let mut fixture = TestEnv::new();
         let env = fixture.env_ptr();
-        let large = Value::make_integer(rug::Integer::from(1) << 80);
+        let large = Value::make_integer(Integer::from(1u64) << 80u32);
         let value = lisp_to_value(env, large);
         let mut sign = 0;
         let mut count = 1;

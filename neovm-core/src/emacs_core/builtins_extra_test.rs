@@ -2,6 +2,8 @@ use super::*;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::{LambdaData, LambdaParams, ValueKind, next_float_id};
 use crate::test_utils::runtime_startup_eval_all;
+use malachite::base::num::arithmetic::traits::Pow;
+use malachite::integer::Integer;
 
 fn bootstrap_eval(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
@@ -104,7 +106,7 @@ fn string_search_gnu_start_pos_errors() {
     let err = builtin_string_search(vec![
         Value::string("a"),
         Value::string("abc"),
-        Value::bignum(rug::Integer::from(1) << 100),
+        Value::bignum(Integer::from(1u64) << 100u32),
     ])
     .unwrap_err();
     match err {

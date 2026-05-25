@@ -1,5 +1,10 @@
 use super::*;
-use rug::ops::Pow;
+use malachite::base::num::arithmetic::traits::{Abs, DivRem, Pow};
+use malachite::base::num::basic::traits::Zero;
+use malachite::base::num::conversion::traits::RoundingFrom;
+use malachite::base::num::logic::traits::SignificantBits;
+use malachite::base::rounding_modes::RoundingMode;
+use malachite::integer::Integer;
 use std::sync::Mutex;
 
 #[cfg(unix)]
@@ -14,7 +19,7 @@ unsafe extern "C" {
 //
 // `+`, `-`, `*` mirror GNU's `arith_driver` (src/data.c:3215): a fast
 // fixnum loop using `ckd_add` / `ckd_sub` / `ckd_mul` for overflow
-// detection, and a fall-back path that switches to GMP (rug::Integer)
+// detection, and a fall-back path that switches to malachite::Integer
 // the moment overflow strikes or a bignum operand appears.
 
 /// Pull an integer-valued operand into an `i64`. Accepts fixnums and
@@ -51,13 +56,13 @@ fn wrong_integer_or_marker(value: &Value) -> Flow {
     )
 }
 
-/// Materialize an integer-valued operand as a `rug::Integer`. Used by
+/// Materialize an integer-valued operand as a `malachite::Integer`. Used by
 /// the bignum slow path. Accepts fixnums, bignums, and markers.
-fn rug_from_value(eval: &super::eval::Context, value: &Value) -> Result<rug::Integer, Flow> {
+fn integer_from_value(eval: &super::eval::Context, value: &Value) -> Result<Integer, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(n) => Ok(rug::Integer::from(n)),
+        ValueKind::Fixnum(n) => Ok(Integer::from(n)),
         ValueKind::Veclike(VecLikeType::Bignum) => Ok(value.as_bignum().unwrap().clone()),
-        _ if super::marker::is_marker(value) => Ok(rug::Integer::from(
+        _ if super::marker::is_marker(value) => Ok(Integer::from(
             super::marker::marker_position_as_int_eval(eval, value)?,
         )),
         _ => Err(wrong_number_or_marker(value)),
@@ -69,8 +74,8 @@ fn rug_from_value(eval: &super::eval::Context, value: &Value) -> Result<rug::Int
 /// Mirrors GNU `Fplus` → `arith_driver` (src/data.c:3215, 3271): if
 /// every operand is an i64-valued integer or marker and no addition
 /// overflows, stay on the fixnum fast path; otherwise promote to GMP
-/// via `rug::Integer`. Float operands divert through `make_float` as
-/// before.
+/// via `malachite::Integer`. Float operands divert through `make_float`
+/// as before.
 ///
 /// Note: i64 has 64 bits, but fixnums only get 62 bits (the low 2 are
 /// the tag). A sum like `most-positive-fixnum + 1` does not overflow
@@ -115,8 +120,8 @@ pub(crate) fn builtin_add_slice(
                     continue;
                 }
                 None => {
-                    let mut acc = rug::Integer::from(sum);
-                    acc += n;
+                    let mut acc = Integer::from(sum);
+                    acc += Integer::from(n);
                     return continue_bignum_add(eval, &args[i + 1..], acc);
                 }
             }
@@ -125,7 +130,7 @@ pub(crate) fn builtin_add_slice(
             return continue_float_add(eval, &args[i + 1..], sum as f64 + a.xfloat());
         }
         if let Some(big) = a.as_bignum() {
-            let mut acc = rug::Integer::from(sum);
+            let mut acc = Integer::from(sum);
             acc += big;
             return continue_bignum_add(eval, &args[i + 1..], acc);
         }
@@ -137,8 +142,8 @@ pub(crate) fn builtin_add_slice(
                     continue;
                 }
                 None => {
-                    let mut acc = rug::Integer::from(sum);
-                    acc += n;
+                    let mut acc = Integer::from(sum);
+                    acc += Integer::from(n);
                     return continue_bignum_add(eval, &args[i + 1..], acc);
                 }
             }
@@ -179,13 +184,17 @@ fn continue_float_add(
 fn continue_bignum_add(
     eval: &super::super::eval::Context,
     rest: &[Value],
-    mut acc: rug::Integer,
+    mut acc: Integer,
 ) -> EvalResult {
     for (i, a) in rest.iter().enumerate() {
         if a.is_float() {
-            return continue_float_add(eval, &rest[i + 1..], acc.to_f64() + a.xfloat());
+            return continue_float_add(
+                eval,
+                &rest[i + 1..],
+                f64::rounding_from(&acc, RoundingMode::Nearest).0 + a.xfloat(),
+            );
         }
-        let n = rug_from_value(eval, a)?;
+        let n = integer_from_value(eval, a)?;
         acc += n;
     }
     Ok(Value::make_integer(acc))
@@ -233,8 +242,8 @@ pub(crate) fn builtin_sub_slice(
                     continue;
                 }
                 None => {
-                    let mut bacc = rug::Integer::from(acc);
-                    bacc -= n;
+                    let mut bacc = Integer::from(acc);
+                    bacc -= Integer::from(n);
                     return continue_bignum_sub(eval, &args[i + 2..], bacc);
                 }
             }
@@ -243,7 +252,7 @@ pub(crate) fn builtin_sub_slice(
             return continue_float_sub(eval, &args[i + 2..], acc as f64 - a.xfloat());
         }
         if let Some(big) = a.as_bignum() {
-            let mut bacc = rug::Integer::from(acc);
+            let mut bacc = Integer::from(acc);
             bacc -= big;
             return continue_bignum_sub(eval, &args[i + 2..], bacc);
         }
@@ -255,8 +264,8 @@ pub(crate) fn builtin_sub_slice(
                     continue;
                 }
                 None => {
-                    let mut bacc = rug::Integer::from(acc);
-                    bacc -= n;
+                    let mut bacc = Integer::from(acc);
+                    bacc -= Integer::from(n);
                     return continue_bignum_sub(eval, &args[i + 2..], bacc);
                 }
             }
@@ -282,13 +291,17 @@ fn continue_float_sub(
 fn continue_bignum_sub(
     eval: &super::super::eval::Context,
     rest: &[Value],
-    mut acc: rug::Integer,
+    mut acc: Integer,
 ) -> EvalResult {
     for (i, a) in rest.iter().enumerate() {
         if a.is_float() {
-            return continue_float_sub(eval, &rest[i + 1..], acc.to_f64() - a.xfloat());
+            return continue_float_sub(
+                eval,
+                &rest[i + 1..],
+                f64::rounding_from(&acc, RoundingMode::Nearest).0 - a.xfloat(),
+            );
         }
-        let n = rug_from_value(eval, a)?;
+        let n = integer_from_value(eval, a)?;
         acc -= n;
     }
     Ok(Value::make_integer(acc))
@@ -312,7 +325,7 @@ fn negate_value(eval: &super::super::eval::Context, value: &Value) -> EvalResult
     // an i64 back which still has to clear the fixnum-range hurdle.
     match n.checked_neg() {
         Some(neg) => Ok(Value::make_int(neg)),
-        None => Ok(Value::make_integer(-rug::Integer::from(n))),
+        None => Ok(Value::make_integer(-Integer::from(n))),
     }
 }
 
@@ -328,8 +341,8 @@ pub(crate) fn builtin_mul(args: Vec<Value>) -> EvalResult {
                     continue;
                 }
                 None => {
-                    let mut acc = rug::Integer::from(prod);
-                    acc *= n;
+                    let mut acc = Integer::from(prod);
+                    acc *= Integer::from(n);
                     return continue_bignum_mul(&args[i + 1..], acc);
                 }
             }
@@ -338,7 +351,7 @@ pub(crate) fn builtin_mul(args: Vec<Value>) -> EvalResult {
             return continue_float_mul(&args[i + 1..], prod as f64 * a.xfloat());
         }
         if let Some(big) = a.as_bignum() {
-            let mut acc = rug::Integer::from(prod);
+            let mut acc = Integer::from(prod);
             acc *= big;
             return continue_bignum_mul(&args[i + 1..], acc);
         }
@@ -350,8 +363,8 @@ pub(crate) fn builtin_mul(args: Vec<Value>) -> EvalResult {
                     continue;
                 }
                 None => {
-                    let mut acc = rug::Integer::from(prod);
-                    acc *= n;
+                    let mut acc = Integer::from(prod);
+                    acc *= Integer::from(n);
                     return continue_bignum_mul(&args[i + 1..], acc);
                 }
             }
@@ -368,16 +381,19 @@ fn continue_float_mul(rest: &[Value], mut acc: f64) -> EvalResult {
     Ok(Value::make_float(acc))
 }
 
-fn continue_bignum_mul(rest: &[Value], mut acc: rug::Integer) -> EvalResult {
+fn continue_bignum_mul(rest: &[Value], mut acc: Integer) -> EvalResult {
     for (i, a) in rest.iter().enumerate() {
         if a.is_float() {
-            return continue_float_mul(&rest[i + 1..], acc.to_f64() * a.xfloat());
+            return continue_float_mul(
+                &rest[i + 1..],
+                f64::rounding_from(&acc, RoundingMode::Nearest).0 * a.xfloat(),
+            );
         }
         match a.kind() {
-            ValueKind::Fixnum(n) => acc *= n,
+            ValueKind::Fixnum(n) => acc *= Integer::from(n),
             ValueKind::Veclike(VecLikeType::Bignum) => acc *= a.as_bignum().unwrap(),
             _ if super::marker::is_marker(a) => {
-                acc *= super::marker::marker_position_as_int(a)?;
+                acc *= Integer::from(super::marker::marker_position_as_int(a)?);
             }
             _ => return Err(wrong_number_or_marker(a)),
         }
@@ -419,9 +435,9 @@ pub(crate) fn builtin_div(args: Vec<Value>) -> EvalResult {
         if a.is_bignum() {
             // Promote: convert acc to bignum and divide by this bignum,
             // then continue.
-            let mut bacc = rug::Integer::from(acc);
+            let mut bacc = Integer::from(acc);
             let big = a.as_bignum().unwrap();
-            if big.is_zero() {
+            if *big == Integer::from(0) {
                 return Err(signal("arith-error", vec![]));
             }
             bacc /= big;
@@ -435,7 +451,7 @@ pub(crate) fn builtin_div(args: Vec<Value>) -> EvalResult {
             Some(q) => acc = q,
             None => {
                 // Only `i64::MIN / -1` triggers this. Promote.
-                let bacc = rug::Integer::from(acc) / d;
+                let bacc = Integer::from(acc) / Integer::from(d);
                 return continue_bignum_div(&args[i + 2..], bacc);
             }
         }
@@ -450,7 +466,7 @@ fn div_one_arg(arg: &Value) -> EvalResult {
     }
     if let Some(big) = arg.as_bignum() {
         // GNU: dividing 1 by any bignum yields 0 (since |bignum| > MAX_FIXNUM).
-        if big.is_zero() {
+        if *big == Integer::from(0) {
             return Err(signal("arith-error", vec![]));
         }
         return Ok(Value::fixnum(0));
@@ -462,10 +478,10 @@ fn div_one_arg(arg: &Value) -> EvalResult {
     Ok(Value::fixnum(1 / d))
 }
 
-fn continue_bignum_div(rest: &[Value], mut acc: rug::Integer) -> EvalResult {
+fn continue_bignum_div(rest: &[Value], mut acc: Integer) -> EvalResult {
     for a in rest {
         if let Some(big) = a.as_bignum() {
-            if big.is_zero() {
+            if *big == Integer::from(0) {
                 return Err(signal("arith-error", vec![]));
             }
             acc /= big;
@@ -475,7 +491,7 @@ fn continue_bignum_div(rest: &[Value], mut acc: rug::Integer) -> EvalResult {
         if d == 0 {
             return Err(signal("arith-error", vec![]));
         }
-        acc /= d;
+        acc /= Integer::from(d);
     }
     Ok(Value::make_integer(acc))
 }
@@ -518,17 +534,17 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
     // Bignum slow path if either side is a bignum, or if the i64 fast
     // path can't represent the operands (markers always fit).
     if num.is_bignum() || den.is_bignum() {
-        let num_big = bignum_or_int_to_rug(num)?;
-        let den_big = bignum_or_int_to_rug(den)?;
-        if den_big.is_zero() {
+        let num_big = bignum_or_int_to_integer(num)?;
+        let den_big = bignum_or_int_to_integer(den)?;
+        if den_big == Integer::from(0) {
             return Err(signal("arith-error", vec![]));
         }
-        let mut r = rug::Integer::from(&num_big % &den_big);
+        let mut r = Integer::from(&num_big % &den_big);
         if modulo {
-            let sgn_r = r.cmp0();
-            let sgn_d = den_big.cmp0();
+            let r_neg = r < Integer::from(0);
+            let d_neg = den_big < Integer::from(0);
             // Wrong sign means r and d have opposite signs.
-            if (sgn_d.is_lt() && sgn_r.is_gt()) || (sgn_d.is_gt() && sgn_r.is_lt()) {
+            if r_neg != d_neg && r != Integer::from(0) {
                 r += &den_big;
             }
         }
@@ -556,15 +572,15 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
     Ok(Value::make_int(r))
 }
 
-/// Convert a fixnum / bignum / marker operand to `rug::Integer`. Used
+/// Convert a fixnum / bignum / marker operand to `Integer`. Used
 /// by the integer remainder slow path.
-fn bignum_or_int_to_rug(value: &Value) -> Result<rug::Integer, Flow> {
+fn bignum_or_int_to_integer(value: &Value) -> Result<Integer, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(n) => Ok(rug::Integer::from(n)),
+        ValueKind::Fixnum(n) => Ok(Integer::from(n)),
         ValueKind::Veclike(VecLikeType::Bignum) => Ok(value.as_bignum().unwrap().clone()),
-        _ if super::marker::is_marker(value) => Ok(rug::Integer::from(
-            super::marker::marker_position_as_int(value)?,
-        )),
+        _ if super::marker::is_marker(value) => {
+            Ok(Integer::from(super::marker::marker_position_as_int(value)?))
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *value],
@@ -587,17 +603,17 @@ fn add1_value(arg: Value) -> EvalResult {
     match arg.kind() {
         ValueKind::Fixnum(n) => match n.checked_add(1) {
             Some(s) => Ok(Value::make_int(s)),
-            None => Ok(Value::make_integer(rug::Integer::from(n) + 1)),
+            None => Ok(Value::make_integer(Integer::from(n) + Integer::from(1))),
         },
         ValueKind::Float => Ok(Value::make_float(arg.xfloat() + 1.0)),
-        ValueKind::Veclike(VecLikeType::Bignum) => {
-            Ok(Value::make_integer(arg.as_bignum().unwrap().clone() + 1))
-        }
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(Value::make_integer(
+            arg.as_bignum().unwrap().clone() + Integer::from(1),
+        )),
         _ if arg.is_marker() => {
             let n = super::marker::marker_position_as_int(&arg)?;
             match n.checked_add(1) {
                 Some(s) => Ok(Value::make_int(s)),
-                None => Ok(Value::make_integer(rug::Integer::from(n) + 1)),
+                None => Ok(Value::make_integer(Integer::from(n) + Integer::from(1))),
             }
         }
         _ => Err(signal(
@@ -622,17 +638,17 @@ fn sub1_value(arg: Value) -> EvalResult {
     match arg.kind() {
         ValueKind::Fixnum(n) => match n.checked_sub(1) {
             Some(s) => Ok(Value::make_int(s)),
-            None => Ok(Value::make_integer(rug::Integer::from(n) - 1)),
+            None => Ok(Value::make_integer(Integer::from(n) - Integer::from(1))),
         },
         ValueKind::Float => Ok(Value::make_float(arg.xfloat() - 1.0)),
-        ValueKind::Veclike(VecLikeType::Bignum) => {
-            Ok(Value::make_integer(arg.as_bignum().unwrap().clone() - 1))
-        }
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(Value::make_integer(
+            arg.as_bignum().unwrap().clone() - Integer::from(1),
+        )),
         _ if arg.is_marker() => {
             let n = super::marker::marker_position_as_int(&arg)?;
             match n.checked_sub(1) {
                 Some(s) => Ok(Value::make_int(s)),
-                None => Ok(Value::make_integer(rug::Integer::from(n) - 1)),
+                None => Ok(Value::make_integer(Integer::from(n) - Integer::from(1))),
             }
         }
         _ => Err(signal(
@@ -704,7 +720,7 @@ pub(crate) fn builtin_abs(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(n) => match n.checked_abs() {
             // Even non-overflowing |i64| might exceed fixnum range.
             Some(a) => Ok(Value::make_int(a)),
-            None => Ok(Value::make_integer(rug::Integer::from(n).abs())),
+            None => Ok(Value::make_integer(Integer::from(n).abs())),
         },
         ValueKind::Float => Ok(Value::make_float(args[0].xfloat().abs())),
         ValueKind::Veclike(VecLikeType::Bignum) => Ok(Value::make_integer(
@@ -812,7 +828,7 @@ fn builtin_logop(args: &[Value], op: BignumLogop) -> EvalResult {
             continue;
         }
         if let Some(big) = a.as_bignum() {
-            let mut bacc = rug::Integer::from(acc);
+            let mut bacc = Integer::from(acc);
             apply_bignum_logop(&mut bacc, big, op);
             return continue_bignum_logop(&args[i + 2..], bacc, op);
         }
@@ -839,7 +855,7 @@ fn apply_i64_logop(acc: &mut i64, next: i64, op: BignumLogop) {
 }
 
 #[inline]
-fn apply_bignum_logop(acc: &mut rug::Integer, next: &rug::Integer, op: BignumLogop) {
+fn apply_bignum_logop(acc: &mut Integer, next: &Integer, op: BignumLogop) {
     match op {
         BignumLogop::And => *acc &= next,
         BignumLogop::Or => *acc |= next,
@@ -847,10 +863,10 @@ fn apply_bignum_logop(acc: &mut rug::Integer, next: &rug::Integer, op: BignumLog
     }
 }
 
-fn continue_bignum_logop(rest: &[Value], mut acc: rug::Integer, op: BignumLogop) -> EvalResult {
+fn continue_bignum_logop(rest: &[Value], mut acc: Integer, op: BignumLogop) -> EvalResult {
     for a in rest {
         if let Some(n) = a.as_fixnum() {
-            let next = rug::Integer::from(n);
+            let next = Integer::from(n);
             apply_bignum_logop(&mut acc, &next, op);
             continue;
         }
@@ -859,7 +875,7 @@ fn continue_bignum_logop(rest: &[Value], mut acc: rug::Integer, op: BignumLogop)
             continue;
         }
         if super::marker::is_marker(a) {
-            let next = rug::Integer::from(super::marker::marker_position_as_int(a)?);
+            let next = Integer::from(super::marker::marker_position_as_int(a)?);
             apply_bignum_logop(&mut acc, &next, op);
             continue;
         }
@@ -909,17 +925,17 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
             if value
                 .as_fixnum()
                 .map(|n| n == 0)
-                .or_else(|| value.as_bignum().map(|b| b.is_zero()))
+                .or_else(|| value.as_bignum().map(|b| *b == Integer::from(0)))
                 .unwrap_or(false)
             {
                 return Ok(Value::fixnum(0));
             }
-            if big.cmp0().is_lt() {
+            if *big < Integer::from(0) {
                 // Negative count + nonzero value: result is 0 (or -1 for negative).
                 let sign_neg = match value.kind() {
                     ValueKind::Fixnum(n) => n < 0,
                     ValueKind::Veclike(VecLikeType::Bignum) => {
-                        value.as_bignum().unwrap().cmp0().is_lt()
+                        *value.as_bignum().unwrap() < Integer::from(0)
                     }
                     _ => {
                         return Err(signal(
@@ -940,11 +956,11 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         }
     };
 
-    // Materialize VALUE as a rug::Integer once. We could try to keep
+    // Materialize VALUE as a Integer once. We could try to keep
     // small fixnum shifts on the i64 path, but ash is rare enough that
     // correctness over branchy fast-pathing is the right tradeoff.
     let value_big = match value.kind() {
-        ValueKind::Fixnum(n) => rug::Integer::from(n),
+        ValueKind::Fixnum(n) => Integer::from(n),
         ValueKind::Veclike(VecLikeType::Bignum) => value.as_bignum().unwrap().clone(),
         _ => {
             return Err(signal(
@@ -958,7 +974,7 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         return Ok(Value::make_integer(value_big));
     }
     let result = if count_i64 > 0 {
-        // Left shift. rug::Integer << u32 (or usize) does GMP mul_2exp.
+        // Left shift. Integer << u32 (or usize) does GMP mul_2exp.
         let bits = u32::try_from(count_i64).unwrap_or(u32::MAX);
         value_big << bits
     } else {
@@ -970,7 +986,7 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
             None => i64::MAX,
         };
         let bits = u32::try_from(neg_count).unwrap_or(u32::MAX);
-        // rug::Integer >> u32 does mpz_fdiv_q_2exp (floor division).
+        // Integer >> u32 does mpz_fdiv_q_2exp (floor division).
         value_big >> bits
     };
     Ok(Value::make_integer(result))
@@ -981,9 +997,9 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
 // ===========================================================================
 //
 // Mirrors GNU `arithcompare` (src/data.c:2682). For two integers
-// (fixnum or bignum) we compare exactly via rug::Integer; for any
+// (fixnum or bignum) we compare exactly via Integer; for any
 // pair involving a float we compare the float against the integer
-// using rug::Integer::partial_cmp<f64>, which is exact (it accounts
+// using Integer::partial_cmp<f64>, which is exact (it accounts
 // for whether the float is integer-valued and how it relates to the
 // bignum). The previous f64-only path lost precision for any bignum
 // outside ±2^53 (audit §1.1 — comparisons part).
@@ -1006,7 +1022,7 @@ fn arithcompare(
     use std::cmp::Ordering;
 
     // Float on either side: if the other side is a bignum we still
-    // get an exact answer via rug::Integer::partial_cmp<f64>; for
+    // get an exact answer via Integer::partial_cmp<f64>; for
     // fixnums and floats, fall back to f64 comparison.
     if a.is_float() || b.is_float() {
         if let Some(big) = a.as_bignum() {
@@ -1039,10 +1055,10 @@ fn arithcompare(
 
     // Bignum-aware integer compare.
     let ai = match a.kind() {
-        ValueKind::Fixnum(n) => rug::Integer::from(n),
+        ValueKind::Fixnum(n) => Integer::from(n),
         ValueKind::Veclike(VecLikeType::Bignum) => a.as_bignum().unwrap().clone(),
         _ if super::marker::is_marker(a) => {
-            rug::Integer::from(super::marker::marker_position_as_int_eval(eval, a)?)
+            Integer::from(super::marker::marker_position_as_int_eval(eval, a)?)
         }
         _ => {
             return Err(signal(
@@ -1052,10 +1068,10 @@ fn arithcompare(
         }
     };
     let bi = match b.kind() {
-        ValueKind::Fixnum(n) => rug::Integer::from(n),
+        ValueKind::Fixnum(n) => Integer::from(n),
         ValueKind::Veclike(VecLikeType::Bignum) => b.as_bignum().unwrap().clone(),
         _ if super::marker::is_marker(b) => {
-            rug::Integer::from(super::marker::marker_position_as_int_eval(eval, b)?)
+            Integer::from(super::marker::marker_position_as_int_eval(eval, b)?)
         }
         _ => {
             return Err(signal(
@@ -1220,9 +1236,9 @@ pub(crate) fn builtin_float(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Fixnum(n) => Ok(Value::make_float(n as f64)),
         ValueKind::Float => Ok(args[0]),
-        ValueKind::Veclike(VecLikeType::Bignum) => {
-            Ok(Value::make_float(args[0].as_bignum().unwrap().to_f64()))
-        }
+        ValueKind::Veclike(VecLikeType::Bignum) => Ok(Value::make_float(
+            f64::rounding_from(args[0].as_bignum().unwrap(), RoundingMode::Nearest).0,
+        )),
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), args[0]],
@@ -1235,7 +1251,9 @@ fn value_to_f64(_name: &str, v: &Value) -> Result<f64, Flow> {
     match v.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(v.xfloat()),
-        ValueKind::Veclike(VecLikeType::Bignum) => Ok(v.as_bignum().unwrap().to_f64()),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(f64::rounding_from(v.as_bignum().unwrap(), RoundingMode::Nearest).0)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *v],
@@ -1253,7 +1271,7 @@ fn value_to_f64(_name: &str, v: &Value) -> Result<f64, Flow> {
 /// `i64::MAX`/`i64::MIN` for out-of-range floats and not surfacing
 /// overflow on infinity / NaN. We now route every integer result
 /// through `Value::make_integer`, and floats outside i64 range use
-/// `rug::Integer::from_f64` to produce a bignum.
+/// `Integer::rounding_from` with `RoundingMode::Down` to produce a bignum.
 fn rounding_with_divisor(
     name: &str,
     args: &[Value],
@@ -1291,7 +1309,7 @@ fn rounding_with_divisor(
             return Ok(Value::make_int(int_div(a, d)));
         }
     }
-    if args[1].is_bignum() && args[1].as_bignum().unwrap().is_zero() {
+    if args[1].is_bignum() && *args[1].as_bignum().unwrap() == Integer::from(0) {
         return Err(signal("arith-error", vec![]));
     }
     // Mixed bignum / float / fixnum 2-arg fallback. For non-float
@@ -1309,14 +1327,14 @@ fn rounding_with_divisor(
     }
     // Bignum-divisor or bignum-dividend integer path: do GMP
     // truncation and reapply the rounding flavor on the residue.
-    let a = bignum_or_int_to_rug(&args[0])?;
-    let d = bignum_or_int_to_rug(&args[1])?;
-    if d.is_zero() {
+    let a = bignum_or_int_to_integer(&args[0])?;
+    let d = bignum_or_int_to_integer(&args[1])?;
+    if d == Integer::from(0) {
         return Err(signal("arith-error", vec![]));
     }
     // Truncation (toward-zero) division as the building block.
-    let q = rug::Integer::from(&a / &d);
-    let r = rug::Integer::from(&a - rug::Integer::from(&q * &d));
+    let q = Integer::from(&a / &d);
+    let r = Integer::from(&a - Integer::from(&q * &d));
     // Apply the same flavor that the int_div lambda would for fixnums,
     // but in GMP. We dispatch by name because the closure type erases
     // intent — and there are only four flavors.
@@ -1325,8 +1343,8 @@ fn rounding_with_divisor(
         "floor" => {
             // Toward -inf: if remainder is nonzero and r and d have
             // opposite signs, subtract 1.
-            if !r.is_zero() && (r.cmp0().is_lt()) != (d.cmp0().is_lt()) {
-                q - 1
+            if r != Integer::from(0) && (r < Integer::from(0)) != (d < Integer::from(0)) {
+                q - Integer::from(1)
             } else {
                 q
             }
@@ -1334,31 +1352,31 @@ fn rounding_with_divisor(
         "ceiling" => {
             // Toward +inf: if remainder is nonzero and r and d have
             // the same sign, add 1.
-            if !r.is_zero() && (r.cmp0().is_lt()) == (d.cmp0().is_lt()) {
-                q + 1
+            if r != Integer::from(0) && (r < Integer::from(0)) == (d < Integer::from(0)) {
+                q + Integer::from(1)
             } else {
                 q
             }
         }
         "round" => {
             // Round half to even (banker's rounding).
-            let abs_r2 = rug::Integer::from(&r * 2).abs();
-            let abs_d = rug::Integer::from(d.abs_ref());
+            let abs_r2 = (&r * Integer::from(2)).abs();
+            let abs_d = (&d).abs();
             use std::cmp::Ordering;
             match abs_r2.cmp(&abs_d) {
                 Ordering::Greater => {
-                    if (r.cmp0().is_lt()) == (d.cmp0().is_lt()) {
-                        q + 1
+                    if (r < Integer::from(0)) == (d < Integer::from(0)) {
+                        q + Integer::from(1)
                     } else {
-                        q - 1
+                        q - Integer::from(1)
                     }
                 }
                 Ordering::Equal => {
-                    if q.is_odd() {
-                        if (r.cmp0().is_lt()) == (d.cmp0().is_lt()) {
-                            q + 1
+                    if &q & Integer::from(1) != Integer::from(0) {
+                        if (r < Integer::from(0)) == (d < Integer::from(0)) {
+                            q + Integer::from(1)
                         } else {
-                            q - 1
+                            q - Integer::from(1)
                         }
                     } else {
                         q
@@ -1380,9 +1398,9 @@ fn float_to_lisp_integer(value: f64) -> EvalResult {
         return Err(signal("overflow-error", vec![]));
     }
     // i64::MIN..=i64::MAX is the safe `as i64` range; outside that we
-    // need GMP. But fixnum range is even tighter (62-bit), so always
-    // funnel through make_integer.
-    let big = rug::Integer::from_f64(value).expect("finite f64");
+    // need a bignum. But fixnum range is even tighter (62-bit), so always
+    // funnel through make_integer. Truncate toward zero (Down).
+    let big = Integer::rounding_from(value, RoundingMode::Down).0;
     Ok(Value::make_integer(big))
 }
 
@@ -1544,7 +1562,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
     let exp_val = &args[1];
     let exp_is_neg = match exp_val.kind() {
         ValueKind::Fixnum(n) => n < 0,
-        ValueKind::Veclike(VecLikeType::Bignum) => exp_val.as_bignum().unwrap().cmp0().is_lt(),
+        ValueKind::Veclike(VecLikeType::Bignum) => *exp_val.as_bignum().unwrap() < Integer::from(0),
         _ => {
             return Err(signal(
                 "wrong-type-argument",
@@ -1567,7 +1585,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
                 let exp_zero = match exp_val.kind() {
                     ValueKind::Fixnum(n) => n == 0,
                     ValueKind::Veclike(VecLikeType::Bignum) => {
-                        exp_val.as_bignum().unwrap().is_zero()
+                        *exp_val.as_bignum().unwrap() == Integer::from(0)
                     }
                     _ => false,
                 };
@@ -1578,7 +1596,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
                 let odd = match exp_val.kind() {
                     ValueKind::Fixnum(n) => n & 1 == 1,
                     ValueKind::Veclike(VecLikeType::Bignum) => {
-                        exp_val.as_bignum().unwrap().is_odd()
+                        exp_val.as_bignum().unwrap() & Integer::from(1) != Integer::from(0)
                     }
                     _ => false,
                 };
@@ -1588,23 +1606,25 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
         }
     }
 
-    // Exponent must fit in u32 for rug::Integer::pow_u. (GNU bounds it
-    // by ULONG_MAX; that's larger than u32 on most platforms but the
+    // Exponent must fit in u64 for Integer::pow. (GNU bounds it
+    // by ULONG_MAX; that's larger than u64 on most platforms but the
     // result becomes astronomically large long before then.)
-    let exp_u32: u32 = match exp_val.kind() {
-        ValueKind::Fixnum(n) => match u32::try_from(n) {
+    let exp_u64: u64 = match exp_val.kind() {
+        ValueKind::Fixnum(n) => match u64::try_from(n) {
             Ok(v) => v,
             Err(_) => return Err(signal("overflow-error", vec![])),
         },
-        ValueKind::Veclike(VecLikeType::Bignum) => match exp_val.as_bignum().unwrap().to_u32() {
-            Some(v) => v,
-            None => return Err(signal("overflow-error", vec![])),
-        },
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            match u64::try_from(exp_val.as_bignum().unwrap()) {
+                Ok(v) => v,
+                Err(_) => return Err(signal("overflow-error", vec![])),
+            }
+        }
         _ => unreachable!("non-int exponent handled above"),
     };
 
-    let base_big = bignum_or_int_to_rug(base_val)?;
-    Ok(Value::make_integer(base_big.pow(exp_u32)))
+    let base_big = bignum_or_int_to_integer(base_val)?;
+    Ok(Value::make_integer(base_big.pow(exp_u64)))
 }
 
 pub(crate) fn builtin_random(args: Vec<Value>) -> EvalResult {

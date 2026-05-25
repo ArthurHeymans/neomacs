@@ -1,3 +1,4 @@
+use malachite::integer::Integer;
 use std::{collections::HashMap, fmt, sync::Arc};
 
 use neovm_compiler::regir::RegFunction;
@@ -557,7 +558,7 @@ impl Runtime {
         value.is_fixnum() || self.is_float(value) || self.is_bignum(value)
     }
 
-    pub fn bignum(&mut self, value: rug::Integer) -> LispValue {
+    pub fn bignum(&mut self, value: Integer) -> LispValue {
         let mut obj = Box::new(BignumObj {
             header: HeapHeader {
                 kind: HeapKind::Bignum,
@@ -577,9 +578,9 @@ impl Runtime {
             .is_some_and(|addr| self.heap_kind(addr) == Some(HeapKind::Bignum))
     }
 
-    pub fn as_integer(&self, value: LispValue) -> Option<rug::Integer> {
+    pub fn as_integer(&self, value: LispValue) -> Option<Integer> {
         if let Some(fixnum) = value.as_fixnum() {
-            return Some(rug::Integer::from(fixnum));
+            return Some(Integer::from(fixnum));
         }
         if let Some(addr) = value.heap_addr() {
             if let Some(obj) = self.bignum_by_addr(addr) {
@@ -591,7 +592,7 @@ impl Runtime {
 
     /// Extract the bignum value, returning an error if it's not a bignum.
     /// Create a clone since the bignum is stored in a Vec and might move.
-    pub fn bignum_data(&self, value: LispValue) -> Result<rug::Integer, RuntimeError> {
+    pub fn bignum_data(&self, value: LispValue) -> Result<Integer, RuntimeError> {
         let addr = value.heap_addr().ok_or(RuntimeError::WrongTypeArgument {
             expected: "bignum",
             value,
@@ -2978,7 +2979,7 @@ struct FloatObj {
 #[repr(C, align(8))]
 struct BignumObj {
     header: HeapHeader,
-    value: rug::Integer,
+    value: Integer,
 }
 
 /// Clojure-style atom: a lock-free CAS-based mutable cell.

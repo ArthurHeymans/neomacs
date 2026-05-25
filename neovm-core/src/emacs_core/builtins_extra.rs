@@ -13,6 +13,10 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 // storage imports removed — now using emacs_char + LispString directly
 use super::value::{Value, ValueKind, VecLikeType};
+use malachite::base::num::conversion::traits::RoundingFrom;
+use malachite::base::num::logic::traits::SignificantBits;
+use malachite::base::rounding_modes::RoundingMode;
+use malachite::integer::Integer;
 #[cfg(unix)]
 use std::ffi::CStr;
 use std::fs;
@@ -100,7 +104,9 @@ fn expect_number_or_marker_f64(value: &Value) -> Result<f64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(value.xfloat()),
-        ValueKind::Veclike(VecLikeType::Bignum) => Ok(value.as_bignum().unwrap().to_f64()),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(f64::rounding_from(value.as_bignum().unwrap(), RoundingMode::Nearest).0)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("number-or-marker-p"), *value],
@@ -520,7 +526,7 @@ pub(crate) fn builtin_natnump(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(n) => n >= 0,
         _ if args[0].is_bignum() => args[0]
             .as_bignum()
-            .is_some_and(|value| value.significant_bits() == 0 || value > &rug::Integer::from(0)),
+            .is_some_and(|value| value.significant_bits() == 0 || value > &Integer::from(0)),
         _ => false,
     };
     Ok(Value::bool_val(is_nat))

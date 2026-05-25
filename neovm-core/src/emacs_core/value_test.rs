@@ -3,6 +3,9 @@ use crate::buffer::BufferId;
 use crate::emacs_core::intern::{intern, intern_uninterned, resolve_sym};
 use crate::heap_types::LispMarker;
 use crate::tagged::header::CLOSURE_ARGLIST;
+use malachite::base::num::arithmetic::traits::Pow;
+use malachite::integer::Integer;
+use std::str::FromStr;
 
 /// Helper: set up a temporary heap for tests that use Value constructors.
 /// With the tagged-pointer runtime the test fallback heap is auto-created,
@@ -36,7 +39,7 @@ fn bignum_constructor_and_predicates() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
         // Pick a value that can never fit in fixnum: 2^100.
-        let mut huge = rug::Integer::from(1);
+        let mut huge = Integer::from(1);
         huge <<= 100;
         let big = Value::make_integer(huge.clone());
         assert!(big.is_bignum(), "expected bignum, got {:?}", big.kind());
@@ -53,7 +56,7 @@ fn bignum_constructor_and_predicates() {
         );
 
         // Values that fit must come back as fixnums, not bignums.
-        let small = Value::make_integer(rug::Integer::from(42));
+        let small = Value::make_integer(Integer::from(42));
         assert!(small.is_fixnum());
         assert!(!small.is_bignum());
         assert_eq!(small.as_fixnum(), Some(42));
@@ -65,17 +68,17 @@ fn eql_compares_bignums_by_numeric_value() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
         let left = Value::make_integer(
-            rug::Integer::parse("1000000000000000000000001")
+            Integer::from_str("1000000000000000000000001")
                 .expect("valid bignum")
                 .into(),
         );
         let right = Value::make_integer(
-            rug::Integer::parse("1000000000000000000000001")
+            Integer::from_str("1000000000000000000000001")
                 .expect("valid bignum")
                 .into(),
         );
         let different = Value::make_integer(
-            rug::Integer::parse("1000000000000000000000002")
+            Integer::from_str("1000000000000000000000002")
                 .expect("valid bignum")
                 .into(),
         );
@@ -93,17 +96,17 @@ fn equal_compares_bignums_by_numeric_value() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {
         let left = Value::make_integer(
-            rug::Integer::parse("1267650600228229401496703205376")
+            Integer::from_str("1267650600228229401496703205376")
                 .expect("valid bignum")
                 .into(),
         );
         let right = Value::make_integer(
-            rug::Integer::parse("1267650600228229401496703205376")
+            Integer::from_str("1267650600228229401496703205376")
                 .expect("valid bignum")
                 .into(),
         );
         let different = Value::make_integer(
-            rug::Integer::parse("1267650600228229401496703205377")
+            Integer::from_str("1267650600228229401496703205377")
                 .expect("valid bignum")
                 .into(),
         );

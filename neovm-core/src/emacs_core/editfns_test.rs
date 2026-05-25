@@ -1,4 +1,6 @@
 use super::*;
+use malachite::base::num::arithmetic::traits::Pow;
+use malachite::integer::Integer;
 
 fn install_test_runtime() {
     // Tagged heap is auto-created in test mode; no manual setup needed.
@@ -172,10 +174,10 @@ fn logcount_bignum_matches_gnu_integer_path() {
     crate::test_utils::init_test_tracing();
     install_test_runtime();
 
-    let big = Value::make_integer(rug::Integer::from(1) << 100);
+    let big = Value::make_integer(Integer::from(1u64) << 100u32);
     assert_eq!(builtin_logcount(vec![big]).unwrap(), Value::fixnum(1));
 
-    let mut negative_big = rug::Integer::from(1);
+    let mut negative_big = Integer::from(1);
     negative_big <<= 100;
     negative_big = -negative_big;
     let negative = Value::make_integer(negative_big);

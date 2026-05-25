@@ -15,6 +15,8 @@ use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{Buffer, BufferManager};
 use crate::emacs_core::value::ValueKind;
+use malachite::base::num::logic::traits::SignificantBits;
+use malachite::integer::Integer;
 #[cfg(unix)]
 use std::ffi::CStr;
 
@@ -1227,13 +1229,14 @@ pub(crate) fn builtin_logcount(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Bignum) => {
             let n = args[0].as_bignum().expect("bignum kind");
-            let bits = if n.cmp0().is_lt() {
-                n.count_zeros().expect("negative bignum has zero count")
+            let bits = if *n < Integer::from(0) {
+                n.checked_count_zeros()
+                    .expect("negative bignum has zero count")
             } else {
-                n.count_ones()
+                n.checked_count_ones()
                     .expect("nonnegative bignum has finite one count")
             };
-            Ok(Value::fixnum(i64::from(bits)))
+            Ok(Value::fixnum(i64::try_from(bits).unwrap_or(i64::MAX)))
         }
         ValueKind::Fixnum(n) => {
             let bits = if n >= 0 {

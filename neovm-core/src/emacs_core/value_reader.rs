@@ -13,6 +13,8 @@
 
 use super::eval::{push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
 use super::intern::{intern, intern_lisp_string, intern_uninterned_lisp_string, resolve_sym};
+use malachite::base::num::conversion::traits::FromStringBase;
+use malachite::integer::Integer;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + Vec<u8> directly
 use super::emacs_char;
@@ -1794,20 +1796,20 @@ impl<'a> Reader<'a> {
             return Err(self.error(&format!("integer, radix {}", radix)));
         }
 
-        // Try i64 first; on overflow promote to a rug::Integer with the
+        // Try i64 first; on overflow promote to a malachite::Integer with the
         // requested radix. Mirrors GNU `string_to_number` (`src/lread.c`)
         // which falls through to the bignum path on overflow.
         let value = match i64::from_str_radix(&digits, radix) {
-            Ok(val) => Value::make_integer(rug::Integer::from(if negative { -val } else { val })),
+            Ok(val) => Value::make_integer(Integer::from(if negative { -val } else { val })),
             Err(_) => {
                 let mut signed = String::with_capacity(digits.len() + 1);
                 if negative {
                     signed.push('-');
                 }
                 signed.push_str(&digits);
-                let parsed = rug::Integer::parse_radix(&signed, radix as i32)
-                    .map_err(|_| self.error("invalid radix number"))?;
-                Value::make_integer(rug::Integer::from(parsed))
+                let parsed = Integer::from_string_base(radix as u8, &signed)
+                    .ok_or_else(|| self.error("invalid radix number"))?;
+                Value::make_integer(parsed)
             }
         };
         Ok(value)
@@ -1975,14 +1977,14 @@ impl<'a> Reader<'a> {
                 // Try integer. Funnel through Value::make_integer so a value
                 // that fits in i64 but not in fixnum (62-bit) is promoted to
                 // a bignum, matching GNU `string_to_number` behavior. On i64
-                // overflow, fall through to a rug::Integer parse so true
+                // overflow, fall through to a malachite::Integer parse so true
                 // bignum literals work.
                 if looks_like_integer(token_text) {
                     if let Ok(n) = token_text.parse::<i64>() {
-                        return Ok(Value::make_integer(rug::Integer::from(n)));
+                        return Ok(Value::make_integer(Integer::from(n)));
                     }
-                    if let Ok(parsed) = rug::Integer::parse(token_text) {
-                        return Ok(Value::make_integer(rug::Integer::from(parsed)));
+                    if let Ok(parsed) = token_text.parse::<Integer>() {
+                        return Ok(Value::make_integer(parsed));
                     }
                 }
 

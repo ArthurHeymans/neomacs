@@ -9,6 +9,7 @@ use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::BufferManager;
+use malachite::integer::Integer;
 
 // ---------------------------------------------------------------------------
 // Argument helpers (duplicated from builtins.rs — they are not `pub`)
@@ -66,7 +67,7 @@ struct LineCountArg {
 
 fn bignum_line_count(value: &Value) -> i64 {
     let n = value.as_bignum().expect("bignum kind");
-    if n >= &rug::Integer::from(0) {
+    if n >= &Integer::from(0) {
         Value::MOST_POSITIVE_FIXNUM
     } else {
         Value::MOST_NEGATIVE_FIXNUM
@@ -127,7 +128,7 @@ fn line_count_result(arg: LineCountArg, shortage: i64) -> Value {
 
     let adjustment = shortage - arg.count;
     if let Some(big) = arg.original.as_bignum() {
-        return Value::make_integer(big.clone() + adjustment);
+        return Value::make_integer(big.clone() + Integer::from(adjustment));
     }
     Value::make_int(shortage)
 }

@@ -1,6 +1,7 @@
 use super::error::{Flow, signal};
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::buffer::BufferManager;
+use malachite::integer::Integer;
 
 pub(crate) fn fix_position_with_buffers(
     buffers: &BufferManager,
@@ -35,7 +36,7 @@ pub(crate) fn fix_position_eval(eval: &super::eval::Context, value: &Value) -> R
 
 fn fix_position_bignum(value: &Value) -> i64 {
     let n = value.as_bignum().expect("bignum kind");
-    if n >= &rug::Integer::from(0) {
+    if n >= &Integer::from(0) {
         Value::MOST_POSITIVE_FIXNUM
     } else {
         Value::MOST_NEGATIVE_FIXNUM

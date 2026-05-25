@@ -1,5 +1,7 @@
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::{HashTableTest, Value, eq_value, next_float_id};
+use malachite::integer::Integer;
+use std::str::FromStr;
 
 #[test]
 fn fillarray_vector_is_in_place() {
@@ -287,7 +289,7 @@ fn nthcdr_positive_bignum_reduces_over_circular_list_like_gnu() {
     second.set_cdr(third);
 
     let count = Value::make_integer(
-        rug::Integer::parse("100000000000000000000000000000000000001")
+        Integer::from_str("100000000000000000000000000000000000001")
             .expect("valid bignum")
             .into(),
     );

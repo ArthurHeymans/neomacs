@@ -1,5 +1,6 @@
 use super::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType, eq_value};
+use malachite::integer::Integer;
 
 // ===========================================================================
 // Cons / List operations
@@ -774,7 +775,7 @@ fn builtin_nth_values(n_value: Value, list: Value) -> EvalResult {
 enum NthcdrCount {
     Fixnum(i64),
     NegativeBignum,
-    PositiveBignum(rug::Integer),
+    PositiveBignum(Integer),
 }
 
 fn expect_nthcdr_count(value: Value) -> Result<NthcdrCount, Flow> {
@@ -782,7 +783,7 @@ fn expect_nthcdr_count(value: Value) -> Result<NthcdrCount, Flow> {
         ValueKind::Fixnum(n) => Ok(NthcdrCount::Fixnum(n)),
         ValueKind::Veclike(VecLikeType::Bignum) => {
             let n = value.as_bignum().expect("bignum kind").clone();
-            if n.cmp0().is_lt() {
+            if n < Integer::from(0) {
                 Ok(NthcdrCount::NegativeBignum)
             } else {
                 Ok(NthcdrCount::PositiveBignum(n))
@@ -882,9 +883,9 @@ fn nthcdr_large_or_bignum(count: NthcdrCount, mut tail: Value, list: Value) -> E
 
     let cycle_length = tortoise_num - num;
     if let Some(big) = original_bignum.as_ref() {
-        let modulus = rug::Integer::from(cycle_length);
-        let remainder = rug::Integer::from(big % &modulus);
-        num += remainder.to_i64().expect("remainder fits in cycle length");
+        let modulus = Integer::from(cycle_length);
+        let remainder = big % &modulus;
+        num += i64::try_from(&remainder).expect("remainder fits in cycle length");
         num += cycle_length - large_num % cycle_length;
     }
     num %= cycle_length;

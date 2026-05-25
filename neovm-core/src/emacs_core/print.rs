@@ -909,8 +909,8 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         }
         ValueKind::Veclike(VecLikeType::Bignum) => {
             // GNU `print_object` formats bignums via `mpz_get_str`
-            // (`src/print.c` PRINT_INTEGER branch). `rug::Integer`'s
-            // Display delegates to the same routine.
+            // (`src/print.c` PRINT_INTEGER branch). `malachite::Integer`'s
+            // Display implements the same formatting.
             write!(out, "{}", value.as_bignum().unwrap()).unwrap();
         }
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {

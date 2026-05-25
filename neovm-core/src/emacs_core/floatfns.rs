@@ -7,6 +7,8 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::value::ValueKind;
+use malachite::base::num::conversion::traits::RoundingFrom;
+use malachite::base::rounding_modes::RoundingMode;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -35,7 +37,9 @@ fn extract_number(val: &Value) -> Result<f64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(val.xfloat()),
-        ValueKind::Veclike(VecLikeType::Bignum) => Ok(val.as_bignum().unwrap().to_f64()),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            Ok(f64::rounding_from(val.as_bignum().unwrap(), RoundingMode::Nearest).0)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *val],

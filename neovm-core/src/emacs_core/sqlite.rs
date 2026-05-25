@@ -219,7 +219,7 @@ fn bind_elisp_value(
             .raw_bind_parameter(idx, n)
             .map_err(|e| sqlite_err(&e.to_string())),
         ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => {
-            let Some(n) = val.as_bignum().and_then(|n| n.to_i64()) else {
+            let Some(n) = val.as_bignum().and_then(|n| i64::try_from(n).ok()) else {
                 return Err(sqlite_err("bignum value out of range"));
             };
             stmt.raw_bind_parameter(idx, n)
@@ -293,7 +293,7 @@ unsafe fn bind_raw_value(
         },
         ValueKind::Fixnum(n) => unsafe { ffi::sqlite3_bind_int64(stmt, idx, n) },
         ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => {
-            let Some(n) = val.as_bignum().and_then(|n| n.to_i64()) else {
+            let Some(n) = val.as_bignum().and_then(|n| i64::try_from(n).ok()) else {
                 return Err(sqlite_err("bignum value out of range"));
             };
             unsafe { ffi::sqlite3_bind_int64(stmt, idx, n) }

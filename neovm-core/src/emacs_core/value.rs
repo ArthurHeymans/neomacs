@@ -11,10 +11,12 @@
 //! - Lexical environment helpers: `lexenv_*`
 //! - String text property helpers
 
+use malachite::integer::Integer;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -1155,7 +1157,7 @@ impl TaggedValue {
     /// GNU `make_integer_mpz` (`src/bignum.c:146`) by returning a
     /// fixnum when the value fits and only allocating a bignum on
     /// promotion.
-    pub fn bignum(value: rug::Integer) -> Self {
+    pub fn bignum(value: Integer) -> Self {
         with_tagged_heap(|h| h.alloc_bignum(value))
     }
 
@@ -1168,16 +1170,16 @@ impl TaggedValue {
         if (Self::MOST_NEGATIVE_FIXNUM..=Self::MOST_POSITIVE_FIXNUM).contains(&value) {
             Self::fixnum(value)
         } else {
-            Self::bignum(rug::Integer::from(value))
+            Self::bignum(Integer::from(value))
         }
     }
 
-    /// Canonical "make a Lisp integer from this rug::Integer" entry
+    /// Canonical "make a Lisp integer from this malachite::Integer" entry
     /// point. Mirrors GNU `make_integer_mpz` (`src/bignum.c:146`):
     /// returns a fixnum if the value fits in fixnum range, otherwise
     /// allocates a bignum object.
-    pub fn make_integer(value: rug::Integer) -> Self {
-        if let Some(small) = value.to_i64() {
+    pub fn make_integer(value: Integer) -> Self {
+        if let Ok(small) = i64::try_from(&value) {
             if (TaggedValue::MOST_NEGATIVE_FIXNUM..=TaggedValue::MOST_POSITIVE_FIXNUM)
                 .contains(&small)
             {
@@ -1192,8 +1194,8 @@ impl TaggedValue {
     /// indicate a corrupt dump) it falls back to 0 rather than
     /// panicking — the dump format guarantees a valid base-10 string.
     pub fn make_integer_from_str_or_zero(text: &str) -> Self {
-        match rug::Integer::parse(text) {
-            Ok(incomplete) => Self::make_integer(rug::Integer::from(incomplete)),
+        match Integer::from_str(text) {
+            Ok(value) => Self::make_integer(value),
             Err(_) => Self::fixnum(0),
         }
     }

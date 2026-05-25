@@ -97,16 +97,9 @@ tl = "0.7"
 rusqlite = { version = "0.35", features = ["bundled"] }
 
 # Arbitrary precision integers (bignum support).
-# Uses GMP under the hood, mirroring GNU Emacs's bignum.c which also
-# wraps GMP. We disable rug's default features so only the `integer`
-# module is built — we don't need MPFR (rationals/floats) here, since
-# elisp bignums are integers and elisp floats stay as f64.
-rug = { version = "1", default-features = false, features = ["integer", "std"] }
-# gmp-mpfr-sys is rug's underlying FFI crate. We enable `use-system-libs`
-# so it links against a pre-installed libgmp rather than building GMP from
-# source. On Linux/macOS that comes from the system package manager; on
-# Windows CI we install it via vcpkg (MSVC) or MSYS2 (MinGW) before building.
-gmp-mpfr-sys = { version = "1.7", default-features = false, features = ["use-system-libs"] }
+# Uses malachite, a pure-Rust bignum library derived from GMP/FLINT
+# algorithms. This avoids C library compilation issues on Windows CI.
+malachite = "0.9"
 
 # GPU / windowing
 winit = "0.30"

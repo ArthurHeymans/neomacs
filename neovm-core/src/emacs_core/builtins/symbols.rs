@@ -7,6 +7,7 @@ use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::{indent, xdisp};
+use malachite::integer::Integer;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static PROFILER_MEMORY_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -3774,12 +3775,12 @@ fn compare_number_values_for_value_lt(lhs: &Value, rhs: &Value) -> Option<std::c
     }
 
     let left = match lhs.kind() {
-        ValueKind::Fixnum(n) => rug::Integer::from(n),
+        ValueKind::Fixnum(n) => Integer::from(n),
         ValueKind::Veclike(VecLikeType::Bignum) => lhs.as_bignum().expect("bignum").clone(),
         _ => return None,
     };
     let right = match rhs.kind() {
-        ValueKind::Fixnum(n) => rug::Integer::from(n),
+        ValueKind::Fixnum(n) => Integer::from(n),
         ValueKind::Veclike(VecLikeType::Bignum) => rhs.as_bignum().expect("bignum").clone(),
         _ => return None,
     };

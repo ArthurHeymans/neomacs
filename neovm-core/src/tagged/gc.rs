@@ -23,6 +23,7 @@ use super::header::*;
 use super::value::TaggedValue;
 use crate::emacs_core::intern::SymId;
 use crate::gc_trace::GcTrace;
+use malachite::integer::Integer;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::alloc::{self, Layout};
 use std::cell::Cell;
@@ -1426,7 +1427,7 @@ impl TaggedHeap {
     /// responsible for ensuring the value is outside fixnum range.
     /// Use `Value::make_integer` for the canonical "fixnum-or-bignum"
     /// constructor that delegates here only when promotion is needed.
-    pub fn alloc_bignum(&mut self, value: rug::Integer) -> TaggedValue {
+    pub fn alloc_bignum(&mut self, value: Integer) -> TaggedValue {
         let obj = Box::new(BignumObj {
             header: VecLikeHeader::new(VecLikeType::Bignum),
             value,
@@ -2105,9 +2106,9 @@ impl TaggedHeap {
             | VecLikeType::UserPtr => {
                 // These have no Value children to trace.
                 //
-                // Bignums own a `rug::Integer`, which owns a libgmp
-                // limb buffer, but no Lisp_Object children — `Drop`
-                // takes care of the GMP memory in `free_gc_object`.
+                // Bignums own a `malachite::Integer`, which manages
+                // its own limb buffer, but no Lisp_Object children —
+                // `Drop` takes care of the memory in `free_gc_object`.
                 //
                 // UserPtr has only a raw C pointer and finalizer, no
                 // Lisp children.
@@ -2229,8 +2230,8 @@ impl TaggedHeap {
                     VecLikeType::Timer => unsafe { drop(Box::from_raw(ptr as *mut TimerObj)) },
                     VecLikeType::Subr => unsafe { drop(Box::from_raw(ptr as *mut SubrObj)) },
                     VecLikeType::Bignum => unsafe {
-                        // Box::drop runs rug::Integer::drop, which frees
-                        // the underlying libgmp limb buffer.
+                        // Box::drop runs malachite::Integer::drop, which
+                        // frees the underlying limb buffer.
                         drop(Box::from_raw(ptr as *mut BignumObj))
                     },
                     VecLikeType::SymbolWithPos => unsafe {

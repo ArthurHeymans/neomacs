@@ -10,6 +10,8 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
 use crate::emacs_core::value::ValueKind;
+use malachite::base::num::conversion::traits::RoundingFrom;
+use malachite::base::rounding_modes::RoundingMode;
 use std::cell::RefCell;
 use std::ffi::{CStr, OsString};
 use std::sync::{Mutex, OnceLock};
@@ -207,7 +209,7 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
     // pairs anyway, so a bignum here usually only occurs for
     // tests that compute (1+ most-positive-fixnum) etc.
     if let ValueKind::Veclike(VecLikeType::Bignum) = val.kind() {
-        let f = val.as_bignum().unwrap().to_f64();
+        let f = f64::rounding_from(val.as_bignum().unwrap(), RoundingMode::Nearest).0;
         return Ok(ParsedTime {
             time: TimeMicros {
                 secs: f as i64,
