@@ -2852,6 +2852,17 @@ impl Buffer {
             Some(RuntimeBindingValue::Void)
         )
     }
+
+    pub(crate) fn set_text_properties_with_undo(
+        &mut self,
+        start: usize,
+        end: usize,
+        plist: Vec<(Value, Value)>,
+    ) {
+        let entries = text_properties_set_undo_entries(self, start, end, &plist);
+        record_buffer_text_property_undo_entries(self, entries);
+        self.text.text_props_set_properties(start, end, plist);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2980,6 +2991,29 @@ fn record_buffer_text_property_undo_entries(
         undo::undo_list_record_property_change(&mut ul, name, old_value, char_start, char_end);
     }
     buf.set_undo_list(ul);
+}
+
+fn text_properties_set_undo_entries(
+    buf: &Buffer,
+    start: usize,
+    end: usize,
+    plist: &[(Value, Value)],
+) -> Vec<(Value, Value, usize, usize)> {
+    let mut entries = Vec::new();
+    for run in buffer_text_property_undo_runs(buf, start, end) {
+        for (old_name, old_value) in &run.plist {
+            match plist_get_eq(plist, *old_name) {
+                Some(new_value) if eq_value(&new_value, old_value) => {}
+                _ => entries.push((*old_name, *old_value, run.char_start, run.char_end)),
+            }
+        }
+        for (new_name, _) in plist {
+            if plist_get_eq(&run.plist, *new_name).is_none() {
+                entries.push((*new_name, Value::NIL, run.char_start, run.char_end));
+            }
+        }
+    }
+    entries
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3879,8 +3913,7 @@ impl BufferManager {
     ) -> Option<()> {
         self.buffers
             .get_mut(&id)?
-            .text
-            .text_props_remove_all(start, end);
+            .set_text_properties_with_undo(start, end, Vec::new());
         Some(())
     }
 
@@ -3891,17 +3924,9 @@ impl BufferManager {
         end: usize,
         plist: Vec<(Value, Value)>,
     ) -> Option<()> {
-        let buf = self.buffers.get_mut(&id)?;
-        let mut entries = Vec::new();
-        if !plist.is_empty() {
-            for run in buffer_text_property_undo_runs(buf, start, end) {
-                for (new_name, _) in &plist {
-                    entries.push((*new_name, Value::NIL, run.char_start, run.char_end));
-                }
-            }
-        }
-        record_buffer_text_property_undo_entries(buf, entries);
-        buf.text.text_props_set_properties(start, end, plist);
+        self.buffers
+            .get_mut(&id)?
+            .set_text_properties_with_undo(start, end, plist);
         Some(())
     }
 

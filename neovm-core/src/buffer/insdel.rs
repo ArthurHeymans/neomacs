@@ -682,12 +682,9 @@ impl Buffer {
         self.text
             .copy_emacs_bytes_to(start2_byte, end2_byte, &mut region2);
 
-        let mut old_span = Vec::with_capacity(end2_byte - start1_byte);
-        old_span.extend_from_slice(&region1);
-        old_span.extend_from_slice(&mid);
-        old_span.extend_from_slice(&region2);
+        let old_span = self.buffer_region_lisp_string(start1_byte, end2_byte);
 
-        let mut replacement = Vec::with_capacity(old_span.len());
+        let mut replacement = Vec::with_capacity(end2_byte - start1_byte);
         replacement.extend_from_slice(&region2);
         replacement.extend_from_slice(&mid);
         replacement.extend_from_slice(&region1);
@@ -697,12 +694,10 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&undo_list) {
             let record_change = |undo_list: &mut crate::emacs_core::value::Value,
                                  start_char: usize,
-                                 bytes: Vec<u8>,
-                                 len_chars: usize,
-                                 multibyte: bool,
+                                 deleted: LispString,
                                  pt: usize,
                                  point_before| {
-                let deleted = lisp_string_from_buffer_bytes(bytes, multibyte);
+                let len_chars = deleted.schars();
                 undo::undo_list_record_delete(undo_list, start_char, deleted, pt, point_before);
                 undo::undo_list_record_insert(undo_list, start_char, len_chars, point_before);
             };
@@ -713,8 +708,6 @@ impl Buffer {
                         &mut undo_list,
                         start1_char,
                         old_span,
-                        end2_char - start1_char,
-                        self.get_multibyte(),
                         self.pt,
                         self.undo_state.point_before_command_or_undo(),
                     );
@@ -722,18 +715,14 @@ impl Buffer {
                     record_change(
                         &mut undo_list,
                         start1_char,
-                        region1.clone(),
-                        end1_char - start1_char,
-                        self.get_multibyte(),
+                        self.buffer_region_lisp_string(start1_byte, end1_byte),
                         self.pt,
                         self.undo_state.point_before_command_or_undo(),
                     );
                     record_change(
                         &mut undo_list,
                         start2_char,
-                        region2.clone(),
-                        end2_char - start2_char,
-                        self.get_multibyte(),
+                        self.buffer_region_lisp_string(start2_byte, end2_byte),
                         self.pt,
                         self.undo_state.point_before_command_or_undo(),
                     );
@@ -743,8 +732,6 @@ impl Buffer {
                     &mut undo_list,
                     start1_char,
                     old_span,
-                    end2_char - start1_char,
-                    self.get_multibyte(),
                     self.pt,
                     self.undo_state.point_before_command_or_undo(),
                 );
@@ -754,6 +741,12 @@ impl Buffer {
 
         let replacement_props =
             self.transpose_region_properties(start1_char, end1_char, start2_char, end2_char);
+        if end1_char - start1_char == end2_char - start2_char {
+            self.set_text_properties_with_undo(start1_byte, end1_byte, Vec::new());
+            self.set_text_properties_with_undo(start2_byte, end2_byte, Vec::new());
+        } else {
+            self.set_text_properties_with_undo(start1_byte, end2_byte, Vec::new());
+        }
         let new_point_byte =
             transpose_position(self.pt_byte, start1_byte, end1_byte, start2_byte, end2_byte);
         let new_point_char =
