@@ -77,12 +77,12 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: true
+          update: false
+          cache: true
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gmp
             mingw-w64-x86_64-pkg-config
-            mingw-w64-x86_64-rust
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
