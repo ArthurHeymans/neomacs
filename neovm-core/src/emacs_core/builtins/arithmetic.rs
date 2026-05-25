@@ -1644,21 +1644,16 @@ pub(crate) fn builtin_random(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(emacs_get_random()))
 }
 
-#[cfg(unix)]
 fn emacs_random_lock() -> &'static Mutex<()> {
     static RANDOM_LOCK: Mutex<()> = Mutex::new(());
     &RANDOM_LOCK
 }
 
-#[cfg(unix)]
 fn emacs_intmask() -> u64 {
     (1_u64 << emacs_random_fixnum_bits()) - 1
 }
 
-#[cfg(unix)]
 fn emacs_random_fixnum_bits() -> u32 {
-    // Match GNU Emacs get_random()/INTMASK behavior on current 64-bit builds:
-    // FIXNUM_BITS is 62 even though most-positive-fixnum is 2^61 - 1.
     62
 }
 

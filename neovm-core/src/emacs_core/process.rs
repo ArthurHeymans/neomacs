@@ -34,7 +34,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// A TLS-wrapped TCP stream using rustls.
 /// The underlying `TcpStream` is owned by `StreamOwned`, so when TLS is active
 /// the `Process.socket` field is `None`.
-#[cfg(unix)]
 pub type TlsStream = rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>;
 
 use super::error::{EvalResult, Flow, signal};
@@ -128,13 +127,9 @@ pub struct Process {
     pub pty_reader: Option<Box<dyn IoRead + Send>>,
     /// PTY writer for sending input to the master side.
     pub pty_writer: Option<Box<dyn std::io::Write + Send>>,
-    /// TCP socket for network processes (client or accepted connection).
-    /// When TLS is active, this is `None` (the socket is owned by `tls_stream`).
-    #[cfg(unix)]
     pub socket: Option<std::net::TcpStream>,
     /// TLS-wrapped stream for encrypted network connections.
     /// When `Some`, reads/writes go through this instead of `socket`.
-    #[cfg(unix)]
     pub tls_stream: Option<TlsStream>,
     /// End-of-output marker, matching GNU's `p->mark`.
     pub mark: Value,
@@ -744,7 +739,6 @@ impl ProcessManager {
             pty_child: None,
             pty_reader: None,
             pty_writer: None,
-            #[cfg(unix)]
             socket: None,
             tls_stream: None,
             mark: super::marker::make_marker_value(None, None, false),
@@ -1167,11 +1161,8 @@ impl ProcessManager {
             if let Some(pty_child) = proc.pty_child.as_mut() {
                 let _ = pty_child.kill();
             }
-            #[cfg(unix)]
-            {
-                proc.tls_stream.take();
-                proc.socket.take();
-            }
+            proc.tls_stream.take();
+            proc.socket.take();
             proc.status = process_status_signal_value(9);
             true
         } else {
@@ -1188,11 +1179,8 @@ impl ProcessManager {
             if let Some(pty_child) = proc.pty_child.as_mut() {
                 let _ = pty_child.kill();
             }
-            #[cfg(unix)]
-            {
-                proc.tls_stream.take();
-                proc.socket.take();
-            }
+            proc.tls_stream.take();
+            proc.socket.take();
             proc.status = process_status_signal_value(9);
             self.deleted_processes.insert(id, proc);
             true
@@ -1296,7 +1284,6 @@ impl ProcessManager {
                 if p.child.is_some() || p.pty_child.is_some() {
                     return true;
                 }
-                #[cfg(unix)]
                 if p.socket.is_some() || p.tls_stream.is_some() {
                     return true;
                 }
@@ -1348,7 +1335,6 @@ impl ProcessManager {
                 }
             }
             // Write to TLS stream or plain socket for network processes.
-            #[cfg(unix)]
             if let Some(ref mut tls) = proc.tls_stream {
                 use std::io::Write;
                 let _ = tls.write_all(input_bytes);
@@ -1364,24 +1350,20 @@ impl ProcessManager {
         }
     }
 
-    /// Register a network socket's fd with the I/O poller so that
+    /// Register a network socket with the I/O poller so that
     /// `wait_for_output` wakes up when data arrives.
-    #[cfg(unix)]
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
         let socket = proc.socket.as_ref().ok_or("No socket")?;
         if let Some(ref poller) = self.poller {
-            use std::os::unix::io::AsRawFd;
-            let fd = socket.as_raw_fd();
             unsafe {
-                let borrowed = std::os::unix::io::BorrowedFd::borrow_raw(fd);
                 poller
                     .add_with_mode(
-                        &borrowed,
+                        socket,
                         polling::Event::readable(id as usize),
                         polling::PollMode::Level,
                     )
-                    .map_err(|e| format!("Failed to register socket fd: {}", e))?;
+                    .map_err(|e| format!("Failed to register socket: {}", e))?;
             }
         }
         Ok(())
@@ -1414,7 +1396,6 @@ impl ProcessManager {
         }
 
         // Try TLS stream first (encrypted network process), then plain socket.
-        #[cfg(unix)]
         {
             let proc = self.processes.get_mut(&id)?;
 
@@ -1452,11 +1433,6 @@ impl ProcessManager {
                     Err(_) => return None,
                 }
             }
-        }
-
-        #[cfg(not(unix))]
-        {
-            let _ = self.processes.get(&id)?;
         }
 
         None
@@ -3594,7 +3570,6 @@ pub(crate) fn builtin_internal_default_process_sentinel(
 /// PROCESS must be a network process with an open TCP socket.
 /// TYPE is ignored (GNU uses it for credential type).
 /// PROPLIST is a keyword plist; we extract `:hostname` for SNI.
-#[cfg(unix)]
 pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-boot", &args, 3)?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
@@ -3702,16 +3677,6 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     proc.tls_stream = Some(tls_stream);
 
     Ok(Value::T)
-}
-
-/// Stub for non-unix platforms.
-#[cfg(not(unix))]
-pub(crate) fn builtin_gnutls_boot(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("gnutls-boot", &args, 3)?;
-    Ok(Value::NIL)
 }
 
 /// (isearch-process-search-char CHAR &optional COUNT) -> nil
@@ -4349,14 +4314,7 @@ pub(crate) fn builtin_make_network_process(
     );
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
     if let Some(proc) = eval.processes.get_mut(id) {
-        #[cfg(unix)]
-        {
-            proc.socket = Some(stream);
-        }
-        #[cfg(not(unix))]
-        {
-            drop(stream);
-        }
+        proc.socket = Some(stream);
         proc.status = process_status_run_value();
         proc.childp = Value::list(vec![
             Value::keyword(":name"),
@@ -4388,8 +4346,6 @@ pub(crate) fn builtin_make_network_process(
         }
     }
 
-    // Register socket fd with the poller for I/O notification.
-    #[cfg(unix)]
     eval.processes.register_socket_fd(id).ok();
 
     // Call sentinel with "open\n" to signal successful connection
