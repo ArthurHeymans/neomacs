@@ -35,7 +35,6 @@ jobs:
             pkg-config \
             cmake \
             m4 \
-            libgmp-dev \
             libssl-dev \
             fontconfig \
             libfontconfig1-dev \
@@ -130,7 +129,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies (brew)
-        run: brew install gmp pkg-config gstreamer
+        run: brew install pkg-config gstreamer
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -185,7 +184,7 @@ jobs:
 
       - name: Install system libraries via vcpkg
         if: steps.cache-vcpkg-system-libs.outputs.cache-hit != 'true'
-        run: vcpkg install gmp:x64-windows-static glib:x64-windows-static "gstreamer[plugins-base]:x64-windows-static"
+        run: vcpkg install glib:x64-windows-static "gstreamer[plugins-base]:x64-windows-static"
 
       - name: Set pkg-config path for vcpkg
         shell: powershell

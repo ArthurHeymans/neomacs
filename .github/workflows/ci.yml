@@ -19,18 +19,18 @@ jobs:
             install-deps: |
               sudo apt-get update
               sudo apt-get install -y --no-install-recommends \
-                libgmp-dev libfontconfig1-dev pkg-config
+                libfontconfig1-dev pkg-config
           - runner: ubuntu-24.04-arm
             label: linux-aarch64
             cache-key: linux-check-aarch64
             install-deps: |
               sudo apt-get update
               sudo apt-get install -y --no-install-recommends \
-                libgmp-dev libfontconfig1-dev pkg-config
+                libfontconfig1-dev pkg-config
           - runner: macos-latest
             label: macos-aarch64
             cache-key: macos-check-aarch64
-            install-deps: brew install gmp pkg-config fontconfig
+            install-deps: brew install pkg-config fontconfig
     name: cargo check (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
@@ -70,23 +70,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache vcpkg GMP
-        id: cache-vcpkg-gmp
-        uses: actions/cache@v5
-        with:
-          path: C:\vcpkg\installed\x64-windows-static
-          key: vcpkg-gmp-x64-windows-static-v1
-
-      - name: Install GMP via vcpkg
-        if: steps.cache-vcpkg-gmp.outputs.cache-hit != 'true'
-        run: vcpkg install gmp:x64-windows-static
-
-      - name: Set pkg-config path for vcpkg
-        shell: powershell
-        run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=C:\vcpkg\installed\x64-windows-static\lib\pkgconfig"
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=C:\vcpkg"
-
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
@@ -96,8 +79,6 @@ jobs:
           cache-on-failure: true
 
       - name: cargo check
-        env:
-          PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
         run: cargo check --no-default-features -p neomacs -p neovm-core
 
   check-windows-gnu:
@@ -117,7 +98,7 @@ jobs:
         with:
           toolchain: 1.95.0-x86_64-pc-windows-gnu
 
-      - name: Setup MSYS2 and install MinGW GMP
+      - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         id: msys2
         with:
@@ -126,7 +107,6 @@ jobs:
           cache: true
           install: >-
             mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-gmp
             mingw-w64-x86_64-pkg-config
 
       - name: Add MinGW to PATH
