@@ -97,31 +97,28 @@ rpm_topdir="$dist_dir/rpm-topdir"
 rm -rf "$rpm_topdir"
 mkdir -p "$rpm_topdir"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-mkdir -p "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}"
+payload="$rpm_topdir/SOURCES/neomacs-payload"
+install -d "$payload/usr/bin"
+install -d "$payload/usr/share/neomacs"
+install -d "$payload/usr/share/applications"
+install -d "$payload/usr/share/icons/hicolor/128x128/apps"
+install -d "$payload/usr/share/doc/neomacs"
 
-install -d "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}/usr/bin"
-install -d "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}/usr/share/neomacs"
-install -d "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}/usr/share/applications"
-install -d "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}/usr/share/icons/hicolor/128x128/apps"
-install -d "$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}/usr/share/doc/neomacs"
-
-buildroot="$rpm_topdir/BUILDROOT/neomacs-${version}-1.${rpm_arch}"
-
-install -m 0755 "$release_tree/bin/neomacs" "$buildroot/usr/bin/neomacs"
+install -m 0755 "$release_tree/bin/neomacs" "$payload/usr/bin/neomacs"
 for bin in neomacs-temacs bootstrap-neomacs mock-display; do
   if [[ -x "$release_tree/bin/$bin" ]]; then
-    install -m 0755 "$release_tree/bin/$bin" "$buildroot/usr/bin/$bin"
+    install -m 0755 "$release_tree/bin/$bin" "$payload/usr/bin/$bin"
   fi
 done
 
-install -m 0644 "$release_tree/bin/neomacs.pdump" "$buildroot/usr/bin/neomacs.pdump"
+install -m 0644 "$release_tree/bin/neomacs.pdump" "$payload/usr/bin/neomacs.pdump"
 
-cp -a "$release_tree/share/neomacs/." "$buildroot/usr/share/neomacs/"
+cp -a "$release_tree/share/neomacs/." "$payload/usr/share/neomacs/"
 
-install -m 0644 README.md "$buildroot/usr/share/doc/neomacs/README.md"
-install -m 0644 COPYING "$buildroot/usr/share/doc/neomacs/COPYING"
+install -m 0644 README.md "$payload/usr/share/doc/neomacs/README.md"
+install -m 0644 COPYING "$payload/usr/share/doc/neomacs/COPYING"
 
-cat >"$buildroot/usr/share/applications/neomacs.desktop" <<'DESKTOP'
+cat >"$payload/usr/share/applications/neomacs.desktop" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=NEO Emacs
@@ -135,7 +132,7 @@ DESKTOP
 
 if [[ -f assets/logo-128.png ]]; then
   install -m 0644 assets/logo-128.png \
-    "$buildroot/usr/share/icons/hicolor/128x128/apps/neomacs.png"
+    "$payload/usr/share/icons/hicolor/128x128/apps/neomacs.png"
 fi
 
 cat >"$rpm_topdir/SPECS/neomacs.spec" <<SPEC
@@ -155,7 +152,8 @@ NEO Emacs is an extensible, programmable text editor based on
 Emacs Lisp and the Neovim virtual machine, built with Rust.
 
 %install
-true
+mkdir -p %{buildroot}
+cp -a %{_sourcedir}/neomacs-payload/. %{buildroot}/
 
 %files
 %doc /usr/share/doc/neomacs/README.md
@@ -179,7 +177,6 @@ SPEC
 
 rpmbuild -bb \
   --define "_topdir $rpm_topdir" \
-  --buildroot "$buildroot" \
   --target "$rpm_arch" \
   "$rpm_topdir/SPECS/neomacs.spec"
 
