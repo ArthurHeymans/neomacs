@@ -4401,6 +4401,15 @@ impl Context {
             obarray.ensure_interned_global_id(id);
         }
 
+        // --- src/lread.c: syms_of_lread ---
+        // GNU registers these names with DEFSYM while initializing the reader.
+        // They are globally interned symbols even when they have no value or
+        // function binding.
+        for name in ["hash-table", "data", "test", "size", "purecopy", "weakness"] {
+            let id = crate::emacs_core::intern::intern(name);
+            obarray.ensure_interned_global_id(id);
+        }
+
         // --- src/callint.c: syms_of_callint ---
         // DEFVAR_LISP, default nil.
         obarray.set_symbol_value("mouse-leave-buffer-hook", Value::NIL);

@@ -129,6 +129,27 @@ fn print_float_nan_payload_tag_round_trip_shape() {
 }
 
 #[test]
+fn float_output_format_zero_precision_matches_gnu_print_c() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        format_float_with_output_format(1.25, Some(Value::string("%.0f"))),
+        "1"
+    );
+    assert_eq!(
+        format_float_with_output_format(1.25, Some(Value::string("%.f"))),
+        "1.0"
+    );
+    assert_eq!(
+        format_float_with_output_format(1.25, Some(Value::string("%.e"))),
+        "1e+00"
+    );
+    assert_eq!(
+        format_float_with_output_format(1.25, Some(Value::string("%.0g"))),
+        "1.25"
+    );
+}
+
+#[test]
 fn print_string() {
     crate::test_utils::init_test_tracing();
     assert_eq!(print_value(&Value::string("hello")), "\"hello\"");

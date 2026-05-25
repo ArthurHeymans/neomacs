@@ -2196,16 +2196,20 @@ fn parse_float_output_format(value: Option<Value>) -> Option<(usize, u8, i32)> {
         return None;
     }
 
-    let precision = if width > 0 { width as usize } else { 6 };
+    let precision = if width >= 0 { width as usize } else { 0 };
     Some((precision, spec, width))
 }
 
 fn format_float_printf(precision: usize, spec: u8, f: f64) -> Option<String> {
     match spec {
-        b'e' => Some(format!("{:.prec$e}", f, prec = precision)),
+        b'e' => Some(normalize_float_exponent(&format!(
+            "{:.prec$e}",
+            f,
+            prec = precision
+        ))),
         b'f' => Some(format!("{:.prec$}", f, prec = precision)),
         b'g' => {
-            let exp_form = format!("{:.prec$e}", f, prec = precision);
+            let exp_form = normalize_float_exponent(&format!("{:.prec$e}", f, prec = precision));
             let fix_form = format!("{:.prec$}", f, prec = precision);
             let chosen = if exp_form.len() <= fix_form.len() {
                 &exp_form
@@ -2221,6 +2225,19 @@ fn format_float_printf(precision: usize, spec: u8, f: f64) -> Option<String> {
             Some(trimmed.to_string())
         }
         _ => None,
+    }
+}
+
+fn normalize_float_exponent(s: &str) -> String {
+    let Some((mantissa, exponent)) = s.split_once('e') else {
+        return s.to_string();
+    };
+
+    let exp = exponent.parse::<i32>().unwrap_or(0);
+    if exp >= 0 {
+        format!("{mantissa}e+{exp:02}")
+    } else {
+        format!("{mantissa}e-{abs:02}", abs = -exp)
     }
 }
 

@@ -3264,10 +3264,11 @@ fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
     // specializer, frame/action-alist, and some feature-name markers interned
     // even when they have no value/function/plist surface.  Later Lisp compares
     // these symbols by identity, notably funcall_lambda's `&optional' /
-    // `&rest' handling, pcase's backquote expander,
-    // `face-spec-set-match-display', `cl-generic-generalizers',
-    // `frame-width'/`frame-height' frame parameter lookup, and `require' of
-    // byte-compiled files whose constants were read during loadup.
+    // `&rest' handling, pcase's backquote expander, lread.c's printed
+    // hash-table keys, `face-spec-set-match-display',
+    // `cl-generic-generalizers', `frame-width'/`frame-height' frame parameter
+    // lookup, and `require' of byte-compiled files whose constants were read
+    // during loadup.
     name.starts_with('&')
         || matches!(
             name,
@@ -3280,6 +3281,12 @@ fn is_gnu_preloaded_syntax_symbol(name: &str) -> bool {
                 | "function"
                 | "lambda"
                 | "closure"
+                | "hash-table"
+                | "data"
+                | "test"
+                | "size"
+                | "purecopy"
+                | "weakness"
                 | "cl--class"
                 | "cl-deftype-satisfies"
                 | "head"

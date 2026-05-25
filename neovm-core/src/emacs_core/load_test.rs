@@ -2929,12 +2929,13 @@ fn final_dump_cleanup_preserves_gnu_loaddefs_and_runtime_manager_symbols() {
              (boundp 'rx--builtin-symbols)
              (intern-soft "cat" obarray)
              (intern-soft "can-break" obarray)
+             (intern-soft "test" obarray)
              (intern-soft "pred" obarray)
              (intern-soft "app" obarray))"#,
     );
     assert_eq!(
         rendered,
-        "OK (t nil nil seq--pcase-macroexpander nil nil nil nil pred app)"
+        "OK (t nil nil seq--pcase-macroexpander nil nil nil nil test pred app)"
     );
 }
 
@@ -2957,6 +2958,12 @@ fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
              (eq (intern-soft "&rest" obarray) '&rest)
              (eq (intern-soft "," obarray) '\,)
              (eq (intern-soft ",@" obarray) '\,@)
+             (eq (intern-soft "hash-table" obarray) 'hash-table)
+             (eq (intern-soft "data" obarray) 'data)
+             (eq (intern-soft "test" obarray) 'test)
+             (eq (intern-soft "size" obarray) 'size)
+             (eq (intern-soft "purecopy" obarray) 'purecopy)
+             (eq (intern-soft "weakness" obarray) 'weakness)
              (get '\` 'pcase-macroexpander)
              (fboundp '\`--pcase-macroexpander)
              (autoloadp (symbol-function '\`--pcase-macroexpander))
@@ -3002,7 +3009,7 @@ fn runtime_startup_preserves_gnu_syntax_symbols_after_transient_cleanup() {
     );
     assert_eq!(
         rendered,
-        "OK (t t t t nil nil nil t t t t t t t t t t t t t t t t t t t t t t t t t t t t t functionp t (functionp t))"
+        "OK (t t t t t t t t t t nil nil nil t t t t t t t t t t t t t t t t t t t t t t t t t t t t t functionp t (functionp t))"
     );
     let rendered = eval_rendered(
         &mut eval,
