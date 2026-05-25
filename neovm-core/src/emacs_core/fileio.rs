@@ -1015,35 +1015,6 @@ fn write_bytes_to_file_with_mode(
 /// If MATCH_REGEX is Some, only include entries whose names match the regex.
 /// If NOSORT is true, preserve filesystem enumeration order.
 /// COUNT limits the number of accepted entries during enumeration.
-#[cfg(unix)]
-fn read_directory_names(dir: &str) -> Result<Vec<String>, DirectoryFilesError> {
-    let dir_cstr = CString::new(dir).map_err(|_| DirectoryFilesError::Io {
-        action: "Opening directory",
-        err: std::io::Error::new(ErrorKind::InvalidInput, "path contains interior NUL"),
-    })?;
-    let dirp = unsafe { libc::opendir(dir_cstr.as_ptr()) };
-    if dirp.is_null() {
-        return Err(DirectoryFilesError::Io {
-            action: "Opening directory",
-            err: std::io::Error::last_os_error(),
-        });
-    }
-
-    let mut names = Vec::new();
-    loop {
-        let entry = unsafe { libc::readdir(dirp) };
-        if entry.is_null() {
-            break;
-        }
-        let raw_name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
-        names.push(raw_name.to_string_lossy().into_owned());
-    }
-
-    let _ = unsafe { libc::closedir(dirp) };
-    Ok(names)
-}
-
-#[cfg(not(unix))]
 fn read_directory_names(dir: &str) -> Result<Vec<String>, DirectoryFilesError> {
     let entries = fs::read_dir(dir).map_err(|e| DirectoryFilesError::Io {
         action: "Opening directory",

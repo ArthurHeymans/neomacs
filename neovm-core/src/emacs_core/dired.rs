@@ -86,42 +86,6 @@ fn signal_file_io(action: &str, path: &str, err: std::io::Error) -> Flow {
     )
 }
 
-#[cfg(unix)]
-fn read_directory_names(dir: &str) -> Result<Vec<String>, Flow> {
-    let dir_cstr = CString::new(dir).map_err(|_| {
-        signal(
-            "file-error",
-            vec![
-                Value::string("Opening directory"),
-                Value::string("path contains interior NUL"),
-                Value::string(dir),
-            ],
-        )
-    })?;
-    let dirp = unsafe { libc::opendir(dir_cstr.as_ptr()) };
-    if dirp.is_null() {
-        return Err(signal_file_io(
-            "Opening directory",
-            dir,
-            std::io::Error::last_os_error(),
-        ));
-    }
-
-    let mut names = Vec::new();
-    loop {
-        let entry = unsafe { libc::readdir(dirp) };
-        if entry.is_null() {
-            break;
-        }
-        let raw_name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) };
-        names.push(raw_name.to_string_lossy().into_owned());
-    }
-
-    let _ = unsafe { libc::closedir(dirp) };
-    Ok(names)
-}
-
-#[cfg(not(unix))]
 fn read_directory_names(dir: &str) -> Result<Vec<String>, Flow> {
     let entries = fs::read_dir(dir).map_err(|e| signal_file_io("Opening directory", dir, e))?;
     let mut names = vec![".".to_string(), "..".to_string()];
