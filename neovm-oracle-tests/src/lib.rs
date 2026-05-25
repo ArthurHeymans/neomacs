@@ -2214,6 +2214,194 @@ mod divergence_combo_cl_dotimes_marker_overlay_textprop_buflocal_narrow;
 mod divergence_combo_cl_ecase_marker_overlay;
 #[path = "divergence-combo-cl-ecase-marker-overlay-textprop-buflocal-narrow.rs"]
 mod divergence_combo_cl_ecase_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-abbrev-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_abbrev_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-advice-generic2-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_advice_generic2_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-advice-generic-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_advice_generic_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-auto-fill-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_auto_fill_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-before-after-string-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_before_after_string_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-buffer-substring-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_buffer_substring_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-buflocal-variables-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_buflocal_variables_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-bufsubstr-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_bufsubstr_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-bufswap-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_bufswap_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-category-textprop-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_category_textprop_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-change-class-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_change_class_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-change-hooks2-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_change_hooks2_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-change-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_change_hooks_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-char-property-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_char_property_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-char-width-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_char_width_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-chartable-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_chartable_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-cl-labels-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_cl_labels_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-class-alloc-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_class_alloc_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-closures-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_closures_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-command-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_command_hooks_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-comment-region-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_comment_region_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-compare-bufsubstr-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_compare_bufsubstr_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-composition-property-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_composition_property_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-condition-case-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_condition_case_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-deep-nest-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_deep_nest_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-deep-undo-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_deep_undo_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-defmethod-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_defmethod_dispatch_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-defstruct-interop2-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_defstruct_interop2_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-defstruct-interop-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_defstruct_interop_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-display-table-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_display_table_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-dynamic-operations-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_dynamic_operations_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-error-recovery-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_error_recovery_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-excursion-restriction-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_excursion_restriction_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-field-properties-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_field_properties_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-file-io-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_file_io_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-generic-method-invocation-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_generic_method_invocation_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-hash-objects-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_hash_objects_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-hashtable-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_hashtable_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-indent-fill-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_indent_fill_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-inhibit-modification-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_inhibit_modification_hooks_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-initialization-lifecycle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_initialization_lifecycle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-invisibility-spec-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_invisibility_spec_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-invisible-intangible-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_invisible_intangible_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-jit-lock-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_jit_lock_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-kill-ring-yank-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_kill_ring_yank_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-line-move-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_line_move_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-line-ops-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_line_ops_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-loop-pcase-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_loop_pcase_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-macro-eval-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_macro_eval_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-evaporate-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_evaporate_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-insertion-types-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_insertion_types_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-marker-type-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_marker_type_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-match-data-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_match_data_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-method-combo-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_method_combo_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-mode-line-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_mode_line_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-move-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_move_overlay_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-multi-buf-adv-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_multi_buf_adv_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-multi-buffer-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_multi_buffer_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-multiple-inheritance-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_multiple_inheritance_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_obarray_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-overlay-stack-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_overlay_stack_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-plist-alist-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_plist_alist_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-prin1-read-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_prin1_read_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-print-circle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_print_circle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-print-clone-introspection-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_print_clone_introspection_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-prop-boundary2-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_prop_boundary2_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-prop-boundary-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_prop_boundary_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-read-only-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_read_only_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-rectangle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_rectangle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-regex-multibyte-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_regex_multibyte_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-region-ops-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_region_ops_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-register-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_register_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-replace-regexp-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_replace_regexp_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-save-excursion-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_save_excursion_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-slot-lifecycle-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_slot_lifecycle_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-sort-seq-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_sort_seq_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-sticky-props-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_sticky_props_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-subr-advice-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_subr_advice_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-symbol-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_symbol_obarray_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-adv-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_adv_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-ppss-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_ppss_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-syntax-scan-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_syntax_scan_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-temp-buffer-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_temp_buffer_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-text-prop-search-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_text_prop_search_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-text-property-scan-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_text_property_scan_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-textprop-search-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_textprop_search_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-tp-face-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_tp_face_overlay_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-transpose-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_transpose_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-truncate-wrap-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_truncate_wrap_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-typep-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_typep_dispatch_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-undo-list-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_undo_list_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-unwind-protect-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_unwind_protect_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-window-point-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_window_point_marker_overlay_textprop_buflocal_narrow;
+#[path = "divergence-combo-cl-eieio-with-slots-accessors-marker-overlay-textprop-buflocal-narrow.rs"]
+mod divergence_combo_cl_eieio_with_slots_accessors_marker_overlay_textprop_buflocal_narrow;
 #[path = "divergence-combo-cl-etypecase-marker-overlay.rs"]
 mod divergence_combo_cl_etypecase_marker_overlay;
 #[path = "divergence-combo-cl-etypecase-marker-overlay-textprop-buflocal-narrow.rs"]
@@ -3194,191 +3382,3 @@ mod divergence_window_frame_real;
 mod divergence_window_geometry;
 #[path = "divergence-window-redisplay.rs"]
 mod divergence_window_redisplay;
-#[path = "divergence-combo-cl-eieio-change-class-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_change_class_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-with-slots-accessors-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_with_slots_accessors_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-generic-method-invocation-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_generic_method_invocation_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-initialization-lifecycle-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_initialization_lifecycle_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-print-clone-introspection-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_print_clone_introspection_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-error-recovery-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_error_recovery_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-multiple-inheritance-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_multiple_inheritance_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-advice-generic-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_advice_generic_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-hash-objects-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_hash_objects_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-defstruct-interop-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_defstruct_interop_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-unwind-protect-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_unwind_protect_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-symbol-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_symbol_obarray_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-macro-eval-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_macro_eval_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-dynamic-operations-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_dynamic_operations_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-print-circle-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_print_circle_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-marker-insertion-types-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_marker_insertion_types_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-loop-pcase-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_loop_pcase_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-excursion-restriction-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_excursion_restriction_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-textprop-search-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_textprop_search_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-regex-multibyte-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_regex_multibyte_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-condition-case-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_condition_case_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-kill-ring-yank-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_kill_ring_yank_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-buffer-substring-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_buffer_substring_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-sort-seq-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_sort_seq_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-prin1-read-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_prin1_read_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-syntax-scan-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_syntax_scan_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-read-only-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_read_only_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-char-property-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_char_property_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-plist-alist-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_plist_alist_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-change-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_change_hooks_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-invisible-intangible-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_invisible_intangible_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-marker-evaporate-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_marker_evaporate_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-inhibit-modification-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_inhibit_modification_hooks_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-field-properties-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_field_properties_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-subr-advice-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_subr_advice_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-command-hooks-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_command_hooks_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-category-textprop-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_category_textprop_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-match-data-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_match_data_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-composition-property-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_composition_property_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-display-table-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_display_table_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-indent-fill-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_indent_fill_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-syntax-ppss-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_syntax_ppss_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-rectangle-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_rectangle_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-undo-list-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_undo_list_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-comment-region-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_comment_region_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-register-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_register_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-transpose-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_transpose_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-multi-buffer-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_multi_buffer_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-buflocal-variables-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_buflocal_variables_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-file-io-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_file_io_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-defmethod-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_defmethod_dispatch_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-abbrev-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_abbrev_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-text-property-scan-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_text_property_scan_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-auto-fill-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_auto_fill_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-truncate-wrap-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_truncate_wrap_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-line-move-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_line_move_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-char-width-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_char_width_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-invisibility-spec-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_invisibility_spec_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-jit-lock-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_jit_lock_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-overlay-stack-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_overlay_stack_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-marker-type-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_marker_type_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-tp-face-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_tp_face_overlay_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-bufsubstr-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_bufsubstr_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-before-after-string-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_before_after_string_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-region-ops-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_region_ops_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-move-overlay-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_move_overlay_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-multi-buf-adv-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_multi_buf_adv_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-deep-undo-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_deep_undo_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-syntax-adv-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_syntax_adv_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-save-excursion-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_save_excursion_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-replace-regexp-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_replace_regexp_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-chartable-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_chartable_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-line-ops-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_line_ops_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-hashtable-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_hashtable_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-obarray-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_obarray_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-prop-boundary-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_prop_boundary_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-closures-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_closures_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-temp-buffer-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_temp_buffer_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-sticky-props-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_sticky_props_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-slot-lifecycle-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_slot_lifecycle_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-method-combo-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_method_combo_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-class-alloc-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_class_alloc_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-typep-dispatch-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_typep_dispatch_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-bufswap-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_bufswap_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-advice-generic2-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_advice_generic2_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-compare-bufsubstr-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_compare_bufsubstr_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-mode-line-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_mode_line_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-defstruct-interop2-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_defstruct_interop2_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-window-point-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_window_point_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-prop-boundary2-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_prop_boundary2_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-deep-nest-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_deep_nest_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-change-hooks2-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_change_hooks2_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-text-prop-search-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_text_prop_search_marker_overlay_textprop_buflocal_narrow;
-#[path = "divergence-combo-cl-eieio-cl-labels-marker-overlay-textprop-buflocal-narrow.rs"]
-mod divergence_combo_cl_eieio_cl_labels_marker_overlay_textprop_buflocal_narrow;
