@@ -65,15 +65,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install Rust toolchain (stable-gnu)
+      - name: Install Rust toolchain (1.95.0-gnu)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
+          toolchain: 1.95.0-x86_64-pc-windows-gnu
 
-      - name: Override rust-toolchain.toml for MinGW
+      - name: Remove rust-toolchain.toml (would force MSVC)
         shell: bash
-        run: |
-          rm rust-toolchain.toml
+        run: rm -f rust-toolchain.toml
 
       - name: Setup MSYS2 and install MinGW GMP
         uses: msys2/setup-msys2@v2
