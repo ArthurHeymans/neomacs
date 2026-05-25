@@ -2365,12 +2365,8 @@ fn log_clean_process_exit(started_at: Instant, args: &[OsString]) {
 }
 
 // ---------------------------------------------------------------------------
-// TTY terminal setup/teardown for TtyRif single-thread path
+// Bootstrap dump mode
 // ---------------------------------------------------------------------------
-
-/// Saved original termios for the TtyRif path. Stored globally so
-/// `tty_init::tty_shutdown_terminal` can restore it even from a panic handler.
-#[cfg(unix)]
 
 /// Set up the terminal for the TtyRif direct-rendering path:
 /// raw mode, alternate screen buffer, hidden cursor.
