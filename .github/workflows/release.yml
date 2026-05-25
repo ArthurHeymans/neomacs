@@ -186,8 +186,14 @@ jobs:
           Start-Process msiexec.exe -Wait -ArgumentList @("/i", $runtime, "/qn", "ADDLOCAL=ALL")
           Start-Process msiexec.exe -Wait -ArgumentList @("/i", $devel, "/qn", "ADDLOCAL=ALL")
           $gstRoot = "C:\gstreamer\1.0\msvc_x86_64"
+          $pkgConfig = "$gstRoot\bin\pkg-config.exe"
+          if (-not (Test-Path $pkgConfig)) {
+            choco install pkgconfiglite -y
+            $pkgConfig = "pkg-config"
+          }
           Add-Content -Path $env:GITHUB_PATH -Value "$gstRoot\bin"
           Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_ROOT_X86_64=$gstRoot\"
+          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG=$pkgConfig"
           Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=$gstRoot\lib\pkgconfig"
           Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_RUNTIME_MSI=$runtime"
 
