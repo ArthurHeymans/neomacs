@@ -2319,18 +2319,65 @@ fn tool_program(name: &str) -> PathBuf {
 
 fn resolve_program_on_path(program: &str, path: Option<&OsStr>, cwd: &Path) -> Option<PathBuf> {
     let path = path?;
+    let candidate_names = path_lookup_candidate_names(program);
     for dir in env::split_paths(path) {
         let dir = if dir.is_absolute() {
             dir
         } else {
             cwd.join(dir)
         };
-        let candidate = dir.join(program);
-        if candidate.is_file() {
-            return Some(candidate);
+        for candidate_name in &candidate_names {
+            let candidate = dir.join(candidate_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
+}
+
+fn path_lookup_candidate_names(program: &str) -> Vec<OsString> {
+    path_lookup_candidate_names_with(program, env::var_os("PATHEXT").as_deref())
+}
+
+fn path_lookup_candidate_names_with(program: &str, pathext: Option<&OsStr>) -> Vec<OsString> {
+    let program_path = Path::new(program);
+    if program_path.extension().is_some() {
+        return vec![OsString::from(program)];
+    }
+
+    #[cfg(windows)]
+    {
+        let pathext = pathext.unwrap_or_else(|| OsStr::new(".COM;.EXE;.BAT;.CMD"));
+        let mut candidates = Vec::new();
+        for ext in env::split_paths(pathext) {
+            let ext = ext.as_os_str().to_string_lossy();
+            let ext = ext.trim_matches(';').trim();
+            if ext.is_empty() {
+                continue;
+            }
+            let ext = if ext.starts_with('.') {
+                ext.to_string()
+            } else {
+                format!(".{ext}")
+            };
+            let candidate = OsString::from(format!("{program}{ext}"));
+            if !candidates.iter().any(|existing: &OsString| {
+                existing
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&candidate.to_string_lossy())
+            }) {
+                candidates.push(candidate);
+            }
+        }
+        candidates
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = pathext;
+        vec![OsString::from(program)]
+    }
 }
 
 fn run_command(

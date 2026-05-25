@@ -1094,7 +1094,10 @@ fn executable_name_uses_platform_suffix() {
 fn cargo_program_uses_path_lookup() {
     let cargo = cargo_program();
     assert!(cargo.is_absolute(), "{}", cargo.display());
-    assert_eq!(cargo.file_name().unwrap(), "cargo");
+    assert_eq!(
+        cargo.file_name().unwrap(),
+        executable_name("cargo").as_str()
+    );
 }
 
 #[test]
@@ -1102,12 +1105,28 @@ fn resolve_program_on_path_returns_absolute_path_from_path() {
     let tempdir = tempdir();
     let bin = tempdir.join("bin");
     fs::create_dir_all(&bin).unwrap();
-    let cargo = bin.join("cargo");
+    let cargo = bin.join(executable_name("cargo"));
     fs::write(&cargo, "").unwrap();
 
     assert_eq!(
         resolve_program_on_path("cargo", Some(bin.as_os_str()), Path::new("/unused")).unwrap(),
         cargo
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn resolve_program_on_path_uses_pathext_before_extensionless_files() {
+    let tempdir = tempdir();
+    let bin = tempdir.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    fs::write(bin.join("gunzip"), "not a Windows executable").unwrap();
+    let gunzip_exe = bin.join("gunzip.exe");
+    fs::write(&gunzip_exe, "").unwrap();
+
+    assert_eq!(
+        resolve_program_on_path("gunzip", Some(bin.as_os_str()), Path::new("/unused")).unwrap(),
+        gunzip_exe
     );
 }
 
