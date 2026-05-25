@@ -54,6 +54,7 @@ rayon = "1"
 
 # FFI / system
 libc = "0.2"
+notify = "8"
 
 # Crypto
 sha1 = "0.11"

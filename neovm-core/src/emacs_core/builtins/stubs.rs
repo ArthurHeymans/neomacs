@@ -8,6 +8,7 @@ use crate::window::{FrameManager, WindowId};
 use arboard::Clipboard;
 #[cfg(target_os = "linux")]
 use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
+use notify::Watcher;
 
 // =========================================================================
 // fontset.c gap-fill stubs
@@ -19,17 +20,28 @@ pub(crate) fn builtin_fontset_list_all(args: Vec<Value>) -> EvalResult {
 }
 
 // =========================================================================
-// inotify.c gap-fill stubs
+// inotify.c / file-notification — cross-platform via `notify` crate
 // =========================================================================
 
 pub(crate) fn builtin_inotify_watch_list(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-watch-list", &args, 0)?;
-    Ok(Value::NIL)
+    FILE_NOTIFY_STATE.with(|slot| {
+        let state = slot.borrow();
+        let list: Vec<Value> = state
+            .watches
+            .iter()
+            .map(|w| Value::cons(Value::fixnum(w.id), Value::string(&w.path)))
+            .collect();
+        Ok(Value::list(list))
+    })
 }
 
 pub(crate) fn builtin_inotify_allocated_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-allocated-p", &args, 0)?;
-    Ok(Value::NIL)
+    FILE_NOTIFY_STATE.with(|slot| {
+        let state = slot.borrow();
+        Ok(Value::bool_val(state.watcher.is_some()))
+    })
 }
 
 // =========================================================================
@@ -907,7 +919,7 @@ pub(super) fn reset_stubs_thread_locals() {
     NEOMACS_CLIPBOARD_TEXT.with(|slot| *slot.borrow_mut() = None);
     NEOMACS_PRIMARY_SELECTION_TEXT.with(|slot| *slot.borrow_mut() = None);
     NEOMACS_MONITORS.with(|slot| slot.borrow_mut().clear());
-    INOTIFY_STATE.with(|slot| *slot.borrow_mut() = InotifyState::default());
+    FILE_NOTIFY_STATE.with(|slot| *slot.borrow_mut() = FileNotifyState::default());
 }
 
 thread_local! {
@@ -2249,319 +2261,153 @@ pub(crate) fn builtin_window_scroll_bar_width(args: Vec<Value>) -> EvalResult {
 }
 
 thread_local! {
-    static INOTIFY_STATE: RefCell<InotifyState> = RefCell::new(InotifyState::default());
+    static FILE_NOTIFY_STATE: RefCell<FileNotifyState> = RefCell::new(FileNotifyState::default());
 }
 
-#[cfg(target_os = "linux")]
 pub(crate) const INOTIFY_FEATURE_AVAILABLE: bool = true;
-#[cfg(not(target_os = "linux"))]
-pub(crate) const INOTIFY_FEATURE_AVAILABLE: bool = false;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct InotifyWatch {
-    descriptor: i32,
+#[derive(Debug)]
+struct FileWatch {
     id: i64,
-    mask: u32,
+    path: String,
 }
 
 #[derive(Debug)]
-struct InotifyState {
-    fd: i32,
-    watches: Vec<InotifyWatch>,
+struct FileNotifyState {
+    watcher: Option<notify::RecommendedWatcher>,
+    _rx: Option<std::sync::mpsc::Receiver<Result<notify::Event, notify::Error>>>,
+    watches: Vec<FileWatch>,
+    next_id: i64,
 }
 
-impl Default for InotifyState {
+impl Default for FileNotifyState {
     fn default() -> Self {
         Self {
-            fd: -1,
+            watcher: None,
+            _rx: None,
             watches: Vec::new(),
+            next_id: 0,
         }
     }
 }
 
-impl Drop for InotifyState {
-    fn drop(&mut self) {
-        if self.fd >= 0 {
-            unsafe {
-                libc::close(self.fd);
-            }
-            self.fd = -1;
+impl FileNotifyState {
+    fn ensure_watcher(&mut self) -> Result<(), Flow> {
+        if self.watcher.is_some() {
+            return Ok(());
         }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let watcher = notify::RecommendedWatcher::new(
+            move |res: Result<notify::Event, notify::Error>| {
+                let _ = tx.send(res);
+            },
+            notify::Config::default(),
+        )
+        .map_err(|e| {
+            file_notify_error("File watching is not available", Some(e.to_string()), None)
+        })?;
+        self.watcher = Some(watcher);
+        self._rx = Some(rx);
+        Ok(())
+    }
+
+    fn allocate_id(&mut self) -> i64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 }
 
-fn inotify_watch_descriptor_parts(value: &Value) -> Option<(i32, i64)> {
-    if !value.is_cons() {
-        return None;
-    };
-    let pair_car = value.cons_car();
-    let pair_cdr = value.cons_cdr();
-    let descriptor = pair_car.as_int()?;
-    let id = pair_cdr.as_int()?;
-    if !(0..=i32::MAX as i64).contains(&descriptor) || id < 0 {
-        return None;
-    }
-    Some((descriptor as i32, id))
-}
-
-fn inotify_file_notify_error(message: &str, errno: Option<i32>, object: Option<Value>) -> Flow {
-    if let Some(errno) = errno {
-        inotify_set_errno(errno);
-    }
-    let errno = errno.or_else(inotify_current_errno);
+fn file_notify_error(message: &str, detail: Option<String>, object: Option<Value>) -> Flow {
     let mut tail = match object {
         Some(object) if object.is_cons() => object,
         Some(object) if !object.is_nil() => Value::list(vec![object]),
         _ => Value::NIL,
     };
-    if let Some(errno) = errno {
-        tail = Value::cons(Value::string(inotify_errno_message(errno)), tail);
+    if let Some(detail) = detail {
+        tail = Value::cons(Value::string(&detail), tail);
     }
     let raw_data = Value::cons(Value::string(message), tail);
     crate::emacs_core::error::signal_with_data("file-notify-error", raw_data)
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn inotify_set_errno(errno: i32) {
-    unsafe {
-        *libc::__errno_location() = errno;
+fn extract_watch_id(value: &Value) -> Option<i64> {
+    if !value.is_cons() {
+        return None;
     }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn inotify_set_errno(_errno: i32) {}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn inotify_current_errno() -> Option<i32> {
-    let errno = unsafe { *libc::__errno_location() };
-    (errno != 0).then_some(errno)
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn inotify_current_errno() -> Option<i32> {
-    std::io::Error::last_os_error().raw_os_error()
-}
-
-fn inotify_errno_message(errno: i32) -> String {
-    unsafe {
-        let ptr = libc::strerror(errno);
-        if ptr.is_null() {
-            return format!("Unknown error {errno}");
-        }
-        std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
-    }
-}
-
-fn inotify_symbol_to_mask(symbol: Value) -> Result<u32, Flow> {
-    let mask = match symbol.as_symbol_name() {
-        Some("access") => libc::IN_ACCESS,
-        Some("attrib") => libc::IN_ATTRIB,
-        Some("close-write") => libc::IN_CLOSE_WRITE,
-        Some("close-nowrite") => libc::IN_CLOSE_NOWRITE,
-        Some("create") => libc::IN_CREATE,
-        Some("delete") => libc::IN_DELETE,
-        Some("delete-self") => libc::IN_DELETE_SELF,
-        Some("modify") => libc::IN_MODIFY,
-        Some("move-self") => libc::IN_MOVE_SELF,
-        Some("moved-from") => libc::IN_MOVED_FROM,
-        Some("moved-to") => libc::IN_MOVED_TO,
-        Some("open") => libc::IN_OPEN,
-        Some("move") => libc::IN_MOVE,
-        Some("close") => libc::IN_CLOSE,
-        Some("dont-follow") => libc::IN_DONT_FOLLOW,
-        Some("onlydir") => libc::IN_ONLYDIR,
-        Some("ignored") => libc::IN_IGNORED,
-        Some("unmount") => libc::IN_UNMOUNT,
-        Some("all-events") | Some("t") => libc::IN_ALL_EVENTS,
-        _ => {
-            return Err(inotify_file_notify_error(
-                "Unknown aspect",
-                Some(libc::EINVAL),
-                Some(symbol),
-            ));
-        }
-    };
-    Ok(mask)
-}
-
-fn inotify_aspect_to_mask(aspect: Value) -> Result<u32, Flow> {
-    if aspect.is_nil() {
-        return Ok(0);
-    }
-    if !aspect.is_cons() {
-        return inotify_symbol_to_mask(aspect);
-    }
-
-    let mut mask = 0;
-    let mut tail = aspect;
-    while tail.is_cons() {
-        mask |= inotify_symbol_to_mask(tail.cons_car())?;
-        tail = tail.cons_cdr();
-    }
-    if tail.is_nil() {
-        Ok(mask)
-    } else {
-        Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("listp"), aspect],
-        ))
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn inotify_ensure_fd(state: &mut InotifyState) -> Result<i32, Flow> {
-    if state.fd >= 0 {
-        return Ok(state.fd);
-    }
-
-    let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
-    if fd < 0 {
-        return Err(inotify_file_notify_error(
-            "File watching is not available",
-            std::io::Error::last_os_error().raw_os_error(),
-            None,
-        ));
-    }
-    state.fd = fd;
-    Ok(fd)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn inotify_ensure_fd(_state: &mut InotifyState) -> Result<i32, Flow> {
-    Err(inotify_file_notify_error(
-        "File watching is not available",
-        Some(libc::ENOSYS),
-        None,
-    ))
-}
-
-fn inotify_next_watch_id(state: &InotifyState, descriptor: i32) -> i64 {
-    let mut ids: Vec<i64> = state
-        .watches
-        .iter()
-        .filter(|watch| watch.descriptor == descriptor)
-        .map(|watch| watch.id)
-        .collect();
-    ids.sort_unstable();
-    let mut id = 0;
-    for used in ids {
-        if used != id {
-            break;
-        }
-        id += 1;
-    }
-    id
-}
-
-fn inotify_watch_is_active(value: &Value) -> bool {
-    let Some((descriptor, id)) = inotify_watch_descriptor_parts(value) else {
-        return false;
-    };
-    INOTIFY_STATE.with(|slot| {
-        slot.borrow()
-            .watches
-            .iter()
-            .any(|watch| watch.descriptor == descriptor && watch.id == id)
-    })
-}
-
-fn inotify_remove_watch(value: &Value) -> Result<bool, Flow> {
-    let Some((descriptor, id)) = inotify_watch_descriptor_parts(value) else {
-        return Ok(false);
-    };
-    INOTIFY_STATE.with(|slot| {
-        let mut state = slot.borrow_mut();
-        let Some(pos) = state
-            .watches
-            .iter()
-            .position(|watch| watch.descriptor == descriptor && watch.id == id)
-        else {
-            return Ok(false);
-        };
-
-        state.watches.remove(pos);
-        if state
-            .watches
-            .iter()
-            .any(|watch| watch.descriptor == descriptor)
-        {
-            return Ok(true);
-        }
-
-        if state.fd >= 0 {
-            let rc = unsafe { libc::inotify_rm_watch(state.fd, descriptor) };
-            if rc != 0 {
-                return Err(inotify_file_notify_error(
-                    "Could not rm watch",
-                    std::io::Error::last_os_error().raw_os_error(),
-                    Some(*value),
-                ));
-            }
-        }
-        if state.watches.is_empty() && state.fd >= 0 {
-            unsafe {
-                libc::close(state.fd);
-            }
-            state.fd = -1;
-        }
-        Ok(true)
-    })
+    let car = value.cons_car();
+    let id = car.as_int()?;
+    if id >= 0 { Some(id) } else { None }
 }
 
 pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-valid-p", &args, 1)?;
-    Ok(Value::bool_val(inotify_watch_is_active(&args[0])))
+    let Some(id) = extract_watch_id(&args[0]) else {
+        return Ok(Value::NIL);
+    };
+    FILE_NOTIFY_STATE.with(|slot| {
+        let state = slot.borrow();
+        Ok(Value::bool_val(state.watches.iter().any(|w| w.id == id)))
+    })
 }
 
 pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
     let filename = expect_strict_string(&args[0])?;
-    let mask = inotify_aspect_to_mask(args[1])?;
-    let c_filename = std::ffi::CString::new(filename.as_bytes()).map_err(|_| {
-        inotify_file_notify_error(
-            "Could not add watch for file",
-            Some(libc::EINVAL),
-            Some(args[0]),
-        )
-    })?;
-    let add_mask = mask | libc::IN_MASK_ADD | libc::IN_EXCL_UNLINK;
 
-    INOTIFY_STATE.with(|slot| {
+    FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let fd = inotify_ensure_fd(&mut state)?;
-        let descriptor = unsafe { libc::inotify_add_watch(fd, c_filename.as_ptr(), add_mask) };
-        if descriptor < 0 {
-            return Err(inotify_file_notify_error(
-                "Could not add watch for file",
-                std::io::Error::last_os_error().raw_os_error(),
-                Some(args[0]),
-            ));
+        state.ensure_watcher()?;
+
+        let path = std::path::Path::new(&filename);
+        if let Some(ref mut watcher) = state.watcher {
+            watcher
+                .watch(path, notify::RecursiveMode::NonRecursive)
+                .map_err(|e| {
+                    file_notify_error(
+                        "Could not add watch for file",
+                        Some(e.to_string()),
+                        Some(args[0]),
+                    )
+                })?;
         }
 
-        let id = inotify_next_watch_id(&state, descriptor);
-        state.watches.push(InotifyWatch {
-            descriptor,
+        let id = state.allocate_id();
+        state.watches.push(FileWatch {
             id,
-            mask,
+            path: filename.clone(),
         });
-        Ok(Value::cons(
-            Value::fixnum(i64::from(descriptor)),
-            Value::fixnum(id),
-        ))
+
+        Ok(Value::cons(Value::fixnum(id), Value::fixnum(0)))
     })
 }
 
 pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-rm-watch", &args, 1)?;
-    if inotify_watch_descriptor_parts(&args[0]).is_none() {
-        return Err(inotify_file_notify_error(
-            "Invalid descriptor ",
-            None,
-            Some(args[0]),
-        ));
-    }
-    inotify_remove_watch(&args[0])?;
-    Ok(Value::T)
+
+    let Some(id) = extract_watch_id(&args[0]) else {
+        return Err(file_notify_error("Invalid descriptor", None, Some(args[0])));
+    };
+
+    FILE_NOTIFY_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        let Some(pos) = state.watches.iter().position(|w| w.id == id) else {
+            return Ok(Value::T);
+        };
+
+        let removed = state.watches.remove(pos);
+        if let Some(ref mut watcher) = state.watcher {
+            let path = std::path::Path::new(&removed.path);
+            let _ = watcher.unwatch(path);
+        }
+
+        if state.watches.is_empty() {
+            state.watcher = None;
+            state._rx = None;
+        }
+
+        Ok(Value::T)
+    })
 }
 
 // =========================================================================
