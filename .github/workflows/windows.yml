@@ -73,8 +73,7 @@ jobs:
       - name: Override rust-toolchain.toml for MinGW
         shell: bash
         run: |
-          echo '[toolchain]
-          channel = "1.95.0-x86_64-pc-windows-gnu"' > rust-toolchain.toml
+          rm rust-toolchain.toml
 
       - name: Setup MSYS2 and install MinGW GMP
         uses: msys2/setup-msys2@v2
