@@ -18,7 +18,6 @@ Environment:
 
 Output:
   dist/neomacs-{version}-{target}.AppImage
-  dist/SHA256SUMS
 USAGE
 }
 
@@ -139,17 +138,4 @@ if ((smoke)); then
     timeout 30s "$appimage" --batch --eval "(kill-emacs 0)"
 fi
 
-(
-  cd "$dist_dir"
-  if [[ ! -f SHA256SUMS ]]; then
-    : > SHA256SUMS
-  fi
-  tmp_sums="$(mktemp)"
-  grep -v "  $(basename "$appimage")\$" SHA256SUMS > "$tmp_sums" || true
-  sha256sum "$(basename "$appimage")" >> "$tmp_sums"
-  sort "$tmp_sums" > SHA256SUMS
-  rm -f "$tmp_sums"
-)
-
 echo "wrote $appimage"
-echo "updated $dist_dir/SHA256SUMS"

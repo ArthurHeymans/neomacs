@@ -17,7 +17,6 @@ Options:
 
 Output:
   dist/neomacs-{version}-{target}.tar.gz
-  dist/SHA256SUMS
 USAGE
 }
 
@@ -38,6 +37,23 @@ get_version() {
   v="$(git describe --tags --abbrev=0 2>/dev/null)" && echo "${v#v}" && return
   v="$(git rev-parse --short=12 HEAD 2>/dev/null)" && echo "$v" && return
   echo "0.0.0-dev"
+}
+
+binary_ext_for_target() {
+  case "$1" in
+    *-windows-*) echo ".exe" ;;
+    *) echo "" ;;
+  esac
+}
+
+install_binary_if_present() {
+  local name="$1"
+  local ext="$2"
+  local source="$release_dir/$name$ext"
+  local dest="$package_dir/bin/$name$ext"
+  if [[ -f "$source" ]]; then
+    install -m 0755 "$source" "$dest"
+  fi
 }
 
 target_triple="$(detect_target)"
@@ -83,8 +99,9 @@ version="$(get_version)"
 package_name="neomacs-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
 archive="$dist_dir/$package_name.tar.gz"
+binary_ext="$(binary_ext_for_target "$target_triple")"
 
-for required in "$release_dir/neomacs" "$release_dir/neomacs.pdump"; do
+for required in "$release_dir/neomacs$binary_ext" "$release_dir/neomacs.pdump"; do
   if [[ ! -f "$required" ]]; then
     echo "missing required release artifact: $required" >&2
     echo "run cargo xtask fresh-build --release first, or omit --skip-build" >&2
@@ -96,9 +113,7 @@ rm -rf "$package_dir" "$archive"
 mkdir -p "$package_dir/bin" "$package_dir/share/neomacs"
 
 for binary in neomacs neomacs-temacs bootstrap-neomacs mock-display; do
-  if [[ -f "$release_dir/$binary" ]]; then
-    install -m 0755 "$release_dir/$binary" "$package_dir/bin/$binary"
-  fi
+  install_binary_if_present "$binary" "$binary_ext"
 done
 
 install -m 0644 "$release_dir/neomacs.pdump" "$package_dir/bin/neomacs.pdump"
@@ -130,10 +145,4 @@ else
   tar -C "$dist_dir" -czf "$archive" "$package_name"
 fi
 
-(
-  cd "$dist_dir"
-  sha256sum "$(basename "$archive")" > SHA256SUMS
-)
-
 echo "wrote $archive"
-echo "wrote $dist_dir/SHA256SUMS"

@@ -65,7 +65,7 @@ jobs:
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          toolchain: 1.95.0
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -130,12 +130,12 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies (brew)
-        run: brew install gmp pkg-config
+        run: brew install gmp pkg-config gstreamer
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          toolchain: 1.95.0
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -171,7 +171,7 @@ jobs:
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain-file: rust-toolchain.toml
+          toolchain: 1.95.0
 
       - name: Cache vcpkg GMP
         id: cache-vcpkg-gmp
@@ -201,6 +201,10 @@ jobs:
       - name: Install NSIS
         run: choco install nsis -y
 
+      - name: Add NSIS to PATH
+        shell: powershell
+        run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
+
       - name: Build and package .exe installer
         shell: bash
         env:
@@ -224,14 +228,6 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-
-      - name: Generate .sha256 sidecar files
-        run: |
-          cd dist
-            for f in *.AppImage *.deb *.rpm *.dmg *.exe; do
-            [ -f "$f" ] || continue
-            sha256sum "$f" > "${f}.sha256"
-          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

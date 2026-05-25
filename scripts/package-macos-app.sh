@@ -16,7 +16,6 @@ Environment:
 
 Output:
   dist/neomacs-{version}-aarch64-apple-darwin.dmg
-  dist/SHA256SUMS
 USAGE
 }
 
@@ -171,17 +170,4 @@ hdiutil create \
 
 rm -rf "$dmg_staging"
 
-(
-  cd "$dist_dir"
-  if [[ ! -f SHA256SUMS ]]; then
-    : > SHA256SUMS
-  fi
-  tmp_sums="$(mktemp)"
-  grep -v "  $(basename "$dmg")\$" SHA256SUMS > "$tmp_sums" || true
-  sha256sum "$(basename "$dmg")" >> "$tmp_sums"
-  sort "$tmp_sums" > SHA256SUMS
-  rm -f "$tmp_sums"
-)
-
 echo "wrote $dmg"
-echo "updated $dist_dir/SHA256SUMS"

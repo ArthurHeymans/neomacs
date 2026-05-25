@@ -13,7 +13,6 @@ Prerequisites:
 
 Output:
   dist/neomacs-{version}-x86_64-pc-windows-msvc.exe
-  dist/SHA256SUMS
 USAGE
 }
 
@@ -104,17 +103,4 @@ if ((smoke)); then
       --batch --eval "(kill-emacs 0)" || true
 fi
 
-(
-  cd "$dist_dir"
-  if [[ ! -f SHA256SUMS ]]; then
-    : > SHA256SUMS
-  fi
-  tmp_sums="$(mktemp)"
-  grep -v "  $(basename "$exe_path")\$" SHA256SUMS > "$tmp_sums" || true
-  sha256sum "$(basename "$exe_path")" >> "$tmp_sums"
-  sort "$tmp_sums" > SHA256SUMS
-  rm -f "$tmp_sums"
-)
-
 echo "wrote $exe_path"
-echo "updated $dist_dir/SHA256SUMS"
