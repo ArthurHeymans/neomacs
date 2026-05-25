@@ -214,7 +214,14 @@ jobs:
 
       - name: Build and package .exe installer
         shell: bash
-        run: ./scripts/package-windows-installer.sh --no-smoke
+        run: |
+          gst_root_posix="$(cygpath -u "$GSTREAMER_ROOT_X86_64")"
+          export PATH="$gst_root_posix/bin:$PATH"
+          export PKG_CONFIG="$gst_root_posix/bin/pkg-config.exe"
+          export PKG_CONFIG_PATH="$gst_root_posix/lib/pkgconfig"
+          export PKG_CONFIG_LIBDIR="$gst_root_posix/lib/pkgconfig"
+          "$PKG_CONFIG" --modversion glib-2.0
+          ./scripts/package-windows-installer.sh --no-smoke
 
       - name: Upload .exe artifact
         uses: actions/upload-artifact@v4
