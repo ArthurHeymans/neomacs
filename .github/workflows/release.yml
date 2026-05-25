@@ -162,6 +162,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+      GSTREAMER_VERSION: 1.26.9
     steps:
       - name: Checkout
         uses: actions/checkout@v6
