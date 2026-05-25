@@ -24,7 +24,15 @@ jobs:
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache vcpkg GMP
+        id: cache-vcpkg-gmp
+        uses: actions/cache@v5
+        with:
+          path: C:\vcpkg\installed\x64-windows-static
+          key: vcpkg-gmp-x64-windows-static-v1
+
       - name: Install GMP via vcpkg
+        if: steps.cache-vcpkg-gmp.outputs.cache-hit != 'true'
         run: vcpkg install gmp:x64-windows-static
 
       - name: Set pkg-config path for vcpkg
