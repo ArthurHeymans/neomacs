@@ -55,6 +55,7 @@ rayon = "1"
 # FFI / system
 libc = "0.2"
 notify = "8"
+fs4 = { version = "1", features = ["sync"] }
 
 # Crypto
 sha1 = "0.11"

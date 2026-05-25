@@ -2451,81 +2451,54 @@ fn open_bootstrap_lock_file(lock_path: &Path) -> Result<std::fs::File, String> {
 }
 
 struct BootstrapCacheWriteLock {
-    #[cfg(unix)]
     file: std::fs::File,
 }
 
 impl BootstrapCacheWriteLock {
     fn acquire(lock_path: &Path) -> Result<Self, BootstrapCacheLockError> {
-        #[cfg(unix)]
-        {
-            let file =
-                open_bootstrap_lock_file(lock_path).map_err(BootstrapCacheLockError::Other)?;
+        let file = open_bootstrap_lock_file(lock_path).map_err(BootstrapCacheLockError::Other)?;
 
-            // Serialize cache creation/repair across processes while keeping
-            // ordinary pdump reads lock-free.
-            let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-            if rc != 0 {
-                let err = std::io::Error::last_os_error();
-                if matches!(err.raw_os_error(), Some(libc::EWOULDBLOCK)) {
-                    return Err(BootstrapCacheLockError::Busy(format!(
-                        "bootstrap cache lock busy at {}",
-                        lock_path.display()
-                    )));
-                }
-                return Err(BootstrapCacheLockError::Other(format!(
+        use fs4::FileExt as _;
+        match fs4::FileExt::try_lock(&file) {
+            Ok(()) => Ok(Self { file }),
+            Err(e) => match e {
+                fs4::TryLockError::WouldBlock => Err(BootstrapCacheLockError::Busy(format!(
+                    "bootstrap cache lock busy at {}",
+                    lock_path.display()
+                ))),
+                fs4::TryLockError::Error(e) => Err(BootstrapCacheLockError::Other(format!(
                     "bootstrap cache lock: failed locking {}: {}",
                     lock_path.display(),
-                    err
-                )));
-            }
-
-            Ok(Self { file })
-        }
-
-        #[cfg(not(unix))]
-        {
-            let _ = lock_path;
-            Ok(Self {})
+                    e
+                ))),
+            },
         }
     }
 }
 
 struct BootstrapCacheReadLock {
-    #[cfg(unix)]
     file: std::fs::File,
 }
 
 impl BootstrapCacheReadLock {
     fn wait(lock_path: &Path) -> Result<Self, String> {
-        #[cfg(unix)]
-        {
-            let file = open_bootstrap_lock_file(lock_path)?;
-            let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
-            if rc != 0 {
-                let err = std::io::Error::last_os_error();
-                return Err(format!(
-                    "bootstrap cache lock: failed waiting on {}: {}",
-                    lock_path.display(),
-                    err
-                ));
-            }
-
-            Ok(Self { file })
-        }
-
-        #[cfg(not(unix))]
-        {
-            let _ = lock_path;
-            Ok(Self {})
-        }
+        let file = open_bootstrap_lock_file(lock_path)?;
+        use fs4::FileExt;
+        file.lock_shared().map_err(|e| {
+            format!(
+                "bootstrap cache lock: failed waiting on {}: {}",
+                lock_path.display(),
+                e
+            )
+        })?;
+        Ok(Self { file })
     }
 }
 
-#[cfg(unix)]
 impl Drop for BootstrapCacheWriteLock {
     fn drop(&mut self) {
-        let _ = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+        use fs4::FileExt;
+        let _ = self.file.unlock();
     }
 }
 
