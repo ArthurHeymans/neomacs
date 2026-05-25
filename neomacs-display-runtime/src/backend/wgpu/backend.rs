@@ -159,8 +159,7 @@ impl WinitBackend {
         }
 
         // Create wgpu instance
-        let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_descriptor.backends = wgpu::Backends::all();
+        let instance_descriptor = crate::wgpu_instance_descriptor_from_env();
         let instance = wgpu::Instance::new(instance_descriptor);
 
         // Request adapter without a surface (headless)
@@ -349,8 +348,8 @@ impl WinitBackend {
         self.height = size.height;
 
         // Create wgpu instance
-        let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
-        instance_descriptor.backends = wgpu::Backends::all();
+        let instance_descriptor =
+            crate::wgpu_instance_descriptor_with_display(event_loop.owned_display_handle());
         let instance = wgpu::Instance::new(instance_descriptor);
 
         // Create surface - we need to use unsafe to create a surface from the window

@@ -72,6 +72,16 @@ pub fn gpu_power_preference() -> wgpu::PowerPreference {
     }
 }
 
+pub(crate) fn wgpu_instance_descriptor_from_env() -> wgpu::InstanceDescriptor {
+    wgpu::InstanceDescriptor::new_without_display_handle_from_env()
+}
+
+pub(crate) fn wgpu_instance_descriptor_with_display(
+    display: winit::event_loop::OwnedDisplayHandle,
+) -> wgpu::InstanceDescriptor {
+    wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(display))
+}
+
 /// Initialize the display engine.
 ///
 /// Logging is initialized separately by the binary entry point via

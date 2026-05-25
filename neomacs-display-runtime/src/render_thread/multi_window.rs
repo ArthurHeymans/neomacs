@@ -120,6 +120,7 @@ impl MultiWindowManager {
     pub fn process_creates(
         &mut self,
         event_loop: &ActiveEventLoop,
+        instance: &wgpu::Instance,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
     ) {
@@ -143,11 +144,7 @@ impl MultiWindowManager {
                     let scale_factor = effective_window_scale_factor(raw_scale_factor);
                     let phys = window.inner_size();
 
-                    // Create surface for this window
-                    let mut instance_descriptor =
-                        wgpu::InstanceDescriptor::new_without_display_handle();
-                    instance_descriptor.backends = wgpu::Backends::all();
-                    let instance = wgpu::Instance::new(instance_descriptor);
+                    // Create surface for this window using the primary display-bound instance.
                     let surface = match instance.create_surface(window.clone()) {
                         Ok(s) => s,
                         Err(e) => {

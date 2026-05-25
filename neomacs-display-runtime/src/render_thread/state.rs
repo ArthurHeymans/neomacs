@@ -186,6 +186,13 @@ pub(super) struct ImeCursorArea {
     pub(super) height: u32,
 }
 
+pub(super) struct RenderGpuContext {
+    pub(super) instance: wgpu::Instance,
+    pub(super) adapter: wgpu::Adapter,
+    pub(super) device: Arc<wgpu::Device>,
+    pub(super) queue: Arc<wgpu::Queue>,
+}
+
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
     pub(super) window: Option<Arc<Window>>,
@@ -195,12 +202,11 @@ pub(super) struct RenderApp {
     pub(super) title: String,
     pub(super) primary_geometry_hints: Option<GuiFrameGeometryHints>,
 
-    // wgpu state
+    // Shared wgpu context used by the primary surface and secondary windows.
+    pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
     pub(super) surface: Option<wgpu::Surface<'static>>,
     pub(super) surface_config: Option<wgpu::SurfaceConfiguration>,
-    pub(super) device: Option<Arc<wgpu::Device>>,
-    pub(super) queue: Option<Arc<wgpu::Queue>>,
     pub(super) glyph_atlas: Option<WgpuGlyphAtlas>,
 
     // Face cache built from frame data
@@ -256,9 +262,6 @@ pub(super) struct RenderApp {
 
     // Multi-window manager (secondary OS windows for top-level frames)
     pub(super) multi_windows: MultiWindowManager,
-    // wgpu adapter (needed for creating surfaces on new windows)
-    pub(super) adapter: Option<wgpu::Adapter>,
-
     // Child frames (posframe, which-key-posframe, etc.)
     pub(super) child_frames: ChildFrameManager,
     // Child frame visual style
@@ -375,11 +378,10 @@ impl RenderApp {
             title,
             primary_geometry_hints: None,
             scale_factor: 1.0,
+            gpu: None,
             renderer: None,
             surface: None,
             surface_config: None,
-            device: None,
-            queue: None,
             glyph_atlas: None,
             faces: HashMap::new(),
             modifiers: 0,
@@ -404,7 +406,6 @@ impl RenderApp {
             #[cfg(feature = "neo-term")]
             shared_terminals,
             multi_windows: MultiWindowManager::new(),
-            adapter: None,
             child_frames: ChildFrameManager::new(),
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
