@@ -2896,6 +2896,8 @@ pub struct BufferManager {
 struct TextPropertyUndoRun {
     char_start: usize,
     char_end: usize,
+    source_start: usize,
+    source_end: usize,
     plist: Vec<(Value, Value)>,
 }
 
@@ -2939,12 +2941,16 @@ fn buffer_text_property_undo_runs(
                 runs.push(TextPropertyUndoRun {
                     char_start: cursor,
                     char_end: clipped_start,
+                    source_start: cursor,
+                    source_end: clipped_start,
                     plist: Vec::new(),
                 });
             }
             runs.push(TextPropertyUndoRun {
                 char_start: clipped_start,
                 char_end: clipped_end,
+                source_start: interval_start,
+                source_end: interval_end,
                 plist: plist.to_vec(),
             });
             cursor = clipped_end;
@@ -2955,6 +2961,8 @@ fn buffer_text_property_undo_runs(
         runs.push(TextPropertyUndoRun {
             char_start: cursor,
             char_end,
+            source_start: cursor,
+            source_end: char_end,
             plist: Vec::new(),
         });
     }
@@ -3001,14 +3009,24 @@ fn text_properties_set_undo_entries(
 ) -> Vec<(Value, Value, usize, usize)> {
     let mut entries = Vec::new();
     for run in buffer_text_property_undo_runs(buf, start, end) {
-        for (old_name, old_value) in &run.plist {
+        // GNU's set_text_properties_1 calls split_interval_right/left without
+        // copying properties into the changed split interval except for the
+        // untouched remainder.  Therefore set_properties sees a nil old plist
+        // for partial source intervals and records nil in undo.
+        let old_plist: &[(Value, Value)] =
+            if run.char_start == run.source_start && run.char_end == run.source_end {
+                &run.plist
+            } else {
+                &[]
+            };
+        for (old_name, old_value) in old_plist {
             match plist_get_eq(plist, *old_name) {
                 Some(new_value) if eq_value(&new_value, old_value) => {}
                 _ => entries.push((*old_name, *old_value, run.char_start, run.char_end)),
             }
         }
         for (new_name, _) in plist {
-            if plist_get_eq(&run.plist, *new_name).is_none() {
+            if plist_get_eq(old_plist, *new_name).is_none() {
                 entries.push((*new_name, Value::NIL, run.char_start, run.char_end));
             }
         }

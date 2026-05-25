@@ -469,6 +469,62 @@ fn test_undo_restores_property_when_range_start_was_unpropertied() {
 }
 
 #[test]
+fn test_set_text_properties_partial_interval_undo_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let id = eval.buffers.current_buffer_id().expect("scratch buffer");
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let italic = Value::symbol("italic");
+    let underline = Value::symbol("underline");
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
+        buffer.insert("abcdef");
+    }
+    eval.buffers
+        .put_buffer_text_property(id, 0, 2, face, bold)
+        .expect("scratch buffer");
+    eval.buffers
+        .put_buffer_text_property(id, 2, 4, face, italic)
+        .expect("scratch buffer");
+    eval.buffers
+        .configure_buffer_undo_list(id, Value::NIL)
+        .expect("scratch buffer");
+    eval.buffers
+        .set_buffer_text_properties(id, 1, 3, vec![(face, underline)])
+        .expect("scratch buffer");
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
+        let mut ul = buffer.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buffer.set_undo_list(ul);
+    }
+
+    builtin_undo(&mut eval, vec![]).unwrap();
+
+    let buffer = eval.buffers.current_buffer().expect("scratch buffer");
+    assert_eq!(
+        buffer.text.text_props_get_properties_ordered(0),
+        vec![(face, bold)]
+    );
+    assert_eq!(
+        buffer.text.text_props_get_properties_ordered(1),
+        vec![(face, Value::NIL)]
+    );
+    assert_eq!(
+        buffer.text.text_props_get_properties_ordered(2),
+        vec![(face, Value::NIL)]
+    );
+    assert_eq!(
+        buffer.text.text_props_get_properties_ordered(3),
+        vec![(face, italic)]
+    );
+    assert!(buffer.text.text_props_get_properties_ordered(4).is_empty());
+}
+
+#[test]
 fn test_undo_without_boundary_signals_user_error_after_apply() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
