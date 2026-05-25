@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install system dependencies (apt)
         run: |
@@ -115,6 +117,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install system dependencies (brew)
         run: brew install gmp pkg-config
@@ -127,13 +131,13 @@ jobs:
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: macos-x86_64
+          shared-key: macos-aarch64
           cache-bin: false
           save-if: true
           cache-on-failure: true
 
       - name: Build and package release
-        run: ./scripts/package-release.sh --no-smoke
+        run: ./scripts/package-release.sh --target aarch64-apple-darwin --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -153,6 +157,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -188,7 +194,7 @@ jobs:
         shell: bash
         env:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
-        run: ./scripts/package-release.sh --no-smoke
+        run: ./scripts/package-release.sh --target x86_64-pc-windows-msvc --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

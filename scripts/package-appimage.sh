@@ -3,12 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/package-appimage.sh [--target NAME] [--skip-build] [--no-smoke]
+Usage: scripts/package-appimage.sh [--target TRIPLE] [--skip-build] [--no-smoke]
 
 Build and package a Neomacs Linux AppImage.
 
 Options:
-  --target NAME   Artifact target suffix. Defaults to linux-x86_64.
+  --target TRIPLE Rust target triple. Defaults to x86_64-unknown-linux-gnu.
   --skip-build    Reuse existing target/release artifacts.
   --no-smoke      Do not smoke-test the AppImage.
 
@@ -17,19 +17,26 @@ Environment:
   APPIMAGETOOL_APPIMAGE  Path to appimagetool-x86_64.AppImage or appimagetool.
 
 Output:
-  dist/neomacs-NAME.AppImage
+  dist/neomacs-{version}-{target}.AppImage
   dist/SHA256SUMS
 USAGE
 }
 
-target_name="linux-x86_64"
+get_version() {
+  local v
+  v="$(git describe --tags --abbrev=0 2>/dev/null)" && echo "${v#v}" && return
+  v="$(git rev-parse --short=12 HEAD 2>/dev/null)" && echo "$v" && return
+  echo "0.0.0-dev"
+}
+
+target_triple="x86_64-unknown-linux-gnu"
 skip_build=0
 smoke=1
 
 while (($#)); do
   case "$1" in
     --target)
-      target_name="${2:?--target requires a value}"
+      target_triple="${2:?--target requires a value}"
       shift 2
       ;;
     --skip-build)
@@ -56,7 +63,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 dist_dir="$repo_root/dist"
-package_name="neomacs-${target_name}"
+version="$(get_version)"
+package_name="neomacs-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
 appdir="$dist_dir/$package_name.AppDir"
 appimage="$dist_dir/$package_name.AppImage"
@@ -74,14 +82,14 @@ if [[ -z "$appimagetool" || ! -x "$appimagetool" ]]; then
 fi
 
 if [[ ! -x "$package_dir/bin/neomacs" || ! -d "$package_dir/share/neomacs/lisp" ]]; then
-  package_args=(--target "$target_name")
+  package_args=(--target "$target_triple")
   if ((skip_build)); then
     package_args+=(--skip-build)
   fi
   package_args+=(--no-smoke)
   scripts/package-release.sh "${package_args[@]}"
 elif ((skip_build == 0)); then
-  scripts/package-release.sh --target "$target_name" --no-smoke
+  scripts/package-release.sh --target "$target_triple" --no-smoke
 fi
 
 rm -rf "$appdir" "$appimage"

@@ -103,6 +103,7 @@ jobs:
         run: cargo check --no-default-features -p neomacs -p neovm-core
 
   check-windows-gnu:
+    if: false  # Disabled: MSVC is the preferred Windows toolchain for distribution
     name: cargo check (windows-gnu-x86_64)
     runs-on: windows-latest
     timeout-minutes: 30
