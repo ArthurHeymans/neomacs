@@ -104,3 +104,115 @@ jobs:
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: build macOS
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies (brew)
+        run: brew install gmp pkg-config
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain-file: rust-toolchain.toml
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-x86_64
+          cache-bin: false
+          save-if: true
+          cache-on-failure: true
+
+      - name: Build release binaries
+        run: cargo xtask fresh-build --release
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neomacs-macos
+          path: |
+            target/release/neomacs
+            target/release/temacs
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/neomacs
+            target/release/temacs
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: build Windows
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain-file: rust-toolchain.toml
+
+      - name: Cache vcpkg GMP
+        id: cache-vcpkg-gmp
+        uses: actions/cache@v5
+        with:
+          path: C:\vcpkg\installed\x64-windows-static
+          key: vcpkg-gmp-x64-windows-static-v1
+
+      - name: Install GMP via vcpkg
+        if: steps.cache-vcpkg-gmp.outputs.cache-hit != 'true'
+        run: vcpkg install gmp:x64-windows-static
+
+      - name: Set pkg-config path for vcpkg
+        shell: powershell
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=C:\vcpkg\installed\x64-windows-static\lib\pkgconfig"
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=C:\vcpkg"
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-msvc-x86_64
+          cache-bin: false
+          save-if: true
+          cache-on-failure: true
+
+      - name: Build release binaries
+        env:
+          PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
+        run: cargo xtask fresh-build --release
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neomacs-windows
+          path: |
+            target/release/neomacs.exe
+            target/release/temacs.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/neomacs.exe
+            target/release/temacs.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

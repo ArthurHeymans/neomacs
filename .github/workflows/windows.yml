@@ -49,10 +49,10 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
-      - name: Build neomacs on Windows (MSVC, no video/neo-term)
+      - name: Check neomacs on Windows (MSVC)
         env:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
-        run: cargo build --bin neomacs --no-default-features
+        run: cargo check --workspace --exclude neomacs-tui-tests --exclude neomacs-melpa-tests --exclude neovm-oracle-tests
 
   # MinGW target — install GMP via MSYS2, then build with x86_64-pc-windows-gnu.
   mingw:
@@ -92,5 +92,5 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
-      - name: Build neomacs on Windows (MinGW, no video/neo-term)
-        run: cargo build --bin neomacs --no-default-features --target x86_64-pc-windows-gnu
+      - name: Check neomacs on Windows (MinGW)
+        run: cargo check --workspace --exclude neomacs-tui-tests --exclude neomacs-melpa-tests --exclude neovm-oracle-tests --target x86_64-pc-windows-gnu
