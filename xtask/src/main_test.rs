@@ -1083,6 +1083,14 @@ fn executable_role_copy_breaks_existing_hardlink() {
 }
 
 #[test]
+fn executable_name_uses_platform_suffix() {
+    assert_eq!(
+        executable_name("neomacs"),
+        format!("neomacs{}", std::env::consts::EXE_SUFFIX)
+    );
+}
+
+#[test]
 fn cargo_program_uses_path_lookup() {
     let cargo = cargo_program();
     assert!(cargo.is_absolute(), "{}", cargo.display());

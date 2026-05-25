@@ -2108,9 +2108,9 @@ fn remove_file_if_exists(path: &Path) -> Result<bool> {
 fn pipeline_paths(options: &FreshBuildOptions) -> PipelinePaths {
     let lisp_root = options.runtime_root.join("lisp");
     PipelinePaths {
-        temacs: options.bin_dir.join("neomacs-temacs"),
-        bootstrap: options.bin_dir.join("bootstrap-neomacs"),
-        final_bin: options.bin_dir.join("neomacs"),
+        temacs: options.bin_dir.join(executable_name("neomacs-temacs")),
+        bootstrap: options.bin_dir.join(executable_name("bootstrap-neomacs")),
+        final_bin: options.bin_dir.join(executable_name("neomacs")),
         etc_root: options.runtime_root.join("etc"),
         makefile_in: lisp_root.join("Makefile.in"),
         leim_root: options.repo_root.join("leim"),
@@ -2119,6 +2119,10 @@ fn pipeline_paths(options: &FreshBuildOptions) -> PipelinePaths {
         admin_unidata_root: options.repo_root.join("admin/unidata"),
         lisp_root,
     }
+}
+
+fn executable_name(stem: &str) -> String {
+    format!("{stem}{}", env::consts::EXE_SUFFIX)
 }
 
 fn ensure_runtime_inputs(paths: &PipelinePaths) -> Result<()> {

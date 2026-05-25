@@ -9,6 +9,7 @@
 
 #[cfg(not(windows))]
 use std::ffi::{CStr, CString};
+#[cfg(not(windows))]
 use std::os::raw::c_char;
 #[cfg(not(windows))]
 use std::os::raw::c_int;
