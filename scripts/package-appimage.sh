@@ -5,7 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/package-appimage.sh [--target TRIPLE] [--skip-build] [--no-smoke]
 
-Build and package a Neomacs Linux AppImage.
+Build and package a NEO Emacs Linux AppImage.
 
 Options:
   --target TRIPLE Rust target triple. Defaults to x86_64-unknown-linux-gnu.
@@ -105,7 +105,7 @@ desktop_file="$appdir/usr/share/applications/neomacs.desktop"
 cat >"$desktop_file" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
-Name=Neomacs
+Name=NEO Emacs
 Comment=Extensible text editor
 Exec=neomacs %F
 Icon=neomacs

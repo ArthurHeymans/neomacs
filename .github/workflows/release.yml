@@ -136,13 +136,13 @@ jobs:
           save-if: true
           cache-on-failure: true
 
-      - name: Build and package release
-        run: ./scripts/package-release.sh --target aarch64-apple-darwin --no-smoke
+      - name: Build and package .app + .dmg
+        run: ./scripts/package-macos-app.sh --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/neomacs-*.tar.gz
+          files: dist/neomacs-*.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -190,16 +190,19 @@ jobs:
           save-if: true
           cache-on-failure: true
 
-      - name: Build and package release
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Build and package .exe installer
         shell: bash
         env:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
-        run: ./scripts/package-release.sh --target x86_64-pc-windows-msvc --no-smoke
+        run: ./scripts/package-windows-installer.sh --no-smoke
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/neomacs-*.tar.gz
+          files: dist/neomacs-*.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
