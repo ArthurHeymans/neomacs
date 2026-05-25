@@ -72,6 +72,16 @@ pkg_args+=(--no-smoke)
 
 scripts/package-release.sh "${pkg_args[@]}"
 
+if [[ -n "${GSTREAMER_RUNTIME_MSI:-}" ]]; then
+  if [[ ! -f "$GSTREAMER_RUNTIME_MSI" ]]; then
+    echo "GSTREAMER_RUNTIME_MSI does not exist: $GSTREAMER_RUNTIME_MSI" >&2
+    exit 1
+  fi
+  mkdir -p "$package_dir/vendor/gstreamer"
+  install -m 0644 "$GSTREAMER_RUNTIME_MSI" \
+    "$package_dir/vendor/gstreamer/gstreamer-runtime.msi"
+fi
+
 nsi_script="$repo_root/assets/windows-installer.nsi"
 if [[ ! -f "$nsi_script" ]]; then
   echo "NSIS script not found: $nsi_script" >&2

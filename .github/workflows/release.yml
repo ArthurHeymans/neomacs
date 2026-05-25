@@ -122,6 +122,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+      GSTREAMER_VERSION: 1.26.9
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -172,25 +173,22 @@ jobs:
         with:
           toolchain: 1.95.0
 
-      - name: Cache vcpkg system libraries
-        id: cache-vcpkg-system-libs
-        uses: actions/cache@v5
-        with:
-          path: C:\vcpkg\installed\x64-windows-static
-          key: vcpkg-system-libs-x64-windows-static-v1
-
-      - name: Install pkg-config
-        run: choco install pkgconfiglite -y
-
-      - name: Install system libraries via vcpkg
-        if: steps.cache-vcpkg-system-libs.outputs.cache-hit != 'true'
-        run: vcpkg install glib:x64-windows-static "gstreamer[plugins-base]:x64-windows-static"
-
-      - name: Set pkg-config path for vcpkg
+      - name: Install GStreamer SDK
         shell: powershell
         run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=C:\vcpkg\installed\x64-windows-static\lib\pkgconfig"
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=C:\vcpkg"
+          $ErrorActionPreference = "Stop"
+          $baseUrl = "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GSTREAMER_VERSION/msvc"
+          $runtime = "$env:RUNNER_TEMP\gstreamer-runtime.msi"
+          $devel = "$env:RUNNER_TEMP\gstreamer-devel.msi"
+          Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $runtime
+          Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-devel-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $devel
+          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $runtime, "/qn", "ADDLOCAL=ALL")
+          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $devel, "/qn", "ADDLOCAL=ALL")
+          $gstRoot = "C:\gstreamer\1.0\msvc_x86_64"
+          Add-Content -Path $env:GITHUB_PATH -Value "$gstRoot\bin"
+          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_ROOT_X86_64=$gstRoot\"
+          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=$gstRoot\lib\pkgconfig"
+          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_RUNTIME_MSI=$runtime"
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -209,8 +207,6 @@ jobs:
 
       - name: Build and package .exe installer
         shell: bash
-        env:
-          PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
         run: ./scripts/package-windows-installer.sh --no-smoke
 
       - name: Upload .exe artifact
