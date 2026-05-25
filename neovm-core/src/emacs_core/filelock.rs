@@ -69,24 +69,13 @@ fn current_user_name() -> String {
 }
 
 fn current_host_name() -> String {
-    #[cfg(unix)]
-    {
-        let mut buf = [0u8; 256];
-        unsafe {
-            if libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) == 0 {
-                let end = buf.iter().position(|b| *b == 0).unwrap_or(buf.len());
-                if let Ok(host) = std::str::from_utf8(&buf[..end])
-                    && !host.is_empty()
-                {
-                    return host.to_string();
-                }
-            }
-        }
-    }
-
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "unknown-host".to_string())
+    hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+        .filter(|s| !s.is_empty())
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .unwrap_or_else(|| "unknown-host".to_string())
 }
 
 fn current_lock_info_string() -> String {

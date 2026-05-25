@@ -2603,9 +2603,8 @@ fn parse_stat_i64_field(fields: &[&str], index: usize) -> Option<i64> {
     fields.get(index)?.parse::<i64>().ok()
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(unix)]
 fn page_size_kb() -> i64 {
-    // SAFETY: `sysconf(_SC_PAGESIZE)` has no additional preconditions.
     let page_size_bytes = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
     if page_size_bytes <= 0 {
         4
@@ -2614,7 +2613,7 @@ fn page_size_kb() -> i64 {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(unix))]
 fn page_size_kb() -> i64 {
     4
 }

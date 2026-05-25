@@ -805,30 +805,7 @@ fn fallback_system_configuration() -> String {
 }
 
 fn operating_system_release() -> Option<String> {
-    #[cfg(unix)]
-    {
-        let mut utsname = std::mem::MaybeUninit::<libc::utsname>::uninit();
-        // SAFETY: uname writes a fully initialized utsname struct on success.
-        let release = unsafe {
-            if libc::uname(utsname.as_mut_ptr()) != 0 {
-                return None;
-            }
-            let utsname = utsname.assume_init();
-            CStr::from_ptr(utsname.release.as_ptr())
-                .to_string_lossy()
-                .trim()
-                .to_string()
-        };
-        if release.is_empty() {
-            None
-        } else {
-            Some(release)
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        None
-    }
+    sysinfo::System::kernel_version()
 }
 
 /// `(emacs-version)` -> string.

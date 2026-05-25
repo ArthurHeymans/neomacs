@@ -1303,9 +1303,8 @@ fn lookup_group_name(_gid: u32) -> Option<String> {
 
 #[cfg(unix)]
 fn read_load_average() -> Option<[f64; 3]> {
-    let mut values = [0.0f64; 3];
-    let result = unsafe { libc::getloadavg(values.as_mut_ptr(), 3) };
-    if result == 3 { Some(values) } else { None }
+    let load = sysinfo::System::load_average();
+    Some([load.one, load.five, load.fifteen])
 }
 
 #[cfg(not(unix))]
