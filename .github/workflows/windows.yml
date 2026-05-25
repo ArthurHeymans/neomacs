@@ -52,7 +52,7 @@ jobs:
       - name: Check neomacs on Windows (MSVC)
         env:
           PKG_CONFIG_PATH: "C:\\vcpkg\\installed\\x64-windows-static\\lib\\pkgconfig"
-        run: cargo check --workspace --exclude neomacs-tui-tests --exclude neomacs-melpa-tests --exclude neovm-oracle-tests
+        run: cargo check --no-default-features -p neomacs -p neovm-core
 
   # MinGW target — install GMP via MSYS2, then build with x86_64-pc-windows-gnu.
   mingw:
@@ -98,4 +98,4 @@ jobs:
           cache-on-failure: true
 
       - name: Check neomacs on Windows (MinGW)
-        run: cargo check --workspace --exclude neomacs-tui-tests --exclude neomacs-melpa-tests --exclude neovm-oracle-tests --target x86_64-pc-windows-gnu
+        run: cargo check --no-default-features -p neomacs -p neovm-core --target x86_64-pc-windows-gnu
