@@ -4480,29 +4480,22 @@ fn write_region_content_in_state(
 }
 
 struct DecodedFileContents {
-    value: Value,
+    text: LispString,
     coding: String,
 }
 
 impl DecodedFileContents {
     fn from_lisp_string(text: LispString, coding: String) -> Self {
-        Self {
-            value: Value::heap_string(text),
-            coding,
-        }
+        Self { text, coding }
     }
 
-    fn from_runtime_multibyte_string(text: String, coding: String) -> Self {
-        Self::from_lisp_string(
-            crate::emacs_core::builtins::runtime_string_to_lisp_string(&text, true),
-            coding,
-        )
+    fn from_decoded_multibyte_bytes(bytes: &[u8], coding: String) -> Self {
+        let text = crate::encoding::decode_bytes_to_lisp_string(bytes, &coding);
+        Self::from_lisp_string(text, coding)
     }
 
     fn text(&self) -> &LispString {
-        self.value
-            .as_lisp_string()
-            .expect("decoded file contents must be a Lisp string")
+        &self.text
     }
 
     fn text_properties(&self) -> Option<&TextPropertyTable> {
@@ -4569,9 +4562,8 @@ fn decode_insert_file_contents(
         if source_load_context && multibyte {
             let eol_suffix = detected_default_eol_suffix(bytes);
             let coding = format!("utf-8-emacs{eol_suffix}");
-            return Ok(DecodedFileContents::from_runtime_multibyte_string(
-                crate::encoding::decode_bytes(bytes, &coding),
-                coding,
+            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+                bytes, coding,
             ));
         }
 
@@ -4585,24 +4577,21 @@ fn decode_insert_file_contents(
         let eol_suffix = detected_default_eol_suffix(bytes);
         if bytes.is_ascii() {
             let coding = format!("undecided{eol_suffix}");
-            return Ok(DecodedFileContents::from_runtime_multibyte_string(
-                crate::encoding::decode_bytes(bytes, &coding),
-                coding,
+            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+                bytes, coding,
             ));
         }
         if std::str::from_utf8(bytes).is_ok() {
             let coding = format!("utf-8{eol_suffix}");
-            return Ok(DecodedFileContents::from_runtime_multibyte_string(
-                crate::encoding::decode_bytes(bytes, &coding),
-                coding,
+            return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+                bytes, coding,
             ));
         }
 
         let eol_suffix = detected_default_eol_suffix(bytes);
         let coding = format!("utf-8-emacs{eol_suffix}");
-        let decoded = crate::encoding::decode_bytes(bytes, &coding);
-        return Ok(DecodedFileContents::from_runtime_multibyte_string(
-            decoded, coding,
+        return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+            bytes, coding,
         ));
     };
 
@@ -4612,9 +4601,8 @@ fn decode_insert_file_contents(
         .unwrap_or_else(|| coding.to_string());
 
     if source_load_context && multibyte && is_utf8_like_source_coding(&coding) {
-        return Ok(DecodedFileContents::from_runtime_multibyte_string(
-            crate::encoding::decode_bytes(bytes, &coding),
-            coding,
+        return Ok(DecodedFileContents::from_decoded_multibyte_bytes(
+            bytes, coding,
         ));
     }
 
@@ -4627,10 +4615,13 @@ fn decode_insert_file_contents(
     )?;
 
     match decoded.kind() {
-        ValueKind::String => Ok(DecodedFileContents {
-            value: decoded,
+        ValueKind::String => Ok(DecodedFileContents::from_lisp_string(
+            decoded
+                .as_lisp_string()
+                .expect("ValueKind::String must carry LispString")
+                .clone(),
             coding,
-        }),
+        )),
         other => Err(signal(
             "error",
             vec![Value::string(format!(

@@ -1171,6 +1171,14 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
     }
 }
 
+pub(crate) fn decode_bytes_to_lisp_string(
+    bytes: &[u8],
+    coding_system: &str,
+) -> crate::heap_types::LispString {
+    let text = decode_bytes(bytes, coding_system);
+    crate::emacs_core::builtins::runtime_string_to_lisp_string(&text, true)
+}
+
 fn is_byte_preserving_coding_system(coding_system: &str) -> bool {
     matches!(
         coding_system,
