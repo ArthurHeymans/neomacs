@@ -62,6 +62,13 @@ jobs:
           save-if: true
           cache-on-failure: true
 
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Add NSIS to PATH
+        shell: powershell
+        run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
+
       - name: Verify GStreamer pkg-config
         shell: bash
         run: source scripts/windows-gstreamer-env.sh --verify
@@ -72,3 +79,10 @@ jobs:
         run: |
           source scripts/windows-gstreamer-env.sh
           cargo xtask fresh-build --release
+
+      - name: Run Windows package script
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          source scripts/windows-gstreamer-env.sh
+          ./scripts/package-windows-installer.sh --skip-build --no-smoke
