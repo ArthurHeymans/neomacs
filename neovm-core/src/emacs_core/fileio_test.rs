@@ -197,6 +197,26 @@ fn test_expand_file_name_accepts_gnu_windows_absolute_paths() {
 
 #[cfg(windows)]
 #[test]
+fn builtin_expand_file_name_treats_drive_paths_as_absolute_on_windows() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let value = builtin_expand_file_name(
+        &mut eval,
+        vec![
+            Value::string("emacs-lisp"),
+            Value::string(r"D:\a\neomacs\neomacs\lisp"),
+        ],
+    )
+    .expect("expand-file-name should accept drive absolute default directory");
+    let result = value
+        .as_lisp_string()
+        .map(crate::emacs_core::builtins::runtime_string_from_lisp_string)
+        .expect("string result");
+    assert_eq!(result, "D:/a/neomacs/neomacs/lisp/emacs-lisp");
+}
+
+#[cfg(windows)]
+#[test]
 fn host_paths_are_exposed_to_lisp_with_gnu_windows_separators() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

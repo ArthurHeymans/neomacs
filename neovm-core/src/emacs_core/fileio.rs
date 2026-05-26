@@ -1532,6 +1532,11 @@ fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<String> {
 }
 
 fn lisp_file_name_absolute_system_p(filename: &crate::heap_types::LispString) -> bool {
+    #[cfg(windows)]
+    {
+        return file_name_absolute_bytes_p(filename.as_bytes());
+    }
+
     filename.as_bytes().first() == Some(&b'/')
 }
 
