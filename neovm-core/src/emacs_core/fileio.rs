@@ -801,8 +801,7 @@ pub fn file_exists_p(filename: &str) -> bool {
 
 /// Return true if FILENAME is readable.
 pub fn file_readable_p(filename: &str) -> bool {
-    // A file is "readable" if we can open it for reading.
-    fs::File::open(filename).is_ok()
+    file_readable_path(Path::new(filename))
 }
 
 /// Return true if FILENAME is writable.
@@ -2624,7 +2623,9 @@ fn file_readable_path(path: &Path) -> bool {
 
     #[cfg(not(unix))]
     {
-        fs::File::open(path).is_ok()
+        // GNU's Windows faccessat(R_OK) checks file attributes, so directories
+        // are readable even though opening them as regular files fails.
+        fs::metadata(path).is_ok()
     }
 }
 

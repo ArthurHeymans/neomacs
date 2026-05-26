@@ -501,6 +501,19 @@ fn test_file_directory_p() {
     assert!(!file_directory_p("/nonexistent_path_12345"));
 }
 
+#[cfg(windows)]
+#[test]
+fn file_readable_p_treats_existing_directories_as_readable_on_windows() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join(format!("neomacs-readable-dir-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    assert!(file_readable_p(&dir.to_string_lossy()));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn test_file_regular_p() {
     crate::test_utils::init_test_tracing();
