@@ -274,10 +274,12 @@ fn file_truename_lisp_inner(
     remaining_links: &mut i64,
     prev_dirs: &mut HashMap<Vec<u8>, crate::heap_types::LispString>,
 ) -> Result<crate::heap_types::LispString, Flow> {
-    let mut filename = if lisp_file_name_absolute_system_p(filename) {
-        filename.clone()
+    let filename = lisp_file_name_normalize_directory_separators(filename);
+    let default_dir = lisp_file_name_normalize_directory_separators(default_dir);
+    let mut filename = if lisp_file_name_absolute_system_p(&filename) {
+        filename
     } else {
-        expand_file_name_lisp(filename, Some(default_dir))
+        expand_file_name_lisp(&filename, Some(&default_dir))
     };
 
     loop {
@@ -301,7 +303,7 @@ fn file_truename_lisp_inner(
             } else {
                 let new = lisp_file_name_as_directory(&file_truename_lisp_inner(
                     &dirfile,
-                    default_dir,
+                    &default_dir,
                     remaining_links,
                     prev_dirs,
                 )?);
@@ -1457,6 +1459,29 @@ fn lisp_file_name_directory(
         .map(|pos| file_name_lisp_from_bytes(bytes[..=pos].to_vec(), filename.is_multibyte()))
 }
 
+#[cfg(windows)]
+fn lisp_file_name_normalize_directory_separators(
+    filename: &crate::heap_types::LispString,
+) -> crate::heap_types::LispString {
+    if !filename.as_bytes().contains(&b'\\') {
+        return filename.clone();
+    }
+    let mut bytes = filename.as_bytes().to_vec();
+    for byte in &mut bytes {
+        if *byte == b'\\' {
+            *byte = b'/';
+        }
+    }
+    file_name_lisp_from_bytes(bytes, filename.is_multibyte())
+}
+
+#[cfg(not(windows))]
+fn lisp_file_name_normalize_directory_separators(
+    filename: &crate::heap_types::LispString,
+) -> crate::heap_types::LispString {
+    filename.clone()
+}
+
 fn lisp_file_name_nondirectory(
     filename: &crate::heap_types::LispString,
 ) -> crate::heap_types::LispString {
@@ -1490,6 +1515,12 @@ fn lisp_directory_file_name(
     let bytes = filename.as_bytes();
     if bytes.is_empty() {
         return filename.clone();
+    }
+    #[cfg(windows)]
+    if matches!(bytes, [drive, b':', b'/', rest @ ..]
+        if drive.is_ascii_alphabetic() && rest.iter().all(|&byte| byte == b'/'))
+    {
+        return file_name_lisp_from_bytes(bytes[..3].to_vec(), filename.is_multibyte());
     }
     if bytes.iter().all(|&byte| byte == b'/') {
         return if bytes.len() == 2 {

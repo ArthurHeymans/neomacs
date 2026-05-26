@@ -1579,6 +1579,26 @@ fn test_builtin_file_truename_counter_validation() {
     }
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_file_truename_accepts_backslash_drive_paths() {
+    crate::test_utils::init_test_tracing();
+    let value = call_fileio_builtin!(builtin_file_truename, vec![Value::string(r"C:\")]).unwrap();
+    assert_eq!(value.as_utf8_str(), Some("C:/"));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_drive_root_is_file_truename_recursion_root() {
+    crate::test_utils::init_test_tracing();
+    let filename = LispString::from_utf8("D:/");
+    let dirfile = lisp_directory_file_name(&filename);
+    assert_eq!(dirfile.as_utf8_str(), Some("D:/"));
+
+    let value = call_fileio_builtin!(builtin_file_truename, vec![Value::string("D:/")]).unwrap();
+    assert_eq!(value.as_utf8_str(), Some("D:/"));
+}
+
 #[test]
 fn test_builtin_file_truename_eval_uses_default_directory() {
     crate::test_utils::init_test_tracing();
