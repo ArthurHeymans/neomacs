@@ -19,7 +19,6 @@ concurrency:
 jobs:
   build-linux:
     name: build Linux
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -122,7 +121,6 @@ jobs:
 
   build-macos:
     name: build macOS
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     timeout-minutes: 120
     env:
@@ -163,7 +161,6 @@ jobs:
 
   build-windows:
     name: build Windows
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     timeout-minutes: 180
     env:
@@ -251,7 +248,6 @@ jobs:
   create-release:
     name: create release
     needs: [build-linux, build-macos, build-windows]
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
