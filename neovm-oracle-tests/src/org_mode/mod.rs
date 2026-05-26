@@ -491,3 +491,112 @@ fn org_refile_file_backed_subtree_to_target_combo() {
       (when (file-exists-p file) (delete-file file)))))"#,
     );
 }
+
+#[test]
+fn org_id_file_location_lookup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-id)
+  (let* ((file (make-temp-file "org-id" nil ".org"
+                               "* Target
+:PROPERTIES:
+:ID: fixed-id-1
+:END:
+Body
+* Other
+"))
+         (org-id-locations-file (make-temp-file "org-id-loc"))
+         (org-id-track-globally t))
+    (unwind-protect
+        (progn
+          (org-id-update-id-locations (list file) t)
+          (let ((marker (org-id-find "fixed-id-1" t)))
+            (list (markerp marker)
+                  (and marker (marker-position marker))
+                  (and marker
+                       (with-current-buffer (marker-buffer marker)
+                         (buffer-substring-no-properties (point-min) (point-max))))
+                  (file-name-extension (gethash "fixed-id-1" org-id-locations)))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file))
+      (when (file-exists-p org-id-locations-file)
+        (delete-file org-id-locations-file)))))"#,
+    );
+}
+
+#[test]
+fn org_citation_parse_styles_and_keys_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+cite_export: basic author-year\n")
+    (insert "Text [cite/t:@doe2020; see @roe2021 p. 4] and [cite:@solo].\n")
+    (insert "#+bibliography: refs.bib\n")
+    (let ((out nil))
+      (org-element-map (org-element-parse-buffer) 'citation
+        (lambda (citation)
+          (push (list (org-element-property :style citation)
+                      (org-element-property :prefix citation)
+                      (org-cite-get-references citation t))
+                out)))
+      (nreverse out))))"##,
+    );
+}
+
+#[test]
+fn org_table_remote_reference_formula_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: source\n")
+    (insert "| item | value |\n")
+    (insert "|------+-------|\n")
+    (insert "| a | 2 |\n")
+    (insert "| b | 3 |\n\n")
+    (insert "#+NAME: summary\n")
+    (insert "| total |  |\n")
+    (insert "#+TBLFM: @1$2=remote(source,@>$2)+remote(source,@>$2)\n")
+    (goto-char (point-min))
+    (search-forward "summary")
+    (org-table-recalculate-buffer-tables)
+    (buffer-substring-no-properties (point-min) (point-max))))"##,
+    );
+}
+
+#[test]
+fn org_capture_string_file_headline_template_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-capture)
+  (let* ((file (make-temp-file "org-capture" nil ".org" "* Inbox\n"))
+         (org-capture-templates
+          `(("t" "Todo" entry (file+headline ,file "Inbox")
+             "** TODO %i\n:PROPERTIES:\n:Source: %a\n:END:\n"
+             :empty-lines 0))))
+    (unwind-protect
+        (progn
+          (org-capture-string "Captured task" "t")
+          (org-capture-finalize)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (buffer-string)))
+      (when (get-buffer "CAPTURE-org-capture")
+        (kill-buffer "CAPTURE-org-capture"))
+      (when (file-exists-p file) (delete-file file)))))"#,
+    );
+}
