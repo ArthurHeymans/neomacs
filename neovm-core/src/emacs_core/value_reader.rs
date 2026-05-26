@@ -366,17 +366,6 @@ fn substitute_read_placeholder_recurse(
     subtree
 }
 
-fn translate_runtime_source_char(ch: char) -> u32 {
-    let cp = ch as u32;
-    if (0xE080..=0xE0FF).contains(&cp) {
-        crate::emacs_core::emacs_char::unibyte_to_char((cp - 0xE000) as u8)
-    } else if (0xE300..=0xE3FF).contains(&cp) {
-        (cp - 0xE300) as u32
-    } else {
-        cp
-    }
-}
-
 impl<'a> Reader<'a> {
     fn new(input: &'a str, source_multibyte: bool, obarray: &'a super::symbol::Obarray) -> Self {
         Self {
@@ -2212,10 +2201,11 @@ impl<'a> Reader<'a> {
             return None;
         }
         match self.source {
-            ReaderSource::Runtime(input) => input[pos..self.limit]
-                .chars()
-                .next()
-                .map(translate_runtime_source_char),
+            ReaderSource::Runtime(input) => {
+                crate::emacs_core::string_escape::storage_code_step(input, pos)
+                    .filter(|(_, next)| *next <= self.limit)
+                    .map(|(code, _)| code)
+            }
             ReaderSource::LispString(input) => {
                 self.lisp_string_code_step(input, pos).map(|(code, _)| code)
             }
@@ -2228,10 +2218,11 @@ impl<'a> Reader<'a> {
             return None;
         }
         match self.source {
-            ReaderSource::Runtime(input) => input[pos..self.limit]
-                .chars()
-                .next()
-                .map(|ch| pos + ch.len_utf8()),
+            ReaderSource::Runtime(input) => {
+                crate::emacs_core::string_escape::storage_code_step(input, pos)
+                    .map(|(_, next)| next)
+                    .filter(|next| *next <= self.limit)
+            }
             ReaderSource::LispString(input) => self
                 .lisp_string_code_step(input, pos)
                 .map(|(_, width)| pos + width),

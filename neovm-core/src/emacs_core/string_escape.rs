@@ -264,6 +264,35 @@ pub(crate) fn scan_storage_units(s: &str) -> Vec<StorageUnit> {
     out
 }
 
+/// Return the Emacs character code at a storage byte position and the next
+/// storage byte position.
+pub(crate) fn storage_code_step(s: &str, pos: usize) -> Option<(u32, usize)> {
+    if pos >= s.len() {
+        return None;
+    }
+
+    let ch = s[pos..].chars().next()?;
+    let code = ch as u32;
+    let next = pos + ch.len_utf8();
+
+    if (RAW_BYTE_SENTINEL_MIN..=RAW_BYTE_SENTINEL_MAX).contains(&code) {
+        let raw = code - RAW_BYTE_SENTINEL_BASE;
+        return Some((0x3FFF00 + raw, next));
+    }
+
+    if (UNIBYTE_BYTE_SENTINEL_MIN..=UNIBYTE_BYTE_SENTINEL_MAX).contains(&code) {
+        return Some((code - UNIBYTE_BYTE_SENTINEL_BASE, next));
+    }
+
+    if code == EXT_SEQ_PREFIX {
+        if let Some((end, cp)) = decode_extended_sequence_span(s, pos) {
+            return Some((cp, end));
+        }
+    }
+
+    Some((code, next))
+}
+
 fn storage_has_special_units(s: &str) -> bool {
     if s.is_ascii() {
         return false;
