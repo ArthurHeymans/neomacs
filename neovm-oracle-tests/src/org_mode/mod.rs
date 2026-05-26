@@ -13,6 +13,7 @@ mod citation;
 mod clock_agenda;
 mod display_state;
 mod editing_export;
+mod export_mix;
 mod fold_font;
 mod id_link;
 mod link_export;
