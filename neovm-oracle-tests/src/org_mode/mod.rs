@@ -14,6 +14,7 @@ mod editing_export;
 mod fold_font;
 mod id_link;
 mod link_export;
+mod list_checkbox;
 mod macro_include;
 mod property_log;
 mod support;
