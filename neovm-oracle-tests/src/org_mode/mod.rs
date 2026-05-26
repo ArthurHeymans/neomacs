@@ -18,6 +18,7 @@ mod link_export;
 mod list_checkbox;
 mod macro_include;
 mod property_log;
+mod source_block;
 mod support;
 mod table_agenda;
 
