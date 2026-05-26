@@ -3485,6 +3485,21 @@ fn decode_insert_file_contents_source_load_normalizes_detected_eols() {
 
     let decoded = super::decode_insert_file_contents(
         &coding_systems,
+        b"(message \"alpha\")\r\n(message \"beta\")\r\n",
+        true,
+        true,
+        Some("utf-8-emacs"),
+    )
+    .expect("decode source-loaded dos-eol text with explicit utf-8-emacs coding");
+
+    assert_eq!(
+        decoded.text().as_utf8_str(),
+        Some("(message \"alpha\")\n(message \"beta\")\n")
+    );
+    assert_eq!(decoded.coding, "utf-8-emacs-dos");
+
+    let decoded = super::decode_insert_file_contents(
+        &coding_systems,
         b"(message \"alpha\")\r(message \"beta\")\r",
         true,
         true,

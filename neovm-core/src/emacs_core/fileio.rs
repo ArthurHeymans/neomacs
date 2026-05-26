@@ -4608,7 +4608,7 @@ fn decode_insert_file_contents(
 
     if source_load_context && multibyte && is_utf8_like_source_coding(&coding) {
         return Ok(DecodedFileContents::from_multibyte_string(
-            crate::emacs_core::load::decode_emacs_utf8(bytes),
+            crate::encoding::decode_bytes(bytes, &coding),
             coding,
         ));
     }
