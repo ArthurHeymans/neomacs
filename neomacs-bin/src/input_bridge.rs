@@ -119,7 +119,27 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }
-        DisplayEvent::ToolBarClick { index } => Some(KbInputEvent::ToolBarClick { index: *index }),
+        DisplayEvent::ToolBarClick {
+            index,
+            emacs_frame_id,
+        } => Some(KbInputEvent::ToolBarClick {
+            index: *index,
+            emacs_frame_id: *emacs_frame_id,
+        }),
+        DisplayEvent::TabBarClick {
+            index,
+            emacs_frame_id,
+        } => Some(KbInputEvent::TabBarClick {
+            index: *index,
+            emacs_frame_id: *emacs_frame_id,
+        }),
+        DisplayEvent::MenuBarClick {
+            index,
+            emacs_frame_id,
+        } => Some(KbInputEvent::MenuBarClick {
+            index: *index,
+            emacs_frame_id: *emacs_frame_id,
+        }),
         DisplayEvent::WindowResize {
             width,
             height,

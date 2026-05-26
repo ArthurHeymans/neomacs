@@ -99,11 +99,51 @@ fn popup_menu_selection_reaches_keyboard_owner() {
 
 #[test]
 fn tool_bar_click_reaches_keyboard_owner() {
-    let display_event = DisplayEvent::ToolBarClick { index: 3 };
+    let display_event = DisplayEvent::ToolBarClick {
+        index: 3,
+        emacs_frame_id: 42,
+    };
     let event = convert_display_event(&display_event);
 
     match event {
-        Some(KbInputEvent::ToolBarClick { index: 3 }) => {}
+        Some(KbInputEvent::ToolBarClick {
+            index: 3,
+            emacs_frame_id: 42,
+        }) => {}
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
+fn tab_bar_click_reaches_keyboard_owner() {
+    let display_event = DisplayEvent::TabBarClick {
+        index: 2,
+        emacs_frame_id: 42,
+    };
+    let event = convert_display_event(&display_event);
+
+    match event {
+        Some(KbInputEvent::TabBarClick {
+            index: 2,
+            emacs_frame_id: 42,
+        }) => {}
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
+fn menu_bar_click_reaches_keyboard_owner() {
+    let display_event = DisplayEvent::MenuBarClick {
+        index: 1,
+        emacs_frame_id: 42,
+    };
+    let event = convert_display_event(&display_event);
+
+    match event {
+        Some(KbInputEvent::MenuBarClick {
+            index: 1,
+            emacs_frame_id: 42,
+        }) => {}
         other => panic!("unexpected event: {other:?}"),
     }
 }

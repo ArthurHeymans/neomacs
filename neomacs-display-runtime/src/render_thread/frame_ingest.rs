@@ -180,8 +180,7 @@ impl RenderApp {
                 } else {
                     self.menu_bar_items.clear();
                     self.menu_bar_height = 0.0;
-                    self.menu_bar_hovered = None;
-                    self.menu_bar_active = None;
+                    self.chrome_interaction.clear_menu_bar();
                 }
                 if let Some(tool_bar) = gui_tool_bar {
                     self.sync_toolbar_visual_config_from_height(tool_bar.height);
@@ -193,8 +192,7 @@ impl RenderApp {
                 } else {
                     self.toolbar_items.clear();
                     self.toolbar_height = 0.0;
-                    self.toolbar_hovered = None;
-                    self.toolbar_pressed = None;
+                    self.chrome_interaction.clear_toolbar();
                 }
                 if let Some(compact_bar) = gui_compact_bar {
                     self.sync_toolbar_visual_config_from_height(compact_bar.height);
@@ -210,10 +208,7 @@ impl RenderApp {
                     self.compact_bar_menu_items.clear();
                     self.compact_bar_tool_items.clear();
                     self.compact_bar_height = 0.0;
-                    self.compact_bar_menu_hovered = None;
-                    self.compact_bar_menu_active = None;
-                    self.compact_bar_tool_hovered = None;
-                    self.compact_bar_tool_pressed = None;
+                    self.chrome_interaction.clear_compact_bar();
                 }
                 if let Some(tab_bar) = self
                     .current_frame
@@ -227,8 +222,7 @@ impl RenderApp {
                     self.tab_bar_items.clear();
                     self.tab_bar_y = 0.0;
                     self.tab_bar_height = 0.0;
-                    self.tab_bar_hovered = None;
-                    self.tab_bar_pressed = None;
+                    self.chrome_interaction.clear_tab_bar();
                 }
                 self.cursor.reset_blink();
             }

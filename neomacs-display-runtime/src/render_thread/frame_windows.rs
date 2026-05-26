@@ -13,7 +13,9 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 use super::child_frames::ChildFrameManager;
-use super::state::{effective_window_scale_factor, window_size_from_emacs_pixels};
+use super::state::{
+    GuiChromeInteractionState, effective_window_scale_factor, window_size_from_emacs_pixels,
+};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::{
@@ -56,6 +58,8 @@ pub(crate) struct GuiFrameWindowState {
     pub tool_bar: Option<GuiToolBarState>,
     /// Compact GUI chrome snapshot for this frame, if visible.
     pub compact_bar: Option<GuiCompactBarState>,
+    /// Hover/active/pressed state for GUI chrome in this frame window.
+    pub chrome_interaction: GuiChromeInteractionState,
     /// Active popup menu shown in this frame window.
     pub popup_menu: Option<PopupMenuState>,
     /// Active tooltip shown in this frame window.
@@ -296,6 +300,7 @@ impl GuiFrameWindowManager {
                             menu_bar: None,
                             tool_bar: None,
                             compact_bar: None,
+                            chrome_interaction: GuiChromeInteractionState::default(),
                             popup_menu: None,
                             tooltip: None,
                             visual_bell_start: None,
@@ -388,6 +393,18 @@ impl GuiFrameWindowManager {
                 }
             } else if let Some(ws) = self.windows.get_mut(&frame_id) {
                 // Root frame for a secondary window
+                if menu_bar.is_none() {
+                    ws.chrome_interaction.clear_menu_bar();
+                }
+                if tool_bar.is_none() {
+                    ws.chrome_interaction.clear_toolbar();
+                }
+                if compact_bar.is_none() {
+                    ws.chrome_interaction.clear_compact_bar();
+                }
+                if frame.tab_bar.is_none() {
+                    ws.chrome_interaction.clear_tab_bar();
+                }
                 ws.menu_bar = menu_bar;
                 ws.tool_bar = tool_bar;
                 ws.compact_bar = compact_bar;

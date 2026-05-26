@@ -186,6 +186,44 @@ pub(super) struct ImeCursorArea {
     pub(super) height: u32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GuiChromeInteractionState {
+    pub(super) menu_bar_hovered: Option<u32>,
+    pub(super) menu_bar_active: Option<u32>,
+    pub(super) tab_bar_hovered: Option<u32>,
+    pub(super) tab_bar_pressed: Option<u32>,
+    pub(super) toolbar_hovered: Option<u32>,
+    pub(super) toolbar_pressed: Option<u32>,
+    pub(super) compact_bar_menu_hovered: Option<u32>,
+    pub(super) compact_bar_menu_active: Option<u32>,
+    pub(super) compact_bar_tool_hovered: Option<u32>,
+    pub(super) compact_bar_tool_pressed: Option<u32>,
+}
+
+impl GuiChromeInteractionState {
+    pub(super) fn clear_menu_bar(&mut self) {
+        self.menu_bar_hovered = None;
+        self.menu_bar_active = None;
+    }
+
+    pub(super) fn clear_tab_bar(&mut self) {
+        self.tab_bar_hovered = None;
+        self.tab_bar_pressed = None;
+    }
+
+    pub(super) fn clear_toolbar(&mut self) {
+        self.toolbar_hovered = None;
+        self.toolbar_pressed = None;
+    }
+
+    pub(super) fn clear_compact_bar(&mut self) {
+        self.compact_bar_menu_hovered = None;
+        self.compact_bar_menu_active = None;
+        self.compact_bar_tool_hovered = None;
+        self.compact_bar_tool_pressed = None;
+    }
+}
+
 pub(super) struct RenderGpuContext {
     pub(super) instance: wgpu::Instance,
     pub(super) adapter: wgpu::Adapter,
@@ -283,15 +321,11 @@ pub(super) struct RenderApp {
     pub(super) menu_bar_height: f32,
     pub(super) menu_bar_fg: (f32, f32, f32),
     pub(super) menu_bar_bg: (f32, f32, f32),
-    pub(super) menu_bar_hovered: Option<u32>,
-    pub(super) menu_bar_active: Option<u32>,
 
     // Tab bar state (items + height kept for click hit-testing)
     pub(super) tab_bar_items: Vec<TabBarItem>,
     pub(super) tab_bar_y: f32,
     pub(super) tab_bar_height: f32,
-    pub(super) tab_bar_hovered: Option<u32>,
-    pub(super) tab_bar_pressed: Option<u32>,
 
     // Toolbar state
     pub(super) toolbar_items: Vec<ToolBarItem>,
@@ -299,8 +333,6 @@ pub(super) struct RenderApp {
     pub(super) toolbar_fg: (f32, f32, f32),
     pub(super) toolbar_bg: (f32, f32, f32),
     pub(super) toolbar_icon_textures: HashMap<String, u32>,
-    pub(super) toolbar_hovered: Option<u32>,
-    pub(super) toolbar_pressed: Option<u32>,
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
 
@@ -312,10 +344,7 @@ pub(super) struct RenderApp {
     pub(super) compact_bar_menu_bg: (f32, f32, f32),
     pub(super) compact_bar_tool_fg: (f32, f32, f32),
     pub(super) compact_bar_tool_bg: (f32, f32, f32),
-    pub(super) compact_bar_menu_hovered: Option<u32>,
-    pub(super) compact_bar_menu_active: Option<u32>,
-    pub(super) compact_bar_tool_hovered: Option<u32>,
-    pub(super) compact_bar_tool_pressed: Option<u32>,
+    pub(super) chrome_interaction: GuiChromeInteractionState,
 
     // Visual bell state (flash overlay)
     pub(super) visual_bell_start: Option<Instant>,
@@ -420,20 +449,14 @@ impl RenderApp {
             menu_bar_height: 0.0,
             menu_bar_fg: (0.8, 0.8, 0.8),
             menu_bar_bg: (0.15, 0.15, 0.15),
-            menu_bar_hovered: None,
-            menu_bar_active: None,
             tab_bar_items: Vec::new(),
             tab_bar_y: 0.0,
             tab_bar_height: 0.0,
-            tab_bar_hovered: None,
-            tab_bar_pressed: None,
             toolbar_items: Vec::new(),
             toolbar_height: 0.0,
             toolbar_fg: (0.8, 0.8, 0.8),
             toolbar_bg: (0.15, 0.15, 0.15),
             toolbar_icon_textures: HashMap::new(),
-            toolbar_hovered: None,
-            toolbar_pressed: None,
             toolbar_icon_size: 24,
             toolbar_padding: 5,
             compact_bar_menu_items: Vec::new(),
@@ -443,10 +466,7 @@ impl RenderApp {
             compact_bar_menu_bg: (0.15, 0.15, 0.15),
             compact_bar_tool_fg: (0.8, 0.8, 0.8),
             compact_bar_tool_bg: (0.15, 0.15, 0.15),
-            compact_bar_menu_hovered: None,
-            compact_bar_menu_active: None,
-            compact_bar_tool_hovered: None,
-            compact_bar_tool_pressed: None,
+            chrome_interaction: GuiChromeInteractionState::default(),
             visual_bell_start: None,
             ime_enabled: false,
             ime_preedit_active: false,

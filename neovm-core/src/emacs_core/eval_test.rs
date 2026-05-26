@@ -3292,10 +3292,12 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_by_item_key() {
     )
     .expect("define tool-bar binding");
 
-    ev.command_loop
-        .keyboard
-        .pending_input_events
-        .push_back(crate::keyboard::InputEvent::ToolBarClick { index: 0 });
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::ToolBarClick {
+            index: 0,
+            emacs_frame_id: 0,
+        },
+    );
 
     let (keys, binding) = ev
         .read_key_sequence()
@@ -3307,6 +3309,204 @@ fn read_key_sequence_dispatches_gui_tool_bar_click_by_item_key() {
     assert_eq!(keys[0], Value::symbol("tool-bar"));
     assert_eq!(event[0], Value::symbol("open-file"));
     assert_eq!(position[1], Value::symbol("tool-bar"));
+}
+
+#[test]
+fn read_key_sequence_dispatches_gui_tool_bar_click_from_owning_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let primary = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    let secondary_buffer = ev.buffer_manager_mut().create_buffer("secondary");
+    let secondary = ev.frames.create_frame("F2", 960, 640, secondary_buffer);
+    ev.frames.select_frame(primary);
+
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let primary_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let secondary_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.obarray
+        .set_symbol_value("tool-bar-map", primary_tool_bar_map);
+    ev.buffer_manager_mut()
+        .get_mut(secondary_buffer)
+        .expect("secondary buffer")
+        .set_buffer_local("tool-bar-map", secondary_tool_bar_map);
+    ev.eval_str(
+        r#"(fset 'neomacs-secondary-tool-bar-click-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup");
+    crate::emacs_core::keymap::list_keymap_define(
+        primary_tool_bar_map,
+        Value::symbol("primary-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Primary"),
+            Value::symbol("ignore"),
+            Value::symbol(":image"),
+            Value::string("primary.svg"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        secondary_tool_bar_map,
+        Value::symbol("secondary-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Secondary"),
+            Value::symbol("neomacs-secondary-tool-bar-click-command"),
+            Value::symbol(":image"),
+            Value::string("secondary.svg"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("tool-bar"), Value::symbol("secondary-action")],
+        Value::symbol("neomacs-secondary-tool-bar-click-command"),
+    )
+    .expect("define secondary tool-bar binding");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::ToolBarClick {
+            index: 0,
+            emacs_frame_id: secondary.0,
+        },
+    );
+
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("read secondary tool-bar click sequence");
+    let event = crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list");
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).expect("position list");
+
+    assert_eq!(
+        binding,
+        Value::symbol("neomacs-secondary-tool-bar-click-command")
+    );
+    assert_eq!(event[0], Value::symbol("secondary-action"));
+    assert_eq!(position[0], Value::make_frame(secondary.0));
+    assert_eq!(position[1], Value::symbol("tool-bar"));
+}
+
+#[test]
+fn read_key_sequence_gui_tool_bar_frame_fallback_ignores_current_buffer_local_map() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let primary = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    let secondary_buffer = ev.buffer_manager_mut().create_buffer("secondary");
+    let secondary = ev.frames.create_frame("F2", 960, 640, secondary_buffer);
+    ev.frames.select_frame(primary);
+
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let primary_local_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    let default_tool_bar_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.obarray
+        .set_symbol_value("tool-bar-map", default_tool_bar_map);
+    ev.buffer_manager_mut()
+        .get_mut(crate::buffer::BufferId(1))
+        .expect("primary buffer")
+        .set_buffer_local("tool-bar-map", primary_local_tool_bar_map);
+    ev.eval_str(
+        r#"(fset 'neomacs-default-tool-bar-click-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup");
+    crate::emacs_core::keymap::list_keymap_define(
+        primary_local_tool_bar_map,
+        Value::symbol("primary-local-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Primary Local"),
+            Value::symbol("ignore"),
+            Value::symbol(":image"),
+            Value::string("primary-local.svg"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define(
+        default_tool_bar_map,
+        Value::symbol("default-action"),
+        Value::list(vec![
+            Value::symbol("menu-item"),
+            Value::string("Default"),
+            Value::symbol("neomacs-default-tool-bar-click-command"),
+            Value::symbol(":image"),
+            Value::string("default.svg"),
+        ]),
+    );
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("tool-bar"), Value::symbol("default-action")],
+        Value::symbol("neomacs-default-tool-bar-click-command"),
+    )
+    .expect("define default tool-bar binding");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::ToolBarClick {
+            index: 0,
+            emacs_frame_id: secondary.0,
+        },
+    );
+
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("read secondary tool-bar click sequence");
+    let event = crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list");
+
+    assert_eq!(
+        binding,
+        Value::symbol("neomacs-default-tool-bar-click-command")
+    );
+    assert_eq!(event[0], Value::symbol("default-action"));
+}
+
+#[test]
+fn read_key_sequence_dispatches_gui_menu_bar_click_with_frame_id() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let primary = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    let secondary = ev
+        .frames
+        .create_frame("F2", 960, 640, crate::buffer::BufferId(1));
+    ev.frames.select_frame(primary);
+
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+    ev.eval_str(
+        r#"(fset 'neomacs-menu-bar-click-command
+                  (lambda () (interactive) 'ok))"#,
+    )
+    .expect("setup");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("menu-bar"), Value::symbol("mouse-1")],
+        Value::symbol("neomacs-menu-bar-click-command"),
+    )
+    .expect("define menu-bar binding");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::MenuBarClick {
+            index: 2,
+            emacs_frame_id: secondary.0,
+        },
+    );
+
+    let (keys, binding) = ev
+        .read_key_sequence()
+        .expect("read menu-bar click sequence");
+    let event = crate::emacs_core::value::list_to_vec(&keys[1]).expect("event list");
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).expect("position list");
+
+    assert_eq!(binding, Value::symbol("neomacs-menu-bar-click-command"));
+    assert_eq!(keys[0], Value::symbol("menu-bar"));
+    assert_eq!(event[0], Value::symbol("mouse-1"));
+    assert_eq!(position[0], Value::make_frame(secondary.0));
+    assert_eq!(position[1], Value::symbol("menu-bar"));
+    assert_eq!(position[2], Value::cons(Value::fixnum(2), Value::fixnum(0)));
 }
 
 #[test]

@@ -725,7 +725,13 @@ pub enum InputEvent {
     MenuSelection { index: i32 },
     /// Tool-bar item click.  The display layer reports the zero-based
     /// index in the current rendered tool-bar item vector.
-    ToolBarClick { index: i32 },
+    ToolBarClick { index: i32, emacs_frame_id: u64 },
+    /// Tab-bar item click.  The display layer reports the zero-based
+    /// index in the current rendered tab-bar item vector.
+    TabBarClick { index: i32, emacs_frame_id: u64 },
+    /// Menu-bar item click.  The display layer reports the zero-based
+    /// index in the current rendered menu-bar item vector.
+    MenuBarClick { index: i32, emacs_frame_id: u64 },
     /// Window resize.
     Resize {
         width: u32,
@@ -3643,19 +3649,40 @@ impl crate::emacs_core::eval::Context {
                 ]);
                 Ok(Some(event))
             }
-            InputEvent::ToolBarClick { index } => {
-                let Some(key) = self.tool_bar_key_at_index(index) else {
+            InputEvent::ToolBarClick {
+                index,
+                emacs_frame_id,
+            } => {
+                let Some(key) = self.tool_bar_key_at_index(index, emacs_frame_id) else {
                     return Ok(None);
                 };
-                let frame = self
-                    .frames
-                    .selected_frame()
-                    .map(|frame| Value::make_frame(frame.id.0))
-                    .unwrap_or(Value::NIL);
+                let frame = self.event_frame_value(emacs_frame_id);
                 let event = Value::list(vec![
                     key,
                     Value::list(vec![frame, Value::symbol("tool-bar")]),
                 ]);
+                self.command_loop.store_kbd_macro_event(event);
+                Ok(Some(event))
+            }
+            InputEvent::TabBarClick {
+                index,
+                emacs_frame_id,
+            } => {
+                let Some(event) = self.chrome_mouse_click_event("tab-bar", index, emacs_frame_id)
+                else {
+                    return Ok(None);
+                };
+                self.command_loop.store_kbd_macro_event(event);
+                Ok(Some(event))
+            }
+            InputEvent::MenuBarClick {
+                index,
+                emacs_frame_id,
+            } => {
+                let Some(event) = self.chrome_mouse_click_event("menu-bar", index, emacs_frame_id)
+                else {
+                    return Ok(None);
+                };
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
@@ -4462,11 +4489,53 @@ impl crate::emacs_core::eval::Context {
         frame.window_at(x, y)
     }
 
-    fn tool_bar_key_at_index(&self, index: i32) -> Option<Value> {
+    fn event_frame_id(&self, emacs_frame_id: u64) -> Option<crate::window::FrameId> {
+        if emacs_frame_id == 0 {
+            self.frames.selected_frame().map(|frame| frame.id)
+        } else {
+            Some(crate::window::FrameId(emacs_frame_id))
+        }
+    }
+
+    fn event_frame_value(&self, emacs_frame_id: u64) -> Value {
+        self.event_frame_id(emacs_frame_id)
+            .map(|frame_id| Value::make_frame(frame_id.0))
+            .unwrap_or(Value::NIL)
+    }
+
+    fn chrome_mouse_click_event(
+        &self,
+        area: &'static str,
+        index: i32,
+        emacs_frame_id: u64,
+    ) -> Option<Value> {
         if index < 0 {
             return None;
         }
-        let raw_map = self.current_tool_bar_map();
+        let frame_id = self.event_frame_id(emacs_frame_id)?;
+        self.frames.get(frame_id)?;
+        let frame_value = Value::make_frame(frame_id.0);
+        let position = Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+            window_or_frame: frame_value,
+            area: Some(area),
+            x: index as i64,
+            y: 0,
+            metrics: MousePosnMetrics {
+                point: None,
+                col: None,
+                row: None,
+                width: None,
+                height: None,
+            },
+        });
+        Some(Value::list(vec![Value::symbol("mouse-1"), position]))
+    }
+
+    fn tool_bar_key_at_index(&self, index: i32, emacs_frame_id: u64) -> Option<Value> {
+        if index < 0 {
+            return None;
+        }
+        let raw_map = self.tool_bar_map_for_frame(emacs_frame_id);
         let keymap = crate::emacs_core::keymap::maybe_keymap_in_obarray(self.obarray(), &raw_map)?;
         let mut remaining = index as usize;
         let mut found = None;
@@ -4486,16 +4555,38 @@ impl crate::emacs_core::eval::Context {
         found
     }
 
+    fn tool_bar_map_for_frame(&self, emacs_frame_id: u64) -> Value {
+        if emacs_frame_id == 0 {
+            return self.current_tool_bar_map();
+        }
+        if let Some(frame_id) = self.event_frame_id(emacs_frame_id)
+            && let Some(buffer_id) = self
+                .frames
+                .get(frame_id)
+                .and_then(|frame| frame.selected_window())
+                .and_then(|window| window.buffer_id())
+            && let Some(buffer) = self.buffers.get(buffer_id)
+            && let Some(local) = buffer.buffer_local_value("tool-bar-map")
+        {
+            return local;
+        }
+        self.default_tool_bar_map()
+    }
+
+    fn default_tool_bar_map(&self) -> Value {
+        self.obarray()
+            .default_value_id(intern("tool-bar-map"))
+            .copied()
+            .unwrap_or(Value::NIL)
+    }
+
     fn current_tool_bar_map(&self) -> Value {
         if let Some(buffer) = self.buffers.current_buffer()
             && let Some(local) = buffer.buffer_local_value("tool-bar-map")
         {
             return local;
         }
-        self.obarray()
-            .default_value_id(intern("tool-bar-map"))
-            .copied()
-            .unwrap_or(Value::NIL)
+        self.default_tool_bar_map()
     }
 
     fn is_rendered_tool_bar_item(key: &Value, def: &Value) -> bool {

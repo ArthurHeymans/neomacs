@@ -112,7 +112,7 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             self.popup_menu = None;
-                            self.menu_bar_active = None;
+                            self.chrome_interaction.menu_bar_active = None;
                             self.frame_dirty = true;
                         }
                         Key::Named(NamedKey::ArrowDown) => {
@@ -144,14 +144,14 @@ impl RenderApp {
                                             index: global_idx as i32,
                                         });
                                         self.popup_menu = None;
-                                        self.menu_bar_active = None;
+                                        self.chrome_interaction.menu_bar_active = None;
                                         self.frame_dirty = true;
                                     }
                                 } else {
                                     self.comms
                                         .send_input(InputEvent::MenuSelection { index: -1 });
                                     self.popup_menu = None;
-                                    self.menu_bar_active = None;
+                                    self.chrome_interaction.menu_bar_active = None;
                                     self.frame_dirty = true;
                                 }
                             }

@@ -153,13 +153,16 @@ pub enum InputEvent {
     /// Toolbar button clicked (index into toolbar items)
     ToolBarClick {
         index: i32,
+        emacs_frame_id: u64,
     },
     TabBarClick {
         index: i32,
+        emacs_frame_id: u64,
     },
     /// Menu bar item clicked (index into menu bar items)
     MenuBarClick {
         index: i32,
+        emacs_frame_id: u64,
     },
 }
 
