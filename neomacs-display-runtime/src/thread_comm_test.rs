@@ -1063,6 +1063,7 @@ fn render_command_show_popup_menu() {
     ];
 
     let cmd = RenderCommand::ShowPopupMenu {
+        emacs_frame_id: 0x1000,
         x: 100.0,
         y: 200.0,
         items: items.clone(),
@@ -1072,6 +1073,7 @@ fn render_command_show_popup_menu() {
     };
     match cmd {
         RenderCommand::ShowPopupMenu {
+            emacs_frame_id,
             x,
             y,
             items: menu_items,
@@ -1079,6 +1081,7 @@ fn render_command_show_popup_menu() {
             fg,
             bg,
         } => {
+            assert_eq!(emacs_frame_id, 0x1000);
             assert_eq!(x, 100.0);
             assert_eq!(y, 200.0);
             assert_eq!(menu_items.len(), 3);

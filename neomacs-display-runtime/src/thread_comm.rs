@@ -446,6 +446,8 @@ pub enum RenderCommand {
     },
     /// Show a popup menu at position (x, y)
     ShowPopupMenu {
+        /// Emacs frame_id of the owning top-level frame (0 = primary)
+        emacs_frame_id: u64,
         x: f32,
         y: f32,
         items: Vec<PopupMenuItem>,

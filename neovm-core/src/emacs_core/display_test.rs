@@ -3322,6 +3322,9 @@ fn display_supports_face_attributes_p_arity_and_nil_result() {
 #[test]
 fn x_popup_menu_interactive_keymap_returns_selected_event() {
     let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval.frames.create_frame("popup-owner", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
     let (tx, rx) = crossbeam_channel::unbounded();
     eval.input_rx = Some(rx);
     let host = RecordingPopupHost::default();
@@ -3348,6 +3351,7 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
     assert_eq!(events, vec![Value::symbol("open")]);
     let shown = shown.lock().unwrap();
     assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].frame_id, frame_id);
     assert_eq!(shown[0].entries.len(), 1);
     assert_eq!(shown[0].entries[0].label, "Open");
     assert_eq!(*hidden.lock().unwrap(), 1);

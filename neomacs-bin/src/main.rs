@@ -1032,6 +1032,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
+        let emacs_frame_id = if self.primary_frame_id == Some(menu.frame_id) {
+            0
+        } else {
+            menu.frame_id.0
+        };
         let items = menu
             .entries
             .into_iter()
@@ -1046,6 +1051,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .collect();
         self.send_render_command(
             RenderCommand::ShowPopupMenu {
+                emacs_frame_id,
                 x: menu.x,
                 y: menu.y,
                 items,

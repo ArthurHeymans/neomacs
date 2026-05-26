@@ -21,8 +21,8 @@ use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
-    ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    ImageResolveRequest, ImageResolveSource, PopupMenuEntry, PopupMenuRequest, VideoResolveRequest,
+    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -673,6 +673,67 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
     assert_eq!(host.primary_frame_id, None);
     let cached_titles = host.last_window_titles.lock().expect("title cache");
     assert!(cached_titles.is_empty());
+}
+
+#[test]
+fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let mut host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: true,
+        primary_frame_id: Some(FrameId(0x100000001)),
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+
+    let entry = PopupMenuEntry {
+        label: "Open".to_string(),
+        shortcut: "C-x C-f".to_string(),
+        enabled: true,
+        separator: false,
+        submenu: false,
+        depth: 0,
+    };
+    for frame_id in [FrameId(0x100000001), FrameId(0x100000002)] {
+        neovm_core::emacs_core::DisplayHost::show_popup_menu(
+            &mut host,
+            PopupMenuRequest {
+                frame_id,
+                x: 10.0,
+                y: 20.0,
+                title: Some("File".to_string()),
+                entries: vec![entry.clone()],
+                selected: 0,
+            },
+        )
+        .expect("show popup menu");
+    }
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert_eq!(commands.len(), 2);
+    assert!(matches!(
+        commands[0],
+        RenderCommand::ShowPopupMenu {
+            emacs_frame_id: 0,
+            ..
+        }
+    ));
+    assert!(matches!(
+        commands[1],
+        RenderCommand::ShowPopupMenu {
+            emacs_frame_id: 0x100000002,
+            ..
+        }
+    ));
 }
 
 #[test]

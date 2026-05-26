@@ -1448,6 +1448,7 @@ pub struct PopupMenuEntry {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PopupMenuRequest {
+    pub frame_id: crate::window::FrameId,
     pub x: f32,
     pub y: f32,
     pub title: Option<String>,

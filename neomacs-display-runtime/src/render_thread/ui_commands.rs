@@ -61,6 +61,17 @@ impl RenderApp {
         }
     }
 
+    #[cfg(test)]
+    pub(super) fn set_secondary_popup_menu_for_test(
+        &mut self,
+        emacs_frame_id: u64,
+        menu: PopupMenuState,
+    ) {
+        if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+            window_state.popup_menu = Some(menu);
+        }
+    }
+
     pub(super) fn handle_ui_command(&mut self, cmd: RenderCommand) -> Result<(), RenderCommand> {
         match cmd {
             RenderCommand::SetCursorBlink {
@@ -131,6 +142,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::ShowPopupMenu {
+                emacs_frame_id,
                 x,
                 y,
                 items,
@@ -138,29 +150,64 @@ impl RenderApp {
                 fg,
                 bg,
             } => {
-                tracing::info!("ShowPopupMenu at ({}, {}) with {} items", x, y, items.len());
-                let (fs, lh, cw) = self
-                    .glyph_atlas
-                    .as_ref()
-                    .map(|a| {
-                        (
-                            a.default_font_size(),
-                            a.default_line_height(),
-                            a.default_char_width(),
-                        )
-                    })
-                    .unwrap_or((13.0, 17.0, 13.0 * 0.6));
+                tracing::info!(
+                    "ShowPopupMenu frame=0x{:x} at ({}, {}) with {} items",
+                    emacs_frame_id,
+                    x,
+                    y,
+                    items.len()
+                );
+                let (fs, lh, cw) = if emacs_frame_id == 0 {
+                    self.glyph_atlas
+                        .as_ref()
+                        .map(|a| {
+                            (
+                                a.default_font_size(),
+                                a.default_line_height(),
+                                a.default_char_width(),
+                            )
+                        })
+                        .unwrap_or((13.0, 17.0, 13.0 * 0.6))
+                } else {
+                    self.frame_windows
+                        .get(emacs_frame_id)
+                        .map(|window_state| {
+                            let atlas = &window_state.glyph_atlas;
+                            (
+                                atlas.default_font_size(),
+                                atlas.default_line_height(),
+                                atlas.default_char_width(),
+                            )
+                        })
+                        .unwrap_or((13.0, 17.0, 13.0 * 0.6))
+                };
                 let mut menu = PopupMenuState::new(x, y, items, title, fs, lh, cw);
                 menu.face_fg = fg;
                 menu.face_bg = bg;
-                self.popup_menu = Some(menu);
-                self.frame_dirty = true;
+                if emacs_frame_id == 0 {
+                    self.popup_menu = Some(menu);
+                    self.frame_dirty = true;
+                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.popup_menu = Some(menu);
+                    window_state.frame_dirty = true;
+                } else {
+                    tracing::warn!(
+                        "ShowPopupMenu requested for unknown frame_id=0x{:x}",
+                        emacs_frame_id
+                    );
+                }
                 Ok(())
             }
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
                 self.popup_menu = None;
                 self.menu_bar_active = None;
+                for window_state in self.frame_windows.windows.values_mut() {
+                    if window_state.popup_menu.is_some() {
+                        window_state.popup_menu = None;
+                        window_state.frame_dirty = true;
+                    }
+                }
                 self.frame_dirty = true;
                 Ok(())
             }

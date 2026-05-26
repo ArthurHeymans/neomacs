@@ -157,6 +157,16 @@ impl RenderApp {
             }
         }
 
+        if let Some(menu) = window_state.popup_menu.as_ref() {
+            renderer.render_popup_menu(
+                &surface_view,
+                menu,
+                &mut window_state.glyph_atlas,
+                window_state.width,
+                window_state.height,
+            );
+        }
+
         output.present();
         window_state.frame_dirty = false;
         renderer.set_scale_factor(old_scale_factor);

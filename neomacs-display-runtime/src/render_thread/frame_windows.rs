@@ -18,7 +18,7 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-use neomacs_renderer_wgpu::WgpuGlyphAtlas;
+use neomacs_renderer_wgpu::{PopupMenuState, WgpuGlyphAtlas};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Per-window state for a top-level GUI frame.
@@ -55,6 +55,8 @@ pub(crate) struct GuiFrameWindowState {
     pub tool_bar: Option<GuiToolBarState>,
     /// Compact GUI chrome snapshot for this frame, if visible.
     pub compact_bar: Option<GuiCompactBarState>,
+    /// Active popup menu shown in this frame window.
+    pub popup_menu: Option<PopupMenuState>,
 }
 
 impl GuiFrameWindowState {
@@ -289,6 +291,7 @@ impl GuiFrameWindowManager {
                             menu_bar: None,
                             tool_bar: None,
                             compact_bar: None,
+                            popup_menu: None,
                         },
                     );
                 }

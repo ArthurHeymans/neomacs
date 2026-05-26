@@ -1345,10 +1345,16 @@ fn show_popup_menu_selection(
     entries: &[PopupMenuEntry],
     selected: usize,
 ) -> Result<(), Flow> {
+    let frame_id = ctx
+        .frame_manager()
+        .selected_frame()
+        .map(|frame| frame.id)
+        .unwrap_or(crate::window::FrameId(0));
     let Some(host) = ctx.display_host.as_mut() else {
         return Ok(());
     };
     host.show_popup_menu(PopupMenuRequest {
+        frame_id,
         x,
         y,
         title: None,
