@@ -7,6 +7,7 @@
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
+mod archive_refile;
 mod babel_export;
 mod citation;
 mod editing_export;
