@@ -119,11 +119,30 @@ fn tab_bar_hit_test_items(
 }
 
 impl RenderApp {
+    #[cfg(feature = "wpe-webkit")]
+    fn floating_webkit_hit_test(
+        floating_webkits: &[crate::core::scene::FloatingWebKit],
+        x: f32,
+        y: f32,
+    ) -> Option<(u32, i32, i32)> {
+        floating_webkits.iter().rev().find_map(|wk| {
+            if x >= wk.x && x < wk.x + wk.width && y >= wk.y && y < wk.y + wk.height {
+                Some((wk.webkit_id, (x - wk.x) as i32, (y - wk.y) as i32))
+            } else {
+                None
+            }
+        })
+    }
+
     fn pointer_target_for_frame_window(
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> (f32, f32, u64) {
+        #[cfg(feature = "wpe-webkit")]
+        if Self::floating_webkit_hit_test(&window_state.floating_webkits, x, y).is_some() {
+            return (x, y, window_state.emacs_frame_id);
+        }
         if let Some((fid, local_x, local_y)) = window_state.child_frames.hit_test(x, y) {
             (local_x, local_y, fid)
         } else {
@@ -155,6 +174,14 @@ impl RenderApp {
         ev_x: f32,
         ev_y: f32,
     ) -> (u32, i32, i32) {
+        #[cfg(feature = "wpe-webkit")]
+        if target_fid == window_state.emacs_frame_id
+            && let Some(target) =
+                Self::floating_webkit_hit_test(&window_state.floating_webkits, ev_x, ev_y)
+        {
+            return target;
+        }
+
         Self::glyphs_for_frame_window_pointer_target(window_state, target_fid)
             .and_then(|glyphs| webkit_glyph_hit_test(glyphs, ev_x, ev_y))
             .unwrap_or((0, 0, 0))
@@ -275,6 +302,10 @@ impl RenderApp {
     }
 
     fn pointer_target_at(&self, x: f32, y: f32) -> (f32, f32, u64) {
+        #[cfg(feature = "wpe-webkit")]
+        if Self::floating_webkit_hit_test(&self.floating_webkits, x, y).is_some() {
+            return (x, y, 0);
+        }
         if let Some((fid, local_x, local_y)) = self.child_frames.hit_test(x, y) {
             (local_x, local_y, fid)
         } else {
@@ -287,24 +318,23 @@ impl RenderApp {
         let mut wk_rx = 0i32;
         let mut wk_ry = 0i32;
 
-        if let Some(glyphs) = self.glyphs_for_pointer_target(target_fid) {
-            if let Some((id, rx, ry)) = webkit_glyph_hit_test(glyphs, ev_x, ev_y) {
+        #[cfg(feature = "wpe-webkit")]
+        if target_fid == 0 {
+            if let Some((id, rx, ry)) =
+                Self::floating_webkit_hit_test(&self.floating_webkits, ev_x, ev_y)
+            {
                 wk_id = id;
                 wk_rx = rx;
                 wk_ry = ry;
             }
         }
 
-        #[cfg(feature = "wpe-webkit")]
-        if wk_id == 0 && target_fid == 0 {
-            let mx = self.mouse_pos.0;
-            let my = self.mouse_pos.1;
-            for wk in self.floating_webkits.iter().rev() {
-                if mx >= wk.x && mx < wk.x + wk.width && my >= wk.y && my < wk.y + wk.height {
-                    wk_id = wk.webkit_id;
-                    wk_rx = (mx - wk.x) as i32;
-                    wk_ry = (my - wk.y) as i32;
-                    break;
+        if wk_id == 0 {
+            if let Some(glyphs) = self.glyphs_for_pointer_target(target_fid) {
+                if let Some((id, rx, ry)) = webkit_glyph_hit_test(glyphs, ev_x, ev_y) {
+                    wk_id = id;
+                    wk_rx = rx;
+                    wk_ry = ry;
                 }
             }
         }
@@ -874,28 +904,23 @@ impl RenderApp {
             MouseButton::Other(n) => n as u32,
         };
 
-        let (ev_x, ev_y, target_fid) = if let Some((fid, lx, ly)) = self
-            .child_frames
-            .hit_test(self.mouse_pos.0, self.mouse_pos.1)
-        {
-            if let Some(entry) = self.child_frames.frames.get(&fid) {
+        let (ev_x, ev_y, target_fid) = self.pointer_target_at(self.mouse_pos.0, self.mouse_pos.1);
+        if target_fid != 0 {
+            if let Some(entry) = self.child_frames.frames.get(&target_fid) {
                 tracing::trace!(
                     "Child frame hit: fid={} abs=({:.1},{:.1}) size=({:.1}x{:.1}) mouse=({:.1},{:.1}) local=({:.1},{:.1})",
-                    fid,
+                    target_fid,
                     entry.abs_x,
                     entry.abs_y,
                     entry.frame.width,
                     entry.frame.height,
                     self.mouse_pos.0,
                     self.mouse_pos.1,
-                    lx,
-                    ly
+                    ev_x,
+                    ev_y
                 );
             }
-            (lx, ly, fid)
-        } else {
-            (self.mouse_pos.0, self.mouse_pos.1, 0)
-        };
+        }
 
         let (wk_id, wk_rx, wk_ry) = if state == ElementState::Pressed {
             let (id, rx, ry) = self.webkit_target_at(target_fid, ev_x, ev_y);

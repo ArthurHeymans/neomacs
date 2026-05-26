@@ -21,6 +21,8 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
+#[cfg(feature = "wpe-webkit")]
+use neomacs_display_protocol::scene::FloatingWebKit;
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas};
 use neovm_core::window::GuiFrameGeometryHints;
 
@@ -66,6 +68,9 @@ pub(crate) struct GuiFrameWindowState {
     pub tooltip: Option<TooltipState>,
     /// Visual bell flash start time for this frame window.
     pub visual_bell_start: Option<Instant>,
+    /// Floating WebKit overlays rendered on this frame window.
+    #[cfg(feature = "wpe-webkit")]
+    pub floating_webkits: Vec<FloatingWebKit>,
 }
 
 impl GuiFrameWindowState {
@@ -304,6 +309,8 @@ impl GuiFrameWindowManager {
                             popup_menu: None,
                             tooltip: None,
                             visual_bell_start: None,
+                            #[cfg(feature = "wpe-webkit")]
+                            floating_webkits: Vec::new(),
                         },
                     );
                 }

@@ -194,9 +194,15 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
+                    self.floating_webkits.retain(|w| w.webkit_id != id);
+                    for window_state in self.frame_windows.windows.values_mut() {
+                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
+                        window_state.frame_dirty = true;
+                    }
                     if let Some(ref mut renderer) = self.renderer {
                         renderer.remove_webkit_view(id);
                     }
+                    self.frame_dirty = true;
                 }
                 Ok(())
             }
@@ -309,6 +315,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::WebKitSetFloating {
+                emacs_frame_id,
                 id,
                 x,
                 y,
@@ -325,25 +332,70 @@ impl RenderApp {
                 );
                 #[cfg(feature = "wpe-webkit")]
                 {
+                    let overlay = crate::core::scene::FloatingWebKit {
+                        webkit_id: id,
+                        x,
+                        y,
+                        width,
+                        height,
+                    };
+                    let primary_len = self.floating_webkits.len();
                     self.floating_webkits.retain(|w| w.webkit_id != id);
-                    self.floating_webkits
-                        .push(crate::core::scene::FloatingWebKit {
-                            webkit_id: id,
-                            x,
-                            y,
-                            width,
-                            height,
-                        });
-                    self.frame_dirty = true;
+                    if self.floating_webkits.len() != primary_len {
+                        self.frame_dirty = true;
+                    }
+                    for window_state in self.frame_windows.windows.values_mut() {
+                        let old_len = window_state.floating_webkits.len();
+                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
+                        if window_state.floating_webkits.len() != old_len {
+                            window_state.frame_dirty = true;
+                        }
+                    }
+                    if emacs_frame_id == 0
+                        || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
+                    {
+                        self.floating_webkits.push(overlay);
+                        self.frame_dirty = true;
+                    } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                        window_state.floating_webkits.push(overlay);
+                        window_state.frame_dirty = true;
+                    } else {
+                        tracing::warn!(
+                            "WebKitSetFloating requested for unknown frame_id=0x{:x}",
+                            emacs_frame_id
+                        );
+                    }
                 }
                 Ok(())
             }
-            RenderCommand::WebKitRemoveFloating { id } => {
+            RenderCommand::WebKitRemoveFloating { emacs_frame_id, id } => {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
+                    let primary_len = self.floating_webkits.len();
                     self.floating_webkits.retain(|w| w.webkit_id != id);
-                    self.frame_dirty = true;
+                    if self.floating_webkits.len() != primary_len {
+                        self.frame_dirty = true;
+                    }
+                    for window_state in self.frame_windows.windows.values_mut() {
+                        let old_len = window_state.floating_webkits.len();
+                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
+                        if window_state.floating_webkits.len() != old_len {
+                            window_state.frame_dirty = true;
+                        }
+                    }
+                    if emacs_frame_id == 0
+                        || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
+                    {
+                        self.frame_dirty = true;
+                    } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                        window_state.frame_dirty = true;
+                    } else {
+                        tracing::warn!(
+                            "WebKitRemoveFloating requested for unknown frame_id=0x{:x}",
+                            emacs_frame_id
+                        );
+                    }
                 }
                 Ok(())
             }

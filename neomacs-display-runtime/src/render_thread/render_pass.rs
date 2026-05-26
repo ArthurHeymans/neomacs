@@ -84,6 +84,11 @@ impl RenderApp {
             }
         }
 
+        #[cfg(feature = "wpe-webkit")]
+        if !window_state.floating_webkits.is_empty() {
+            renderer.render_floating_webkits(&surface_view, &window_state.floating_webkits);
+        }
+
         if let Some(menu_bar) = window_state.menu_bar.as_ref() {
             if menu_bar.height > 0.0 && !menu_bar.items.is_empty() {
                 renderer.render_menu_bar(
@@ -427,6 +432,14 @@ impl RenderApp {
             }
         }
 
+        // Render floating WebKit overlays above frame contents but below GUI chrome.
+        #[cfg(feature = "wpe-webkit")]
+        if !self.floating_webkits.is_empty() {
+            if let Some(ref renderer) = self.renderer {
+                renderer.render_floating_webkits(&surface_view, &self.floating_webkits);
+            }
+        }
+
         // Render breadcrumb/path bar overlay
         if self.effects.breadcrumb.enabled {
             if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
@@ -485,14 +498,6 @@ impl RenderApp {
                     self.width,
                     self.height,
                 );
-            }
-        }
-
-        // Render floating WebKit overlays on top of everything
-        #[cfg(feature = "wpe-webkit")]
-        if !self.floating_webkits.is_empty() {
-            if let Some(ref renderer) = self.renderer {
-                renderer.render_floating_webkits(&surface_view, &self.floating_webkits);
             }
         }
 

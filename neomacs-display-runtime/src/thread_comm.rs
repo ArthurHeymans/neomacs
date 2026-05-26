@@ -311,6 +311,7 @@ pub enum RenderCommand {
     },
     /// Set floating WebKit overlay position and size
     WebKitSetFloating {
+        emacs_frame_id: u64,
         id: u32,
         x: f32,
         y: f32,
@@ -319,6 +320,7 @@ pub enum RenderCommand {
     },
     /// Remove floating WebKit overlay
     WebKitRemoveFloating {
+        emacs_frame_id: u64,
         id: u32,
     },
     /// Create video player

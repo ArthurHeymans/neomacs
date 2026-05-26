@@ -1497,6 +1497,7 @@ fn render_command_webkit_execute_javascript() {
 #[test]
 fn render_command_webkit_set_floating() {
     let cmd = RenderCommand::WebKitSetFloating {
+        emacs_frame_id: 42,
         id: 1,
         x: 10.0,
         y: 20.0,
@@ -1505,12 +1506,14 @@ fn render_command_webkit_set_floating() {
     };
     match cmd {
         RenderCommand::WebKitSetFloating {
+            emacs_frame_id,
             id,
             x,
             y,
             width,
             height,
         } => {
+            assert_eq!(emacs_frame_id, 42);
             assert_eq!(id, 1);
             assert_eq!(x, 10.0);
             assert_eq!(y, 20.0);
@@ -1523,9 +1526,15 @@ fn render_command_webkit_set_floating() {
 
 #[test]
 fn render_command_webkit_remove_floating() {
-    let cmd = RenderCommand::WebKitRemoveFloating { id: 7 };
+    let cmd = RenderCommand::WebKitRemoveFloating {
+        emacs_frame_id: 42,
+        id: 7,
+    };
     match cmd {
-        RenderCommand::WebKitRemoveFloating { id } => assert_eq!(id, 7),
+        RenderCommand::WebKitRemoveFloating { emacs_frame_id, id } => {
+            assert_eq!(emacs_frame_id, 42);
+            assert_eq!(id, 7);
+        }
         other => panic!("Expected WebKitRemoveFloating, got {:?}", other),
     }
 }
