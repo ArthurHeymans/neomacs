@@ -61,17 +61,6 @@ impl RenderApp {
         }
     }
 
-    #[cfg(test)]
-    pub(super) fn set_secondary_popup_menu_for_test(
-        &mut self,
-        emacs_frame_id: u64,
-        menu: PopupMenuState,
-    ) {
-        if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-            window_state.popup_menu = Some(menu);
-        }
-    }
-
     pub(super) fn handle_ui_command(&mut self, cmd: RenderCommand) -> Result<(), RenderCommand> {
         match cmd {
             RenderCommand::SetCursorBlink {
@@ -255,11 +244,23 @@ impl RenderApp {
                 self.frame_dirty = true;
                 Ok(())
             }
-            RenderCommand::VisualBell => {
-                self.visual_bell_start = Some(std::time::Instant::now());
+            RenderCommand::VisualBell { emacs_frame_id } => {
+                let now = std::time::Instant::now();
+                if emacs_frame_id == 0 {
+                    self.visual_bell_start = Some(now);
+                    self.frame_dirty = true;
+                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.visual_bell_start = Some(now);
+                    window_state.frame_dirty = true;
+                } else {
+                    tracing::warn!(
+                        "VisualBell requested for unknown frame_id=0x{:x}",
+                        emacs_frame_id
+                    );
+                }
                 if self.effects.cursor_error_pulse.enabled {
                     if let Some(renderer) = self.renderer.as_mut() {
-                        renderer.trigger_cursor_error_pulse(std::time::Instant::now());
+                        renderer.trigger_cursor_error_pulse(now);
                     }
                 }
                 if self.effects.edge_snap.enabled {
@@ -275,7 +276,7 @@ impl RenderApp {
                                             info.mode_line_height,
                                             at_top,
                                             at_bottom,
-                                            std::time::Instant::now(),
+                                            now,
                                         );
                                     }
                                 }
@@ -284,7 +285,6 @@ impl RenderApp {
                         }
                     }
                 }
-                self.frame_dirty = true;
                 Ok(())
             }
             RenderCommand::UpdateEffect(updater) => {

@@ -291,10 +291,13 @@ fn thread_comms_split_channels_work() {
     let (emacs, render) = comms.split();
 
     // Emacs sends command, render receives
-    emacs.cmd_tx.send(RenderCommand::VisualBell).unwrap();
+    emacs
+        .cmd_tx
+        .send(RenderCommand::VisualBell { emacs_frame_id: 7 })
+        .unwrap();
     let cmd = render.cmd_rx.try_recv().unwrap();
     match cmd {
-        RenderCommand::VisualBell => {}
+        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 7),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
 
@@ -1153,9 +1156,9 @@ fn render_command_hide_tooltip() {
 
 #[test]
 fn render_command_visual_bell() {
-    let cmd = RenderCommand::VisualBell;
+    let cmd = RenderCommand::VisualBell { emacs_frame_id: 99 };
     match cmd {
-        RenderCommand::VisualBell => {}
+        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 99),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
 }
@@ -1782,7 +1785,10 @@ fn channel_sends_multiple_commands_in_order() {
     let comms = ThreadComms::new().unwrap();
 
     comms.cmd_tx.send(RenderCommand::Shutdown).unwrap();
-    comms.cmd_tx.send(RenderCommand::VisualBell).unwrap();
+    comms
+        .cmd_tx
+        .send(RenderCommand::VisualBell { emacs_frame_id: 0 })
+        .unwrap();
     comms.cmd_tx.send(RenderCommand::HideTooltip).unwrap();
 
     match comms.cmd_rx.try_recv().unwrap() {
@@ -1790,7 +1796,7 @@ fn channel_sends_multiple_commands_in_order() {
         other => panic!("Expected Shutdown, got {:?}", other),
     }
     match comms.cmd_rx.try_recv().unwrap() {
-        RenderCommand::VisualBell => {}
+        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 0),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
     match comms.cmd_rx.try_recv().unwrap() {

@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
@@ -57,6 +58,8 @@ pub(crate) struct GuiFrameWindowState {
     pub compact_bar: Option<GuiCompactBarState>,
     /// Active popup menu shown in this frame window.
     pub popup_menu: Option<PopupMenuState>,
+    /// Visual bell flash start time for this frame window.
+    pub visual_bell_start: Option<Instant>,
 }
 
 impl GuiFrameWindowState {
@@ -292,6 +295,7 @@ impl GuiFrameWindowManager {
                             tool_bar: None,
                             compact_bar: None,
                             popup_menu: None,
+                            visual_bell_start: None,
                         },
                     );
                 }

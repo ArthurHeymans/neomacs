@@ -473,7 +473,10 @@ pub enum RenderCommand {
     /// Hide the active tooltip
     HideTooltip,
     /// Trigger visual bell flash
-    VisualBell,
+    VisualBell {
+        /// Emacs frame_id of the flashing top-level frame (0 = primary)
+        emacs_frame_id: u64,
+    },
     /// Request window attention (urgency hint / taskbar flash)
     RequestAttention {
         urgent: bool,

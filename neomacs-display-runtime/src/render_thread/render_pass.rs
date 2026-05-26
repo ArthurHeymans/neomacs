@@ -167,6 +167,23 @@ impl RenderApp {
             );
         }
 
+        if let Some(start) = window_state.visual_bell_start {
+            let elapsed = start.elapsed().as_secs_f32();
+            let duration = 0.15;
+            if elapsed < duration {
+                let alpha = (1.0 - elapsed / duration) * 0.3;
+                renderer.render_visual_bell(
+                    &surface_view,
+                    window_state.width,
+                    window_state.height,
+                    alpha,
+                );
+                window_state.frame_dirty = true;
+            } else {
+                window_state.visual_bell_start = None;
+            }
+        }
+
         output.present();
         window_state.frame_dirty = false;
         renderer.set_scale_factor(old_scale_factor);
