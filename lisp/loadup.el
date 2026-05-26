@@ -312,11 +312,30 @@
       (load "x-dnd")
       (load "term/common-win")
       (load "term/x-win")))
+
+(if (or (eq system-type 'windows-nt)
+        (featurep 'w32))
+    (progn
+      (load "term/common-win")
+      (load "w32-vars")
+      (load "term/w32-win")
+      (load "disp-table")
+      (when (eq system-type 'windows-nt)
+        (load "term/w32-nt")
+        (load "w32-fns")
+        (load "ls-lisp")
+        (load "dos-w32"))
+      (load "touch-screen")))
+
 (if (fboundp 'x-create-frame)
     ;; Do it after loading term/foo-win.el since the value of the
     ;; mouse-wheel-*-event vars depends on those files being loaded or not.
     (load "mwheel"))
 
+;; progmodes/elisp-mode.el must be after w32-fns.el, to avoid this:
+;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
+;; which happens while processing 'elisp-flymake-byte-compile', when
+;; elisp-mode.elc is outdated.
 (load "progmodes/elisp-mode")
 
 ;; Preload some constants and floating point functions.

@@ -3067,6 +3067,7 @@ dependencies = [
  "tree-sitter-language",
  "unicode_names2",
  "webpki-roots",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

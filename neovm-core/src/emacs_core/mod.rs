@@ -120,6 +120,7 @@ pub mod value;
 pub mod value_reader;
 pub mod var_docs;
 pub mod window_cmds;
+pub(crate) mod windows;
 pub mod xdisp;
 pub mod xfaces;
 pub mod xml;

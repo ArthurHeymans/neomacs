@@ -51,6 +51,9 @@ quick-xml.workspace = true
 tl.workspace = true
 rodio = { version = "0.20", optional = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true
+
 [features]
 default = []
 sound = ["rodio"]

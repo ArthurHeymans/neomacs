@@ -85,6 +85,28 @@ fn gnu_system_type() -> &'static str {
     }
 }
 
+fn initial_feature_names() -> Vec<&'static str> {
+    let mut features = vec!["threads", "emacs"];
+    if cfg!(target_os = "windows") {
+        // GNU w32term.c calls Fprovide(Qw32) during C-level startup.
+        features.insert(0, "w32");
+    }
+    features
+}
+
+fn initial_features_value() -> Value {
+    Value::list(
+        initial_feature_names()
+            .into_iter()
+            .map(Value::symbol)
+            .collect(),
+    )
+}
+
+fn initial_feature_ids() -> Vec<SymId> {
+    initial_feature_names().into_iter().map(intern).collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplaySignature {
     selected_frame: Option<u64>,
@@ -3115,10 +3137,7 @@ impl Context {
         // GNU fns.c initializes `features' to include `emacs', and
         // thread.c:syms_of_threads provides `threads' when thread builtins
         // are installed.
-        obarray.set_symbol_value(
-            "features",
-            Value::list(vec![Value::symbol("threads"), Value::symbol("emacs")]),
-        );
+        obarray.set_symbol_value("features", initial_features_value());
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
         obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
@@ -4434,8 +4453,18 @@ impl Context {
         // backend before Lisp loadup.  `lisp/loadup.el' deliberately checks
         // only `boundp' so `scroll-bar.el' is loaded even when the value is
         // nil for a non-toolkit build.
-        obarray.set_symbol_value("x-toolkit-scroll-bars", Value::symbol("gtk"));
+        obarray.set_symbol_value(
+            "x-toolkit-scroll-bars",
+            if cfg!(target_os = "windows") {
+                Value::T
+            } else {
+                Value::symbol("gtk")
+            },
+        );
         obarray.make_special("x-toolkit-scroll-bars");
+
+        #[cfg(target_os = "windows")]
+        super::windows::register_bootstrap_symbols(&mut obarray);
 
         let mut command_loop = crate::keyboard::CommandLoop::new();
         command_loop
@@ -4478,7 +4507,7 @@ impl Context {
             symbols_with_pos_enabled,
             print_symbols_bare_symbol: core_eval_symbols.print_symbols_bare_symbol,
             print_symbols_bare,
-            features: vec![intern("threads"), intern("emacs")],
+            features: initial_feature_ids(),
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             buffers: BufferManager::new(),
