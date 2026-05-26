@@ -13,6 +13,7 @@ mod editing_export;
 mod fold_font;
 mod id_link;
 mod link_export;
+mod macro_include;
 mod property_log;
 mod support;
 mod table_agenda;
