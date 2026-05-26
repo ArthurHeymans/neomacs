@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 mod babel_export;
 mod editing_export;
 mod fold_font;
+mod id_link;
 mod link_export;
 mod property_log;
 mod support;
