@@ -15,6 +15,7 @@ mod display_state;
 mod editing_export;
 mod export_mix;
 mod fold_font;
+mod footnote_edit;
 mod id_link;
 mod link_export;
 mod list_checkbox;
