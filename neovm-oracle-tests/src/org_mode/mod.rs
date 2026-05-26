@@ -12,6 +12,7 @@ mod babel_export;
 mod capture_workflow;
 mod citation;
 mod clock_agenda;
+mod datetree_workflow;
 mod display_state;
 mod editing_export;
 mod export_mix;
