@@ -8686,6 +8686,74 @@ fn load_file_reads_utf8_emacs_extended_char_literals() {
 }
 
 #[test]
+fn reader_accepts_utf8_emacs_extended_char_literals_from_ethiopic_source() {
+    crate::test_utils::init_test_tracing();
+    let source = decode_emacs_utf8_source(
+        b"(aset composition-function-table ?\xF6\xA0\x87\x8A #'ethio-composition-function)\n",
+    );
+
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &source,
+        true,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("reader should accept utf-8-emacs extended chars before function quote");
+
+    assert_eq!(forms.len(), 1);
+}
+
+#[test]
+fn reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic_source() {
+    crate::test_utils::init_test_tracing();
+    let bytes = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("workspace root")
+            .join("lisp/language/ethiopic.el"),
+    )
+    .expect("read ethiopic source fixture");
+    let source = decode_emacs_utf8_source(&bytes);
+
+    let forms = crate::emacs_core::value_reader::read_all_with_source_multibyte(
+        &source,
+        true,
+        &crate::emacs_core::symbol::Obarray::new(),
+    )
+    .expect("reader should accept GNU utf-8-emacs source files");
+
+    assert!(!forms.is_empty());
+}
+
+#[test]
+fn lisp_source_reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic_source() {
+    crate::test_utils::init_test_tracing();
+    let bytes = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("workspace root")
+            .join("lisp/language/ethiopic.el"),
+    )
+    .expect("read ethiopic source fixture");
+    let text = crate::emacs_core::builtins::runtime_string_to_lisp_string(
+        &decode_emacs_utf8_source(&bytes),
+        true,
+    );
+    let source = crate::emacs_core::value_reader::LispReadSource::new(&text);
+
+    let mut pos = 0;
+    let mut count = 0;
+    while let Some((_form, next_pos)) = source
+        .read_one(pos, &crate::emacs_core::symbol::Obarray::new())
+        .expect("LispReadSource should accept GNU utf-8-emacs source files")
+    {
+        pos = next_pos;
+        count += 1;
+    }
+
+    assert!(count > 0);
+}
+
+#[test]
 fn load_file_single_line_shebang_signals_end_of_file() {
     crate::test_utils::init_test_tracing();
     let unique = SystemTime::now()
@@ -9474,6 +9542,32 @@ fn partial_bootstrap_load_with_code_conversion_swallows_footer_local_variables_e
         format_eval_result(&result),
         "OK t",
         "source load path should demote footer local variable parse errors"
+    );
+}
+
+#[test]
+fn partial_bootstrap_load_with_code_conversion_preserves_utf8_emacs_extended_source_chars() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = partial_bootstrap_eval_until("emacs-lisp/macroexp", false);
+    eval.set_variable(
+        "load-source-file-function",
+        Value::symbol("load-with-code-conversion"),
+    );
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("utf8-emacs-source-char.el");
+    fs::write(
+        &path,
+        b";;; utf8-emacs-source-char.el --- fixture -*- coding: utf-8-emacs; lexical-binding: t; -*-\n\
+          (setq vm-source-load-extended-char ?\xF6\xA0\x87\x8A)\n",
+    )
+    .expect("write utf-8-emacs source fixture");
+
+    let result = load_file(&mut eval, &path);
+    assert_eq!(format_eval_result(&result), "OK t");
+    assert_eq!(
+        eval_rendered(&mut eval, "(= vm-source-load-extended-char #x1A01CA)"),
+        "OK t"
     );
 }
 
