@@ -24,6 +24,7 @@ mod property_log;
 mod source_block;
 mod support;
 mod table_agenda;
+mod tag_match;
 
 #[test]
 fn org_element_headline_properties() {
