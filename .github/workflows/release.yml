@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Tag to release, for example v0.0.4
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -34,7 +28,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
       - name: Install system dependencies (apt)
         run: |
@@ -138,7 +131,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
       - name: Install system dependencies (brew)
         run: brew install pkg-config gstreamer
@@ -179,7 +171,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -267,8 +258,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
-          name: NEO Emacs ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          name: NEO Emacs ${{ github.ref_name }}
           files: dist/*
           generate_release_notes: true
         env:
