@@ -158,7 +158,7 @@ jobs:
   build-windows:
     name: build Windows
     runs-on: windows-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
@@ -230,20 +230,23 @@ jobs:
         shell: powershell
         run: Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
 
-      - name: Build and package .exe installer
+      - name: Verify GStreamer pkg-config
         shell: bash
+        run: source scripts/windows-gstreamer-env.sh --verify
+
+      - name: Build release binaries
+        shell: bash
+        timeout-minutes: 150
         run: |
-          gst_root_posix="$(cygpath -u "$GSTREAMER_ROOT_X86_64")"
-          pkg_config_posix="$(cygpath -u "$PKG_CONFIG")"
-          export PATH="$(dirname "$pkg_config_posix"):$gst_root_posix/bin:$PATH"
-          export PKG_CONFIG="$(cygpath -w "$PKG_CONFIG")"
-          export PKG_CONFIG_PATH="$(cygpath -w "$gst_root_posix/lib/pkgconfig")"
-          export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
-          find "$gst_root_posix" -name 'glib-2.0.pc' -o -name 'gstreamer-1.0.pc'
-          "$pkg_config_posix" --version
-          "$pkg_config_posix" --modversion glib-2.0
-          "$pkg_config_posix" --modversion gstreamer-1.0
-          ./scripts/package-windows-installer.sh --no-smoke
+          source scripts/windows-gstreamer-env.sh
+          cargo xtask fresh-build --release
+
+      - name: Package .exe installer
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          source scripts/windows-gstreamer-env.sh
+          ./scripts/package-windows-installer.sh --skip-build --no-smoke
 
       - name: Upload .exe artifact
         uses: actions/upload-artifact@v4
