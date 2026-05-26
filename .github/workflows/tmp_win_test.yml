@@ -1,0 +1,74 @@
+name: tmp Windows fresh build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-build:
+    name: cargo xtask fresh-build --release
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      RUST_LOG: info
+      GSTREAMER_VERSION: 1.26.9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Restore GStreamer SDK cache
+        id: cache-gstreamer
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            C:\gstreamer
+            C:\gstreamer-msi-cache
+          key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
+
+      - name: Install GStreamer SDK
+        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
+        shell: powershell
+        run: ./scripts/setup-windows-gstreamer.ps1 -Install
+
+      - name: Save GStreamer SDK cache
+        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            C:\gstreamer
+            C:\gstreamer-msi-cache
+          key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
+
+      - name: Configure GStreamer SDK
+        shell: powershell
+        run: ./scripts/setup-windows-gstreamer.ps1
+
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-msvc-x86_64
+          cache-bin: false
+          save-if: true
+          cache-on-failure: true
+
+      - name: Verify GStreamer pkg-config
+        shell: bash
+        run: source scripts/windows-gstreamer-env.sh --verify
+
+      - name: Run fresh build
+        shell: bash
+        timeout-minutes: 150
+        run: |
+          source scripts/windows-gstreamer-env.sh
+          cargo xtask fresh-build --release
