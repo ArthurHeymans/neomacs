@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 mod babel_export;
 mod editing_export;
+mod link_export;
 mod support;
 mod table_agenda;
 
