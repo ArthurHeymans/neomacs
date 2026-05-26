@@ -8,7 +8,16 @@
 
 use super::intern::intern;
 use super::symbol::Obarray;
-use super::value::Value;
+use super::{
+    error::{EvalResult, Flow, signal},
+    eval::Context,
+    value::{Value, ValueKind},
+};
+
+#[cfg(windows)]
+thread_local! {
+    static W32_VALID_CODEPAGES: std::cell::RefCell<Vec<i64>> = const { std::cell::RefCell::new(Vec::new()) };
+}
 
 pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
     register_w32term_symbols(obarray);
@@ -18,6 +27,148 @@ pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
     register_w32dwrite_symbols(obarray);
     register_w32console_symbols(obarray);
     register_windows_dynamic_library_versions(obarray);
+}
+
+#[cfg(windows)]
+pub(crate) fn register_builtin_subrs(ctx: &mut Context) {
+    ctx.defsubr_0("w32-get-valid-codepages", builtin_w32_get_valid_codepages);
+    ctx.defsubr_0("w32-get-console-codepage", builtin_w32_get_console_codepage);
+    ctx.defsubr_1(
+        "w32-set-console-codepage",
+        builtin_w32_set_console_codepage,
+        1,
+    );
+    ctx.defsubr_0(
+        "w32-get-console-output-codepage",
+        builtin_w32_get_console_output_codepage,
+    );
+    ctx.defsubr_1(
+        "w32-set-console-output-codepage",
+        builtin_w32_set_console_output_codepage,
+        1,
+    );
+    ctx.defsubr_1(
+        "w32-get-codepage-charset",
+        builtin_w32_get_codepage_charset,
+        1,
+    );
+}
+
+#[cfg(windows)]
+fn builtin_w32_get_valid_codepages(_ctx: &mut Context) -> EvalResult {
+    use windows_sys::Win32::Globalization::{CP_SUPPORTED, EnumSystemCodePagesA};
+
+    W32_VALID_CODEPAGES.with(|codepages| codepages.borrow_mut().clear());
+    unsafe {
+        EnumSystemCodePagesA(Some(enum_codepage_fn), CP_SUPPORTED);
+    }
+    let codepages = W32_VALID_CODEPAGES.with(|codepages| codepages.borrow().clone());
+    Ok(Value::list(
+        codepages.into_iter().map(Value::fixnum).collect(),
+    ))
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn enum_codepage_fn(codepage_num: windows_sys::core::PCSTR) -> i32 {
+    if !codepage_num.is_null() {
+        if let Ok(text) = unsafe { std::ffi::CStr::from_ptr(codepage_num.cast()) }.to_str() {
+            if let Ok(codepage) = text.parse::<i64>() {
+                W32_VALID_CODEPAGES.with(|codepages| codepages.borrow_mut().push(codepage));
+            }
+        }
+    }
+    1
+}
+
+#[cfg(windows)]
+fn builtin_w32_get_console_codepage(_ctx: &mut Context) -> EvalResult {
+    use windows_sys::Win32::System::Console::GetConsoleCP;
+
+    Ok(Value::fixnum(unsafe { GetConsoleCP() } as i64))
+}
+
+#[cfg(windows)]
+fn builtin_w32_set_console_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
+    use windows_sys::Win32::{
+        Globalization::IsValidCodePage,
+        System::Console::{GetConsoleCP, SetConsoleCP},
+    };
+
+    let cp = expect_fixnump(&cp)?;
+    let Some(cp) = codepage_u32(cp) else {
+        return Ok(Value::NIL);
+    };
+    unsafe {
+        if IsValidCodePage(cp) == 0 || SetConsoleCP(cp) == 0 {
+            return Ok(Value::NIL);
+        }
+        Ok(Value::fixnum(GetConsoleCP() as i64))
+    }
+}
+
+#[cfg(windows)]
+fn builtin_w32_get_console_output_codepage(_ctx: &mut Context) -> EvalResult {
+    use windows_sys::Win32::System::Console::GetConsoleOutputCP;
+
+    Ok(Value::fixnum(unsafe { GetConsoleOutputCP() } as i64))
+}
+
+#[cfg(windows)]
+fn builtin_w32_set_console_output_codepage(_ctx: &mut Context, cp: Value) -> EvalResult {
+    use windows_sys::Win32::{
+        Globalization::IsValidCodePage,
+        System::Console::{GetConsoleOutputCP, SetConsoleOutputCP},
+    };
+
+    let cp = expect_fixnump(&cp)?;
+    let Some(cp) = codepage_u32(cp) else {
+        return Ok(Value::NIL);
+    };
+    unsafe {
+        if IsValidCodePage(cp) == 0 || SetConsoleOutputCP(cp) == 0 {
+            return Ok(Value::NIL);
+        }
+        Ok(Value::fixnum(GetConsoleOutputCP() as i64))
+    }
+}
+
+#[cfg(windows)]
+fn builtin_w32_get_codepage_charset(_ctx: &mut Context, cp: Value) -> EvalResult {
+    use windows_sys::Win32::Globalization::{
+        CHARSETINFO, IsValidCodePage, TCI_SRCCODEPAGE, TranslateCharsetInfo,
+    };
+
+    let cp = expect_fixnump(&cp)?;
+    let Some(cp) = codepage_u32(cp) else {
+        return Ok(Value::NIL);
+    };
+    unsafe {
+        if IsValidCodePage(cp) == 0 {
+            return Ok(Value::NIL);
+        }
+        let mut info = std::mem::zeroed::<CHARSETINFO>();
+        if TranslateCharsetInfo(cp as usize as *mut u32, &mut info, TCI_SRCCODEPAGE) != 0 {
+            Ok(Value::fixnum(info.ciCharset as i64))
+        } else {
+            Ok(Value::NIL)
+        }
+    }
+}
+
+#[cfg(windows)]
+fn codepage_u32(cp: i64) -> Option<u32> {
+    u32::try_from(cp).ok()
+}
+
+#[cfg(windows)]
+fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("fixnump"), *value],
+        )),
+    }
 }
 
 fn register_w32term_symbols(obarray: &mut Obarray) {

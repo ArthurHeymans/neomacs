@@ -1237,6 +1237,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     use super::error::*;
     use super::eval::Context;
     use super::value::*;
+    #[cfg(windows)]
+    super::windows::register_builtin_subrs(ctx);
     ctx.defsubr_slice("apply", builtin_apply_slice, 1, None);
     ctx.defsubr_slice("funcall", builtin_funcall_slice, 1, None);
     ctx.defsubr_slice(
