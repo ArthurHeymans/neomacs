@@ -105,6 +105,7 @@ fn active_minibuffer_window_tracks_live_minibuffer_state() {
 struct RecordingDisplayHost {
     realized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
     resized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
+    destroyed_gui_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     removed_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     geometry_hints:
         Rc<RefCell<Vec<(crate::window::FrameId, crate::window::GuiFrameGeometryHints)>>>,
@@ -160,6 +161,11 @@ impl DisplayHost for RecordingDisplayHost {
 
     fn opening_gui_frame_pending(&self) -> bool {
         self.realized.borrow().is_empty()
+    }
+
+    fn destroy_gui_frame(&mut self, frame_id: crate::window::FrameId) -> Result<(), String> {
+        self.destroyed_gui_frames.borrow_mut().push(frame_id);
+        Ok(())
     }
 
     fn remove_gui_child_frame(&mut self, frame_id: crate::window::FrameId) -> Result<(), String> {
@@ -3844,6 +3850,34 @@ fn delete_frame_removes_gui_child_overlay_from_display_host() {
 
     assert!(ev.frames.get(child_id).is_none());
     assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
+fn delete_frame_destroys_top_level_gui_window_from_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let first_id = ev.frames.create_frame("first", 960, 640, scratch);
+    let second_id = ev.frames.create_frame("second", 800, 500, scratch);
+    for frame_id in [first_id, second_id] {
+        ev.frames
+            .get_mut(frame_id)
+            .expect("gui frame")
+            .set_window_system(Some(Value::symbol("x")));
+    }
+    ev.frames.select_frame(first_id);
+    let host = RecordingDisplayHost::new();
+    let destroyed_gui_frames = host.destroyed_gui_frames.clone();
+    let removed_child_frames = host.removed_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    super::builtin_delete_frame(&mut ev, vec![Value::make_frame(second_id.0)])
+        .expect("delete top-level gui frame");
+
+    assert!(ev.frames.get(first_id).is_some());
+    assert!(ev.frames.get(second_id).is_none());
+    assert_eq!(*destroyed_gui_frames.borrow(), vec![second_id]);
+    assert!(removed_child_frames.borrow().is_empty());
 }
 
 #[test]

@@ -631,6 +631,51 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
 }
 
 #[test]
+fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let mut host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: true,
+        primary_frame_id: Some(FrameId(0x100000001)),
+        last_window_titles: Mutex::new(std::collections::HashMap::from([
+            (FrameId(0x100000001), LispString::from_utf8("primary")),
+            (FrameId(0x100000002), LispString::from_utf8("secondary")),
+        ])),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+
+    neovm_core::emacs_core::DisplayHost::destroy_gui_frame(&mut host, FrameId(0x100000002))
+        .expect("destroy secondary frame");
+    neovm_core::emacs_core::DisplayHost::destroy_gui_frame(&mut host, FrameId(0x100000001))
+        .expect("destroy primary frame");
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert_eq!(commands.len(), 2);
+    assert!(matches!(
+        commands[0],
+        RenderCommand::DestroyWindow {
+            emacs_frame_id: 0x100000002,
+        }
+    ));
+    assert!(matches!(
+        commands[1],
+        RenderCommand::DestroyWindow { emacs_frame_id: 0 }
+    ));
+    assert_eq!(host.primary_frame_id, None);
+    let cached_titles = host.last_window_titles.lock().expect("title cache");
+    assert!(cached_titles.is_empty());
+}
+
+#[test]
 fn primary_display_host_request_image_queues_without_waiting_for_render_thread() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let image_dimensions = Arc::new((

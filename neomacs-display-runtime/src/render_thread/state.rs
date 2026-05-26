@@ -196,6 +196,7 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
     pub(super) window: Option<Arc<Window>>,
+    pub(super) primary_window_destroyed: bool,
     pub(super) current_frame: Option<FrameGlyphBuffer>,
     pub(super) width: u32,
     pub(super) height: u32,
@@ -372,6 +373,7 @@ impl RenderApp {
         Self {
             comms,
             window: None,
+            primary_window_destroyed: false,
             current_frame: None,
             width,
             height,

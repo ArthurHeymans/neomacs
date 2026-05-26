@@ -218,7 +218,18 @@ impl RenderApp {
             }
             RenderCommand::DestroyWindow { emacs_frame_id } => {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
-                self.frame_windows.request_destroy(emacs_frame_id);
+                if emacs_frame_id == 0 {
+                    self.frame_windows.clear_primary_mapping();
+                    self.window = None;
+                    self.surface = None;
+                    self.surface_config = None;
+                    self.glyph_atlas = None;
+                    self.current_frame = None;
+                    self.frame_dirty = false;
+                    self.primary_window_destroyed = true;
+                } else {
+                    self.frame_windows.request_destroy(emacs_frame_id);
+                }
                 Ok(())
             }
             RenderCommand::AdoptPrimaryFrame { emacs_frame_id } => {

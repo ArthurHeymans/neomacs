@@ -93,7 +93,7 @@ impl RenderApp {
             );
             self.resumed_seen = true;
         }
-        if self.window.is_none() {
+        if self.window.is_none() && !self.primary_window_destroyed {
             let attrs = Window::default_attributes()
                 .with_title(&self.title)
                 .with_inner_size(window_size_from_emacs_pixels(self.width, self.height))

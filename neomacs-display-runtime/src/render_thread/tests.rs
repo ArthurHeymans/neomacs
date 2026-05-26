@@ -1,6 +1,24 @@
 use super::RenderApp;
-use crate::thread_comm::ThreadComms;
+use crate::thread_comm::{RenderCommand, ThreadComms};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use winit::keyboard::{Key, NamedKey};
+
+fn make_test_app() -> RenderApp {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (_emacs, render) = comms.split();
+    RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    )
+}
 
 #[test]
 fn test_translate_key_named() {
@@ -95,4 +113,22 @@ fn test_render_thread_creation() {
 
     assert!(emacs.input_rx.is_empty());
     assert!(render.cmd_rx.is_empty());
+}
+
+#[test]
+fn destroy_primary_window_command_prevents_lifecycle_recreate() {
+    let mut app = make_test_app();
+    app.frame_windows.adopt_primary_frame_id(0x1000);
+
+    app.handle_window_command(RenderCommand::DestroyWindow { emacs_frame_id: 0 })
+        .expect("destroy primary window");
+
+    assert!(app.window.is_none());
+    assert!(app.surface.is_none());
+    assert!(app.surface_config.is_none());
+    assert!(app.glyph_atlas.is_none());
+    assert!(app.current_frame.is_none());
+    assert!(!app.frame_dirty);
+    assert!(app.primary_window_destroyed);
+    assert_eq!(app.frame_windows.primary_frame_id(), None);
 }

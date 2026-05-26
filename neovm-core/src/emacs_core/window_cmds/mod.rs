@@ -7142,6 +7142,9 @@ pub(crate) fn delete_frame_owned(
     let was_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
         frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
     });
+    let was_top_level_gui_frame = eval.frames.get(fid).is_some_and(|frame| {
+        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_none()
+    });
     let frame_value = Value::make_frame(fid.0);
     if mode.runs_hooks_immediately() {
         let delete_hook =
@@ -7160,9 +7163,14 @@ pub(crate) fn delete_frame_owned(
     if !eval.frames.delete_frame(fid) {
         return Err(signal("error", vec![Value::string("Cannot delete frame")]));
     }
-    if was_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
-        host.remove_gui_child_frame(fid)
-            .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    if let Some(host) = eval.display_host.as_mut() {
+        if was_gui_child_frame {
+            host.remove_gui_child_frame(fid)
+                .map_err(|message| signal("error", vec![Value::string(message)]))?;
+        } else if was_top_level_gui_frame {
+            host.destroy_gui_frame(fid)
+                .map_err(|message| signal("error", vec![Value::string(message)]))?;
+        }
     }
     let terminal_is_empty = eval.frames.frame_list().into_iter().all(|frame_id| {
         eval.frames

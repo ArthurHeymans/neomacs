@@ -55,6 +55,18 @@ fn new_manager_dirty_windows_is_empty() {
     assert!(mgr.dirty_windows().is_empty());
 }
 
+#[test]
+fn clear_primary_mapping_removes_adopted_primary_identity() {
+    let mut mgr = GuiFrameWindowManager::new();
+    mgr.adopt_primary_frame_id(0x1000);
+    mgr.clear_primary_mapping();
+
+    assert_eq!(mgr.primary_frame_id(), None);
+    assert_eq!(mgr.primary_event_frame_id(), 0);
+    assert_eq!(mgr.primary_winit_id, None);
+    assert!(mgr.winit_to_emacs.is_empty());
+}
+
 // =======================================================================
 // request_create() — pending create queue
 // =======================================================================

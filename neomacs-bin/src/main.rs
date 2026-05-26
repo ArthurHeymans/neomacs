@@ -1014,6 +1014,23 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
+    fn destroy_gui_frame(&mut self, frame_id: neovm_core::window::FrameId) -> Result<(), String> {
+        let emacs_frame_id = if self.primary_frame_id == Some(frame_id) {
+            self.primary_frame_id = None;
+            0
+        } else {
+            frame_id.0
+        };
+        self.last_window_titles
+            .lock()
+            .map_err(|err| format!("failed to forget GUI frame title: {err}"))?
+            .remove(&frame_id);
+        self.send_render_command(
+            RenderCommand::DestroyWindow { emacs_frame_id },
+            "failed to destroy GUI frame window",
+        )
+    }
+
     fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
         let items = menu
             .entries

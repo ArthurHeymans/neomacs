@@ -143,6 +143,13 @@ impl GuiFrameWindowManager {
         self.primary_winit_id == Some(winit_id)
     }
 
+    pub fn clear_primary_mapping(&mut self) {
+        if let Some(winit_id) = self.primary_winit_id.take() {
+            self.winit_to_emacs.remove(&winit_id);
+        }
+        self.primary_emacs_frame_id = None;
+    }
+
     fn sync_primary_mapping(&mut self) {
         if let (Some(winit_id), Some(emacs_frame_id)) =
             (self.primary_winit_id, self.primary_emacs_frame_id)
