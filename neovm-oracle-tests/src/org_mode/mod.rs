@@ -7,6 +7,8 @@
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
+mod editing_export;
+
 #[test]
 fn org_element_headline_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
