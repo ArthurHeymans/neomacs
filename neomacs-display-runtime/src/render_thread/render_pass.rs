@@ -49,18 +49,21 @@ impl RenderApp {
         let old_height = renderer.height();
         renderer.set_scale_factor(window_state.scale_factor as f32);
         renderer.resize(window_state.width, window_state.height);
-        renderer.render_frame_glyphs(
-            &surface_view,
-            frame,
-            &mut window_state.glyph_atlas,
-            faces,
-            window_state.width,
-            window_state.height,
-            cursor_visible,
-            None,
-            window_state.mouse_pos,
-            bg_gradient,
-        );
+        renderer.render_with_transient_effects(&mut window_state.transient_effects, |renderer| {
+            renderer.render_frame_glyphs(
+                &surface_view,
+                frame,
+                &mut window_state.glyph_atlas,
+                faces,
+                window_state.width,
+                window_state.height,
+                cursor_visible,
+                None,
+                window_state.mouse_pos,
+                bg_gradient,
+            );
+        });
+        let transient_still_active = window_state.transient_effects.is_active();
 
         for &child_id in window_state.child_frames.sorted_for_rendering() {
             if let Some(child_entry) = window_state.child_frames.frames.get(&child_id) {
@@ -198,9 +201,10 @@ impl RenderApp {
                 window_state.visual_bell_start = None;
             }
         }
+        let visual_bell_still_active = window_state.visual_bell_start.is_some();
 
         output.present();
-        window_state.frame_dirty = false;
+        window_state.frame_dirty = transient_still_active || visual_bell_still_active;
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
     }

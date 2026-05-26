@@ -2,11 +2,11 @@
 
 #[cfg(test)]
 use super::ModeLineFadeEntry;
-use super::WgpuRenderer;
 use super::{
     ClickHaloEntry, EdgeGlowEntry, EdgeSnapEntry, LineAnimEntry, ScrollMomentumEntry,
     ScrollSpacingEntry, ScrollVelocityFadeEntry, SonarPingEntry, TextFadeEntry, WindowFadeEntry,
 };
+use super::{RendererTransientEffects, WgpuRenderer};
 use neomacs_display_protocol::types::{Color, Rect};
 
 impl WgpuRenderer {
@@ -96,14 +96,15 @@ impl WgpuRenderer {
         at_bottom: bool,
         now: std::time::Instant,
     ) {
-        self.edge_snaps.push(EdgeSnapEntry {
+        let duration_ms = self.effects.edge_snap.duration_ms;
+        self.primary_transient_effects_mut().trigger_edge_snap(
             bounds,
             mode_line_height,
             at_top,
             at_bottom,
-            started: now,
-            duration: std::time::Duration::from_millis(self.effects.edge_snap.duration_ms as u64),
-        });
+            now,
+            duration_ms,
+        );
     }
 
     /// Update typing heat map config
@@ -126,12 +127,9 @@ impl WgpuRenderer {
 
     /// Trigger click halo at position
     pub fn trigger_click_halo(&mut self, x: f32, y: f32, now: std::time::Instant) {
-        self.click_halos.push(ClickHaloEntry {
-            x,
-            y,
-            started: now,
-            duration: std::time::Duration::from_millis(self.effects.click_halo.duration_ms as u64),
-        });
+        let duration_ms = self.effects.click_halo.duration_ms;
+        self.primary_transient_effects_mut()
+            .trigger_click_halo(x, y, now, duration_ms);
     }
 
     /// Trigger scroll velocity fade for a window
@@ -177,7 +175,76 @@ impl WgpuRenderer {
 
     /// Trigger a cursor error pulse
     pub fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
-        self.cursor_error_pulse_started = Some(now);
+        self.primary_transient_effects_mut()
+            .trigger_cursor_error_pulse(now);
+    }
+
+    pub fn trigger_transient_click_halo(
+        &self,
+        effects: &mut RendererTransientEffects,
+        x: f32,
+        y: f32,
+        now: std::time::Instant,
+    ) {
+        effects.trigger_click_halo(x, y, now, self.effects.click_halo.duration_ms);
+    }
+
+    pub fn trigger_transient_edge_snap(
+        &self,
+        effects: &mut RendererTransientEffects,
+        bounds: Rect,
+        mode_line_height: f32,
+        at_top: bool,
+        at_bottom: bool,
+        now: std::time::Instant,
+    ) {
+        effects.trigger_edge_snap(
+            bounds,
+            mode_line_height,
+            at_top,
+            at_bottom,
+            now,
+            self.effects.edge_snap.duration_ms,
+        );
+    }
+
+    pub fn trigger_transient_cursor_error_pulse(
+        &self,
+        effects: &mut RendererTransientEffects,
+        now: std::time::Instant,
+    ) {
+        effects.trigger_cursor_error_pulse(now);
+    }
+
+    pub fn render_with_transient_effects<R>(
+        &mut self,
+        effects: &mut RendererTransientEffects,
+        render: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let primary = self.take_primary_transient_effects();
+        self.apply_transient_effects(std::mem::take(effects));
+        let result = render(self);
+        *effects = self.take_primary_transient_effects();
+        self.apply_transient_effects(primary);
+        result
+    }
+
+    fn primary_transient_effects_mut(&mut self) -> RendererTransientEffectsRef<'_> {
+        RendererTransientEffectsRef { renderer: self }
+    }
+
+    fn take_primary_transient_effects(&mut self) -> RendererTransientEffects {
+        RendererTransientEffects {
+            click_halos: std::mem::take(&mut self.click_halos),
+            edge_snaps: std::mem::take(&mut self.edge_snaps),
+            cursor_error_pulse_started: self.cursor_error_pulse_started.take(),
+        }
+    }
+
+    fn apply_transient_effects(&mut self, effects: RendererTransientEffects) {
+        self.click_halos = effects.click_halos;
+        self.edge_snaps = effects.edge_snaps;
+        self.cursor_error_pulse_started = effects.cursor_error_pulse_started;
     }
 
     /// Get the cursor error pulse color override, if active
@@ -460,6 +527,44 @@ impl WgpuRenderer {
     pub fn set_indent_guide_rainbow(&mut self, enabled: bool, colors: Vec<(f32, f32, f32, f32)>) {
         self.effects.indent_guides.rainbow_enabled = enabled;
         self.effects.indent_guides.rainbow_colors = colors;
+    }
+}
+
+struct RendererTransientEffectsRef<'a> {
+    renderer: &'a mut WgpuRenderer,
+}
+
+impl RendererTransientEffectsRef<'_> {
+    fn trigger_click_halo(&mut self, x: f32, y: f32, now: std::time::Instant, duration_ms: u32) {
+        self.renderer.click_halos.push(ClickHaloEntry {
+            x,
+            y,
+            started: now,
+            duration: std::time::Duration::from_millis(duration_ms as u64),
+        });
+    }
+
+    fn trigger_edge_snap(
+        &mut self,
+        bounds: Rect,
+        mode_line_height: f32,
+        at_top: bool,
+        at_bottom: bool,
+        now: std::time::Instant,
+        duration_ms: u32,
+    ) {
+        self.renderer.edge_snaps.push(EdgeSnapEntry {
+            bounds,
+            mode_line_height,
+            at_top,
+            at_bottom,
+            started: now,
+            duration: std::time::Duration::from_millis(duration_ms as u64),
+        });
+    }
+
+    fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
+        self.renderer.cursor_error_pulse_started = Some(now);
     }
 }
 

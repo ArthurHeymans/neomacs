@@ -352,6 +352,7 @@ impl RenderApp {
         if !self.frame_windows.is_primary_winit(window_id) {
             let mut event = None;
             let mut handled_chrome = false;
+            let mut delivered_mouse_button = false;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 if window_state.popup_menu.is_some() {
                     if state == ElementState::Pressed && button == MouseButton::Left {
@@ -600,10 +601,24 @@ impl RenderApp {
                         webkit_rel_x: wk_rx,
                         webkit_rel_y: wk_ry,
                     });
+                    delivered_mouse_button = true;
                 }
             }
             if let Some(event) = event {
                 self.comms.send_input(event);
+            }
+            if state == ElementState::Pressed
+                && self.effects.click_halo.enabled
+                && delivered_mouse_button
+                && let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id)
+            {
+                window_state.transient_effects.trigger_click_halo(
+                    window_state.mouse_pos.0,
+                    window_state.mouse_pos.1,
+                    std::time::Instant::now(),
+                    self.effects.click_halo.duration_ms,
+                );
+                window_state.frame_dirty = true;
             }
             return;
         }
@@ -958,12 +973,9 @@ impl RenderApp {
         });
 
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
+            let now = std::time::Instant::now();
             if let Some(renderer) = self.renderer.as_mut() {
-                renderer.trigger_click_halo(
-                    self.mouse_pos.0,
-                    self.mouse_pos.1,
-                    std::time::Instant::now(),
-                );
+                renderer.trigger_click_halo(self.mouse_pos.0, self.mouse_pos.1, now);
             }
             self.frame_dirty = true;
         }

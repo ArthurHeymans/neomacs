@@ -272,6 +272,60 @@ pub(super) struct ClickHaloEntry {
     pub(super) duration: std::time::Duration,
 }
 
+/// Frame-local transient effect queues that are rendered through `WgpuRenderer`.
+#[derive(Default)]
+pub struct RendererTransientEffects {
+    click_halos: Vec<ClickHaloEntry>,
+    edge_snaps: Vec<EdgeSnapEntry>,
+    cursor_error_pulse_started: Option<std::time::Instant>,
+}
+
+impl RendererTransientEffects {
+    pub fn is_active(&self) -> bool {
+        !self.click_halos.is_empty()
+            || !self.edge_snaps.is_empty()
+            || self.cursor_error_pulse_started.is_some()
+    }
+
+    pub fn trigger_click_halo(
+        &mut self,
+        x: f32,
+        y: f32,
+        now: std::time::Instant,
+        duration_ms: u32,
+    ) {
+        self.click_halos.push(ClickHaloEntry {
+            x,
+            y,
+            started: now,
+            duration: std::time::Duration::from_millis(duration_ms as u64),
+        });
+    }
+
+    pub fn trigger_edge_snap(
+        &mut self,
+        bounds: Rect,
+        mode_line_height: f32,
+        at_top: bool,
+        at_bottom: bool,
+        now: std::time::Instant,
+        duration_ms: u32,
+    ) {
+        self.edge_snaps.push(EdgeSnapEntry {
+            bounds,
+            mode_line_height,
+            at_top,
+            at_bottom,
+            started: now,
+            duration: std::time::Duration::from_millis(duration_ms as u64),
+        });
+    }
+
+    pub fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
+        self.cursor_error_pulse_started = Some(now);
+    }
+}
+
 /// Entry for scroll velocity fade overlay
 pub(super) struct ScrollVelocityFadeEntry {
     pub(super) window_id: i64,

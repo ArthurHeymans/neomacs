@@ -293,44 +293,72 @@ impl RenderApp {
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
                 let now = std::time::Instant::now();
-                if emacs_frame_id == 0 {
+                if emacs_frame_id == 0
+                    || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
+                {
                     self.visual_bell_start = Some(now);
                     self.frame_dirty = true;
+                    if self.effects.cursor_error_pulse.enabled {
+                        if let Some(renderer) = self.renderer.as_mut() {
+                            renderer.trigger_cursor_error_pulse(now);
+                        }
+                    }
+                    if self.effects.edge_snap.enabled {
+                        if let Some(ref frame) = self.current_frame {
+                            for info in &frame.window_infos {
+                                if info.selected && !info.is_minibuffer {
+                                    let at_top = info.window_start <= 1;
+                                    let at_bottom = info.window_end >= info.buffer_size;
+                                    if at_top || at_bottom {
+                                        if let Some(renderer) = self.renderer.as_mut() {
+                                            renderer.trigger_edge_snap(
+                                                info.bounds,
+                                                info.mode_line_height,
+                                                at_top,
+                                                at_bottom,
+                                                now,
+                                            );
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.visual_bell_start = Some(now);
+                    if self.effects.cursor_error_pulse.enabled {
+                        window_state
+                            .transient_effects
+                            .trigger_cursor_error_pulse(now);
+                    }
+                    if self.effects.edge_snap.enabled {
+                        if let Some(ref frame) = window_state.current_frame {
+                            for info in &frame.window_infos {
+                                if info.selected && !info.is_minibuffer {
+                                    let at_top = info.window_start <= 1;
+                                    let at_bottom = info.window_end >= info.buffer_size;
+                                    if at_top || at_bottom {
+                                        window_state.transient_effects.trigger_edge_snap(
+                                            info.bounds,
+                                            info.mode_line_height,
+                                            at_top,
+                                            at_bottom,
+                                            now,
+                                            self.effects.edge_snap.duration_ms,
+                                        );
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     window_state.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "VisualBell requested for unknown frame_id=0x{:x}",
                         emacs_frame_id
                     );
-                }
-                if self.effects.cursor_error_pulse.enabled {
-                    if let Some(renderer) = self.renderer.as_mut() {
-                        renderer.trigger_cursor_error_pulse(now);
-                    }
-                }
-                if self.effects.edge_snap.enabled {
-                    if let Some(ref frame) = self.current_frame {
-                        for info in &frame.window_infos {
-                            if info.selected && !info.is_minibuffer {
-                                let at_top = info.window_start <= 1;
-                                let at_bottom = info.window_end >= info.buffer_size;
-                                if at_top || at_bottom {
-                                    if let Some(renderer) = self.renderer.as_mut() {
-                                        renderer.trigger_edge_snap(
-                                            info.bounds,
-                                            info.mode_line_height,
-                                            at_top,
-                                            at_bottom,
-                                            now,
-                                        );
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
                 }
                 Ok(())
             }
