@@ -25,6 +25,7 @@ mod property_log;
 mod source_block;
 mod support;
 mod table_agenda;
+mod table_formula;
 mod tag_match;
 
 #[test]
