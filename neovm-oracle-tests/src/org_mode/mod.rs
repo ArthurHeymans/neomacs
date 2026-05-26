@@ -12,7 +12,7 @@ fn org_element_headline_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
-        r#"(progn
+        r##"(progn
   (require 'org)
   (with-temp-buffer
     (org-mode)
@@ -37,7 +37,7 @@ fn org_todo_keyword_edit_preserves_plain_buffer_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
-        r#"(progn
+        r##"(progn
   (require 'org)
   (with-temp-buffer
     (let ((org-log-done nil)
@@ -1168,5 +1168,179 @@ fn org_org_export_todo_schedule_link_combo() {
             (not (null (string-match-p "SCHEDULED:" out)))
             (not (null (string-match-p "\\[\\[https://example.org\\]\\[link\\]\\]" out)))
             out))))"##,
+    );
+}
+
+#[test]
+fn org_map_entries_inherited_tags_and_properties_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-tag-inheritance t))
+      (org-mode)
+      (insert "#+TODO: TODO WAIT | DONE\n")
+      (insert "* TODO Alpha :work:\n")
+      (insert ":PROPERTIES:\n:Effort: 1:30\n:Owner: Ada\n:END:\n")
+      (insert "** WAIT Child :urgent:\n")
+      (insert ":PROPERTIES:\n:Effort: 0:45\n:END:\n")
+      (insert "* DONE Beta :home:\n")
+      (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+      (goto-char (point-min))
+      (list
+       (org-map-entries
+        (lambda ()
+          (list (org-get-heading t t t t)
+                (org-get-tags nil t)
+                (org-entry-get nil "Owner" t)
+                (org-entry-get nil "Effort")))
+        "+work"
+        nil)
+       (org-map-entries
+        (lambda ()
+          (list (org-get-heading t t t t)
+                (org-entry-get nil "Effort")))
+        "Effort={.+}"
+        nil)))))"##,
+    );
+}
+
+#[test]
+fn org_columnview_dynamic_block_properties_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+COLUMNS: %25ITEM %TODO %3PRIORITY %Effort{:} %Owner\n")
+    (insert "* TODO Project\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+    (insert "** TODO Alpha [#A]\n")
+    (insert ":PROPERTIES:\n:Effort: 1:30\n:END:\n")
+    (insert "** WAIT Beta [#C]\n")
+    (insert ":PROPERTIES:\n:Effort: 0:45\n:Owner: Bob\n:END:\n")
+    (insert "#+BEGIN: columnview :hlines 1 :id local\n")
+    (insert "#+END:\n")
+    (goto-char (point-min))
+    (search-forward "#+BEGIN: columnview")
+    (org-dblock-update)
+    (buffer-substring-no-properties (point-min) (point-max))))"##,
+    );
+}
+
+#[test]
+fn org_sort_child_entries_priority_then_todo_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Parent\n")
+    (insert "** TODO B [#C]\n:PROPERTIES:\n:Order: 2\n:END:\n")
+    (insert "** DONE A [#A]\n:PROPERTIES:\n:Order: 1\n:END:\n")
+    (insert "** WAIT C [#B]\n:PROPERTIES:\n:Order: 3\n:END:\n")
+    (goto-char (point-min))
+    (org-sort-entries nil ?p)
+    (let ((by-priority (buffer-substring-no-properties (point-min) (point-max))))
+      (goto-char (point-min))
+      (org-sort-entries nil ?o)
+      (list by-priority
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_attach_copy_list_and_tag_mutation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-attach)
+  (let* ((root (make-temp-file "org-attach-root" t))
+         (src (expand-file-name "payload.txt" root))
+         (attach-root (expand-file-name "attach" root))
+         (default-directory root)
+         (org-attach-id-dir attach-root)
+         (org-id-method 'org)
+         (org-attach-store-link-p nil))
+    (unwind-protect
+        (progn
+          (with-temp-file src (insert "payload"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "* Node\n:PROPERTIES:\n:ID: fixed-attach\n:END:\n")
+            (goto-char (point-min))
+            (search-forward "Node")
+            (let ((org-attach-method 'cp))
+              (org-attach-attach src nil 'cp))
+            (let* ((dir (org-attach-dir))
+                   (files (mapcar #'file-name-nondirectory
+                                  (org-attach-file-list dir)))
+                   (payload
+                    (with-temp-buffer
+                      (insert-file-contents (expand-file-name "payload.txt" dir))
+                      (buffer-string))))
+              (list (file-directory-p dir)
+                    files
+                    payload
+                    (string-prefix-p attach-root dir)
+                    (buffer-substring-no-properties (point-min) (point-max))))))
+      (delete-directory root t))))"#,
+    );
+}
+
+#[test]
+fn org_element_planning_property_timestamp_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "DEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 1:30\n:END:\n")
+    (insert "* Plain\n")
+    (insert "<2026-05-29 Fri 10:00-11:15>\n")
+    (let ((out nil)
+          (timestamp-summary
+           (lambda (timestamp)
+             (and timestamp
+                  (list (org-element-property :type timestamp)
+                        (org-element-property :range-type timestamp)
+                        (org-element-property :raw-value timestamp)
+                        (org-element-property :year-start timestamp)
+                        (org-element-property :month-start timestamp)
+                        (org-element-property :day-start timestamp)
+                        (org-element-property :hour-start timestamp)
+                        (org-element-property :minute-start timestamp)
+                        (org-element-property :hour-end timestamp)
+                        (org-element-property :minute-end timestamp)))))))
+      (org-element-map
+          (org-element-parse-buffer)
+          '(headline planning timestamp node-property)
+        (lambda (element)
+          (push
+           (list (org-element-type element)
+                 (org-element-property :todo-keyword element)
+                 (org-element-property :raw-value element)
+                 (funcall timestamp-summary
+                          (org-element-property :deadline element))
+                 (funcall timestamp-summary
+                          (org-element-property :scheduled element))
+                 (org-element-property :key element)
+                 (org-element-property :value element)
+                 (funcall timestamp-summary element))
+           out)))
+      (nreverse out))))"#,
     );
 }
