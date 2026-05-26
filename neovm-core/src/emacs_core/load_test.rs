@@ -8656,6 +8656,36 @@ fn load_file_normalizes_crlf_source_before_reading_forms() {
 }
 
 #[test]
+fn load_file_reads_utf8_emacs_extended_char_literals() {
+    crate::test_utils::init_test_tracing();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-load-utf8-emacs-char-{unique}"));
+    fs::create_dir_all(&dir).expect("create temp fixture dir");
+    let file = dir.join("probe.el");
+    fs::write(
+        &file,
+        b";;; -*- coding: utf-8-emacs; lexical-binding: t -*-\n(setq vm-load-extended-char ?\xF6\xA0\x87\x8A)\n",
+    )
+    .expect("write utf-8-emacs source fixture");
+
+    let mut eval = super::super::eval::Context::new();
+    let loaded = load_file(&mut eval, &file).expect("load utf-8-emacs source fixture");
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-load-extended-char")
+            .cloned(),
+        Some(Value::fixnum(0x1A_01CA)),
+        "source loading should preserve GNU utf-8-emacs non-Unicode character literals"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn load_file_single_line_shebang_signals_end_of_file() {
     crate::test_utils::init_test_tracing();
     let unique = SystemTime::now()

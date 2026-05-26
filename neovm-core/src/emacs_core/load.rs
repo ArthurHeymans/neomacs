@@ -122,45 +122,23 @@ fn bootstrap_prefers_ldefs_boot() -> bool {
     BOOTSTRAP_PREFER_LDEFS_BOOT.with(Cell::get)
 }
 
-/// Decode Emacs "extended UTF-8" bytes into a Rust String.
+/// Decode Emacs source bytes into the runtime storage string representation.
 ///
 /// Emacs uses a superset of UTF-8 that allows code points above U+10FFFF
 /// (used for internal charset characters, eight-bit raw bytes, etc.).
 /// These are encoded using UTF-8-style 4/5/6-byte sequences that standard
 /// UTF-8 rejects once the leading byte is above F4.
 ///
-/// For `?<extended>` character literals, we replace the extended bytes
-/// with `?\x<HEX>` escape syntax that the parser already supports.
-/// Invalid high bytes are preserved with the reader's byte8 private-use
-/// markers, since generated GNU tables store compressed byte data directly
-/// inside `.el` string literals.
+/// Keep this on the same coding-system path as `insert-file-contents` and
+/// `decode-coding-string`, so the reader sees storage sentinels for every
+/// non-Unicode Emacs character instead of source-load-specific rewrites.
 pub(crate) fn decode_emacs_utf8_source(bytes: &[u8]) -> String {
-    match detect_source_eol(bytes) {
-        SourceEol::Unix => decode_emacs_utf8(bytes),
-        SourceEol::Dos => {
-            let mut unix_bytes = Vec::with_capacity(bytes.len());
-            let mut idx = 0;
-            while idx < bytes.len() {
-                if bytes[idx] == b'\r' && bytes.get(idx + 1) == Some(&b'\n') {
-                    unix_bytes.push(b'\n');
-                    idx += 2;
-                } else {
-                    unix_bytes.push(bytes[idx]);
-                    idx += 1;
-                }
-            }
-            decode_emacs_utf8(&unix_bytes)
-        }
-        SourceEol::Mac => {
-            let mut unix_bytes = bytes.to_vec();
-            for byte in &mut unix_bytes {
-                if *byte == b'\r' {
-                    *byte = b'\n';
-                }
-            }
-            decode_emacs_utf8(&unix_bytes)
-        }
-    }
+    let coding = match detect_source_eol(bytes) {
+        SourceEol::Unix => "utf-8-emacs-unix",
+        SourceEol::Dos => "utf-8-emacs-dos",
+        SourceEol::Mac => "utf-8-emacs-mac",
+    };
+    crate::encoding::decode_bytes(bytes, coding)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
