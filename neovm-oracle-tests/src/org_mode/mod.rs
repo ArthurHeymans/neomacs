@@ -27,6 +27,7 @@ mod macro_include;
 mod planning_timestamp;
 mod property_log;
 mod source_block;
+mod sparse_tree;
 mod support;
 mod table_agenda;
 mod table_formula;
