@@ -11,6 +11,7 @@ mod babel_export;
 mod editing_export;
 mod fold_font;
 mod link_export;
+mod property_log;
 mod support;
 mod table_agenda;
 
