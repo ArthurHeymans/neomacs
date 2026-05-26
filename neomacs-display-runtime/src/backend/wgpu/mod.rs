@@ -1,18 +1,15 @@
 //! Winit + wgpu GPU-accelerated display backend.
 
 mod animation;
-mod backend;
 mod events;
 pub mod toolbar_icons;
 mod transition;
-mod window_state;
 
 pub mod media_budget;
 
 #[cfg(feature = "video")]
 pub use neomacs_renderer_wgpu::{CachedVideo, DecodedFrame, VideoCache, VideoState};
 
-pub use backend::{Callbacks, NeomacsApp, UserEvent, WinitBackend, run_event_loop};
 pub use neomacs_renderer_wgpu::{
     BufferFormat, CachedGlyph, CachedImage, ExternalBuffer, GlyphKey, GlyphVertex, ImageCache,
     ImageDimensions, ImageState, PlatformBuffer, SharedMemoryBuffer, WgpuGlyphAtlas, WgpuRenderer,
@@ -33,7 +30,6 @@ pub use events::{
     NeomacsInputEvent,
 };
 pub use transition::{BufferTransition, TransitionManager, TransitionType};
-pub use window_state::WindowState;
 
 #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
 pub use neomacs_renderer_wgpu::{CachedWebKitView, WgpuWebKitCache};
