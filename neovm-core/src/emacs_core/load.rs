@@ -134,6 +134,73 @@ fn bootstrap_prefers_ldefs_boot() -> bool {
 /// Invalid high bytes are preserved with the reader's byte8 private-use
 /// markers, since generated GNU tables store compressed byte data directly
 /// inside `.el` string literals.
+pub(crate) fn decode_emacs_utf8_source(bytes: &[u8]) -> String {
+    match detect_source_eol(bytes) {
+        SourceEol::Unix => decode_emacs_utf8(bytes),
+        SourceEol::Dos => {
+            let mut unix_bytes = Vec::with_capacity(bytes.len());
+            let mut idx = 0;
+            while idx < bytes.len() {
+                if bytes[idx] == b'\r' && bytes.get(idx + 1) == Some(&b'\n') {
+                    unix_bytes.push(b'\n');
+                    idx += 2;
+                } else {
+                    unix_bytes.push(bytes[idx]);
+                    idx += 1;
+                }
+            }
+            decode_emacs_utf8(&unix_bytes)
+        }
+        SourceEol::Mac => {
+            let mut unix_bytes = bytes.to_vec();
+            for byte in &mut unix_bytes {
+                if *byte == b'\r' {
+                    *byte = b'\n';
+                }
+            }
+            decode_emacs_utf8(&unix_bytes)
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SourceEol {
+    Unix,
+    Dos,
+    Mac,
+}
+
+fn detect_source_eol(bytes: &[u8]) -> SourceEol {
+    let mut saw_lf = false;
+    let mut saw_crlf = false;
+    let mut saw_lone_cr = false;
+    let mut idx = 0;
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'\n' => saw_lf = true,
+            b'\r' => {
+                if bytes.get(idx + 1) == Some(&b'\n') {
+                    saw_crlf = true;
+                    idx += 1;
+                } else {
+                    saw_lone_cr = true;
+                }
+            }
+            _ => {}
+        }
+        idx += 1;
+    }
+    if saw_lf {
+        SourceEol::Unix
+    } else if saw_crlf {
+        SourceEol::Dos
+    } else if saw_lone_cr {
+        SourceEol::Mac
+    } else {
+        SourceEol::Unix
+    }
+}
+
 pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
     fn push_extended_char_or_escape(out: &mut String, code: u32) {
         if out.ends_with('?') {
@@ -1832,7 +1899,7 @@ fn load_file_body(
         // strip it here before the streaming reader sees the source —
         // otherwise the BOM is parsed as a one-character symbol and
         // signals `void-variable`.
-        let decoded = decode_emacs_utf8(&raw_bytes);
+        let decoded = decode_emacs_utf8_source(&raw_bytes);
         (
             match decoded.strip_prefix('\u{feff}') {
                 Some(rest) => rest.to_string(),

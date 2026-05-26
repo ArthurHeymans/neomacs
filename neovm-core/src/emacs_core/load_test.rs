@@ -8626,6 +8626,36 @@ fn load_file_preserves_literal_carriage_return_inside_string() {
 }
 
 #[test]
+fn load_file_normalizes_crlf_source_before_reading_forms() {
+    crate::test_utils::init_test_tracing();
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-load-crlf-source-{unique}"));
+    fs::create_dir_all(&dir).expect("create temp fixture dir");
+    let file = dir.join("probe.el");
+    fs::write(
+        &file,
+        b";;; -*- lexical-binding: t -*-\r\n(setq vm-load-crlf-line-continuation \"alpha\\\r\nbeta\")\r\n",
+    )
+    .expect("write crlf source fixture");
+
+    let mut eval = super::super::eval::Context::new();
+    let loaded = load_file(&mut eval, &file).expect("load crlf source fixture");
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-load-crlf-line-continuation")
+            .cloned(),
+        Some(Value::string("alphabeta")),
+        "source loading should apply GNU-style CRLF decoding before Lisp reading"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn load_file_single_line_shebang_signals_end_of_file() {
     crate::test_utils::init_test_tracing();
     let unique = SystemTime::now()
