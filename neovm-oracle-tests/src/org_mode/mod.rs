@@ -309,3 +309,185 @@ fn org_html_export_markup_and_link_combo() {
             (length html)))))"##,
     );
 }
+
+#[test]
+fn org_agenda_file_schedule_deadline_and_tags_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((file (make-temp-file "org-agenda-probe" nil ".org"
+                               "#+CATEGORY: Probe
+* TODO Write report :work:
+SCHEDULED: <2026-05-27 Wed 09:00>
+:PROPERTIES:
+:Effort: 1:30
+:END:
+* WAIT Blocked :home:
+DEADLINE: <2026-05-28 Thu>
+* DONE Finished :work:
+CLOSED: [2026-05-26 Tue]
+"))
+         (org-agenda-files (list file))
+         (org-agenda-span 3)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-prefix-format "%-8:c%?-12t% s")
+         (org-agenda-sorting-strategy '((agenda time-up priority-down category-keep))))
+    (unwind-protect
+        (progn
+          (org-agenda-list nil "2026-05-27" 3)
+          (with-current-buffer org-agenda-buffer-name
+            (list (not (null (string-match-p "Write report" (buffer-string))))
+                  (not (null (string-match-p "Blocked" (buffer-string))))
+                  (not (null (string-match-p "Probe" (buffer-string))))
+                  (buffer-substring-no-properties (point-min) (point-max)))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-file file))))"##,
+    );
+}
+
+#[test]
+fn org_clock_table_data_from_logbook_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project\n")
+    (insert "** Task A\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+    (insert ":END:\n")
+    (insert "** Task B\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n")
+    (insert ":END:\n")
+    (let* ((data (org-clock-get-table-data
+                  nil (list :maxlevel 3 :scope 'buffer :block nil)))
+           (total (nth 1 data))
+           (rows (mapcar (lambda (row)
+                           (list (nth 0 row)
+                                 (substring-no-properties (nth 1 row))
+                                 (nth 4 row)))
+                         (nth 2 data))))
+      (list total rows))))"#,
+    );
+}
+
+#[test]
+fn org_babel_tangle_multiple_emacs_lisp_blocks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((src (make-temp-file "org-tangle-src" nil ".org"))
+         (out (make-temp-file "org-tangle" nil ".el"))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect src)
+          (erase-buffer)
+          (org-mode)
+          (insert "#+PROPERTY: header-args:emacs-lisp :comments no\n")
+          (insert "#+begin_src emacs-lisp :tangle " out "\n")
+          (insert "(defun alpha () 1)\n")
+          (insert "#+end_src\n")
+          (insert "#+begin_src emacs-lisp :tangle " out "\n")
+          (insert "(defun beta () (+ (alpha) 2))\n")
+          (insert "#+end_src\n")
+          (save-buffer)
+          (let ((files (org-babel-tangle)))
+            (list (mapcar #'file-name-extension files)
+                  (with-temp-buffer
+                    (insert-file-contents out)
+                    (buffer-string)))))
+      (when (get-file-buffer src) (kill-buffer (get-file-buffer src)))
+      (when (file-exists-p src) (delete-file src))
+      (when (file-exists-p out) (delete-file out)))))"##,
+    );
+}
+
+#[test]
+fn org_footnote_normalize_and_sort_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Notes\n")
+    (insert "First ref[fn:alpha] and second[fn:beta].\n\n")
+    (insert "[fn:beta] Beta text\n")
+    (insert "[fn:alpha] Alpha text\n")
+    (org-footnote-normalize)
+    (org-footnote-sort)
+    (list (org-footnote-all-labels)
+          (buffer-substring-no-properties (point-min) (point-max)))))"#,
+    );
+}
+
+#[test]
+fn org_archive_to_sibling_normalized_timestamp_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-archive)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Active\n")
+    (insert "** DONE Finished\n")
+    (insert "Body\n")
+    (insert "** TODO Keep\n")
+    (goto-char (point-min))
+    (search-forward "Finished")
+    (beginning-of-line)
+    (org-archive-to-archive-sibling)
+    (replace-regexp-in-string
+     ":ARCHIVE_TIME: .*"
+     ":ARCHIVE_TIME: <time>"
+     (buffer-substring-no-properties (point-min) (point-max)))))"#,
+    );
+}
+
+#[test]
+fn org_refile_file_backed_subtree_to_target_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let ((file (make-temp-file "org-refile" nil ".org"
+                              "* Inbox\n** TODO Task\n* Projects\n** Target\n")))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect file)
+          (org-mode)
+          (goto-char (point-min))
+          (search-forward "Task")
+          (beginning-of-line)
+          (let ((target-pos (save-excursion
+                              (goto-char (point-min))
+                              (search-forward "Target")
+                              (line-beginning-position))))
+            (org-refile nil nil (list "Target" file nil target-pos)))
+          (save-buffer)
+          (buffer-substring-no-properties (point-min) (point-max)))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"#,
+    );
+}
