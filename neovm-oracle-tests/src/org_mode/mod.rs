@@ -863,3 +863,151 @@ fn org_fold_hide_show_subtree_visibility_combo() {
               (buffer-substring-no-properties (point-min) (point-max)))))))"#,
     );
 }
+
+#[test]
+fn org_publish_project_html_file_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((base (make-temp-file "org-pub" t))
+         (pub (make-temp-file "org-pub-out" t))
+         (src (expand-file-name "index.org" base))
+         (org-publish-project-alist
+          `(("probe"
+             :base-directory ,base
+             :publishing-directory ,pub
+             :publishing-function org-html-publish-to-html
+             :with-toc nil))))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "#+TITLE: Publish Probe\n")
+            (insert "* Head\n")
+            (insert "Body with [[https://example.org][link]].\n"))
+          (org-publish-project "probe" t)
+          (let ((html (expand-file-name "index.html" pub)))
+            (list (file-exists-p html)
+                  (with-temp-buffer
+                    (insert-file-contents html)
+                    (list (not (null (string-match-p "Publish Probe" (buffer-string))))
+                          (not (null (string-match-p "Head" (buffer-string))))
+                          (not (null (string-match-p "https://example.org" (buffer-string)))))))))
+      (delete-directory base t)
+      (delete-directory pub t))))"##,
+    );
+}
+
+#[test]
+fn org_habit_detection_with_repeater_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-habit)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Habit\n")
+    (insert "SCHEDULED: <2026-05-27 Wed .+1d/3d>\n")
+    (insert ":PROPERTIES:\n:STYLE: habit\n:END:\n")
+    (insert "* TODO Plain\n")
+    (insert "SCHEDULED: <2026-05-27 Wed>\n")
+    (goto-char (point-min))
+    (let ((out nil))
+      (while (re-search-forward org-heading-regexp nil t)
+        (beginning-of-line)
+        (push (list (org-get-heading t t t t)
+                    (org-is-habit-p))
+              out)
+        (forward-line 1))
+      (nreverse out))))"#,
+    );
+}
+
+#[test]
+fn org_ordered_entry_blocking_and_inheritance_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-enforce-todo-dependencies t))
+      (org-mode)
+      (insert "* TODO A\n")
+      (insert ":PROPERTIES:\n:ORDERED: t\n:END:\n")
+      (insert "** TODO first\n")
+      (insert "** TODO second\n")
+      (goto-char (point-min))
+      (search-forward "second")
+      (beginning-of-line)
+      (list (org-entry-blocked-p)
+            (org-entry-get-with-inheritance "ORDERED")
+            (org-entry-properties nil 'standard)))))"#,
+    );
+}
+
+#[test]
+fn org_priority_tags_properties_todo_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO A [#B] :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed> DEADLINE: <2026-05-28 Thu>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+    (goto-char (point-min))
+    (list (org-entry-is-todo-p)
+          (org-entry-is-done-p)
+          (org-get-priority (thing-at-point 'line t))
+          (org-entry-get nil "Effort")
+          (org-get-tags))))"#,
+    );
+}
+
+#[test]
+fn org_tempo_source_template_expansion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-tempo)
+  (with-temp-buffer
+    (org-mode)
+    (insert "<s")
+    (org-tempo-complete-tag)
+    (buffer-substring-no-properties (point-min) (point-max))))"#,
+    );
+}
+
+#[test]
+fn org_custom_link_follow_and_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'ol)
+  (with-temp-buffer
+    (org-mode)
+    (org-link-set-parameters
+     "ticket"
+     :follow (lambda (path arg) (list path arg))
+     :export (lambda (path desc backend info)
+               (format "TICKET:%s:%s:%s" path desc backend)))
+    (insert "See [[ticket:ABC-123][Bug]].\n")
+    (let ((link (org-element-map (org-element-parse-buffer) 'link
+                  (lambda (candidate) candidate)
+                  nil t)))
+      (list (org-element-property :type link)
+            (org-element-property :path link)
+            (org-link-open-from-string "[[ticket:ABC-123]]" nil)
+            (org-export-string-as "[[ticket:ABC-123][Bug]]" 'html t)))))"#,
+    );
+}
