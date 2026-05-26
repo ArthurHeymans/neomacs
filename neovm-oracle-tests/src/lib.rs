@@ -1366,6 +1366,7 @@ mod oclosure;
 #[path = "oclosure-advanced.rs"]
 mod oclosure_advanced;
 mod r#or;
+mod org_mode;
 #[path = "overlay-comprehensive-patterns.rs"]
 mod overlay_comprehensive_patterns;
 #[path = "overlay-helper-semantics.rs"]

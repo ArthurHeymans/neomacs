@@ -170,7 +170,8 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                     (when load-root
                       (let ((extra-load-path nil))
                         (dolist (sub '("" "emacs-lisp" "progmodes" "language"
-                                       "international" "textmodes" "vc" "leim"))
+                                       "international" "textmodes" "vc" "leim"
+                                       "org"))
                           (let ((dir (if (equal sub "")
                                          load-root
                                        (expand-file-name sub load-root))))
@@ -211,7 +212,8 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
                       (when load-root
                         (let ((extra-load-path nil))
                           (dolist (sub '("" "emacs-lisp" "progmodes" "language"
-                                         "international" "textmodes" "vc" "leim"))
+                                         "international" "textmodes" "vc" "leim"
+                                         "org"))
                             (let ((dir (if (equal sub "")
                                            load-root
                                          (expand-file-name sub load-root))))
