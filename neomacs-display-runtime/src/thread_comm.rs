@@ -460,6 +460,8 @@ pub enum RenderCommand {
     HidePopupMenu,
     /// Show a tooltip at position (x, y)
     ShowTooltip {
+        /// Emacs frame_id of the owning top-level frame (0 = primary)
+        emacs_frame_id: u64,
         x: f32,
         y: f32,
         text: String,

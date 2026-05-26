@@ -201,6 +201,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::ShowTooltip {
+                emacs_frame_id,
                 x,
                 y,
                 text,
@@ -211,36 +212,82 @@ impl RenderApp {
                 bg_g,
                 bg_b,
             } => {
-                tracing::debug!("ShowTooltip at ({}, {})", x, y);
-                let (fs, lh, cw) = self
-                    .glyph_atlas
-                    .as_ref()
-                    .map(|a| {
-                        (
-                            a.default_font_size(),
-                            a.default_line_height(),
-                            a.default_char_width(),
-                        )
-                    })
-                    .unwrap_or((13.0, 17.0, 13.0 * 0.6));
-                self.tooltip = Some(TooltipState::new(
+                tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
+                let (fs, lh, cw, screen_w, screen_h) = if emacs_frame_id == 0 {
+                    let (fs, lh, cw) = self
+                        .glyph_atlas
+                        .as_ref()
+                        .map(|a| {
+                            (
+                                a.default_font_size(),
+                                a.default_line_height(),
+                                a.default_char_width(),
+                            )
+                        })
+                        .unwrap_or((13.0, 17.0, 13.0 * 0.6));
+                    (
+                        fs,
+                        lh,
+                        cw,
+                        self.width as f32 / self.scale_factor as f32,
+                        self.height as f32 / self.scale_factor as f32,
+                    )
+                } else {
+                    self.frame_windows
+                        .get(emacs_frame_id)
+                        .map(|window_state| {
+                            let atlas = &window_state.glyph_atlas;
+                            (
+                                atlas.default_font_size(),
+                                atlas.default_line_height(),
+                                atlas.default_char_width(),
+                                window_state.width as f32 / window_state.scale_factor as f32,
+                                window_state.height as f32 / window_state.scale_factor as f32,
+                            )
+                        })
+                        .unwrap_or((
+                            13.0,
+                            17.0,
+                            13.0 * 0.6,
+                            self.width as f32,
+                            self.height as f32,
+                        ))
+                };
+                let tooltip = TooltipState::new(
                     x,
                     y,
                     &text,
                     (fg_r, fg_g, fg_b),
                     (bg_r, bg_g, bg_b),
-                    self.width as f32 / self.scale_factor as f32,
-                    self.height as f32 / self.scale_factor as f32,
+                    screen_w,
+                    screen_h,
                     fs,
                     lh,
                     cw,
-                ));
-                self.frame_dirty = true;
+                );
+                if emacs_frame_id == 0 {
+                    self.tooltip = Some(tooltip);
+                    self.frame_dirty = true;
+                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.tooltip = Some(tooltip);
+                    window_state.frame_dirty = true;
+                } else {
+                    tracing::warn!(
+                        "ShowTooltip requested for unknown frame_id=0x{:x}",
+                        emacs_frame_id
+                    );
+                }
                 Ok(())
             }
             RenderCommand::HideTooltip => {
                 tracing::debug!("HideTooltip");
                 self.tooltip = None;
+                for window_state in self.frame_windows.windows.values_mut() {
+                    if window_state.tooltip.is_some() {
+                        window_state.tooltip = None;
+                        window_state.frame_dirty = true;
+                    }
+                }
                 self.frame_dirty = true;
                 Ok(())
             }

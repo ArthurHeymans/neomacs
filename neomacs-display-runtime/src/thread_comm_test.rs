@@ -1113,6 +1113,7 @@ fn render_command_hide_popup_menu() {
 #[test]
 fn render_command_show_tooltip() {
     let cmd = RenderCommand::ShowTooltip {
+        emacs_frame_id: 0x2000,
         x: 300.0,
         y: 400.0,
         text: "This is a tooltip".to_string(),
@@ -1125,6 +1126,7 @@ fn render_command_show_tooltip() {
     };
     match cmd {
         RenderCommand::ShowTooltip {
+            emacs_frame_id,
             x,
             y,
             text,
@@ -1135,6 +1137,7 @@ fn render_command_show_tooltip() {
             bg_g,
             bg_b,
         } => {
+            assert_eq!(emacs_frame_id, 0x2000);
             assert_eq!(x, 300.0);
             assert_eq!(y, 400.0);
             assert_eq!(text, "This is a tooltip");

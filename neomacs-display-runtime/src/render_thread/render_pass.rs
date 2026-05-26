@@ -167,6 +167,16 @@ impl RenderApp {
             );
         }
 
+        if let Some(tooltip) = window_state.tooltip.as_ref() {
+            renderer.render_tooltip(
+                &surface_view,
+                tooltip,
+                &mut window_state.glyph_atlas,
+                window_state.width,
+                window_state.height,
+            );
+        }
+
         if let Some(start) = window_state.visual_bell_start {
             let elapsed = start.elapsed().as_secs_f32();
             let duration = 0.15;

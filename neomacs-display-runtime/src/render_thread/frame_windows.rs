@@ -19,7 +19,7 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-use neomacs_renderer_wgpu::{PopupMenuState, WgpuGlyphAtlas};
+use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Per-window state for a top-level GUI frame.
@@ -58,6 +58,8 @@ pub(crate) struct GuiFrameWindowState {
     pub compact_bar: Option<GuiCompactBarState>,
     /// Active popup menu shown in this frame window.
     pub popup_menu: Option<PopupMenuState>,
+    /// Active tooltip shown in this frame window.
+    pub tooltip: Option<TooltipState>,
     /// Visual bell flash start time for this frame window.
     pub visual_bell_start: Option<Instant>,
 }
@@ -295,6 +297,7 @@ impl GuiFrameWindowManager {
                             tool_bar: None,
                             compact_bar: None,
                             popup_menu: None,
+                            tooltip: None,
                             visual_bell_start: None,
                         },
                     );
