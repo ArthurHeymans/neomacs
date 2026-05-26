@@ -600,3 +600,158 @@ fn org_capture_string_file_headline_template_combo() {
       (when (file-exists-p file) (delete-file file)))))"#,
     );
 }
+
+#[test]
+fn org_duration_parse_format_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-duration)
+  (let* ((durations '("1:30" "2h 15min" "3d 4:05" "1.5h"))
+         (minutes (mapcar #'org-duration-to-minutes durations))
+         (roundtrip (mapcar #'org-duration-from-minutes minutes)))
+    (list minutes
+          roundtrip
+          (mapcar #'org-duration-p durations))))"#,
+    );
+}
+
+#[test]
+fn org_datetree_multiple_dates_ordering_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (org-mode)
+    (org-datetree-file-entry-under "* First" '(5 27 2026))
+    (org-datetree-file-entry-under "* Second" '(5 28 2026))
+    (org-datetree-file-entry-under "* Earlier" '(4 1 2026))
+    (buffer-substring-no-properties (point-min) (point-max))))"#,
+    );
+}
+
+#[test]
+fn org_macro_collect_and_replace_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-macro)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+MACRO: greet Hello, $1!\n")
+    (insert "#+MACRO: wrap /$1/\n")
+    (insert "#+MACRO: twice $1 and $1\n")
+    (insert "Text {{{greet(Ada)}}} {{{wrap(bold)}}} {{{twice(x)}}}.\n")
+    (org-macro-replace-all (org-macro--collect-macros))
+    (buffer-substring-no-properties (point-min) (point-max))))"##,
+    );
+}
+
+#[test]
+fn org_list_struct_to_lisp_and_back_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "1. [X] first\n")
+    (insert "   - child a\n")
+    (insert "   - child b\n")
+    (insert "2. [ ] second\n")
+    (goto-char (point-min))
+    (let* ((struct (org-list-struct))
+           (parents (org-list-parents-alist struct))
+           (prevs (org-list-prevs-alist struct))
+           (items (mapcar (lambda (item)
+                            (list item
+                                  (org-list-get-parent item struct parents)
+                                  (org-list-get-item-number item struct prevs parents)))
+                          (org-list-get-all-items (point-min) struct prevs)))
+           (as-lisp (org-list-to-lisp)))
+      (list items as-lisp (org-list-to-org as-lisp)))))"#,
+    );
+}
+
+#[test]
+fn org_markdown_export_markup_lists_and_links_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-md)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Demo\n")
+    (insert "* Head\n")
+    (insert "Paragraph with *bold*, /italic/, =code=, and [[https://example.org][link]].\n")
+    (insert "- [X] done\n")
+    (insert "- [ ] todo\n")
+    (let* ((org-export-with-toc nil)
+           (md (org-export-as 'md nil nil t nil)))
+      (list (not (null (string-match-p "# Head" md)))
+            (not (null (string-match-p "\\*\\*bold\\*\\*" md)))
+            (not (null (string-match-p "\\*italic\\*" md)))
+            (not (null (string-match-p "`code`" md)))
+            (not (null (string-match-p "\\[link\\](https://example.org)" md)))
+            (not (null (string-match-p "\\[X\\] done" md)))
+            md))))"##,
+    );
+}
+
+#[test]
+fn org_lint_selected_checker_reports_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-lint)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: dup\n")
+    (insert "#+NAME: dup\n")
+    (insert "#+begin_src\nmissing language\n#+end_src\n")
+    (insert "[fn:missing]\n")
+    (let* ((ast (org-element-parse-buffer))
+           (reports (append (org-lint-duplicate-name ast)
+                            (org-lint-missing-language-in-src-block ast)
+                            (org-lint-undefined-footnote-reference ast))))
+      (mapcar (lambda (report)
+                (list (car report) (nth 1 report)))
+              reports))))"##,
+    );
+}
+
+#[test]
+fn org_table_transpose_after_alignment_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | Qty |\n")
+    (insert "|------+-----|\n")
+    (insert "| banana | 10 |\n")
+    (insert "| apple | 2 |\n")
+    (insert "| cherry | 5 |\n")
+    (goto-char (point-min))
+    (org-table-align)
+    (let ((aligned (buffer-substring-no-properties (point-min) (point-max))))
+      (goto-char (point-min))
+      (org-table-transpose-table-at-point)
+      (list aligned
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
