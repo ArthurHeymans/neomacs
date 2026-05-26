@@ -624,6 +624,51 @@ fn builtin_error_message_string_no_payload_specials() {
 }
 
 #[test]
+fn builtin_error_message_string_quit_conditions_are_printable_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    init_standard_errors(&mut evaluator.obarray);
+
+    let quit_no_payload = Value::list(vec![Value::symbol("quit")]);
+    let quit_result = builtin_error_message_string(&mut evaluator, vec![quit_no_payload]);
+    assert!(quit_result.is_ok());
+    assert_eq!(quit_result.unwrap().as_utf8_str(), Some("Quit"));
+
+    let minibuffer_quit_no_payload = Value::list(vec![Value::symbol("minibuffer-quit")]);
+    let minibuffer_quit_result =
+        builtin_error_message_string(&mut evaluator, vec![minibuffer_quit_no_payload]);
+    assert!(minibuffer_quit_result.is_ok());
+    assert_eq!(minibuffer_quit_result.unwrap().as_utf8_str(), Some("Quit"));
+
+    let quit_with_payload = Value::list(vec![Value::symbol("quit"), Value::fixnum(1)]);
+    let quit_payload_result = builtin_error_message_string(&mut evaluator, vec![quit_with_payload]);
+    assert!(quit_payload_result.is_ok());
+    assert_eq!(quit_payload_result.unwrap().as_utf8_str(), Some("Quit: 1"));
+}
+
+#[test]
+fn builtin_error_message_string_message_only_symbol_is_printable_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    evaluator
+        .obarray
+        .put_property(
+            "neomacs-message-only",
+            "error-message",
+            Value::string("Message only"),
+        )
+        .expect("test plist should be writable");
+
+    let err_data = Value::list(vec![
+        Value::symbol("neomacs-message-only"),
+        Value::fixnum(1),
+    ]);
+    let result = builtin_error_message_string(&mut evaluator, vec![err_data]);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().as_utf8_str(), Some("Message only: 1"));
+}
+
+#[test]
 fn builtin_error_message_string_error_with_string_payload() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();

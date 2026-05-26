@@ -565,16 +565,15 @@ pub(crate) fn builtin_error_message_string(
         }
     };
 
-    // Look up the error-message property.
-    let base_message = eval
+    // GNU `print_error_message` treats a signal as printable when its
+    // `error-message` property is a string.  This deliberately includes
+    // non-error conditions such as `quit` and `minibuffer-quit`, whose
+    // `error-conditions` do not include `error`.
+    let Some(base_message) = eval
         .obarray
         .get_property(&sym_name, "error-message")
         .and_then(|v| runtime_string_value(&v))
-        .unwrap_or_else(|| sym_name.clone());
-    let is_known_error = signal_matches_hierarchical(&eval.obarray, &sym_name, "error");
-
-    // Unknown condition symbols are formatted as peculiar errors.
-    if !is_known_error {
+    else {
         if data.is_empty() {
             return Ok(runtime_string_result("peculiar error"));
         }
@@ -586,7 +585,7 @@ pub(crate) fn builtin_error_message_string(
             "peculiar error: {}",
             data_strs.join(", ")
         )));
-    }
+    };
 
     if data.is_empty() {
         if sym_name == "error" {
