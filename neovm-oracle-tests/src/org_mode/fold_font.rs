@@ -239,3 +239,106 @@ fn org_cycle_hide_drawers_show_all_recovery_combo() {
               (buffer-substring-no-properties (point-min) (point-max)))))))"#,
     );
 }
+
+#[test]
+fn org_deep_heading_font_lock_after_level_edits_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces nil)
+          (org-level-color-stars-only nil))
+      (org-mode)
+      (insert "* L1\n** L2\n*** L3\n**** L4\n***** L5\nBody\n")
+      (goto-char (point-min))
+      (search-forward "L4")
+      (beginning-of-line)
+      (org-demote-subtree)
+      (search-forward "L5")
+      (beginning-of-line)
+      (org-promote-subtree)
+      (font-lock-ensure (point-min) (point-max))
+      (let (out)
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) \\(L[0-9]\\)" nil t)
+          (push (list (match-string 1)
+                      (substring-no-properties (match-string 2))
+                      (org-outline-level)
+                      (get-text-property (match-beginning 1) 'face)
+                      (get-text-property (match-beginning 2) 'face))
+                out))
+        (list (nreverse out)
+              (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_global_cycle_deep_sibling_visibility_integrity_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Root\n")
+    (insert "** A\nA body\n*** A1\nA1 body\n**** A1a\nA1a body\n")
+    (insert "** B\nB body\n*** B1\nB1 body\n**** B1a\nB1a body\n")
+    (insert "* Tail\nTail body\n")
+    (let ((snapshot
+           (lambda ()
+             (mapcar
+              (lambda (needle)
+                (let ((pos (save-excursion
+                             (goto-char (point-min))
+                             (search-forward needle)
+                             (point))))
+                  (list needle (not (null (org-invisible-p pos))))))
+              '("Root" "A body" "A1" "A1a body" "B body" "B1" "B1a body"
+                "Tail" "Tail body"))))
+          states)
+      (dotimes (_ 5)
+        (org-cycle-global)
+        (push (funcall snapshot) states))
+      (org-fold-show-all)
+      (push (funcall snapshot) states)
+      (list (nreverse states)
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_reveal_hidden_deep_heading_context_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fold-show-context-detail '((default . lineage))))
+      (org-mode)
+      (insert "* A\nA body\n** B\nB body\n*** C\nC body\n**** D\nD body\n")
+      (insert "* E\nE body\n")
+      (goto-char (point-min))
+      (org-fold-hide-sublevels 1)
+      (goto-char (point-min))
+      (search-forward "D body")
+      (org-fold-reveal)
+      (let ((visibility
+             (mapcar
+              (lambda (needle)
+                (let ((pos (save-excursion
+                             (goto-char (point-min))
+                             (search-forward needle)
+                             (point))))
+                  (list needle (not (null (org-invisible-p pos))))))
+              '("A body" "B" "B body" "C" "C body" "D" "D body" "E" "E body"))))
+        (list visibility
+              (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
