@@ -177,46 +177,32 @@ jobs:
         with:
           toolchain: 1.95.0
 
+      - name: Restore GStreamer SDK cache
+        id: cache-gstreamer
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            C:\gstreamer
+            C:\gstreamer-msi-cache
+          key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
+
       - name: Install GStreamer SDK
+        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
         shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-          $baseUrl = "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GSTREAMER_VERSION/msvc"
-          $runtime = "$env:RUNNER_TEMP\gstreamer-runtime.msi"
-          $devel = "$env:RUNNER_TEMP\gstreamer-devel.msi"
-          Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $runtime
-          Invoke-WebRequest -Uri "$baseUrl/gstreamer-1.0-devel-msvc-x86_64-$env:GSTREAMER_VERSION.msi" -OutFile $devel
-          $installRoot = "C:\gstreamer"
-          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $runtime, "/qn", "INSTALLLEVEL=1000", "INSTALLDIR=$installRoot")
-          Start-Process msiexec.exe -Wait -ArgumentList @("/i", $devel, "/qn", "INSTALLLEVEL=1000", "INSTALLDIR=$installRoot")
-          $searchRoots = @("C:\gstreamer", "${env:ProgramFiles}\gstreamer", "${env:ProgramFiles(x86)}\gstreamer") |
-            Where-Object { Test-Path $_ }
-          $glibPc = $searchRoots |
-            ForEach-Object { Get-ChildItem -Path $_ -Filter glib-2.0.pc -Recurse -ErrorAction SilentlyContinue } |
-            Select-Object -First 1
-          if (-not $glibPc) {
-            $searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Depth 4 -ErrorAction SilentlyContinue }
-            throw "glib-2.0.pc not found after installing GStreamer devel MSI"
-          }
-          $pkgConfigDir = Split-Path -Parent $glibPc.FullName
-          $libDir = Split-Path -Parent $pkgConfigDir
-          $gstRoot = Split-Path -Parent $libDir
-          $pkgConfig = "$gstRoot\bin\pkg-config.exe"
-          if (-not (Test-Path $pkgConfig)) {
-            choco install pkgconfiglite -y
-            $pkgConfig = (Get-Command pkg-config.exe -All |
-              Where-Object { $_.Source -notmatch "\\Git\\" } |
-              Select-Object -First 1 -ExpandProperty Source)
-            if (-not $pkgConfig) {
-              throw "pkg-config.exe not found after installing pkgconfiglite"
-            }
-          }
-          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $pkgConfig)
-          Add-Content -Path $env:GITHUB_PATH -Value "$gstRoot\bin"
-          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_ROOT_X86_64=$gstRoot\"
-          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG=$pkgConfig"
-          Add-Content -Path $env:GITHUB_ENV -Value "PKG_CONFIG_PATH=$gstRoot\lib\pkgconfig"
-          Add-Content -Path $env:GITHUB_ENV -Value "GSTREAMER_RUNTIME_MSI=$runtime"
+        run: ./scripts/setup-windows-gstreamer.ps1 -Install
+
+      - name: Save GStreamer SDK cache
+        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            C:\gstreamer
+            C:\gstreamer-msi-cache
+          key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
+
+      - name: Configure GStreamer SDK
+        shell: powershell
+        run: ./scripts/setup-windows-gstreamer.ps1
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
