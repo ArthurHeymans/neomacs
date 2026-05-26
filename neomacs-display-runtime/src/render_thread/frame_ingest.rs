@@ -157,13 +157,14 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
-            if frame_id != 0 && parent_id == 0 && self.multi_windows.windows.contains_key(&frame_id)
+            if frame_id != 0 && parent_id == 0 && self.frame_windows.windows.contains_key(&frame_id)
             {
-                self.multi_windows.route_frame(frame);
+                self.frame_windows
+                    .route_frame(frame, gui_menu_bar, gui_tool_bar, gui_compact_bar);
                 continue;
             }
-            if parent_id != 0 && self.multi_windows.windows.contains_key(&parent_id) {
-                self.multi_windows.route_frame(frame);
+            if parent_id != 0 && self.frame_windows.windows.contains_key(&parent_id) {
+                self.frame_windows.route_frame(frame, None, None, None);
                 continue;
             }
 

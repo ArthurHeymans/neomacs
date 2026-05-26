@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neovm_core::window::GuiFrameGeometryHints;
 
 // =======================================================================
 // Helper: create a FrameGlyphBuffer with specified identity fields
@@ -24,12 +25,12 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
 }
 
 // =======================================================================
-// MultiWindowManager::new() — initial state
+// GuiFrameWindowManager::new() — initial state
 // =======================================================================
 
 #[test]
 fn new_manager_is_empty() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert!(mgr.windows.is_empty());
     assert!(mgr.winit_to_emacs.is_empty());
     assert!(mgr.pending_creates.is_empty());
@@ -38,19 +39,19 @@ fn new_manager_is_empty() {
 
 #[test]
 fn new_manager_count_is_zero() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert_eq!(mgr.count(), 0);
 }
 
 #[test]
 fn new_manager_any_dirty_is_false() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert!(!mgr.any_dirty());
 }
 
 #[test]
 fn new_manager_dirty_windows_is_empty() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     assert!(mgr.dirty_windows().is_empty());
 }
 
@@ -60,7 +61,7 @@ fn new_manager_dirty_windows_is_empty() {
 
 #[test]
 fn request_create_adds_to_pending() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(
         1,
         800,
@@ -78,7 +79,7 @@ fn request_create_adds_to_pending() {
 
 #[test]
 fn request_create_multiple_preserves_order() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(
         1,
         800,
@@ -109,7 +110,7 @@ fn request_create_multiple_preserves_order() {
 
 #[test]
 fn request_create_does_not_modify_windows_map() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(1, 800, 600, "Test".to_string(), default_geometry_hints());
 
     // The window should NOT be in the windows map yet —
@@ -120,7 +121,7 @@ fn request_create_does_not_modify_windows_map() {
 
 #[test]
 fn request_create_allows_duplicate_frame_ids() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(1, 800, 600, "First".to_string(), default_geometry_hints());
     mgr.request_create(
         1,
@@ -136,7 +137,7 @@ fn request_create_allows_duplicate_frame_ids() {
 
 #[test]
 fn request_create_zero_dimensions() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(1, 0, 0, "Zero".to_string(), default_geometry_hints());
 
     assert_eq!(mgr.pending_creates.len(), 1);
@@ -146,7 +147,7 @@ fn request_create_zero_dimensions() {
 
 #[test]
 fn request_create_empty_title() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_create(1, 800, 600, String::new(), default_geometry_hints());
 
     assert_eq!(mgr.pending_creates[0].title, "");
@@ -154,7 +155,7 @@ fn request_create_empty_title() {
 
 #[test]
 fn request_create_large_frame_id() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let large_id = u64::MAX;
     mgr.request_create(
         large_id,
@@ -173,7 +174,7 @@ fn request_create_large_frame_id() {
 
 #[test]
 fn request_destroy_adds_to_pending() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(42);
 
     assert_eq!(mgr.pending_destroys.len(), 1);
@@ -182,7 +183,7 @@ fn request_destroy_adds_to_pending() {
 
 #[test]
 fn request_destroy_multiple_preserves_order() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(1);
     mgr.request_destroy(2);
     mgr.request_destroy(3);
@@ -193,7 +194,7 @@ fn request_destroy_multiple_preserves_order() {
 
 #[test]
 fn request_destroy_does_not_modify_windows_map() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(99);
 
     // Nothing should change in the actual windows map
@@ -203,7 +204,7 @@ fn request_destroy_does_not_modify_windows_map() {
 
 #[test]
 fn request_destroy_nonexistent_frame_id_is_accepted() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     // No windows exist, but we can still queue a destroy
     mgr.request_destroy(999);
     assert_eq!(mgr.pending_destroys.len(), 1);
@@ -211,7 +212,7 @@ fn request_destroy_nonexistent_frame_id_is_accepted() {
 
 #[test]
 fn request_destroy_duplicate_frame_ids_are_queued() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(1);
     mgr.request_destroy(1);
 
@@ -226,7 +227,7 @@ fn request_destroy_duplicate_frame_ids_are_queued() {
 
 #[test]
 fn process_destroys_drains_pending_queue() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(1);
     mgr.request_destroy(2);
 
@@ -237,7 +238,7 @@ fn process_destroys_drains_pending_queue() {
 
 #[test]
 fn process_destroys_on_empty_queue_is_noop() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.process_destroys();
     assert!(mgr.pending_destroys.is_empty());
     assert!(mgr.windows.is_empty());
@@ -245,7 +246,7 @@ fn process_destroys_on_empty_queue_is_noop() {
 
 #[test]
 fn process_destroys_nonexistent_frame_ids_does_not_panic() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(999);
     mgr.request_destroy(1000);
 
@@ -261,7 +262,7 @@ fn process_destroys_nonexistent_frame_ids_does_not_panic() {
 
 #[test]
 fn get_returns_none_for_empty_manager() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert!(mgr.get(1).is_none());
     assert!(mgr.get(0).is_none());
     assert!(mgr.get(u64::MAX).is_none());
@@ -269,7 +270,7 @@ fn get_returns_none_for_empty_manager() {
 
 #[test]
 fn get_mut_returns_none_for_empty_manager() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     assert!(mgr.get_mut(1).is_none());
 }
 
@@ -283,7 +284,7 @@ fn get_mut_returns_none_for_empty_manager() {
 
 #[test]
 fn winit_to_emacs_map_is_empty_initially() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert!(mgr.winit_to_emacs.is_empty());
 }
 
@@ -293,39 +294,39 @@ fn winit_to_emacs_map_is_empty_initially() {
 
 #[test]
 fn route_frame_with_frame_id_zero_returns_false() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let frame = make_frame(0, 0);
 
-    // frame_id == 0 means primary window, not handled by multi_window
-    assert!(!mgr.route_frame(frame));
+    // frame_id == 0 means primary window, not handled by frame_windows
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 #[test]
 fn route_frame_with_nonexistent_root_frame_returns_false() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let frame = make_frame(42, 0);
 
     // frame_id=42, parent_id=0 → root frame for secondary window
     // But no window with emacs_frame_id=42 exists
-    assert!(!mgr.route_frame(frame));
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 #[test]
 fn route_frame_child_with_no_parent_window_returns_false() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let frame = make_frame(100, 42);
 
     // frame_id=100, parent_id=42 → child frame for parent 42
     // But no window with emacs_frame_id=42 exists
-    assert!(!mgr.route_frame(frame));
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 #[test]
 fn route_frame_does_not_create_windows() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let frame = make_frame(42, 0);
 
-    mgr.route_frame(frame);
+    mgr.route_frame(frame, None, None, None);
 
     // route_frame should not add entries to the windows map
     assert!(mgr.windows.is_empty());
@@ -372,7 +373,7 @@ fn pending_window_unicode_title() {
 
 #[test]
 fn create_and_destroy_queues_are_independent() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
 
     mgr.request_create(1, 800, 600, "Win1".to_string(), default_geometry_hints());
     mgr.request_create(2, 1024, 768, "Win2".to_string(), default_geometry_hints());
@@ -390,7 +391,7 @@ fn create_and_destroy_queues_are_independent() {
 
 #[test]
 fn process_destroys_called_twice_is_safe() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     mgr.request_destroy(1);
 
     mgr.process_destroys();
@@ -407,28 +408,28 @@ fn process_destroys_called_twice_is_safe() {
 
 #[test]
 fn route_frame_primary_window_frame_id_zero_parent_zero() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let frame = make_frame(0, 0);
-    assert!(!mgr.route_frame(frame));
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 #[test]
 fn route_frame_frame_id_zero_parent_nonzero_returns_false() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     // frame_id=0 short-circuits before checking parent_id
     let mut frame = make_frame(0, 42);
     frame.frame_id = 0;
     frame.parent_id = 42;
-    assert!(!mgr.route_frame(frame));
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 #[test]
 fn route_frame_multiple_unmatched_calls_return_false() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
 
     for i in 1..=10 {
         let frame = make_frame(i, 0);
-        assert!(!mgr.route_frame(frame));
+        assert!(!mgr.route_frame(frame, None, None, None));
     }
 
     // Nothing should have been added
@@ -441,19 +442,19 @@ fn route_frame_multiple_unmatched_calls_return_false() {
 
 #[test]
 fn count_on_empty_manager() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert_eq!(mgr.count(), 0);
 }
 
 #[test]
 fn any_dirty_on_empty_manager() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     assert!(!mgr.any_dirty());
 }
 
 #[test]
 fn dirty_windows_on_empty_manager() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     let dirty = mgr.dirty_windows();
     assert!(dirty.is_empty());
 }
@@ -464,7 +465,7 @@ fn dirty_windows_on_empty_manager() {
 
 #[test]
 fn destroy_queue_refill_after_process() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
 
     mgr.request_destroy(1);
     mgr.request_destroy(2);
@@ -485,7 +486,7 @@ fn destroy_queue_refill_after_process() {
 
 #[test]
 fn route_frame_extracts_frame_id_and_parent_id() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
 
     // Create a frame with specific IDs
     let frame = make_frame(0xDEAD, 0xBEEF);
@@ -494,7 +495,7 @@ fn route_frame_extracts_frame_id_and_parent_id() {
 
     // route_frame reads these fields for routing
     // No matching window, so returns false
-    assert!(!mgr.route_frame(frame));
+    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 // =======================================================================
@@ -508,7 +509,7 @@ fn route_frame_extracts_frame_id_and_parent_id() {
 
 #[test]
 fn windows_map_key_is_u64() {
-    let mgr = MultiWindowManager::new();
+    let mgr = GuiFrameWindowManager::new();
     // Verify the map accepts u64 keys
     assert!(mgr.windows.get(&0u64).is_none());
     assert!(mgr.windows.get(&u64::MAX).is_none());
@@ -520,7 +521,7 @@ fn windows_map_key_is_u64() {
 
 #[test]
 fn many_pending_creates() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     for i in 0..1000 {
         mgr.request_create(
             i,
@@ -537,7 +538,7 @@ fn many_pending_creates() {
 
 #[test]
 fn many_pending_destroys_processed() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     for i in 0..1000 {
         mgr.request_destroy(i);
     }
@@ -549,10 +550,10 @@ fn many_pending_destroys_processed() {
 
 #[test]
 fn many_route_frame_misses() {
-    let mut mgr = MultiWindowManager::new();
+    let mut mgr = GuiFrameWindowManager::new();
     for i in 1..=100 {
         let frame = make_frame(i, 0);
-        assert!(!mgr.route_frame(frame));
+        assert!(!mgr.route_frame(frame, None, None, None));
     }
     assert!(mgr.windows.is_empty());
 }

@@ -66,7 +66,7 @@ impl RenderApp {
                     if !self.chrome.decorations_enabled {
                         self.frame_dirty = true;
                     }
-                } else if let Some(window_state) = self.multi_windows.get(emacs_frame_id) {
+                } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
                     window_state.window.set_title(&title);
                 } else {
                     tracing::warn!(
@@ -136,7 +136,7 @@ impl RenderApp {
                         apply_window_geometry_hints(window, geometry_hints);
                         let _ = window.request_inner_size(size);
                     }
-                } else if let Some(window_state) = self.multi_windows.get(emacs_frame_id) {
+                } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
                     apply_window_geometry_hints(&window_state.window, geometry_hints);
                     let _ = window_state.window.request_inner_size(size);
                 } else {
@@ -164,7 +164,7 @@ impl RenderApp {
                     if let Some(ref window) = self.window {
                         apply_window_geometry_hints(window, geometry_hints);
                     }
-                } else if let Some(window_state) = self.multi_windows.get(emacs_frame_id) {
+                } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
                     apply_window_geometry_hints(&window_state.window, geometry_hints);
                 } else {
                     tracing::warn!(
@@ -207,7 +207,7 @@ impl RenderApp {
                     height,
                     title
                 );
-                self.multi_windows.request_create(
+                self.frame_windows.request_create(
                     emacs_frame_id,
                     width,
                     height,
@@ -218,7 +218,12 @@ impl RenderApp {
             }
             RenderCommand::DestroyWindow { emacs_frame_id } => {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
-                self.multi_windows.request_destroy(emacs_frame_id);
+                self.frame_windows.request_destroy(emacs_frame_id);
+                Ok(())
+            }
+            RenderCommand::AdoptPrimaryFrame { emacs_frame_id } => {
+                tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
+                self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
                 Ok(())
             }
             other => Err(other),

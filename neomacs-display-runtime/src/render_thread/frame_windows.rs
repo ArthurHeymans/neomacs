@@ -1,8 +1,9 @@
-//! Multi-window management for the render thread.
+//! GUI frame window management for the render thread.
 //!
-//! Supports multiple OS windows, each with its own wgpu surface.
-//! Shared GPU device/queue/glyph atlas across all windows.
-//! Each window holds its own frame data and child frames.
+//! GNU Emacs treats every top-level GUI frame as a native window. This module
+//! owns the render-thread mapping between Emacs frame IDs and winit windows so
+//! redraw, input, resize, focus, and destruction can be frame-addressed instead
+//! of primary-window-addressed.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,11 +15,14 @@ use super::child_frames::ChildFrameManager;
 use super::state::{effective_window_scale_factor, window_size_from_emacs_pixels};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neomacs_display_protocol::glyph_matrix::{
+    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
+};
+use neomacs_renderer_wgpu::WgpuGlyphAtlas;
 use neovm_core::window::GuiFrameGeometryHints;
 
-/// Per-window state. Each Emacs top-level frame gets its own OS window
-/// with a separate wgpu surface.
-pub(crate) struct WindowState {
+/// Per-window state for a top-level GUI frame.
+pub(crate) struct GuiFrameWindowState {
     /// The winit window.
     pub window: Arc<Window>,
     /// wgpu surface for this window.
@@ -37,13 +41,23 @@ pub(crate) struct WindowState {
     pub current_frame: Option<FrameGlyphBuffer>,
     /// Child frames rendered as overlays in this window.
     pub child_frames: ChildFrameManager,
+    /// Glyph atlas rasterized at this window's current scale factor.
+    pub glyph_atlas: WgpuGlyphAtlas,
     /// Whether this window needs a redraw.
     pub frame_dirty: bool,
+    /// Last known pointer position in this frame's logical coordinates.
+    pub mouse_pos: (f32, f32),
     /// Window title.
     pub title: String,
+    /// GUI menu bar snapshot for this frame, if visible.
+    pub menu_bar: Option<GuiMenuBarState>,
+    /// GUI tool bar snapshot for this frame, if visible.
+    pub tool_bar: Option<GuiToolBarState>,
+    /// Compact GUI chrome snapshot for this frame, if visible.
+    pub compact_bar: Option<GuiCompactBarState>,
 }
 
-impl WindowState {
+impl GuiFrameWindowState {
     /// Resize this window's surface.
     pub fn handle_resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         if width == 0 || height == 0 {
@@ -56,17 +70,30 @@ impl WindowState {
         self.surface.configure(device, &self.surface_config);
         self.frame_dirty = true;
     }
+
+    pub fn set_scale_factor(&mut self, scale_factor: f64) {
+        let effective_scale = effective_window_scale_factor(scale_factor);
+        self.scale_factor = effective_scale;
+        self.glyph_atlas.set_scale_factor(effective_scale as f32);
+        self.frame_dirty = true;
+    }
 }
 
-/// Manages all windows in the render thread.
+/// Manages top-level GUI frame windows in the render thread.
 ///
-/// Maps between Emacs frame IDs (u64) and winit WindowIds.
-/// One shared GPU device services all windows.
-pub(crate) struct MultiWindowManager {
-    /// Emacs frame_id → WindowState
-    pub windows: HashMap<u64, WindowState>,
+/// Secondary windows live directly in `windows`. The adopted primary window is
+/// still stored on `RenderApp` while this manager records its real Emacs frame
+/// ID and native `WindowId`, so input can use GNU frame identity instead of the
+/// historical render-thread sentinel `0`.
+pub(crate) struct GuiFrameWindowManager {
+    /// Emacs frame_id → native window-backed state for secondary top-level frames.
+    pub windows: HashMap<u64, GuiFrameWindowState>,
     /// Winit WindowId → Emacs frame_id (reverse mapping for event dispatch)
     pub winit_to_emacs: HashMap<WindowId, u64>,
+    /// Emacs frame_id adopted by the primary process window.
+    pub primary_emacs_frame_id: Option<u64>,
+    /// winit id of the primary process window.
+    pub primary_winit_id: Option<WindowId>,
     /// Pending window creation requests (processed in resumed/about_to_wait)
     pub pending_creates: Vec<PendingWindow>,
     /// Pending window destruction requests
@@ -82,13 +109,45 @@ pub(crate) struct PendingWindow {
     pub geometry_hints: GuiFrameGeometryHints,
 }
 
-impl MultiWindowManager {
+impl GuiFrameWindowManager {
     pub fn new() -> Self {
         Self {
             windows: HashMap::new(),
             winit_to_emacs: HashMap::new(),
+            primary_emacs_frame_id: None,
+            primary_winit_id: None,
             pending_creates: Vec::new(),
             pending_destroys: Vec::new(),
+        }
+    }
+
+    pub fn adopt_primary_frame_id(&mut self, emacs_frame_id: u64) {
+        self.primary_emacs_frame_id = Some(emacs_frame_id);
+        self.sync_primary_mapping();
+    }
+
+    pub fn adopt_primary_winit_id(&mut self, winit_id: WindowId) {
+        self.primary_winit_id = Some(winit_id);
+        self.sync_primary_mapping();
+    }
+
+    pub fn primary_frame_id(&self) -> Option<u64> {
+        self.primary_emacs_frame_id
+    }
+
+    pub fn primary_event_frame_id(&self) -> u64 {
+        self.primary_emacs_frame_id.unwrap_or(0)
+    }
+
+    pub fn is_primary_winit(&self, winit_id: WindowId) -> bool {
+        self.primary_winit_id == Some(winit_id)
+    }
+
+    fn sync_primary_mapping(&mut self) {
+        if let (Some(winit_id), Some(emacs_frame_id)) =
+            (self.primary_winit_id, self.primary_emacs_frame_id)
+        {
+            self.winit_to_emacs.insert(winit_id, emacs_frame_id);
         }
     }
 
@@ -203,7 +262,7 @@ impl MultiWindowManager {
                     self.winit_to_emacs.insert(winit_id, req.emacs_frame_id);
                     self.windows.insert(
                         req.emacs_frame_id,
-                        WindowState {
+                        GuiFrameWindowState {
                             window,
                             surface,
                             surface_config: config,
@@ -213,8 +272,16 @@ impl MultiWindowManager {
                             emacs_frame_id: req.emacs_frame_id,
                             current_frame: None,
                             child_frames: ChildFrameManager::new(),
+                            glyph_atlas: WgpuGlyphAtlas::new_with_scale(
+                                device,
+                                scale_factor as f32,
+                            ),
                             frame_dirty: false,
+                            mouse_pos: (0.0, 0.0),
                             title: req.title,
+                            menu_bar: None,
+                            tool_bar: None,
+                            compact_bar: None,
                         },
                     );
                 }
@@ -246,6 +313,7 @@ impl MultiWindowManager {
         self.pending_creates.clear();
         self.pending_destroys.clear();
         self.winit_to_emacs.clear();
+        self.primary_winit_id = None;
         // Drop all window states (surfaces, etc.)
         self.windows.clear();
     }
@@ -256,24 +324,24 @@ impl MultiWindowManager {
     }
 
     /// Get a window state by Emacs frame_id.
-    pub fn get(&self, emacs_frame_id: u64) -> Option<&WindowState> {
+    pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
         self.windows.get(&emacs_frame_id)
     }
 
     /// Get a mutable window state by Emacs frame_id.
-    pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut WindowState> {
+    pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut GuiFrameWindowState> {
         self.windows.get_mut(&emacs_frame_id)
     }
 
     /// Get a window state by winit WindowId.
-    pub fn get_by_winit(&self, winit_id: WindowId) -> Option<&WindowState> {
+    pub fn get_by_winit(&self, winit_id: WindowId) -> Option<&GuiFrameWindowState> {
         self.winit_to_emacs
             .get(&winit_id)
             .and_then(|id| self.windows.get(id))
     }
 
     /// Get a mutable window state by winit WindowId.
-    pub fn get_by_winit_mut(&mut self, winit_id: WindowId) -> Option<&mut WindowState> {
+    pub fn get_by_winit_mut(&mut self, winit_id: WindowId) -> Option<&mut GuiFrameWindowState> {
         self.winit_to_emacs
             .get(&winit_id)
             .copied()
@@ -282,7 +350,13 @@ impl MultiWindowManager {
 
     /// Route a FrameGlyphBuffer to the appropriate window.
     /// Returns true if the frame was routed to a secondary window.
-    pub fn route_frame(&mut self, frame: FrameGlyphBuffer) -> bool {
+    pub fn route_frame(
+        &mut self,
+        frame: FrameGlyphBuffer,
+        menu_bar: Option<GuiMenuBarState>,
+        tool_bar: Option<GuiToolBarState>,
+        compact_bar: Option<GuiCompactBarState>,
+    ) -> bool {
         let frame_id = frame.frame_id;
         if frame_id != 0 {
             if frame.parent_id != 0 {
@@ -297,6 +371,9 @@ impl MultiWindowManager {
                 }
             } else if let Some(ws) = self.windows.get_mut(&frame_id) {
                 // Root frame for a secondary window
+                ws.menu_bar = menu_bar;
+                ws.tool_bar = tool_bar;
+                ws.compact_bar = compact_bar;
                 ws.current_frame = Some(frame);
                 ws.frame_dirty = true;
                 return true;
@@ -326,5 +403,5 @@ impl MultiWindowManager {
 }
 
 #[cfg(test)]
-#[path = "multi_window_test.rs"]
+#[path = "frame_windows_test.rs"]
 mod tests;

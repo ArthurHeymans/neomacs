@@ -1,11 +1,13 @@
 //! Pointer, wheel, and hover handling for winit window events.
 
 use super::RenderApp;
+use super::frame_windows::GuiFrameWindowState;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::thread_comm::InputEvent;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
+use winit::window::WindowId;
 
 /// Search a glyph buffer for a WebKit view at the given local coordinates.
 /// Returns `(webkit_id, relative_x, relative_y)` if found.
@@ -29,6 +31,47 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
 }
 
 impl RenderApp {
+    fn pointer_target_for_frame_window(
+        window_state: &GuiFrameWindowState,
+        x: f32,
+        y: f32,
+    ) -> (f32, f32, u64) {
+        if let Some((fid, local_x, local_y)) = window_state.child_frames.hit_test(x, y) {
+            (local_x, local_y, fid)
+        } else {
+            (x, y, window_state.emacs_frame_id)
+        }
+    }
+
+    fn glyphs_for_frame_window_pointer_target(
+        window_state: &GuiFrameWindowState,
+        target_fid: u64,
+    ) -> Option<&[FrameGlyph]> {
+        if target_fid == window_state.emacs_frame_id {
+            window_state
+                .current_frame
+                .as_ref()
+                .map(|frame| frame.glyphs.as_slice())
+        } else {
+            window_state
+                .child_frames
+                .frames
+                .get(&target_fid)
+                .map(|entry| entry.frame.glyphs.as_slice())
+        }
+    }
+
+    fn webkit_target_for_frame_window(
+        window_state: &GuiFrameWindowState,
+        target_fid: u64,
+        ev_x: f32,
+        ev_y: f32,
+    ) -> (u32, i32, i32) {
+        Self::glyphs_for_frame_window_pointer_target(window_state, target_fid)
+            .and_then(|glyphs| webkit_glyph_hit_test(glyphs, ev_x, ev_y))
+            .unwrap_or((0, 0, 0))
+    }
+
     fn glyphs_for_pointer_target(&self, target_fid: u64) -> Option<&[FrameGlyph]> {
         if target_fid != 0 {
             self.child_frames
@@ -80,7 +123,47 @@ impl RenderApp {
         (wk_id, wk_rx, wk_ry)
     }
 
-    pub(super) fn handle_mouse_input(&mut self, state: ElementState, button: MouseButton) {
+    pub(super) fn handle_mouse_input(
+        &mut self,
+        window_id: WindowId,
+        state: ElementState,
+        button: MouseButton,
+    ) {
+        if !self.frame_windows.is_primary_winit(window_id) {
+            if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
+                let btn = match button {
+                    MouseButton::Left => 1,
+                    MouseButton::Middle => 2,
+                    MouseButton::Right => 3,
+                    MouseButton::Back => 4,
+                    MouseButton::Forward => 5,
+                    MouseButton::Other(n) => n as u32,
+                };
+                let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
+                    window_state,
+                    window_state.mouse_pos.0,
+                    window_state.mouse_pos.1,
+                );
+                let (wk_id, wk_rx, wk_ry) = if state == ElementState::Pressed {
+                    Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y)
+                } else {
+                    (0, 0, 0)
+                };
+                self.comms.send_input(InputEvent::MouseButton {
+                    button: btn,
+                    x: ev_x,
+                    y: ev_y,
+                    pressed: state == ElementState::Pressed,
+                    modifiers: self.modifiers,
+                    target_frame_id: target_fid,
+                    webkit_id: wk_id,
+                    webkit_rel_x: wk_rx,
+                    webkit_rel_y: wk_ry,
+                });
+            }
+            return;
+        }
+
         if state == ElementState::Pressed {
             tracing::debug!(
                 "MouseInput: {:?} at ({:.1}, {:.1}), menu_bar_h={}, popup={}",
@@ -429,7 +512,32 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn handle_cursor_moved(&mut self, position: PhysicalPosition<f64>) {
+    pub(super) fn handle_cursor_moved(
+        &mut self,
+        window_id: WindowId,
+        position: PhysicalPosition<f64>,
+    ) {
+        if !self.frame_windows.is_primary_winit(window_id) {
+            let mut event = None;
+            if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+                let lx = (position.x / window_state.scale_factor) as f32;
+                let ly = (position.y / window_state.scale_factor) as f32;
+                window_state.mouse_pos = (lx, ly);
+                let (ev_x, ev_y, target_fid) =
+                    Self::pointer_target_for_frame_window(window_state, lx, ly);
+                event = Some(InputEvent::MouseMove {
+                    x: ev_x,
+                    y: ev_y,
+                    modifiers: self.modifiers,
+                    target_frame_id: target_fid,
+                });
+            }
+            if let Some(event) = event {
+                self.comms.send_input(event);
+            }
+            return;
+        }
+
         let lx = (position.x / self.scale_factor) as f32;
         let ly = (position.y / self.scale_factor) as f32;
         self.mouse_pos = (lx, ly);
@@ -586,7 +694,40 @@ impl RenderApp {
         });
     }
 
-    pub(super) fn handle_mouse_wheel(&mut self, delta: MouseScrollDelta) {
+    pub(super) fn handle_mouse_wheel(&mut self, window_id: WindowId, delta: MouseScrollDelta) {
+        if !self.frame_windows.is_primary_winit(window_id) {
+            if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
+                let (dx, dy, pixel_precise) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x, y, false),
+                    MouseScrollDelta::PixelDelta(pos) => (
+                        (pos.x / window_state.scale_factor) as f32,
+                        (pos.y / window_state.scale_factor) as f32,
+                        true,
+                    ),
+                };
+                let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
+                    window_state,
+                    window_state.mouse_pos.0,
+                    window_state.mouse_pos.1,
+                );
+                let (wk_id, wk_rx, wk_ry) =
+                    Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
+                self.comms.send_input(InputEvent::MouseScroll {
+                    delta_x: dx,
+                    delta_y: dy,
+                    x: ev_x,
+                    y: ev_y,
+                    modifiers: self.modifiers,
+                    pixel_precise,
+                    target_frame_id: target_fid,
+                    webkit_id: wk_id,
+                    webkit_rel_x: wk_rx,
+                    webkit_rel_y: wk_ry,
+                });
+            }
+            return;
+        }
+
         let (dx, dy, pixel_precise) = match delta {
             MouseScrollDelta::LineDelta(x, y) => (x, y, false),
             MouseScrollDelta::PixelDelta(pos) => (

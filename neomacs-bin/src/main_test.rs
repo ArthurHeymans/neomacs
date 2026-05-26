@@ -599,7 +599,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     .expect("adopt opening gui frame");
 
     let commands: Vec<_> = cmd_rx.try_iter().collect();
-    assert_eq!(commands.len(), 2);
+    assert_eq!(commands.len(), 3);
     assert!(
         commands.iter().any(
             |cmd| matches!(cmd, RenderCommand::SetWindowTitle { title } if title == "Neomacs")
@@ -619,6 +619,12 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
                 width_inc: 8,
                 height_inc: 16,
             }
+    )));
+    assert!(commands.iter().any(|cmd| matches!(
+        cmd,
+        RenderCommand::AdoptPrimaryFrame {
+            emacs_frame_id: 0x100000001,
+        }
     )));
     assert!(host.primary_window_adopted);
     assert_eq!(host.primary_frame_id, Some(FrameId(0x100000001)));
@@ -837,6 +843,12 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
             }
         )),
         "expected bootstrap adoption to publish primary window geometry hints, got {commands:?}"
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|cmd| matches!(cmd, RenderCommand::AdoptPrimaryFrame { .. })),
+        "expected bootstrap adoption to publish the primary frame identity, got {commands:?}"
     );
     assert!(
         commands.iter().any(|cmd| matches!(

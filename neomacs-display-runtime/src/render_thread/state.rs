@@ -15,7 +15,7 @@ use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
-use super::multi_window::MultiWindowManager;
+use super::frame_windows::GuiFrameWindowManager;
 use super::transitions::TransitionState;
 
 #[cfg(feature = "wpe-webkit")]
@@ -260,8 +260,8 @@ pub(super) struct RenderApp {
     #[cfg(feature = "neo-term")]
     pub(super) shared_terminals: crate::terminal::SharedTerminals,
 
-    // Multi-window manager (secondary OS windows for top-level frames)
-    pub(super) multi_windows: MultiWindowManager,
+    // Top-level GUI frame windows.
+    pub(super) frame_windows: GuiFrameWindowManager,
     // Child frames (posframe, which-key-posframe, etc.)
     pub(super) child_frames: ChildFrameManager,
     // Child frame visual style
@@ -405,7 +405,7 @@ impl RenderApp {
             terminal_manager: crate::terminal::TerminalManager::new(),
             #[cfg(feature = "neo-term")]
             shared_terminals,
-            multi_windows: MultiWindowManager::new(),
+            frame_windows: GuiFrameWindowManager::new(),
             child_frames: ChildFrameManager::new(),
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,

@@ -10,6 +10,18 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::WindowId;
 
 impl RenderApp {
+    fn emacs_frame_for_window_event(&self, window_id: WindowId) -> u64 {
+        self.frame_windows
+            .emacs_frame_for_winit(window_id)
+            .unwrap_or_else(|| {
+                if self.frame_windows.is_primary_winit(window_id) {
+                    self.frame_windows.primary_event_frame_id()
+                } else {
+                    0
+                }
+            })
+    }
+
     pub(super) fn handle_window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -19,28 +31,24 @@ impl RenderApp {
         match event {
             WindowEvent::CloseRequested => {
                 tracing::info!("Window close requested");
-                let emacs_fid = self
-                    .multi_windows
-                    .emacs_frame_for_winit(window_id)
-                    .unwrap_or(0);
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 self.comms.send_input(InputEvent::WindowClose {
                     emacs_frame_id: emacs_fid,
                 });
-                if emacs_fid == 0 {
+                if is_primary {
                     event_loop.exit();
                 } else {
-                    self.multi_windows.request_destroy(emacs_fid);
+                    self.frame_windows.request_destroy(emacs_fid);
                 }
             }
 
             WindowEvent::Resized(size) => {
                 tracing::info!("WindowEvent::Resized: {}x{}", size.width, size.height);
 
-                let emacs_fid = self
-                    .multi_windows
-                    .emacs_frame_for_winit(window_id)
-                    .unwrap_or(0);
-                if emacs_fid == 0 {
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let emacs_fid = self.emacs_frame_for_window_event(window_id);
+                if is_primary {
                     self.handle_resize(size.width, size.height);
                     let (emacs_w, emacs_h) =
                         emacs_pixels_from_window_size(size.width, size.height, self.scale_factor);
@@ -52,10 +60,10 @@ impl RenderApp {
                     self.comms.send_input(InputEvent::WindowResize {
                         width: emacs_w,
                         height: emacs_h,
-                        emacs_frame_id: 0,
+                        emacs_frame_id: emacs_fid,
                     });
                 } else if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
-                    if let Some(ws) = self.multi_windows.get_mut(emacs_fid) {
+                    if let Some(ws) = self.frame_windows.get_mut(emacs_fid) {
                         ws.handle_resize(&device, size.width, size.height);
                         let (emacs_w, emacs_h) =
                             emacs_pixels_from_window_size(size.width, size.height, ws.scale_factor);
@@ -69,10 +77,8 @@ impl RenderApp {
             }
 
             WindowEvent::Focused(focused) => {
-                let emacs_fid = self
-                    .multi_windows
-                    .emacs_frame_for_winit(window_id)
-                    .unwrap_or(0);
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 self.comms.send_input(InputEvent::WindowFocus {
                     focused,
                     emacs_frame_id: emacs_fid,
@@ -206,10 +212,7 @@ impl RenderApp {
                                     keysym: control_keysym,
                                     modifiers: self.modifiers,
                                     pressed: true,
-                                    emacs_frame_id: self
-                                        .multi_windows
-                                        .emacs_frame_for_winit(window_id)
-                                        .unwrap_or(0),
+                                    emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                                 });
                                 handled_via_text = true;
                             } else if let Some(keysyms) =
@@ -232,9 +235,7 @@ impl RenderApp {
                                         modifiers: self.modifiers,
                                         pressed: true,
                                         emacs_frame_id: self
-                                            .multi_windows
-                                            .emacs_frame_for_winit(window_id)
-                                            .unwrap_or(0),
+                                            .emacs_frame_for_window_event(window_id),
                                     });
                                 }
                                 handled_via_text = true;
@@ -276,10 +277,7 @@ impl RenderApp {
                                 keysym,
                                 modifiers: self.modifiers,
                                 pressed: state == ElementState::Pressed,
-                                emacs_frame_id: self
-                                    .multi_windows
-                                    .emacs_frame_for_winit(window_id)
-                                    .unwrap_or(0),
+                                emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                             });
                         } else if state == ElementState::Pressed {
                             tracing::debug!(
@@ -295,20 +293,25 @@ impl RenderApp {
             }
 
             WindowEvent::MouseInput { state, button, .. } => {
-                self.handle_mouse_input(state, button);
+                self.handle_mouse_input(window_id, state, button);
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                self.handle_cursor_moved(position);
+                self.handle_cursor_moved(window_id, position);
             }
 
             WindowEvent::MouseWheel { delta, .. } => {
-                self.handle_mouse_wheel(delta);
+                self.handle_mouse_wheel(window_id, delta);
             }
 
             WindowEvent::RedrawRequested => {
-                self.render();
-                self.frame_dirty = false;
+                if self.frame_windows.is_primary_winit(window_id) {
+                    self.render();
+                    self.frame_dirty = false;
+                } else if let Some(emacs_fid) = self.frame_windows.emacs_frame_for_winit(window_id)
+                {
+                    self.render_frame_window(emacs_fid);
+                }
             }
 
             WindowEvent::ModifiersChanged(mods) => {
@@ -366,10 +369,7 @@ impl RenderApp {
                                 keysym,
                                 modifiers: 0,
                                 pressed: true,
-                                emacs_frame_id: self
-                                    .multi_windows
-                                    .emacs_frame_for_winit(window_id)
-                                    .unwrap_or(0),
+                                emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                             });
                         }
                     }
@@ -399,6 +399,19 @@ impl RenderApp {
 
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let effective_scale = effective_window_scale_factor(scale_factor);
+                if !self.frame_windows.is_primary_winit(window_id) {
+                    if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
+                        tracing::info!(
+                            "Scale factor changed for frame 0x{:x}: previous_effective={} raw={} effective={}",
+                            ws.emacs_frame_id,
+                            ws.scale_factor,
+                            scale_factor,
+                            effective_scale
+                        );
+                        ws.set_scale_factor(scale_factor);
+                    }
+                    return;
+                }
                 tracing::info!(
                     "Scale factor changed: previous_effective={} raw={} effective={}",
                     self.scale_factor,

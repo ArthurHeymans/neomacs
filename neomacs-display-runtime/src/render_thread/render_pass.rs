@@ -1,7 +1,201 @@
+use super::frame_windows::GuiFrameWindowState;
 use super::{RenderApp, surface_readback};
 use crate::core::types::{AnimatedCursor, CursorAnimStyle};
+use neomacs_renderer_wgpu::WgpuRenderer;
 
 impl RenderApp {
+    fn render_secondary_frame_window(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        window_state: &mut GuiFrameWindowState,
+        cursor_visible: bool,
+        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+    ) {
+        let Some(frame) = window_state.current_frame.as_ref() else {
+            return;
+        };
+
+        let output = match window_state.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(output)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
+                window_state
+                    .surface
+                    .configure(renderer.device(), &window_state.surface_config);
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                tracing::warn!(
+                    "Surface validation error for frame 0x{:x}",
+                    window_state.emacs_frame_id
+                );
+                return;
+            }
+        };
+
+        let surface_view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let old_scale_factor = renderer.scale_factor();
+        let old_width = renderer.width();
+        let old_height = renderer.height();
+        renderer.set_scale_factor(window_state.scale_factor as f32);
+        renderer.resize(window_state.width, window_state.height);
+        renderer.render_frame_glyphs(
+            &surface_view,
+            frame,
+            &mut window_state.glyph_atlas,
+            faces,
+            window_state.width,
+            window_state.height,
+            cursor_visible,
+            None,
+            window_state.mouse_pos,
+            bg_gradient,
+        );
+
+        for &child_id in window_state.child_frames.sorted_for_rendering() {
+            if let Some(child_entry) = window_state.child_frames.frames.get(&child_id) {
+                renderer.render_child_frame(
+                    &surface_view,
+                    &child_entry.frame,
+                    child_entry.abs_x,
+                    child_entry.abs_y,
+                    &mut window_state.glyph_atlas,
+                    faces,
+                    window_state.width,
+                    window_state.height,
+                    cursor_visible,
+                    None,
+                    child_frame_corner_radius,
+                    child_frame_shadow_enabled,
+                    child_frame_shadow_layers,
+                    child_frame_shadow_offset,
+                    child_frame_shadow_opacity,
+                );
+            }
+        }
+
+        if let Some(menu_bar) = window_state.menu_bar.as_ref() {
+            if menu_bar.height > 0.0 && !menu_bar.items.is_empty() {
+                renderer.render_menu_bar(
+                    &surface_view,
+                    &menu_bar.items,
+                    menu_bar.height,
+                    menu_bar.fg,
+                    menu_bar.bg,
+                    None,
+                    None,
+                    &mut window_state.glyph_atlas,
+                    window_state.width,
+                    window_state.height,
+                );
+            }
+        }
+
+        if let Some(tool_bar) = window_state.tool_bar.as_ref() {
+            if tool_bar.height > 0.0 && !tool_bar.items.is_empty() {
+                renderer.render_toolbar(
+                    &surface_view,
+                    &tool_bar.items,
+                    frame
+                        .tab_bar
+                        .as_ref()
+                        .map(|tab_bar| tab_bar.y + tab_bar.height)
+                        .unwrap_or_else(|| {
+                            window_state
+                                .menu_bar
+                                .as_ref()
+                                .map_or(0.0, |menu_bar| menu_bar.height)
+                        }),
+                    tool_bar.height,
+                    tool_bar.fg,
+                    tool_bar.bg,
+                    &std::collections::HashMap::new(),
+                    None,
+                    None,
+                    24,
+                    5,
+                    window_state.width,
+                    window_state.height,
+                );
+            }
+        }
+
+        if let Some(compact_bar) = window_state.compact_bar.as_ref() {
+            if compact_bar.height > 0.0
+                && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
+            {
+                renderer.render_compact_bar(
+                    &surface_view,
+                    &compact_bar.menu_items,
+                    &compact_bar.tool_items,
+                    compact_bar.height,
+                    compact_bar.menu_fg,
+                    compact_bar.menu_bg,
+                    compact_bar.tool_fg,
+                    compact_bar.tool_bg,
+                    &std::collections::HashMap::new(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    24,
+                    5,
+                    &mut window_state.glyph_atlas,
+                    window_state.width,
+                    window_state.height,
+                );
+            }
+        }
+
+        output.present();
+        window_state.frame_dirty = false;
+        renderer.set_scale_factor(old_scale_factor);
+        renderer.resize(old_width, old_height);
+    }
+
+    pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) {
+        self.prepare_frame_state_for_render();
+
+        let bg_gradient = if self.effects.bg_gradient.enabled {
+            Some((
+                self.effects.bg_gradient.top,
+                self.effects.bg_gradient.bottom,
+            ))
+        } else {
+            None
+        };
+
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
+            return;
+        };
+
+        Self::render_secondary_frame_window(
+            renderer,
+            &self.faces,
+            window_state,
+            self.cursor.blink_on,
+            bg_gradient,
+            self.child_frame_corner_radius,
+            self.child_frame_shadow_enabled,
+            self.child_frame_shadow_layers,
+            self.child_frame_shadow_offset,
+            self.child_frame_shadow_opacity,
+        );
+    }
+
     pub(super) fn render(&mut self) {
         // Early return checks
         if self.current_frame.is_none()

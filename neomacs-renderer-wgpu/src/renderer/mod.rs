@@ -1894,6 +1894,11 @@ impl WgpuRenderer {
         self.height
     }
 
+    /// Get the current display scale factor.
+    pub fn scale_factor(&self) -> f32 {
+        self.scale_factor
+    }
+
     // =========== Image Loading Methods ===========
 
     // =========== Video Loading Methods ===========

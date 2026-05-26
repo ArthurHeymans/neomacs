@@ -530,6 +530,10 @@ pub enum RenderCommand {
         title: String,
         geometry_hints: GuiFrameGeometryHints,
     },
+    /// Associate the already-created primary OS window with its real Emacs frame ID.
+    AdoptPrimaryFrame {
+        emacs_frame_id: u64,
+    },
     /// Destroy an OS window for a top-level Emacs frame
     DestroyWindow {
         emacs_frame_id: u64,

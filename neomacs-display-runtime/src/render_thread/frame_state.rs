@@ -40,6 +40,18 @@ impl RenderApp {
                 self.faces.entry(*face_id).or_insert_with(|| face.clone());
             }
         }
+        for window_state in self.frame_windows.windows.values() {
+            if let Some(frame) = window_state.current_frame.as_ref() {
+                for (face_id, face) in &frame.faces {
+                    self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                }
+            }
+            for entry in window_state.child_frames.frames.values() {
+                for (face_id, face) in &entry.frame.faces {
+                    self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                }
+            }
+        }
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             if let Some(ref mut atlas) = self.glyph_atlas {

@@ -128,6 +128,7 @@ impl RenderApp {
 
                     // Initialize wgpu with the window
                     self.init_wgpu(event_loop, window.clone());
+                    self.frame_windows.adopt_primary_winit_id(window.id());
 
                     // Enable IME input for CJK and compose support
                     window.set_ime_allowed(true);
@@ -152,9 +153,9 @@ impl RenderApp {
     pub(super) fn handle_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if !self.about_to_wait_seen {
             tracing::info!(
-                "Render thread entered about_to_wait: primary_window_exists={} multi_windows={}",
+                "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
                 self.window.is_some(),
-                self.multi_windows.count()
+                self.frame_windows.count()
             );
             self.about_to_wait_seen = true;
         }
@@ -167,14 +168,14 @@ impl RenderApp {
 
         // Process multi-window creates/destroys
         if let Some(gpu) = &self.gpu {
-            self.multi_windows.process_creates(
+            self.frame_windows.process_creates(
                 event_loop,
                 &gpu.instance,
                 &gpu.device,
                 &gpu.adapter,
             );
         }
-        self.multi_windows.process_destroys();
+        self.frame_windows.process_destroys();
 
         // Get latest frame from Emacs
         self.poll_frame();
@@ -268,6 +269,12 @@ impl RenderApp {
 
         // Request redraw when we have new frame data, cursor blink toggled,
         // or webkit/video content changed
+        for frame_id in self.frame_windows.dirty_windows() {
+            if let Some(state) = self.frame_windows.get(frame_id) {
+                state.window.request_redraw();
+            }
+        }
+
         if self.frame_dirty || has_active_content {
             if let Some(ref renderer) = self.renderer {
                 tracing::debug!(
@@ -292,6 +299,7 @@ impl RenderApp {
         let now = std::time::Instant::now();
         let next_wake = if self.frame_dirty
             || has_active_content
+            || self.frame_windows.any_dirty()
             || self.cursor.animating
             || self.cursor.size_animating
             || self.idle_dim_active
@@ -343,7 +351,7 @@ impl RenderApp {
         drop(self.surface.take());
         self.surface_config = None;
         // Drop multi-window state (secondary surfaces)
-        self.multi_windows.destroy_all();
+        self.frame_windows.destroy_all();
         // Leak the adapter to prevent eglTerminate crash on Wayland.
         // The adapter's Drop triggers eglTerminate → dri2_teardown_wayland which
         // SEGVs if the Wayland connection is already gone. Since we're exiting,

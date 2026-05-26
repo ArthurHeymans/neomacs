@@ -967,6 +967,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 },
                 "failed to update primary window geometry hints",
             )?;
+            self.send_render_command(
+                RenderCommand::AdoptPrimaryFrame {
+                    emacs_frame_id: request.frame_id.0,
+                },
+                "failed to adopt primary GUI frame",
+            )?;
             // The opening GUI frame adopts the already-existing primary host
             // window. Do not push stale Lisp bootstrap dimensions back into
             // that window during adoption; host resize events remain the
