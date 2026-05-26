@@ -31,6 +31,8 @@ pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
 
 #[cfg(windows)]
 pub(crate) fn register_builtin_subrs(ctx: &mut Context) {
+    ctx.defsubr_1("w32-short-file-name", builtin_w32_short_file_name, 1);
+    ctx.defsubr_1("w32-long-file-name", builtin_w32_long_file_name, 1);
     ctx.defsubr_0("w32-get-valid-codepages", builtin_w32_get_valid_codepages);
     ctx.defsubr_0("w32-get-console-codepage", builtin_w32_get_console_codepage);
     ctx.defsubr_1(
@@ -52,6 +54,228 @@ pub(crate) fn register_builtin_subrs(ctx: &mut Context) {
         builtin_w32_get_codepage_charset,
         1,
     );
+}
+
+#[cfg(windows)]
+fn builtin_w32_short_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
+    let expanded = expand_w32_filename(ctx, filename)?;
+    match w32_get_short_filename(&expanded) {
+        Some(mut shortname) => {
+            normalize_filename(&mut shortname, '/');
+            Ok(Value::string(shortname))
+        }
+        None => Ok(Value::NIL),
+    }
+}
+
+#[cfg(windows)]
+fn builtin_w32_long_file_name(ctx: &mut Context, filename: Value) -> EvalResult {
+    let original = expect_string_runtime(&filename)?;
+    let drive_only = original.as_bytes().len() == 2 && original.as_bytes()[1] == b':';
+    let expanded = expand_w32_filename(ctx, filename)?;
+    match w32_get_long_filename(&expanded) {
+        Some(mut longname) => {
+            normalize_filename(&mut longname, '/');
+            if drive_only {
+                let bytes = longname.as_bytes();
+                if bytes.len() == 3 && bytes[1] == b':' && bytes[2] == b'/' {
+                    longname.truncate(2);
+                }
+            }
+            Ok(Value::heap_string(
+                super::builtins::runtime_string_to_lisp_string(&longname, !longname.is_ascii()),
+            ))
+        }
+        None => Ok(Value::NIL),
+    }
+}
+
+#[cfg(windows)]
+fn expand_w32_filename(ctx: &mut Context, filename: Value) -> Result<String, Flow> {
+    let expanded = super::fileio::builtin_expand_file_name(ctx, vec![filename, Value::NIL])?;
+    expect_string_runtime(&expanded)
+}
+
+#[cfg(windows)]
+fn expect_string_runtime(value: &Value) -> Result<String, Flow> {
+    match value.kind() {
+        ValueKind::String => Ok(super::builtins::runtime_string_from_lisp_string(
+            value
+                .as_lisp_string()
+                .expect("ValueKind::String must carry LispString payload"),
+        )),
+        _ => Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), *value],
+        )),
+    }
+}
+
+#[cfg(windows)]
+fn w32_get_short_filename(name: &str) -> Option<String> {
+    use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
+
+    const MAX_PATH_WCHARS: usize = 260;
+
+    let mut dos_name = name.to_owned();
+    normalize_filename(&mut dos_name, '\\');
+    let wide_name = wide_nul(&dos_name);
+    let mut short_name = [0u16; MAX_PATH_WCHARS];
+    let len = unsafe {
+        GetShortPathNameW(
+            wide_name.as_ptr(),
+            short_name.as_mut_ptr(),
+            short_name.len() as u32,
+        )
+    };
+    if len == 0 || len as usize >= short_name.len() {
+        return None;
+    }
+    String::from_utf16(&short_name[..len as usize]).ok()
+}
+
+#[cfg(windows)]
+fn w32_get_long_filename(name: &str) -> Option<String> {
+    let mut full = name.to_owned();
+    normalize_filename(&mut full, '\\');
+
+    let root_len = parse_root_len(&full);
+    let mut out = full.get(..root_len)?.to_owned();
+    let mut pos = root_len;
+
+    while pos < full.len() {
+        let rest = full.get(pos..)?;
+        let next_sep = rest.find('\\').map(|offset| pos + offset);
+        let component_end = next_sep.unwrap_or(full.len());
+        let lookup = full.get(..component_end)?;
+        let basename = w32_get_long_basename(lookup)?;
+        out.push_str(&basename);
+        match next_sep {
+            Some(sep) => {
+                out.push('\\');
+                pos = sep + 1;
+            }
+            None => break,
+        }
+    }
+
+    Some(out)
+}
+
+#[cfg(windows)]
+fn w32_get_long_basename(name: &str) -> Option<String> {
+    use windows_sys::Win32::{
+        Foundation::INVALID_HANDLE_VALUE,
+        Storage::FileSystem::{FindClose, FindFirstFileW, WIN32_FIND_DATAW},
+    };
+
+    if name
+        .bytes()
+        .any(|byte| matches!(byte, b'*' | b'?' | b'|' | b'<' | b'>' | b'"'))
+    {
+        return None;
+    }
+
+    let wide_name = wide_nul(name);
+    let mut find_data = WIN32_FIND_DATAW::default();
+    let handle = unsafe { FindFirstFileW(wide_name.as_ptr(), &mut find_data) };
+    if handle == INVALID_HANDLE_VALUE {
+        return None;
+    }
+    unsafe {
+        FindClose(handle);
+    }
+    let end = find_data
+        .cFileName
+        .iter()
+        .position(|&ch| ch == 0)
+        .unwrap_or(find_data.cFileName.len());
+    String::from_utf16(&find_data.cFileName[..end]).ok()
+}
+
+#[cfg(windows)]
+fn parse_root_len(name: &str) -> usize {
+    let bytes = name.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        let mut len = 2;
+        if bytes.get(2).is_some_and(|byte| is_directory_sep(*byte)) {
+            len += 1;
+        }
+        return len;
+    }
+
+    if bytes.len() >= 2 && is_directory_sep(bytes[0]) && is_directory_sep(bytes[1]) {
+        let mut index = 2;
+        let mut slashes = 2;
+        while index < bytes.len() {
+            if is_directory_sep(bytes[index]) {
+                slashes -= 1;
+                if slashes == 0 {
+                    break;
+                }
+            }
+            index += 1;
+        }
+        if bytes.get(index).is_some_and(|byte| is_directory_sep(*byte)) {
+            index += 1;
+        }
+        return index;
+    }
+
+    0
+}
+
+#[cfg(windows)]
+fn normalize_filename(name: &mut String, path_sep: char) {
+    let mut out = String::with_capacity(name.len());
+    let mut chars = name.chars();
+    if let (Some(first), Some(second)) = (chars.next(), chars.next()) {
+        if second == ':' && first.is_ascii_uppercase() {
+            out.push(first.to_ascii_lowercase());
+        } else {
+            out.push(if is_directory_sep_char(first) {
+                path_sep
+            } else {
+                first
+            });
+        }
+        out.push(if is_directory_sep_char(second) {
+            path_sep
+        } else {
+            second
+        });
+        for ch in chars {
+            out.push(if is_directory_sep_char(ch) {
+                path_sep
+            } else {
+                ch
+            });
+        }
+    } else {
+        for ch in name.chars() {
+            out.push(if is_directory_sep_char(ch) {
+                path_sep
+            } else {
+                ch
+            });
+        }
+    }
+    *name = out;
+}
+
+#[cfg(windows)]
+fn is_directory_sep(byte: u8) -> bool {
+    byte == b'/' || byte == b'\\'
+}
+
+#[cfg(windows)]
+fn is_directory_sep_char(ch: char) -> bool {
+    ch == '/' || ch == '\\'
+}
+
+#[cfg(windows)]
+fn wide_nul(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 #[cfg(windows)]
