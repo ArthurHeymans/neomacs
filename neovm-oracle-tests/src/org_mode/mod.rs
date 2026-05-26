@@ -755,3 +755,111 @@ fn org_table_transpose_after_alignment_combo() {
             (buffer-substring-no-properties (point-min) (point-max))))))"#,
     );
 }
+
+#[test]
+fn org_src_edit_buffer_writeback_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-src)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+begin_src emacs-lisp\n")
+    (insert "(+ 1 2)\n")
+    (insert "#+end_src\n")
+    (goto-char (point-min))
+    (search-forward "(+ 1 2)")
+    (org-edit-src-code)
+    (erase-buffer)
+    (insert "(+ 3 4)\n")
+    (insert "(message \"done\")\n")
+    (org-edit-src-exit)
+    (buffer-substring-no-properties (point-min) (point-max))))"##,
+    );
+}
+
+#[test]
+fn org_inlinetask_insert_demote_and_detect_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-inlinetask)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-inlinetask-min-level 4))
+      (org-inlinetask-insert-task t)
+      (insert "Inline body\n")
+      (org-inlinetask-goto-beginning)
+      (org-inlinetask-demote)
+      (org-inlinetask-goto-beginning)
+      (list (org-inlinetask-at-task-p)
+            (org-inlinetask-get-task-level)
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_entities_lookup_latex_html_utf8_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-entities)
+  (mapcar (lambda (name)
+            (let ((entry (assoc name org-entities)))
+              (list name (nth 1 entry) (nth 3 entry) (nth 6 entry))))
+          '("alpha" "nbsp" "copy" "rightarrow")))"#,
+    );
+}
+
+#[test]
+fn org_ascii_export_links_code_and_table_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Plain\n")
+    (insert "* Head\n")
+    (insert "Paragraph with [[https://example.org][Example]] and =code=.\n")
+    (insert "| A | B |\n")
+    (insert "| 1 | 2 |\n")
+    (let ((org-export-with-toc nil)
+          (org-ascii-charset 'utf-8))
+      (org-export-as 'ascii nil nil t nil))))"##,
+    );
+}
+
+#[test]
+fn org_fold_hide_show_subtree_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Parent\nbody\n** Child\nchild\n* Next\n")
+    (goto-char (point-min))
+    (org-fold-hide-subtree)
+    (let ((hidden-after-hide
+           (invisible-p (save-excursion (search-forward "body") (point)))))
+      (org-fold-show-subtree)
+      (let ((hidden-after-show
+             (invisible-p (save-excursion
+                            (goto-char (point-min))
+                            (search-forward "body")
+                            (point)))))
+        (list hidden-after-hide
+              hidden-after-show
+              (buffer-substring-no-properties (point-min) (point-max)))))))"#,
+    );
+}
