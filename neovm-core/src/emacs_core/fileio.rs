@@ -420,7 +420,11 @@ fn clean_path(path: &str) -> String {
 /// Like Emacs `file-name-directory`: includes the trailing slash.
 pub fn file_name_directory(filename: &str) -> Option<String> {
     // Emacs: if the filename ends with /, the whole thing is the directory part
-    if filename.ends_with('/') {
+    if filename
+        .as_bytes()
+        .last()
+        .is_some_and(|&byte| file_name_directory_separator_byte(byte))
+    {
         return if filename.is_empty() {
             None
         } else {
@@ -428,17 +432,27 @@ pub fn file_name_directory(filename: &str) -> Option<String> {
         };
     }
     // Find the last /
-    filename.rfind('/').map(|pos| filename[..=pos].to_string())
+    filename
+        .bytes()
+        .rposition(file_name_directory_separator_byte)
+        .map(|pos| filename[..=pos].to_string())
 }
 
 /// Return the non-directory part of FILENAME.
 /// Like Emacs `file-name-nondirectory`.
 pub fn file_name_nondirectory(filename: &str) -> String {
     // Emacs: if the filename ends with /, return ""
-    if filename.ends_with('/') {
+    if filename
+        .as_bytes()
+        .last()
+        .is_some_and(|&byte| file_name_directory_separator_byte(byte))
+    {
         return String::new();
     }
-    match filename.rfind('/') {
+    match filename
+        .bytes()
+        .rposition(file_name_directory_separator_byte)
+    {
         Some(pos) => filename[pos + 1..].to_string(),
         None => filename.to_string(),
     }
@@ -562,7 +576,20 @@ pub fn file_name_absolute_p(filename: &str) -> bool {
 
 /// Return true if NAME is a directory name (ends with a directory separator).
 pub fn directory_name_p(name: &str) -> bool {
-    name.ends_with('/')
+    name.as_bytes()
+        .last()
+        .is_some_and(|&byte| file_name_directory_separator_byte(byte))
+}
+
+fn file_name_directory_separator_byte(byte: u8) -> bool {
+    #[cfg(windows)]
+    {
+        byte == b'/' || byte == b'\\'
+    }
+    #[cfg(not(windows))]
+    {
+        byte == b'/'
+    }
 }
 
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1450,13 +1477,22 @@ fn lisp_file_name_directory(
     filename: &crate::heap_types::LispString,
 ) -> Option<crate::heap_types::LispString> {
     let bytes = filename.as_bytes();
-    if bytes.ends_with(b"/") {
-        return (!bytes.is_empty()).then(|| filename.clone());
+    if bytes
+        .last()
+        .is_some_and(|&byte| file_name_directory_separator_byte(byte))
+    {
+        return (!bytes.is_empty())
+            .then(|| lisp_file_name_normalize_directory_separators(filename));
     }
     bytes
         .iter()
-        .rposition(|&byte| byte == b'/')
-        .map(|pos| file_name_lisp_from_bytes(bytes[..=pos].to_vec(), filename.is_multibyte()))
+        .rposition(|&byte| file_name_directory_separator_byte(byte))
+        .map(|pos| {
+            lisp_file_name_normalize_directory_separators(&file_name_lisp_from_bytes(
+                bytes[..=pos].to_vec(),
+                filename.is_multibyte(),
+            ))
+        })
 }
 
 #[cfg(windows)]
@@ -1486,10 +1522,16 @@ fn lisp_file_name_nondirectory(
     filename: &crate::heap_types::LispString,
 ) -> crate::heap_types::LispString {
     let bytes = filename.as_bytes();
-    if bytes.ends_with(b"/") {
+    if bytes
+        .last()
+        .is_some_and(|&byte| file_name_directory_separator_byte(byte))
+    {
         return file_name_lisp_from_bytes(Vec::new(), filename.is_multibyte());
     }
-    match bytes.iter().rposition(|&byte| byte == b'/') {
+    match bytes
+        .iter()
+        .rposition(|&byte| file_name_directory_separator_byte(byte))
+    {
         Some(pos) => file_name_lisp_from_bytes(bytes[pos + 1..].to_vec(), filename.is_multibyte()),
         None => filename.clone(),
     }

@@ -358,6 +358,13 @@ fn test_file_name_directory() {
         file_name_directory("/home/user/dir/"),
         Some("/home/user/dir/".to_string())
     );
+    #[cfg(windows)]
+    {
+        assert_eq!(
+            file_name_directory(r"D:\a\neomacs\lisp\international\uni-titlecase.el"),
+            Some(r"D:\a\neomacs\lisp\international\".to_string())
+        );
+    }
 }
 
 #[test]
@@ -366,6 +373,14 @@ fn test_file_name_nondirectory() {
     assert_eq!(file_name_nondirectory("/home/user/test.txt"), "test.txt");
     assert_eq!(file_name_nondirectory("test.txt"), "test.txt");
     assert_eq!(file_name_nondirectory("/home/user/"), "");
+    #[cfg(windows)]
+    {
+        assert_eq!(
+            file_name_nondirectory(r"D:\a\neomacs\lisp\international\uni-titlecase.el"),
+            "uni-titlecase.el"
+        );
+        assert_eq!(file_name_nondirectory(r"D:\a\neomacs\"), "");
+    }
 }
 
 #[test]
@@ -437,6 +452,11 @@ fn test_directory_name_p() {
     assert!(!directory_name_p("/tmp"));
     assert!(!directory_name_p("foo"));
     assert!(!directory_name_p(""));
+    #[cfg(windows)]
+    {
+        assert!(directory_name_p(r"D:\a\"));
+        assert!(!directory_name_p(r"D:\a"));
+    }
 }
 
 #[test]
@@ -2481,8 +2501,33 @@ fn test_builtin_file_name_ops() {
     let result = builtin_file_name_directory(&mut ev, vec![Value::string("/home/user/test.el")]);
     assert_eq!(result.unwrap().as_utf8_str(), Some("/home/user/"));
 
+    #[cfg(windows)]
+    {
+        let result = builtin_file_name_directory(
+            &mut ev,
+            vec![Value::string(
+                r"D:\a\neomacs\neomacs\lisp\international\uni-titlecase.el",
+            )],
+        );
+        assert_eq!(
+            result.unwrap().as_utf8_str(),
+            Some("D:/a/neomacs/neomacs/lisp/international/")
+        );
+    }
+
     let result = builtin_file_name_nondirectory(&mut ev, vec![Value::string("/home/user/test.el")]);
     assert_eq!(result.unwrap().as_utf8_str(), Some("test.el"));
+
+    #[cfg(windows)]
+    {
+        let result = builtin_file_name_nondirectory(
+            &mut ev,
+            vec![Value::string(
+                r"D:\a\neomacs\neomacs\lisp\international\uni-titlecase.el",
+            )],
+        );
+        assert_eq!(result.unwrap().as_utf8_str(), Some("uni-titlecase.el"));
+    }
 
     let result = builtin_file_name_as_directory(&mut ev, vec![Value::string("/home/user")]);
     assert_eq!(result.unwrap().as_utf8_str(), Some("/home/user/"));
