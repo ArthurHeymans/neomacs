@@ -1011,3 +1011,162 @@ fn org_custom_link_follow_and_export_combo() {
             (org-export-string-as "[[ticket:ABC-123][Bug]]" 'html t)))))"#,
     );
 }
+
+#[test]
+fn org_timer_conversion_and_region_shift_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-timer)
+  (with-temp-buffer
+    (insert "00:00:10\n01:02:03\n")
+    (org-timer-change-times-in-region (point-min) (point-max) "0:00:05")
+    (list (org-timer-hms-to-secs "1:02:03")
+          (org-timer-secs-to-hms 3723)
+          (mapcar (lambda (s) (org-timer-fix-incomplete s))
+                  '("5" "1:02" "1:02:03"))
+          (buffer-substring-no-properties (point-min) (point-max)))))"#,
+    );
+}
+
+#[test]
+fn org_protocol_uri_query_parameter_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-protocol)
+  (list
+   (org-protocol-sanitize-uri
+    "org-protocol://capture?template=t&url=https%3A%2F%2Fexample.org%2Fa%3Fb%3D1&title=Hello%20World")
+   (org-protocol-split-data "capture://x/y/z" t)
+   (org-protocol-convert-query-to-plist
+    "template=t&url=https%3A%2F%2Fexample.org&title=Hello%20World")
+   (org-protocol-parse-parameters
+    "template=t&url=https%3A%2F%2Fexample.org&title=Hello%20World"
+    nil
+    '(:template :url :title))))"#,
+    );
+}
+
+#[test]
+fn org_feed_rss_atom_parse_entry_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let ((rss-buffer (generate-new-buffer " *rss*"))
+        (atom-buffer (generate-new-buffer " *atom*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer rss-buffer
+            (insert "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Feed</title><item><guid>one-guid</guid><title>One</title><link>https://example.org/1</link><description>Body</description><pubDate>Wed, 27 May 2026 10:00:00 GMT</pubDate></item></channel></rss>"))
+          (with-current-buffer atom-buffer
+            (insert "<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><title>Atom</title><entry><title>Two</title><id>tag:example.org,2026:2</id><updated>2026-05-27T11:00:00Z</updated><link href=\"https://example.org/2\"/><content type=\"text\">Atom body</content></entry></feed>"))
+          (list (mapcar #'org-feed-parse-rss-entry
+                        (org-feed-parse-rss-feed rss-buffer))
+                (mapcar #'org-feed-parse-atom-entry
+                        (org-feed-parse-atom-feed atom-buffer))))
+      (kill-buffer rss-buffer)
+      (kill-buffer atom-buffer))))"##,
+    );
+}
+
+#[test]
+fn org_mobile_escape_body_tag_compare_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-mobile)
+  (list (org-mobile-escape-olp "A:B/C")
+        (org-mobile-tags-same-p '("a" "b") '("b" "a"))
+        (org-mobile-tags-same-p '("a" "b") '("a" "c"))
+        (org-mobile-bodies-same-p "  A \n B  " "A\nB")
+        (org-mobile-bodies-same-p "A\nB" "A\n C")))"#,
+    );
+}
+
+#[test]
+fn org_plot_collect_options_table_metadata_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-plot)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+PLOT: title:\"Demo Plot\" ind:1 deps:(2 3) type:2d with:lines set:\"grid\"\n")
+    (insert "| X | A | B |\n")
+    (insert "|---+---+---|\n")
+    (insert "| 1 | 2 | 3 |\n")
+    (goto-char (point-min))
+    (let ((opts (org-plot/collect-options '(:include t))))
+      (list (plist-get opts :title)
+            (plist-get opts :ind)
+            (plist-get opts :deps)
+            (plist-get opts :type)
+            (plist-get opts :with)
+            (plist-get opts :set)
+            (plist-get opts :include)))))"##,
+    );
+}
+
+#[test]
+fn org_latex_export_markup_math_table_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-latex)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Latex Probe\n")
+    (insert "* Head\n")
+    (insert "Text with *bold*, /italic/, =code=, [[https://example.org][Example]], and $x^2$.\n")
+    (insert "| A | B |\n")
+    (insert "| 1 | 2 |\n")
+    (let* ((org-export-with-toc nil)
+           (latex (org-export-as 'latex nil nil t nil)))
+      (list (not (null (string-match-p "\\\\section" latex)))
+            (not (null (string-match-p "\\\\textbf{bold}" latex)))
+            (not (null (string-match-p "\\\\emph{italic}" latex)))
+            (not (null (string-match-p "\\\\texttt{code}" latex)))
+            (not (null (string-match-p "\\\\href{https://example.org}{Example}" latex)))
+            (not (null (string-match-p "tabular" latex)))
+            (replace-regexp-in-string
+             "\\\\label{sec:org[[:alnum:]]+}"
+             "\\\\label{sec:org-id}"
+             latex)))))"##,
+    );
+}
+
+#[test]
+fn org_org_export_todo_schedule_link_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Org Export\n")
+    (insert "* TODO Head :tag:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed>\n")
+    (insert "Body with *bold* and [[https://example.org][link]].\n")
+    (let* ((org-export-with-toc nil)
+           (out (org-export-as 'org nil nil t nil)))
+      (list (not (null (string-match-p "#\\+TITLE: Org Export" out)))
+            (not (null (string-match-p "\\* TODO Head" out)))
+            (not (null (string-match-p "SCHEDULED:" out)))
+            (not (null (string-match-p "\\[\\[https://example.org\\]\\[link\\]\\]" out)))
+            out))))"##,
+    );
+}
