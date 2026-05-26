@@ -2,6 +2,7 @@
 
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{RenderCommand, ToolBarItem};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
 const GNU_TOOL_BAR_BASE_PADDING: f32 = 5.0;
@@ -78,6 +79,13 @@ impl RenderApp {
                     self.cursor.blink_on = true;
                     self.frame_dirty = true;
                 }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.cursor.copy_config_from(&self.cursor);
+                    if !enabled {
+                        window_state.cursor.blink_on = true;
+                        window_state.frame_dirty = true;
+                    }
+                }
                 Ok(())
             }
             RenderCommand::SetCursorAnimation { enabled, speed } => {
@@ -86,6 +94,10 @@ impl RenderApp {
                 self.cursor.anim_speed = speed;
                 if !enabled {
                     self.cursor.animating = false;
+                }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.cursor.copy_config_from(&self.cursor);
+                    window_state.frame_dirty = true;
                 }
                 Ok(())
             }
@@ -121,6 +133,10 @@ impl RenderApp {
                 self.transitions.policy = transition_policy;
                 if !cursor_enabled {
                     self.cursor.animating = false;
+                }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.cursor.copy_config_from(&self.cursor);
+                    window_state.frame_dirty = true;
                 }
                 if !self.transitions.policy.crossfade_enabled {
                     self.transitions.crossfades.clear();
@@ -432,6 +448,10 @@ impl RenderApp {
                 if !enabled {
                     self.cursor.size_animating = false;
                 }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.cursor.copy_config_from(&self.cursor);
+                    window_state.frame_dirty = true;
+                }
                 self.frame_dirty = true;
                 Ok(())
             }
@@ -442,6 +462,44 @@ impl RenderApp {
             RenderCommand::RemoveChildFrame { frame_id } => {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
                 self.child_frames.remove_frame(frame_id);
+                if self
+                    .cursor
+                    .target_cloned()
+                    .is_some_and(|target| target.frame_id == frame_id)
+                {
+                    self.cursor.clear_target();
+                    self.last_ime_cursor_area = None;
+                    self.ime_preedit_active = false;
+                    self.ime_preedit_text.clear();
+                    if let Some(window) = self.window.as_ref() {
+                        window.set_ime_cursor_area(
+                            PhysicalPosition::new(0.0, 0.0),
+                            PhysicalSize::new(1.0, 1.0),
+                        );
+                    }
+                }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    let removed = window_state.child_frames.frames.contains_key(&frame_id);
+                    window_state.child_frames.remove_frame(frame_id);
+                    if removed {
+                        window_state.frame_dirty = true;
+                    }
+                    if window_state
+                        .cursor
+                        .target_cloned()
+                        .is_some_and(|target| target.frame_id == frame_id)
+                    {
+                        window_state.cursor.clear_target();
+                        window_state.last_ime_cursor_area = None;
+                        window_state.ime_preedit_active = false;
+                        window_state.ime_preedit_text.clear();
+                        window_state.window.set_ime_cursor_area(
+                            PhysicalPosition::new(0.0, 0.0),
+                            PhysicalSize::new(1.0, 1.0),
+                        );
+                        window_state.frame_dirty = true;
+                    }
+                }
                 self.frame_dirty = true;
                 Ok(())
             }

@@ -106,6 +106,11 @@ impl RenderApp {
                         self.ime_preedit_active
                     );
                 }
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let secondary_ime_preedit_active = self
+                    .frame_windows
+                    .get_by_winit(window_id)
+                    .is_some_and(|ws| ws.ime_preedit_active);
                 if self.popup_menu.is_some() && state == ElementState::Pressed {
                     match logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
@@ -189,7 +194,9 @@ impl RenderApp {
                         }
                         _ => {}
                     }
-                } else if self.ime_preedit_active {
+                } else if (is_primary && self.ime_preedit_active)
+                    || (!is_primary && secondary_ime_preedit_active)
+                {
                     tracing::debug!(
                         "IME preedit active, suppressing KeyboardInput: {:?}",
                         logical_key
@@ -261,10 +268,20 @@ impl RenderApp {
                                 self.modifiers,
                                 state == ElementState::Pressed
                             );
-                            if state == ElementState::Pressed && !self.mouse_hidden_for_typing {
-                                if let Some(ref window) = self.window {
-                                    window.set_cursor_visible(false);
-                                    self.mouse_hidden_for_typing = true;
+                            if state == ElementState::Pressed {
+                                if is_primary {
+                                    if !self.mouse_hidden_for_typing
+                                        && let Some(ref window) = self.window
+                                    {
+                                        window.set_cursor_visible(false);
+                                        self.mouse_hidden_for_typing = true;
+                                    }
+                                } else if let Some(window_state) =
+                                    self.frame_windows.get_by_winit_mut(window_id)
+                                    && !window_state.mouse_hidden_for_typing
+                                {
+                                    window_state.window.set_cursor_visible(false);
+                                    window_state.mouse_hidden_for_typing = true;
                                 }
                             }
                             if self.effects.typing_speed.enabled && state == ElementState::Pressed {
@@ -343,25 +360,57 @@ impl RenderApp {
 
             WindowEvent::Ime(ime_event) => match ime_event {
                 winit::event::Ime::Enabled => {
-                    self.ime_enabled = true;
-                    self.last_ime_cursor_area = None;
-                    if let Some(target) = self.cursor.target.clone() {
-                        self.update_ime_cursor_area_if_needed(&target);
+                    if self.frame_windows.is_primary_winit(window_id) {
+                        self.ime_enabled = true;
+                        self.last_ime_cursor_area = None;
+                        if let Some(target) = self.cursor.target_cloned() {
+                            self.update_ime_cursor_area_if_needed(&target);
+                        }
+                    } else if let Some(window_state) =
+                        self.frame_windows.get_by_winit_mut(window_id)
+                    {
+                        window_state.ime_enabled = true;
+                        window_state.last_ime_cursor_area = None;
+                        if let Some(target) = window_state.cursor.target_cloned() {
+                            Self::update_frame_window_ime_cursor_area_if_needed(
+                                window_state,
+                                &target,
+                            );
+                        }
                     }
                     tracing::info!("IME enabled");
                 }
                 winit::event::Ime::Disabled => {
-                    self.ime_enabled = false;
-                    self.ime_preedit_active = false;
-                    self.ime_preedit_text.clear();
-                    self.last_ime_cursor_area = None;
+                    if self.frame_windows.is_primary_winit(window_id) {
+                        self.ime_enabled = false;
+                        self.ime_preedit_active = false;
+                        self.ime_preedit_text.clear();
+                        self.last_ime_cursor_area = None;
+                        self.frame_dirty = true;
+                    } else if let Some(window_state) =
+                        self.frame_windows.get_by_winit_mut(window_id)
+                    {
+                        window_state.ime_enabled = false;
+                        window_state.ime_preedit_active = false;
+                        window_state.ime_preedit_text.clear();
+                        window_state.last_ime_cursor_area = None;
+                        window_state.frame_dirty = true;
+                    }
                     tracing::info!("IME disabled");
                 }
                 winit::event::Ime::Commit(text) => {
                     tracing::debug!("IME Commit: '{}'", text);
-                    self.ime_preedit_active = false;
-                    self.ime_preedit_text.clear();
-                    self.frame_dirty = true;
+                    if self.frame_windows.is_primary_winit(window_id) {
+                        self.ime_preedit_active = false;
+                        self.ime_preedit_text.clear();
+                        self.frame_dirty = true;
+                    } else if let Some(window_state) =
+                        self.frame_windows.get_by_winit_mut(window_id)
+                    {
+                        window_state.ime_preedit_active = false;
+                        window_state.ime_preedit_text.clear();
+                        window_state.frame_dirty = true;
+                    }
                     for ch in text.chars() {
                         let keysym = ch as u32;
                         if keysym != 0 {
@@ -376,13 +425,26 @@ impl RenderApp {
                 }
                 winit::event::Ime::Preedit(text, cursor_range) => {
                     tracing::debug!("IME Preedit: '{}' cursor: {:?}", text, cursor_range);
-                    self.ime_preedit_active = !text.is_empty();
-                    self.ime_preedit_text = text.clone();
-
-                    if let Some(target) = self.cursor.target.clone() {
-                        self.update_ime_cursor_area_if_needed(&target);
+                    if self.frame_windows.is_primary_winit(window_id) {
+                        self.ime_preedit_active = !text.is_empty();
+                        self.ime_preedit_text = text.clone();
+                        if let Some(target) = self.cursor.target_cloned() {
+                            self.update_ime_cursor_area_if_needed(&target);
+                        }
+                        self.frame_dirty = true;
+                    } else if let Some(window_state) =
+                        self.frame_windows.get_by_winit_mut(window_id)
+                    {
+                        window_state.ime_preedit_active = !text.is_empty();
+                        window_state.ime_preedit_text = text.clone();
+                        if let Some(target) = window_state.cursor.target_cloned() {
+                            Self::update_frame_window_ime_cursor_area_if_needed(
+                                window_state,
+                                &target,
+                            );
+                        }
+                        window_state.frame_dirty = true;
                     }
-                    self.frame_dirty = true;
                 }
             },
 

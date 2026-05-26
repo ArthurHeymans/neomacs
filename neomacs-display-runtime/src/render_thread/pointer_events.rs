@@ -1093,6 +1093,11 @@ impl RenderApp {
                     window_state.frame_dirty = true;
                 }
 
+                if window_state.mouse_hidden_for_typing {
+                    window_state.window.set_cursor_visible(true);
+                    window_state.mouse_hidden_for_typing = false;
+                }
+
                 let (ev_x, ev_y, target_fid) =
                     Self::pointer_target_for_frame_window(window_state, lx, ly);
                 if event.is_none() {

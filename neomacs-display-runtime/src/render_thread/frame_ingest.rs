@@ -1,10 +1,92 @@
 //! Frame ingestion and cursor target extraction.
 
 use super::RenderApp;
+use super::frame_windows::GuiFrameWindowState;
 use crate::render_thread::cursor::CursorTarget;
+use neomacs_display_protocol::glyph_matrix::{
+    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
+};
 use std::collections::HashSet;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 impl RenderApp {
+    fn ingest_frame_window_root_frame(
+        window_state: &mut GuiFrameWindowState,
+        frame: crate::core::frame_glyphs::FrameGlyphBuffer,
+        menu_bar: Option<GuiMenuBarState>,
+        tool_bar: Option<GuiToolBarState>,
+        compact_bar: Option<GuiCompactBarState>,
+        cursor_config: &crate::render_thread::cursor::CursorState,
+    ) {
+        if menu_bar.is_none() {
+            window_state.chrome_interaction.clear_menu_bar();
+        }
+        if tool_bar.is_none() {
+            window_state.chrome_interaction.clear_toolbar();
+        }
+        if compact_bar.is_none() {
+            window_state.chrome_interaction.clear_compact_bar();
+        }
+        if frame.tab_bar.is_none() {
+            window_state.chrome_interaction.clear_tab_bar();
+        }
+
+        window_state.cursor.reset_blink();
+
+        window_state.menu_bar = menu_bar;
+        window_state.tool_bar = tool_bar;
+        window_state.compact_bar = compact_bar;
+        window_state.current_frame = Some(frame);
+        Self::sync_frame_window_cursor(window_state, cursor_config);
+        window_state.frame_dirty = true;
+    }
+
+    fn sync_frame_window_cursor(
+        window_state: &mut GuiFrameWindowState,
+        cursor_config: &crate::render_thread::cursor::CursorState,
+    ) {
+        let mut active_cursor = window_state.current_frame.as_ref().and_then(|frame| {
+            crate::render_thread::frame_windows::GuiFrameWindowManager::cursor_target_for_frame(
+                window_state.emacs_frame_id,
+                frame,
+            )
+        });
+
+        if active_cursor.is_none() {
+            for (_, entry) in &window_state.child_frames.frames {
+                if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
+                    active_cursor = Some(CursorTarget {
+                        window_id: cursor.window_id,
+                        x: cursor.x,
+                        y: cursor.y,
+                        width: cursor.width,
+                        height: cursor.height,
+                        style: cursor.style,
+                        color: cursor.color,
+                        frame_id: entry.frame_id,
+                    });
+                    break;
+                }
+            }
+        }
+
+        window_state.cursor.copy_config_from(cursor_config);
+        if let Some(new_target) = active_cursor {
+            let (_, target_moved) = window_state.cursor.set_target(new_target);
+            if target_moved {
+                window_state.frame_dirty = true;
+            }
+        } else {
+            window_state.cursor.clear_target();
+            window_state.last_ime_cursor_area = None;
+            window_state.ime_preedit_active = false;
+            window_state.ime_preedit_text.clear();
+            window_state
+                .window
+                .set_ime_cursor_area(PhysicalPosition::new(0.0, 0.0), PhysicalSize::new(1.0, 1.0));
+        }
+    }
+
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
         self.child_frames.tick();
@@ -157,6 +239,34 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
+            if frame_id != 0 && parent_id == 0 {
+                if let Some(window_state) = self.frame_windows.get_mut(frame_id) {
+                    Self::ingest_frame_window_root_frame(
+                        window_state,
+                        frame,
+                        gui_menu_bar,
+                        gui_tool_bar,
+                        gui_compact_bar,
+                        &self.cursor,
+                    );
+                    if let Some(target) = window_state.cursor.target_cloned() {
+                        Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
+                    }
+                    continue;
+                }
+            }
+            if parent_id != 0 {
+                if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
+                    window_state.child_frames.update_frame(frame);
+                    Self::sync_frame_window_cursor(window_state, &self.cursor);
+                    window_state.frame_dirty = true;
+                    if let Some(target) = window_state.cursor.target_cloned() {
+                        Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
+                    }
+                    continue;
+                }
+            }
+
             if frame_id != 0 && parent_id == 0 && self.frame_windows.windows.contains_key(&frame_id)
             {
                 self.frame_windows
@@ -284,6 +394,17 @@ impl RenderApp {
             }
 
             self.update_ime_cursor_area_if_needed(&new_target);
+        } else {
+            self.cursor.clear_target();
+            self.last_ime_cursor_area = None;
+            self.ime_preedit_active = false;
+            self.ime_preedit_text.clear();
+            if let Some(window) = self.window.as_ref() {
+                window.set_ime_cursor_area(
+                    PhysicalPosition::new(0.0, 0.0),
+                    PhysicalSize::new(1.0, 1.0),
+                );
+            }
         }
 
         let mut live_visual_cursor_ids = HashSet::new();

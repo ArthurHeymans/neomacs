@@ -187,10 +187,20 @@ impl RenderApp {
         if self.tick_cursor_blink() {
             self.frame_dirty = true;
         }
+        for window_state in self.frame_windows.windows.values_mut() {
+            if Self::tick_frame_window_cursor_blink(window_state, std::time::Instant::now()) {
+                window_state.frame_dirty = true;
+            }
+        }
 
         // Tick cursor animation
         if self.cursor.tick_animation() {
             self.frame_dirty = true;
+        }
+        for window_state in self.frame_windows.windows.values_mut() {
+            if window_state.cursor.tick_animation() {
+                window_state.frame_dirty = true;
+            }
         }
         for cursor in self.visual_cursors.values_mut() {
             if cursor.tick_animation() {
@@ -201,6 +211,11 @@ impl RenderApp {
         // Tick cursor size transition (runs after position animation, overrides w/h)
         if self.cursor.tick_size_animation() {
             self.frame_dirty = true;
+        }
+        for window_state in self.frame_windows.windows.values_mut() {
+            if window_state.cursor.tick_size_animation() {
+                window_state.frame_dirty = true;
+            }
         }
         for cursor in self.visual_cursors.values_mut() {
             if cursor.tick_size_animation() {
@@ -302,14 +317,19 @@ impl RenderApp {
             || self.frame_windows.any_dirty()
             || self.cursor.animating
             || self.cursor.size_animating
+            || self
+                .frame_windows
+                .windows
+                .values()
+                .any(|ws| ws.cursor.is_animating())
             || self.idle_dim_active
             || self.transitions.has_active()
         {
             // Active rendering: cap at ~240fps to avoid spinning
             now + std::time::Duration::from_millis(4)
-        } else if self.cursor.blink_enabled {
+        } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
             // Idle with cursor blink: wake at next toggle time
-            self.cursor.last_blink_toggle + self.cursor.blink_interval
+            next_blink
         } else if self.poll_when_idle {
             // Compatibility mode for legacy RenderThread callers that do not
             // own a winit EventLoopProxy and therefore cannot wake this loop

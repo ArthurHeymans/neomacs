@@ -13,8 +13,10 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 use super::child_frames::ChildFrameManager;
+use super::cursor::{CursorState, CursorTarget};
 use super::state::{
-    GuiChromeInteractionState, effective_window_scale_factor, window_size_from_emacs_pixels,
+    GuiChromeInteractionState, ImeCursorArea, effective_window_scale_factor,
+    window_size_from_emacs_pixels,
 };
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
@@ -54,6 +56,10 @@ pub(crate) struct GuiFrameWindowState {
     pub frame_dirty: bool,
     /// Last known pointer position in this frame's logical coordinates.
     pub mouse_pos: (f32, f32),
+    /// Text cursor animation and blink state for this frame window.
+    pub(super) cursor: CursorState,
+    /// Whether this window's native pointer cursor is hidden during typing.
+    pub mouse_hidden_for_typing: bool,
     /// Window title.
     pub title: String,
     /// GUI menu bar snapshot for this frame, if visible.
@@ -70,6 +76,14 @@ pub(crate) struct GuiFrameWindowState {
     pub tooltip: Option<TooltipState>,
     /// Visual bell flash start time for this frame window.
     pub visual_bell_start: Option<Instant>,
+    /// Whether native IME composition is active in this frame window.
+    pub ime_enabled: bool,
+    /// Whether an IME preedit overlay is active in this frame window.
+    pub ime_preedit_active: bool,
+    /// Current IME preedit text for this frame window.
+    pub ime_preedit_text: String,
+    /// Last native IME cursor rectangle sent to this frame window.
+    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
     /// Renderer transient effects owned by this frame window.
     pub transient_effects: RendererTransientEffects,
     /// Floating WebKit overlays rendered on this frame window.
@@ -139,6 +153,22 @@ impl GuiFrameWindowManager {
             pending_creates: Vec::new(),
             pending_destroys: Vec::new(),
         }
+    }
+
+    pub(super) fn cursor_target_for_frame(
+        emacs_frame_id: u64,
+        frame: &FrameGlyphBuffer,
+    ) -> Option<CursorTarget> {
+        frame.phys_cursor.as_ref().map(|cursor| CursorTarget {
+            window_id: cursor.window_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            style: cursor.style,
+            color: cursor.color,
+            frame_id: emacs_frame_id,
+        })
     }
 
     pub fn adopt_primary_frame_id(&mut self, emacs_frame_id: u64) {
@@ -305,6 +335,8 @@ impl GuiFrameWindowManager {
                             ),
                             frame_dirty: false,
                             mouse_pos: (0.0, 0.0),
+                            cursor: CursorState::default(),
+                            mouse_hidden_for_typing: false,
                             title: req.title,
                             menu_bar: None,
                             tool_bar: None,
@@ -313,6 +345,10 @@ impl GuiFrameWindowManager {
                             popup_menu: None,
                             tooltip: None,
                             visual_bell_start: None,
+                            ime_enabled: false,
+                            ime_preedit_active: false,
+                            ime_preedit_text: String::new(),
+                            last_ime_cursor_area: None,
                             transient_effects: RendererTransientEffects::default(),
                             #[cfg(feature = "wpe-webkit")]
                             floating_webkits: Vec::new(),

@@ -2,8 +2,8 @@
 
 use crate::core::frame_glyphs::CursorStyle;
 use crate::core::types::{
-    Color, CursorAnimStyle, ease_in_out_cubic, ease_linear, ease_out_cubic, ease_out_expo,
-    ease_out_quad,
+    AnimatedCursor, Color, CursorAnimStyle, ease_in_out_cubic, ease_linear, ease_out_cubic,
+    ease_out_expo, ease_out_quad,
 };
 
 /// Target position/style for cursor animation
@@ -136,6 +136,24 @@ impl Default for CursorState {
 }
 
 impl CursorState {
+    pub(super) fn copy_config_from(&mut self, source: &CursorState) {
+        self.blink_enabled = source.blink_enabled;
+        self.blink_interval = source.blink_interval;
+        self.anim_enabled = source.anim_enabled;
+        self.anim_speed = source.anim_speed;
+        self.anim_style = source.anim_style;
+        self.anim_duration = source.anim_duration;
+        self.trail_size = source.trail_size;
+        self.size_transition_enabled = source.size_transition_enabled;
+        self.size_transition_duration = source.size_transition_duration;
+        if !self.anim_enabled {
+            self.animating = false;
+        }
+        if !self.size_transition_enabled {
+            self.size_animating = false;
+        }
+    }
+
     pub(super) fn set_target(&mut self, new_target: CursorTarget) -> (bool, bool) {
         let had_target = self.target.is_some();
         let target_moved = self.target.as_ref().map_or(true, |old| {
@@ -235,6 +253,52 @@ impl CursorState {
 
         self.target = Some(new_target);
         (had_target, target_moved)
+    }
+
+    pub(super) fn animated_cursor(&self) -> Option<AnimatedCursor> {
+        let target = self.target.as_ref()?;
+        if !self.anim_enabled {
+            return None;
+        }
+        let corners =
+            if self.anim_style == CursorAnimStyle::CriticallyDampedSpring && self.animating {
+                Some([
+                    (self.corner_springs[0].x, self.corner_springs[0].y),
+                    (self.corner_springs[1].x, self.corner_springs[1].y),
+                    (self.corner_springs[2].x, self.corner_springs[2].y),
+                    (self.corner_springs[3].x, self.corner_springs[3].y),
+                ])
+            } else {
+                None
+            };
+        Some(AnimatedCursor {
+            window_id: target.window_id,
+            x: self.current_x,
+            y: self.current_y,
+            width: self.current_w,
+            height: self.current_h,
+            corners,
+            frame_id: target.frame_id,
+        })
+    }
+
+    pub(super) fn target_cloned(&self) -> Option<CursorTarget> {
+        self.target.clone()
+    }
+
+    pub(super) fn clear_target(&mut self) {
+        self.target = None;
+        self.animating = false;
+        self.size_animating = false;
+    }
+
+    pub(super) fn is_animating(&self) -> bool {
+        self.animating || self.size_animating
+    }
+
+    pub(super) fn next_blink_deadline(&self) -> Option<std::time::Instant> {
+        (self.blink_enabled && self.target.is_some())
+            .then_some(self.last_blink_toggle + self.blink_interval)
     }
 
     /// Compute the 4 target corners for a cursor based on its style.

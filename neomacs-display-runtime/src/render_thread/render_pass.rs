@@ -1,6 +1,5 @@
 use super::frame_windows::GuiFrameWindowState;
 use super::{RenderApp, surface_readback};
-use crate::core::types::{AnimatedCursor, CursorAnimStyle};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 impl RenderApp {
@@ -8,7 +7,6 @@ impl RenderApp {
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
-        cursor_visible: bool,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
         child_frame_corner_radius: f32,
         child_frame_shadow_enabled: bool,
@@ -16,9 +14,20 @@ impl RenderApp {
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
     ) {
-        let Some(frame) = window_state.current_frame.as_ref() else {
+        let Some(mut frame) = window_state.current_frame.clone() else {
             return;
         };
+        let animated_cursor = window_state.cursor.animated_cursor();
+        let root_animated_cursor =
+            animated_cursor.filter(|cursor| cursor.frame_id == window_state.emacs_frame_id);
+        if let Some(cursor) = frame.phys_cursor.as_mut()
+            && root_animated_cursor.is_some_and(|target| target.window_id == cursor.window_id)
+        {
+            cursor.x = window_state.cursor.current_x;
+            cursor.y = window_state.cursor.current_y;
+            cursor.width = window_state.cursor.current_w;
+            cursor.height = window_state.cursor.current_h;
+        }
 
         let output = match window_state.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output)
@@ -49,16 +58,17 @@ impl RenderApp {
         let old_height = renderer.height();
         renderer.set_scale_factor(window_state.scale_factor as f32);
         renderer.resize(window_state.width, window_state.height);
+        let cursor_visible = window_state.cursor.blink_on;
         renderer.render_with_transient_effects(&mut window_state.transient_effects, |renderer| {
             renderer.render_frame_glyphs(
                 &surface_view,
-                frame,
+                &frame,
                 &mut window_state.glyph_atlas,
                 faces,
                 window_state.width,
                 window_state.height,
                 cursor_visible,
-                None,
+                root_animated_cursor,
                 window_state.mouse_pos,
                 bg_gradient,
             );
@@ -77,7 +87,7 @@ impl RenderApp {
                     window_state.width,
                     window_state.height,
                     cursor_visible,
-                    None,
+                    animated_cursor.filter(|ac| ac.frame_id == child_id),
                     child_frame_corner_radius,
                     child_frame_shadow_enabled,
                     child_frame_shadow_layers,
@@ -185,6 +195,31 @@ impl RenderApp {
             );
         }
 
+        if window_state.ime_preedit_active && !window_state.ime_preedit_text.is_empty() {
+            if let Some(target) = window_state.cursor.target_cloned() {
+                let (offset_x, offset_y) = if target.frame_id != window_state.emacs_frame_id {
+                    window_state
+                        .child_frames
+                        .frames
+                        .get(&target.frame_id)
+                        .map(|entry| (entry.abs_x, entry.abs_y))
+                        .unwrap_or((0.0, 0.0))
+                } else {
+                    (0.0, 0.0)
+                };
+                renderer.render_ime_preedit(
+                    &surface_view,
+                    &window_state.ime_preedit_text,
+                    target.x + offset_x,
+                    target.y + offset_y,
+                    target.height,
+                    &mut window_state.glyph_atlas,
+                    window_state.width,
+                    window_state.height,
+                );
+            }
+        }
+
         if let Some(start) = window_state.visual_bell_start {
             let elapsed = start.elapsed().as_secs_f32();
             let duration = 0.15;
@@ -232,7 +267,6 @@ impl RenderApp {
             renderer,
             &self.faces,
             window_state,
-            self.cursor.blink_on,
             bg_gradient,
             self.child_frame_corner_radius,
             self.child_frame_shadow_enabled,
@@ -281,44 +315,8 @@ impl RenderApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // Build animated cursor override if applicable
-        let animated_cursor =
-            if let (true, Some(target)) = (self.cursor.anim_enabled, self.cursor.target.as_ref()) {
-                let corners = if self.cursor.anim_style == CursorAnimStyle::CriticallyDampedSpring
-                    && self.cursor.animating
-                {
-                    Some([
-                        (
-                            self.cursor.corner_springs[0].x,
-                            self.cursor.corner_springs[0].y,
-                        ),
-                        (
-                            self.cursor.corner_springs[1].x,
-                            self.cursor.corner_springs[1].y,
-                        ),
-                        (
-                            self.cursor.corner_springs[2].x,
-                            self.cursor.corner_springs[2].y,
-                        ),
-                        (
-                            self.cursor.corner_springs[3].x,
-                            self.cursor.corner_springs[3].y,
-                        ),
-                    ])
-                } else {
-                    None
-                };
-                Some(AnimatedCursor {
-                    window_id: target.window_id,
-                    x: self.cursor.current_x,
-                    y: self.cursor.current_y,
-                    width: self.cursor.current_w,
-                    height: self.cursor.current_h,
-                    corners,
-                    frame_id: target.frame_id,
-                })
-            } else {
-                None
-            };
+        let animated_cursor = self.cursor.animated_cursor();
+        let root_animated_cursor = animated_cursor.filter(|cursor| cursor.frame_id == 0);
 
         // Build background gradient option
         let bg_gradient = if self.effects.bg_gradient.enabled {
@@ -359,7 +357,7 @@ impl RenderApp {
                     self.width,
                     self.height,
                     self.cursor.blink_on,
-                    animated_cursor,
+                    root_animated_cursor,
                     self.mouse_pos,
                     bg_gradient,
                 );
@@ -399,7 +397,7 @@ impl RenderApp {
                 self.width,
                 self.height,
                 self.cursor.blink_on,
-                animated_cursor,
+                root_animated_cursor,
                 self.mouse_pos,
                 bg_gradient,
             );
@@ -596,14 +594,25 @@ impl RenderApp {
 
         // Render IME preedit text overlay at cursor position
         if self.ime_preedit_active && !self.ime_preedit_text.is_empty() {
-            if let (Some(renderer), Some(glyph_atlas), Some(target)) =
-                (&self.renderer, &mut self.glyph_atlas, &self.cursor.target)
-            {
+            if let (Some(renderer), Some(glyph_atlas), Some(target)) = (
+                &self.renderer,
+                &mut self.glyph_atlas,
+                self.cursor.target_cloned(),
+            ) {
+                let (offset_x, offset_y) = if target.frame_id != 0 {
+                    self.child_frames
+                        .frames
+                        .get(&target.frame_id)
+                        .map(|entry| (entry.abs_x, entry.abs_y))
+                        .unwrap_or((0.0, 0.0))
+                } else {
+                    (0.0, 0.0)
+                };
                 renderer.render_ime_preedit(
                     &surface_view,
                     &self.ime_preedit_text,
-                    target.x,
-                    target.y,
+                    target.x + offset_x,
+                    target.y + offset_y,
                     target.height,
                     glyph_atlas,
                     self.width,

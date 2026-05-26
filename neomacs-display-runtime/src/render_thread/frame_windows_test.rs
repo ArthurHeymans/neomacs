@@ -1,5 +1,6 @@
 use super::*;
-use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer};
+use neomacs_display_protocol::types::Color;
 use neovm_core::window::GuiFrameGeometryHints;
 
 // =======================================================================
@@ -22,6 +23,56 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     buf.frame_id = frame_id;
     buf.parent_id = parent_id;
     buf
+}
+
+#[test]
+fn secondary_frame_cursor_target_uses_top_level_frame_identity() {
+    let mut frame = make_frame(0x42, 0);
+    frame.set_phys_cursor(crate::core::frame_glyphs::PhysCursor {
+        window_id: 7,
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: crate::core::frame_glyphs::DisplaySlotId {
+            window_id: 7,
+            row: 0,
+            col: 0,
+        },
+        x: 10.0,
+        y: 20.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::Bar(2.0),
+        color: Color::WHITE,
+        cursor_fg: Color::BLACK,
+    });
+
+    let target = GuiFrameWindowManager::cursor_target_for_frame(0x42, &frame).expect("cursor");
+
+    assert_eq!(target.frame_id, 0x42);
+    assert_eq!(target.window_id, 7);
+    assert_eq!(target.x, 10.0);
+}
+
+#[test]
+fn secondary_frame_cursor_state_clears_when_no_target_remains() {
+    let mut state = crate::render_thread::cursor::CursorState::default();
+    state.set_target(crate::render_thread::cursor::CursorTarget {
+        window_id: 7,
+        x: 10.0,
+        y: 20.0,
+        width: 8.0,
+        height: 16.0,
+        style: CursorStyle::Bar(2.0),
+        color: Color::WHITE,
+        frame_id: 0x42,
+    });
+
+    state.clear_target();
+
+    assert!(state.target_cloned().is_none());
+    assert!(!state.is_animating());
 }
 
 // =======================================================================

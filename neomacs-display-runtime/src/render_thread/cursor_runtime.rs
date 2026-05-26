@@ -1,8 +1,33 @@
+use super::frame_windows::GuiFrameWindowState;
 use super::{ImeCursorArea, RenderApp};
 use crate::render_thread::cursor::CursorTarget;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 impl RenderApp {
+    fn ime_cursor_area_for_window_target(
+        window_state: &GuiFrameWindowState,
+        target: &CursorTarget,
+    ) -> ImeCursorArea {
+        let (ime_off_x, ime_off_y) = if target.frame_id != window_state.emacs_frame_id {
+            window_state
+                .child_frames
+                .frames
+                .get(&target.frame_id)
+                .map(|e| (e.abs_x as f64, e.abs_y as f64))
+                .unwrap_or((0.0, 0.0))
+        } else {
+            (0.0, 0.0)
+        };
+
+        ImeCursorArea {
+            x: ((target.x as f64 + ime_off_x) * window_state.scale_factor).round() as i32,
+            y: ((target.y as f64 + target.height as f64 + ime_off_y) * window_state.scale_factor)
+                .round() as i32,
+            width: ((target.width as f64 * window_state.scale_factor).max(1.0)).round() as u32,
+            height: ((target.height as f64 * window_state.scale_factor).max(1.0)).round() as u32,
+        }
+    }
+
     /// Compute physical IME cursor rectangle for the current cursor target.
     pub(super) fn ime_cursor_area_for_target(&self, target: &CursorTarget) -> ImeCursorArea {
         // If cursor is in a child frame, offset by the child's absolute position.
@@ -46,17 +71,47 @@ impl RenderApp {
         self.last_ime_cursor_area = Some(area);
     }
 
-    /// Update cursor blink state, returns true if blink toggled.
-    pub(super) fn tick_cursor_blink(&mut self) -> bool {
-        if !self.cursor.blink_enabled || self.current_frame.is_none() {
+    /// Update a secondary frame window's IME cursor area when composition is active.
+    pub(super) fn update_frame_window_ime_cursor_area_if_needed(
+        window_state: &mut GuiFrameWindowState,
+        target: &CursorTarget,
+    ) {
+        if !window_state.ime_enabled && !window_state.ime_preedit_active {
+            return;
+        }
+
+        let area = Self::ime_cursor_area_for_window_target(window_state, target);
+        if window_state.last_ime_cursor_area == Some(area) {
+            return;
+        }
+
+        window_state.window.set_ime_cursor_area(
+            PhysicalPosition::new(area.x as f64, area.y as f64),
+            PhysicalSize::new(area.width as f64, area.height as f64),
+        );
+        window_state.last_ime_cursor_area = Some(area);
+    }
+
+    pub(super) fn tick_frame_window_cursor_blink(
+        window_state: &mut GuiFrameWindowState,
+        now: std::time::Instant,
+    ) -> bool {
+        if !window_state.cursor.blink_enabled || window_state.cursor.target_cloned().is_none() {
             return false;
         }
-        let has_cursor = self
-            .current_frame
-            .as_ref()
-            .map(|f| f.phys_cursor.is_some())
-            .unwrap_or(false);
-        if !has_cursor {
+        if now.duration_since(window_state.cursor.last_blink_toggle)
+            < window_state.cursor.blink_interval
+        {
+            return false;
+        }
+        window_state.cursor.blink_on = !window_state.cursor.blink_on;
+        window_state.cursor.last_blink_toggle = now;
+        true
+    }
+
+    /// Update cursor blink state, returns true if blink toggled.
+    pub(super) fn tick_cursor_blink(&mut self) -> bool {
+        if !self.cursor.blink_enabled || self.cursor.target_cloned().is_none() {
             return false;
         }
         let now = std::time::Instant::now();
@@ -73,5 +128,15 @@ impl RenderApp {
         } else {
             false
         }
+    }
+
+    pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
+        let mut next = self.cursor.next_blink_deadline();
+        for window_state in self.frame_windows.windows.values() {
+            if let Some(deadline) = window_state.cursor.next_blink_deadline() {
+                next = Some(next.map_or(deadline, |current| current.min(deadline)));
+            }
+        }
+        next
     }
 }
