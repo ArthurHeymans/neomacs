@@ -10006,6 +10006,24 @@ fn c_defvar_runtime_globals_are_special_like_gnu() {
 }
 
 #[test]
+fn system_type_matches_gnu_host_platform_symbol() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all("system-type");
+    let expected = if cfg!(target_os = "windows") {
+        "windows-nt"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "linux") {
+        "gnu/linux"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else {
+        std::env::consts::OS
+    };
+    assert_eq!(results[0], format!("OK {expected}"));
+}
+
+#[test]
 fn while_no_input_ignore_events_bootstraps_monitors_changed_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

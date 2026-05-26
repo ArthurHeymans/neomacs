@@ -71,6 +71,20 @@ const GC_PERCENT_SCALE: u64 = 1_000_000;
 pub(crate) const INTERNAL_COMPILER_FUNCTION_OVERRIDES: &str =
     "internal--compiler-function-overrides";
 
+fn gnu_system_type() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "windows-nt"
+    } else if cfg!(target_os = "macos") {
+        "darwin"
+    } else if cfg!(target_os = "linux") {
+        "gnu/linux"
+    } else if cfg!(target_os = "android") {
+        "android"
+    } else {
+        std::env::consts::OS
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplaySignature {
     selected_frame: Option<u64>,
@@ -2915,7 +2929,7 @@ impl Context {
         obarray.set_symbol_value("emacs-major-version", Value::fixnum(31));
         obarray.set_symbol_value("emacs-minor-version", Value::fixnum(0));
         obarray.set_symbol_value("emacs-build-number", Value::fixnum(1));
-        obarray.set_symbol_value("system-type", Value::symbol("gnu/linux"));
+        obarray.set_symbol_value("system-type", Value::symbol(gnu_system_type()));
         obarray.make_special("system-type");
         obarray.set_symbol_value("system-uses-terminfo", Value::T);
         // GNU Emacs uses unibyte for default-directory during dump because
