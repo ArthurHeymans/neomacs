@@ -34,6 +34,7 @@ mod num_workflow;
 mod planning_timestamp;
 mod plot_workflow;
 mod property_log;
+mod protocol_feed;
 mod publish_workflow;
 mod source_block;
 mod sparse_tree;
