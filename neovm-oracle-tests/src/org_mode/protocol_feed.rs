@@ -55,6 +55,76 @@ fn org_protocol_parse_store_open_source_combo() {
 }
 
 #[test]
+fn org_protocol_custom_handler_dispatch_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-protocol)
+  (let ((calls nil)
+        (killed nil)
+        (messages nil)
+        (org-protocol-protocol-alist
+         `(("normal"
+            :protocol "normal"
+            :function ,(lambda (plist)
+                         (push (list 'normal plist) calls)
+                         (plist-get plist :file)))
+           ("drop"
+            :protocol "drop"
+            :function ,(lambda (plist)
+                         (push (list 'drop plist) calls)
+                         nil)
+            :kill-client t)
+           ("greedy"
+            :protocol "greedy"
+            :function ,(lambda (files)
+                         (push (list 'greedy
+                                     (org-protocol-flatten-greedy
+                                      files t "<cwd>/"))
+                               calls))
+            :greedy t))))
+    (cl-letf (((symbol-function 'server-edit)
+               (lambda (&rest _) (push 'server-edit killed)))
+              ((symbol-function 'message)
+               (lambda (fmt &rest args)
+                 (push (apply #'format fmt args) messages))))
+      (let* ((normal
+              (org-protocol-check-filename-for-protocol
+               "org-protocol://normal?url=https%3A%2F%2Fexample.org%2Fa%3Fb%3D1&title=A+B&file=/tmp/from-protocol.org"
+               nil nil))
+             (drop
+              (org-protocol-check-filename-for-protocol
+               "org-protocol://drop?url=https%3A%2F%2Fexample.org%2Fdrop&title=Drop"
+               nil nil))
+             (greedy
+              (org-protocol-check-filename-for-protocol
+               "/work/org-protocol://greedy:/first"
+               '(("/work/org-protocol://greedy:/first" . 1)
+                 ("/work/second" . 2)
+                 ("/work/third" . 3))
+               nil))
+             (unknown
+              (org-protocol-check-filename-for-protocol
+               "org-protocol://unknown?x=1" nil nil)))
+        (list normal
+              drop
+              greedy
+              unknown
+              (nreverse calls)
+              (nreverse killed)
+              (nreverse messages)
+              (org-protocol-parse-parameters
+               "url=https%3A%2F%2Fexample.org%2Fone&title=One+Two&body=A%2FB"
+               t)
+              (org-protocol-assign-parameters
+               '("https://example.org/old" "Old Title" "body" "extra" "value")
+               '(:url :title :body))))))"##,
+    );
+}
+
+#[test]
 fn org_feed_parse_format_status_add_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
