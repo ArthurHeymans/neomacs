@@ -201,3 +201,152 @@ fn org_copy_visible_clone_subtree_navigation_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_navigation_hidden_narrow_deep_faces_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-level-color-stars-only nil))
+      (org-mode)
+      (insert "* Project\n")
+      (insert "Intro paragraph.\n")
+      (insert "** Alpha\n")
+      (insert "Alpha body\n")
+      (insert "*** Alpha child\n")
+      (insert "Alpha child body\n")
+      (insert "** COMMENT Folded comment\n")
+      (insert "Comment body\n")
+      (insert "*** Hidden comment child\n")
+      (insert "Hidden body\n")
+      (insert "** Beta archived :ARCHIVE:\n")
+      (insert "Beta body\n")
+      (insert "*** Beta child\n")
+      (insert "Beta child body\n")
+      (insert "** Gamma\n")
+      (insert ":PROPERTIES:\n:Owner: me\n:END:\n")
+      (insert "Gamma body\n")
+      (insert "*** Gamma child\n")
+      (insert "Gamma child body\n")
+      (insert "**** Deep L4\n")
+      (insert "Deep body\n")
+      (insert "***** Deep L5\n")
+      (insert "Deeper body\n")
+      (insert "* Tail\nTail body\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((heading-state
+             (lambda (label)
+               (list label
+                     (- (point) (point-min))
+                     (line-number-at-pos)
+                     (org-outline-level)
+                     (org-get-heading t t t t)
+                     (invisible-p (line-beginning-position))
+                     (buffer-substring-no-properties
+                      (line-beginning-position) (line-end-position)))))
+            (goto-heading
+             (lambda (needle)
+               (goto-char (point-min))
+               (search-forward needle)
+               (beginning-of-line)))
+            (hidden-state
+             (lambda (label needles)
+               (cons label
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (- (point) (point-min))
+                                (invisible-p (point)))))
+                      needles)))))
+            states)
+        (funcall goto-heading "* Project")
+        (org-fold-hide-subtree)
+        (push (funcall hidden-state
+                       'project-hidden
+                       '("Intro" "Alpha body" "Folded comment"
+                         "Beta body" "Gamma" "Tail"))
+              states)
+        (org-fold-show-all)
+        (funcall goto-heading "** Alpha")
+        (org-fold-hide-subtree)
+        (push (list 'alpha-boundaries
+                    (save-excursion
+                      (funcall goto-heading "** Alpha")
+                      (list (- (org-end-of-subtree nil nil) (point-min))
+                            (line-number-at-pos)))
+                    (save-excursion
+                      (funcall goto-heading "** Alpha")
+                      (list (- (org-end-of-subtree t nil) (point-min))
+                            (line-number-at-pos)))
+                    (save-excursion
+                      (funcall goto-heading "** Alpha")
+                      (list (- (org-end-of-subtree t t) (point-min))
+                            (line-number-at-pos))))
+              states)
+        (push (funcall hidden-state
+                       'alpha-hidden
+                       '("Alpha body" "Alpha child" "Folded comment"
+                         "Beta archived" "Gamma"))
+              states)
+        (funcall goto-heading "** Alpha")
+        (org-forward-heading-same-level 1 nil)
+        (push (funcall heading-state 'same-level-visible-1) states)
+        (funcall goto-heading "** Alpha")
+        (org-forward-heading-same-level 2 t)
+        (push (funcall heading-state 'same-level-invisible-2) states)
+        (org-fold-hide-sublevels 2)
+        (funcall goto-heading "* Project")
+        (org-next-visible-heading 1)
+        (push (funcall heading-state 'next-visible-after-project) states)
+        (org-next-visible-heading 1)
+        (push (funcall heading-state 'next-visible-second) states)
+        (org-previous-visible-heading 1)
+        (push (funcall heading-state 'previous-visible-back) states)
+        (org-fold-show-all)
+        (funcall goto-heading "*** Gamma child")
+        (org-narrow-to-subtree)
+        (let ((narrow-limits (list (- (point-min) 1) (- (point-max) 1))))
+          (goto-char (point-min))
+          (search-forward "Deep L5")
+          (beginning-of-line)
+          (let ((up1 (progn
+                       (org-up-heading-safe)
+                       (funcall heading-state 'up-from-l5)))
+                (up2 (progn
+                       (org-up-heading-safe)
+                       (funcall heading-state 'up-from-l4)))
+                (up3 (progn
+                       (org-up-heading-safe)
+                       (funcall heading-state 'up-from-child))))
+            (push (list 'narrowed-up narrow-limits up1 up2 up3)
+                  states)))
+        (widen)
+        (font-lock-ensure (point-min) (point-max))
+        (push (let (faces)
+                (dolist (needle '("Gamma child" "Deep L4" "Deep L5"))
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (push (list needle
+                              (get-text-property
+                               (line-beginning-position) 'face)
+                              (get-text-property
+                               (match-beginning 0) 'face)
+                              (get-text-property
+                               (match-beginning 0) 'font-lock-fontified))
+                        faces))
+                (cons 'deep-heading-faces (nreverse faces)))
+              states)
+        (push (buffer-substring-no-properties (point-min) (point-max))
+              states)
+        (nreverse states))))"##,
+    );
+}
