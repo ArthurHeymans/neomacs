@@ -572,3 +572,95 @@ fn org_property_inherit_literal_special_views_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_property_separators_postprocess_global_cleanup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance t)
+          (org-property-separators
+           '((("Tags" "Path") . ";")
+             ("^List" . "|")))
+          (org-properties-postprocess-alist
+           '(("Score" . (lambda (value)
+                          (number-to-string
+                           (* 2 (string-to-number value)))))
+             ("Owner" . upcase)))
+          (org-property-format "%-12s :: %s")
+          (changes nil))
+      (add-hook 'org-property-changed-functions
+                (lambda (key value) (push (list key value) changes))
+                nil t)
+      (org-mode)
+      (insert "#+PROPERTY: Owner_ALL Ada Bea Cy\n")
+      (insert "#+PROPERTY: Score_ALL 1 2 3 4\n")
+      (insert "* Parent\n")
+      (insert ":PROPERTIES:\n:Tags: root;shared\n:Path: /a;/b\n:ListOne: p|q\n:Score: 1\n:END:\n")
+      (insert "** Child\n")
+      (insert ":PROPERTIES:\n:Tags+: child\n:Path+: /c\n:ListOne+: r\n:Owner: Ada\n:Score: 2\n:END:\n")
+      (goto-char (point-min))
+      (org-set-regexps-and-options)
+      (search-forward "Child")
+      (beginning-of-line)
+      (let ((before
+             (list (org-entry-get nil "Tags" 'inherit)
+                   (org-entry-get nil "Path" 'inherit)
+                   (org-entry-get nil "ListOne" 'inherit)
+                   (org-entry-get-multivalued-property nil "Tags")
+                   (org-entry-get-multivalued-property nil "Path")
+                   (org-entry-get-multivalued-property nil "ListOne")
+                   (org-property-get-allowed-values nil "Owner" 'table)
+                   (org-property-get-allowed-values nil "Score" 'table)))
+            after-set after-delete ast)
+        (org-set-property "Owner" "bea")
+        (org-set-property "Score" "3")
+        (org-entry-put-multivalued-property nil "Tags" "alpha beta" "gamma")
+        (org-entry-add-to-multivalued-property nil "Tags" "delta value")
+        (org-entry-remove-from-multivalued-property nil "Tags" "gamma")
+        (org-entry-put nil "Path+" "/d")
+        (org-entry-put nil "ListOne+" "s|t")
+        (setq after-set
+              (list (org-entry-properties nil 'standard)
+                    (org-entry-get nil "Owner")
+                    (org-entry-get nil "Score")
+                    (org-entry-get nil "Tags" 'inherit)
+                    (org-entry-get nil "Path" 'inherit)
+                    (org-entry-get nil "ListOne" 'inherit)
+                    (org-entry-get-multivalued-property nil "Tags")
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+        (org-delete-property-globally "Path")
+        (org-delete-property-globally "ListOne")
+        (setq after-delete
+              (list (org-property-values "Path")
+                    (org-property-values "ListOne")
+                    (org-entry-get nil "Path" 'inherit)
+                    (org-entry-get nil "ListOne" 'inherit)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+        (goto-char (point-min))
+        (while (re-search-forward org-property-re nil t)
+          (org--align-node-property))
+        (setq ast
+              (org-element-map (org-element-parse-buffer)
+                  '(headline property-drawer node-property)
+                (lambda (el)
+                  (list (org-element-type el)
+                        (org-element-property :raw-value el)
+                        (org-element-property :key el)
+                        (org-element-property :value el)
+                        (org-element-property :begin el)
+                        (org-element-property :end el)))))
+        (list before
+              after-set
+              after-delete
+              ast
+              (nreverse changes)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
