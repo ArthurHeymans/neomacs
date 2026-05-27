@@ -308,7 +308,55 @@ fn org_protocol_capture_template_finalize_combo() {
                      "CAPTURE-org-protocol-capture.org"))
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
-      (when (file-exists-p file) (delete-file file)))))"##,
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_feed_rss_parse_entry_insert_filter_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let* ((root (make-temp-file "org-feed-rss" t))
+         (file (expand-file-name "inbox.org" root))
+         (rss-buffer (generate-new-buffer " *rss-test*"))
+         (org-feed-alist
+          `(("TestRSS"
+             :url "https://example.org/rss.xml"
+             :file ,file
+             :headline "Incoming")))
+         (calls nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer rss-buffer
+            (insert "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Feed</title>")
+            (insert "<item><guid>item-1</guid><title>First Entry</title><link>https://example.org/1</link><description>Body one</description><pubDate>Wed, 27 May 2026 10:00:00 GMT</pubDate></item>")
+            (insert "<item><guid>item-2</guid><title>Second Entry</title><link>https://example.org/2</link><description>Body two</description><pubDate>Wed, 27 May 2026 11:00:00 GMT</pubDate></item>")
+            (insert "</channel></rss>"))
+          ;; Parse RSS entries
+          (let ((entries (org-feed-parse-rss-feed rss-buffer)))
+            ;; Create inbox file
+            (with-temp-file file
+              (insert "* Incoming\n"))
+            ;; Update feed
+            (let ((updated (condition-case nil
+                               (org-feed-update "TestRSS")
+                             (error 'error))))
+              ;; Check inbox content
+              (let ((inbox-content
+                     (with-current-buffer (find-file-noselect file)
+                       (prog1 (buffer-substring-no-properties
+                               (point-min) (point-max))
+                         (kill-buffer)))))
+                (list entries
+                      updated
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>" inbox-content))))))
+      (kill-buffer rss-buffer)
+      (delete-directory root t))))"##,
     );
 }
 
