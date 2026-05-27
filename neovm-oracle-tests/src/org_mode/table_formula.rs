@@ -450,3 +450,60 @@ fn org_table_sort_transpose_formula_metadata_combo() {
                 (org-table-convert-refs-to-an "@3$2..@4$5"))))))"##,
     );
 }
+
+#[test]
+fn org_table_marked_duration_lisp_create_columns_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-table-formula-create-columns t))
+      (insert "| Mark | Task | Estimate | Spent | Remain | Owner |\n")
+      (insert "|------+------|----------+-------+--------+-------|\n")
+      (insert "| # | Alpha | 2:30 | 1:15 | stale-a | ann |\n")
+      (insert "|   | Beta | 1:10 | 0:40 | stale-b | bob |\n")
+      (insert "| # | Gamma | 3:00 | 2:20 | stale-c | cy |\n")
+      (insert "#+TBLFM: $5=$3-$4;U::$7='(concat $2 \":\" $6 \":\" $5)\n")
+      (goto-char (point-min))
+      (org-table-recalculate 'all)
+      (let ((after-marked
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (stored-after-marked (org-table-get-stored-formulas))
+            (lisp-summary nil)
+            (range-corners nil)
+            (field-formula nil))
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (org-table-goto-column 7)
+        (setq lisp-summary (org-table-get-field))
+        (setq field-formula
+              (org-table-current-field-formula 'key 'noerror))
+        (setq range-corners
+              (org-table-get-range "@2$3..@4$5" nil nil nil t))
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (org-table-goto-column 4)
+        (org-table-get-field nil "0:10")
+        (org-table-recalculate)
+        (let ((after-current
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (stored-after-current (org-table-get-stored-formulas)))
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (org-table-goto-column 7)
+          (list after-marked
+                stored-after-marked
+                lisp-summary
+                field-formula
+                range-corners
+                after-current
+                stored-after-current
+                (org-table-current-column)
+                (org-table-get-field)
+                (org-table-to-lisp)))))))"##,
+    );
+}
