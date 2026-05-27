@@ -822,3 +822,164 @@ fn org_insert_link_region_file_stored_edit_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_link_open_store_move_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-link-open-store" t))
+         (main (expand-file-name "main.org" root))
+         (other (expand-file-name "other.org" root))
+         (org-id-locations-file (expand-file-name "ids.el" root))
+         (org-id-track-globally t)
+         (org-link-file-path-type 'relative)
+         (org-link-context-for-files t)
+         (org-id-link-to-org-use-id 'use-existing)
+         (org-link-descriptive t)
+         (org-stored-links nil)
+         (org-store-link-plist nil))
+    (unwind-protect
+        (progn
+          (with-temp-file main
+            (insert "#+TITLE: Link Move\n")
+            (insert "* TODO Alpha :work:\n")
+            (insert ":PROPERTIES:\n:ID: alpha-id\n:CUSTOM_ID: alpha-custom\n:END:\n")
+            (insert "Alpha body with <<radio-alpha>>.\n")
+            (insert "** WAIT Alpha child\nchild body\n")
+            (insert "*** TODO Alpha grand\n")
+            (insert "**** TODO Alpha L4\nlevel four body\n")
+            (insert "* TODO Beta\n")
+            (insert ":PROPERTIES:\n:ID: beta-id\n:CUSTOM_ID: beta-custom\n:END:\n")
+            (insert "Beta body.\n")
+            (insert "** TODO Beta child\nbeta child body\n")
+            (insert "* Links\n")
+            (insert "[[id:alpha-id][Alpha ID]] [[#beta-custom][Beta Custom]]\n")
+            (insert "[[*Alpha grand][Alpha Grand]] [[radio-alpha][Radio]]\n"))
+          (with-temp-file other
+            (insert "* External\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: external-custom\n:END:\n")
+            (insert "External body.\n"))
+          (org-id-update-id-locations (list main other) t)
+          (with-current-buffer (find-file-noselect main)
+            (org-mode)
+            (let ((default-directory root)
+                  opened before-move after-move inserted stored alpha-plist)
+              (org-fold-hide-sublevels 2)
+              (goto-char (point-min))
+              (search-forward "Alpha")
+              (beginning-of-line)
+              (setq stored (org-store-link nil nil)
+                    alpha-plist org-store-link-plist)
+              (goto-char (point-min))
+              (search-forward "* Links")
+              (end-of-line)
+              (insert "\n")
+              (org-insert-link nil (plist-get alpha-plist :link)
+                               "Stored Alpha")
+              (insert " ")
+              (org-insert-link nil (concat "file:" other "::*External")
+                               "External Heading")
+              (font-lock-ensure (point-min) (point-max))
+              (dolist (needle '("Alpha ID" "Beta Custom" "Alpha Grand"
+                                "Radio" "Stored Alpha" "External Heading"))
+                (goto-char (point-min))
+                (search-forward needle)
+                (push
+                 (save-excursion
+                   (org-open-at-point)
+                   (list needle
+                         (file-name-nondirectory (or (buffer-file-name) ""))
+                         (org-get-heading t t t t)
+                         (line-number-at-pos)
+                         (not (null
+                               (org-invisible-p
+                                (line-beginning-position))))
+                         (buffer-substring-no-properties
+                          (line-beginning-position)
+                          (line-end-position))))
+                 opened))
+              (setq before-move
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "Beta child")
+                      (list (org-get-heading t t t t)
+                            (line-number-at-pos)
+                            (org-outline-level))))
+              (goto-char (point-min))
+              (search-forward "Beta child")
+              (beginning-of-line)
+              (org-cut-subtree)
+              (goto-char (point-min))
+              (search-forward "Alpha L4")
+              (beginning-of-line)
+              (org-paste-subtree 5)
+              (setq after-move
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "Beta child")
+                      (list (org-get-heading t t t t)
+                            (line-number-at-pos)
+                            (org-outline-level)
+                            (org-link-search "*Beta child" nil t)
+                            (org-get-heading t t t t))))
+              (org-fold-hide-sublevels 2)
+              (goto-char (point-min))
+              (search-forward "beta child body")
+              (org-fold-show-context 'isearch)
+              (setq inserted
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward needle)
+                         (list needle
+                               (line-number-at-pos)
+                               (not (null (org-invisible-p (point))))
+                               (get-text-property
+                                (line-beginning-position) 'face))))
+                     '("Alpha" "Alpha child" "Alpha grand" "Alpha L4"
+                       "Beta child" "beta child body" "Beta" "Links")))
+              (let* ((tree (org-element-parse-buffer))
+                     (links
+                      (org-element-map tree 'link
+                        (lambda (link)
+                          (list (org-element-property :type link)
+                                (replace-regexp-in-string
+                                 (regexp-quote root)
+                                 "<root>"
+                                 (org-element-property :path link))
+                                (org-element-property :raw-link link)
+                                (and (org-element-contents-begin link)
+                                     (buffer-substring-no-properties
+                                      (org-element-contents-begin link)
+                                      (org-element-contents-end link))))))))
+                (list (replace-regexp-in-string
+                       (regexp-quote root) "<root>" stored)
+                      (plist-put
+                       (copy-sequence alpha-plist)
+                       :link
+                       (replace-regexp-in-string
+                        (regexp-quote root) "<root>"
+                        (plist-get alpha-plist :link)))
+                      (nreverse opened)
+                      before-move
+                      after-move
+                      inserted
+                      links
+                      (replace-regexp-in-string
+                       (regexp-quote root)
+                       "<root>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))))
+      (when (get-file-buffer main) (kill-buffer (get-file-buffer main)))
+      (when (get-file-buffer other) (kill-buffer (get-file-buffer other)))
+      (delete-directory root t))))"##,
+    );
+}
