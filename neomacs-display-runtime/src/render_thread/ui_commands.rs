@@ -301,13 +301,10 @@ impl RenderApp {
                                     / window_state.native.scale_factor as f32,
                             )
                         })
-                        .unwrap_or((
-                            13.0,
-                            17.0,
-                            13.0 * 0.6,
-                            self.width as f32,
-                            self.height as f32,
-                        ))
+                        .unwrap_or_else(|| {
+                            let (screen_w, screen_h) = self.primary_logical_size();
+                            (13.0, 17.0, 13.0 * 0.6, screen_w, screen_h)
+                        })
                 };
                 let tooltip = TooltipState::new(
                     x,

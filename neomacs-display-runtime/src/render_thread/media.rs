@@ -291,7 +291,8 @@ impl RenderApp {
                     frame.height,
                 )
             } else {
-                (8.0, 16.0, 14.0, self.width as f32, self.height as f32)
+                let (frame_w, frame_h) = self.primary_logical_size();
+                (8.0, 16.0, 14.0, frame_w, frame_h)
             };
         let ascent = cell_h * 0.8;
 
