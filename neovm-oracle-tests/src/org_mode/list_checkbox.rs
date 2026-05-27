@@ -286,3 +286,98 @@ fn org_list_descriptive_generic_roundtrip_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_nested_counter_checkbox_repair_cycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-include-plain-lists 'integrate))
+      (org-mode)
+      (insert "* Tasks [0/3]\n")
+      (insert "1. [ ] Alpha [1/2]\n")
+      (insert "   - [X] Alpha done\n")
+      (insert "   - [ ] Alpha todo\n")
+      (insert "2. [ ] Beta\n")
+      (insert "   a. Beta child b\n")
+      (insert "   b. Beta child a\n")
+      (insert "3. [X] Gamma\n")
+      (let ((snapshot
+             (lambda (label)
+               (let* ((struct (org-list-struct))
+                      (prevs (org-list-prevs-alist struct))
+                      (parents (org-list-parents-alist struct))
+                      (items (org-list-get-all-items (point-min) struct prevs)))
+                 (list label
+                       (mapcar
+                        (lambda (item)
+                          (save-excursion
+                            (goto-char item)
+                            (list (- item (point-min))
+                                  (buffer-substring-no-properties
+                                   item (line-end-position))
+                                  (org-list-get-parent item struct parents)
+                                  (org-list-get-children item struct parents)
+                                  (org-list-get-item-number
+                                   item struct prevs parents)
+                                  (org-list-get-list-type item struct prevs)
+                                  (invisible-p item))))
+                        items)
+                       (org-list-to-lisp)
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))
+            states)
+        (goto-char (point-min))
+        (search-forward "Alpha todo")
+        (org-toggle-checkbox)
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (push (funcall snapshot 'after-checkbox) states)
+        (goto-char (point-min))
+        (search-forward "Beta child a")
+        (beginning-of-line)
+        (org-move-item-up)
+        (push (funcall snapshot 'after-child-move) states)
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (beginning-of-line)
+        (org-indent-item-tree)
+        (push (funcall snapshot 'after-indent-gamma) states)
+        (org-outdent-item-tree)
+        (org-list-repair)
+        (push (funcall snapshot 'after-outdent-repair) states)
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-cycle)
+        (push (funcall snapshot 'after-list-cycle) states)
+        (org-fold-show-all)
+        (goto-char (point-min))
+        (org-cycle-list-bullet ?+)
+        (push (funcall snapshot 'after-bullet-cycle) states)
+        (list (nreverse states)
+              (org-list-to-generic
+               (org-list-to-lisp)
+               (list :backend 'org
+                     :raw t
+                     :ostart "<ordered>"
+                     :oend "</ordered>"
+                     :ulstart "<unordered>"
+                     :ulend "</unordered>"
+                     :istart "<item>"
+                     :iend "</item>"
+                     :isep "|"
+                     :cbon "[on]"
+                     :cboff "[off]"
+                     :cbtrans "[mixed]"
+                     :ifmt (lambda (_type contents) contents)))
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
