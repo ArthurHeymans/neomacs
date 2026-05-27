@@ -157,6 +157,85 @@ fn org_lint_multiple_checker_report_combo() {
 }
 
 #[test]
+fn org_lint_custom_category_marker_report_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-lint)
+  (let ((original-checkers org-lint--checkers))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (org-lint-add-checker
+           'combo-custom "old custom checker"
+           (lambda (_ast) nil)
+           :trust 'low
+           :categories '(combo old))
+          (org-lint-add-checker
+           'combo-custom "new custom checker"
+           (lambda (ast)
+             (org-element-map ast 'headline
+               (lambda (h)
+                 (when (string= (org-element-property :raw-value h) "Two")
+                   (list (org-element-property :begin h)
+                         "custom headline Two")))))
+           :trust 'high
+           :categories '(combo structure))
+          (insert "<<dup-target>>\n")
+          (insert "<<dup-target>>\n")
+          (insert "* One\n")
+          (insert ":PROPERTIES:\n:CUSTOM_ID: same\n:END:\n")
+          (insert "[[#missing-custom]] [[dup-target]]\n")
+          (insert "* Two\n")
+          (insert ":PROPERTIES:\n:CUSTOM_ID: same\n")
+          (insert "drawer never closes\n")
+          (let* ((rows (org-lint
+                        '(combo-custom
+                          duplicate-custom-id
+                          duplicate-target
+                          invalid-fuzzy-link
+                          incomplete-drawer)))
+                 (combo-rows
+                  (cl-letf (((symbol-function 'completing-read)
+                             (lambda (&rest _) "combo")))
+                    (org-lint '(4))))
+                 (summarize
+                  (lambda (reports)
+                    (mapcar
+                     (lambda (entry)
+                       (let* ((row (cadr entry))
+                              (line (aref row 0))
+                              (checker (aref row 3))
+                              (marker (get-text-property
+                                       0 'org-lint-marker line)))
+                         (list (aref row 0)
+                               (aref row 1)
+                               (aref row 2)
+                               (org-lint-checker-name checker)
+                               (org-lint-checker-summary checker)
+                               (org-lint-checker-trust checker)
+                               (org-lint-checker-categories checker)
+                               (and marker
+                                    (- (marker-position marker)
+                                       (point-min))))))
+                     reports))))
+            (list (funcall summarize rows)
+                  (funcall summarize combo-rows)
+                  (mapcar #'org-lint-checker-name
+                          (cl-remove-if-not
+                           (lambda (c)
+                             (memq 'combo
+                                   (org-lint-checker-categories c)))
+                           org-lint--checkers))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      (setq org-lint--checkers original-checkers))))"##,
+    );
+}
+
+#[test]
 fn org_attach_url_set_unset_directory_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
