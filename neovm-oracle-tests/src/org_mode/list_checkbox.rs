@@ -1042,6 +1042,70 @@ fn org_checkbox_toggle_counter_stats_toggle_cycle_combo() {
                         after-count
                         after-b
                         after-c-cycle
-                        after-stats)))))))))))"##,
+                          after-stats)))))))))))"##,
+    );
+}
+
+#[test]
+fn org_list_structure_indent_outdent_renumber_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "1. First\n")
+    (insert "   - Child A\n")
+    (insert "   - Child B\n")
+    (insert "     - Grandchild\n")
+    (insert "2. Second\n")
+    (insert "   - [X] Checked\n")
+    (insert "   - [ ] Unchecked\n")
+    (insert "3. Third\n")
+    ;; Parse initial structure
+    (let* ((snap (lambda ()
+                   (list (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         (org-element-map (org-element-parse-buffer) 'item
+                           (lambda (item)
+                             (list (org-element-property :bullet item)
+                                   (org-element-property :checkbox item)
+                                   (org-element-property :counter item)
+                                   (org-element-property :begin item)))))))
+           (initial (funcall snap)))
+      ;; Indent Child B under Child A
+      (goto-char (point-min))
+      (search-forward "Child B")
+      (beginning-of-line)
+      (org-indent-item)
+      (let ((after-indent (funcall snap)))
+        ;; Outdent back
+        (goto-char (point-min))
+        (search-forward "Child B")
+        (beginning-of-line)
+        (org-outdent-item)
+        (let ((after-outdent (funcall snap)))
+          ;; Toggle checkbox
+          (goto-char (point-min))
+          (search-forward "Unchecked")
+          (beginning-of-line)
+          (org-toggle-checkbox)
+          (let ((after-toggle (funcall snap)))
+            ;; Update counter
+            (goto-char (point-min))
+            (org-update-checkbox-count)
+            (let ((after-count (funcall snap)))
+              ;; Sort list
+              (goto-char (point-min))
+              (org-sort-list nil ?A)
+              (let ((after-sort (funcall snap)))
+                (list initial
+                      after-indent
+                      after-outdent
+                      after-toggle
+                      after-count
+                      after-sort))))))))))"##,
     );
 }
