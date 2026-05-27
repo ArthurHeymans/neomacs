@@ -35,6 +35,7 @@ mod element_ast;
 mod element_upstream;
 mod element_upstream_2;
 mod entities_markup;
+mod exa_strict;
 mod export_backends;
 mod export_mix;
 mod export_upstream;
