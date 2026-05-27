@@ -611,7 +611,7 @@ fn strong_colview_roundtrip() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn strong_protocol_parse_roundtrip_comp2() {
+fn strong_protocol_parse_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"(progn
@@ -1663,11 +1663,11 @@ fn strong_colview_format_roundtrip() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Multi-step: protocol parse roundtrip
+// Multi-step: protocol parse roundtrip (second test)
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn strong_protocol_parse_roundtrip_comp2_v2() {
+fn strong_protocol_parse_roundtrip_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"(progn
