@@ -673,3 +673,96 @@ fn org_table_hline_constants_range_property_combo() {
               (org-table-to-lisp))))))"##,
     );
 }
+
+#[test]
+fn org_table_named_remote_debug_structural_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+CONSTANTS: scale=3 offset=2\n")
+    (insert "#+NAME: lookup\n")
+    (insert "| Key | Weight |\n")
+    (insert "|-----+--------|\n")
+    (insert "| low | 2 |\n")
+    (insert "| high | 5 |\n\n")
+    (insert "#+NAME: calc\n")
+    (insert "| ! | Name | Kind | Raw | Weight | Score | Note |\n")
+    (insert "|---+------+------+-----+--------+-------+------|\n")
+    (insert "| # | A | low | 4 |  |  | keep |\n")
+    (insert "|   | B | high | 3 |  |  | move |\n")
+    (insert "| # | C | low | 6 |  |  | keep |\n")
+    (insert "|---+------+------+-----+--------+-------+------|\n")
+    (insert "| _ | Total | | | | | |\n")
+    (insert "#+TBLFM: $Weight=remote(lookup,@2$2)::@3$Weight=remote(lookup,@3$2)::$Score=$Raw*$Weight*$scale+$offset::@>$Score=vsum(@I$Score..@II$Score)\n")
+    (goto-char (point-min))
+    (search-forward "#+NAME: calc")
+    (let ((org-table-formula-debug t)
+          (org-table-formula-create-columns t))
+      (org-table-recalculate 'all)
+      (let ((after-first
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (stored-first (org-table-get-stored-formulas))
+            (debug-formula
+             (org-table-formula-substitute-names
+              "$Score=$Raw*$Weight*$scale+$offset"))
+            field-summary remote-summary range-summary conversions)
+        (goto-char (point-min))
+        (search-forward "B")
+        (org-table-goto-column 6)
+        (org-table-analyze)
+        (setq field-summary
+              (list (org-table-current-dline)
+                    (org-table-current-column)
+                    (org-table-current-line)
+                    (org-table-get-field)
+                    (org-table-current-field-formula 'key 'noerror)
+                    (get-text-property 0 :orig-formula debug-formula)))
+        (setq remote-summary
+              (list (org-table-get-remote-range "lookup" "@2$2..@3$2")
+                    (org-table-get-remote-range "calc" "@2$Name..@4$Score")
+                    (org-table-get-constant "scale")
+                    (org-table-get-constant "missing")))
+        (setq range-summary
+              (list (org-table-get-range "@I$Raw..@II$Score")
+                    (org-table-get-range "@I$Raw..@II$Score" nil nil nil t)))
+        (setq conversions
+              (list (org-table-formula-handle-first/last-rc
+                     "@>$Score=vsum(@I$Score..@II$Score)")
+                    (org-table-convert-refs-to-rc "D3..F5")
+                    (org-table-convert-refs-to-an "@3$4..@5$6")
+                    (org-table-formula-to-user
+                     "@>$6=vsum(@2$6..@4$6)")
+                    (org-table-formula-from-user
+                     "@>$Score=vsum(@2$Score..@4$Score)")))
+        (goto-char (point-min))
+        (search-forward "B")
+        (beginning-of-line)
+        (org-table-move-row-up)
+        (goto-char (point-min))
+        (search-forward "Note")
+        (org-table-move-column-left)
+        (goto-char (point-min))
+        (search-forward "C")
+        (org-table-goto-column 4)
+        (org-table-get-field nil "7")
+        (org-table-recalculate 'all)
+        (let ((after-edit
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (stored-edit (org-table-get-stored-formulas)))
+          (list after-first
+                stored-first
+                debug-formula
+                field-summary
+                remote-summary
+                range-summary
+                conversions
+                after-edit
+                stored-edit
+                (org-table-to-lisp)))))))"##,
+    );
+}
