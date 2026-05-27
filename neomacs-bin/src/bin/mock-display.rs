@@ -878,19 +878,3 @@ fn restore_terminal() {
 fn query_terminal_size() -> Option<(u16, u16)> {
     crossterm::terminal::size().ok()
 }
-
-fn detect_dpi_scale() -> f32 {
-    if let Ok(output) = std::process::Command::new("xrdb").arg("-query").output() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for line in stdout.lines() {
-            if line.starts_with("Xft.dpi:") {
-                if let Some(val) = line.split_whitespace().nth(1) {
-                    if let Ok(dpi) = val.parse::<f32>() {
-                        return (dpi / 96.0).max(1.0);
-                    }
-                }
-            }
-        }
-    }
-    1.0
-}
