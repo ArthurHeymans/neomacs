@@ -29,6 +29,7 @@ mod core_upstream_2;
 mod core_upstream_3;
 mod crypt_workflow;
 mod datetree_workflow;
+mod delta_navigation;
 mod display_state;
 mod dynamic_blocks;
 mod edit_layout;
