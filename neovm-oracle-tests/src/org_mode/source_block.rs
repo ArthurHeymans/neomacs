@@ -1329,8 +1329,50 @@ fn org_babel_tangle_header_args_noweb_comments_deep_state_combo() {
                       ;; Check noweb expansion happened
                       (and content-a
                            (string-match-p "shared-val" content-a))
-                      (and content-a
-                           (not (string-match-p "<<shared>>" content-a)))))))))
+                       (and content-a
+                            (not (string-match-p "<<shared>>" content-a)))))))))
       (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_src_edit_exit_writeback_preserve_structure_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-src)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n")
+    (insert "#+begin_src python\nprint('hello')\n#+end_src\n\n")
+    (insert "Between blocks.\n\n")
+    (insert "#+begin_src emacs-lisp\n(message \"test\")\n#+end_src\n")
+    (goto-char (point-min))
+    (search-forward "(+ 1 2)")
+    (org-edit-src-code)
+    (let ((edit-mode major-mode)
+          (edit-buf (buffer-substring-no-properties
+                     (point-min) (point-max))))
+      (erase-buffer)
+      (insert "(+ 10 20)\n(+ 30 40)\n")
+      (org-edit-src-exit))
+    (let ((after-first-edit (buffer-substring-no-properties
+                             (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "print")
+      (org-edit-src-code)
+      (erase-buffer)
+      (insert "print('modified')\nprint('extra')\n")
+      (org-edit-src-exit)
+      (let ((after-second-edit (buffer-substring-no-properties
+                                (point-min) (point-max))))
+        (let ((blocks
+               (org-element-map (org-element-parse-buffer) 'src-block
+                 (lambda (sb)
+                   (list (org-element-property :language sb)
+                         (org-element-property :value sb))))))
+          (list edit-mode edit-buf after-first-edit after-second-edit blocks)))))))"##,
     );
 }
