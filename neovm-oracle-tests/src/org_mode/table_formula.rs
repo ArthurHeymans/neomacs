@@ -1168,3 +1168,79 @@ fn org_table_cross_ref_edit_recalc_lisp_dump_combo() {
               stored-formulas)))))"##,
     );
 }
+
+#[test]
+fn org_table_field_edit_recalc_range_dump_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Item | Price | Qty | Total |\n")
+    (insert "|------+-------+-----+-------|\n")
+    (insert "| Apple | 2.5 | 4 | |\n")
+    (insert "| Banana | 1.8 | 6 | |\n")
+    (insert "| Cherry | 5.0 | 2 | |\n")
+    (insert "|------+-------+-----+-------|\n")
+    (insert "| Total | | | |\n")
+    (insert "#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n")
+    ;; Recalculate
+    (goto-char (point-min))
+    (org-table-recalculate-buffer-tables)
+    (let ((after-recalc (buffer-substring-no-properties
+                         (point-min) (point-max)))
+          (table-lisp (progn
+                        (goto-char (point-min))
+                        (org-table-to-lisp)))
+          ;; Get specific cell values
+          (apple-total (progn
+                         (goto-char (point-min))
+                         (search-forward "Apple")
+                         (org-table-goto-column 4)
+                         (org-table-get-field)))
+          (banana-total (progn
+                          (goto-char (point-min))
+                          (search-forward "Banana")
+                          (org-table-goto-column 4)
+                          (org-table-get-field)))
+          (grand-total (progn
+                         (goto-char (point-min))
+                         (search-forward "Total")
+                         (forward-line 1)
+                         (beginning-of-line)
+                         (org-table-goto-column 4)
+                         (org-table-get-field))))
+      ;; Edit a cell and recalculate
+      (goto-char (point-min))
+      (search-forward "Banana")
+      (org-table-goto-column 3)
+      (org-table-get-field nil "10")
+      (org-table-recalculate-buffer-tables)
+      (let ((after-edit (buffer-substring-no-properties
+                         (point-min) (point-max)))
+            (banana-after (progn
+                            (goto-char (point-min))
+                            (search-forward "Banana")
+                            (org-table-goto-column 4)
+                            (org-table-get-field)))
+            (total-after (progn
+                           (goto-char (point-min))
+                           (search-forward "Total")
+                           (forward-line 1)
+                           (beginning-of-line)
+                           (org-table-goto-column 4)
+                           (org-table-get-field)))
+            (stored (org-table-get-stored-formulas)))
+        (list after-recalc
+              table-lisp
+              apple-total
+              banana-total
+              grand-total
+              after-edit
+              banana-after
+              total-after
+              stored)))))"##,
+    );
+}
