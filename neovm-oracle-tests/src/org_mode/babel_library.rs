@@ -233,3 +233,106 @@ fn org_babel_local_call_table_cache_inline_combo() {
               no-info)))))"##,
     );
 }
+
+#[test]
+fn org_babel_lob_noweb_export_result_replacement_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-lob)
+  (require 'ob-emacs-lisp)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (let* ((root (make-temp-file "org-lob-export" t))
+         (lib (expand-file-name "lib.org" root))
+         (org-babel-library-of-babel nil)
+         (org-confirm-babel-evaluate nil)
+         (org-export-use-babel t)
+         (org-export-with-broken-links t))
+    (unwind-protect
+        (progn
+          (with-temp-file lib
+            (insert "#+PROPERTY: header-args:emacs-lisp :results value replace\n")
+            (insert "#+NAME: helper-lines\n")
+            (insert "#+begin_src emacs-lisp :var prefix=\"x\" :var rows='((\"a\" 1))\n")
+            (insert "(mapcar (lambda (row)\n")
+            (insert "          (format \"%s:%s=%s\" prefix (car row) (cadr row)))\n")
+            (insert "        rows)\n")
+            (insert "#+end_src\n\n")
+            (insert "#+NAME: wrap-lines\n")
+            (insert "#+begin_src emacs-lisp :var title=\"T\" :var rows='((\"a\" 1)) :noweb yes\n")
+            (insert "(cons title (helper-lines prefix=title rows=rows))\n")
+            (insert "#+end_src\n"))
+          (org-babel-lob-ingest lib)
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+TITLE: LOB Export\n")
+            (insert "#+NAME: data\n")
+            (insert "| key | n |\n")
+            (insert "|-----+---|\n")
+            (insert "| a   | 2 |\n")
+            (insert "| b   | 3 |\n\n")
+            (insert "* Calls\n")
+            (insert "#+CALL: wrap-lines(title=\"Run\", rows=data[2:3,*]) :results value list replace :exports both\n\n")
+            (insert "Inline call_helper-lines[:results raw replace](prefix=\"I\", rows=data[2:2,*]) done.\n")
+            (let (call-info inline-info after-call after-inline html ascii ast)
+              (goto-char (point-min))
+              (search-forward "#+CALL")
+              (setq call-info (org-babel-lob-get-info))
+              (org-babel-execute-maybe)
+              (setq after-call
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))
+              (goto-char (point-min))
+              (search-forward "call_helper-lines")
+              (setq inline-info (org-babel-lob-get-info))
+              (org-babel-execute-maybe)
+              (setq after-inline
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))
+              (setq ast
+                    (org-element-map (org-element-parse-buffer)
+                        '(babel-call inline-babel-call plain-list item table)
+                      (lambda (el)
+                        (list (org-element-type el)
+                              (org-element-property :call el)
+                              (org-element-property :arguments el)
+                              (org-element-property :begin el)
+                              (org-element-property :end el)))))
+              (setq html
+                    (replace-regexp-in-string
+                     "org[[:alnum:]]+"
+                     "org-id"
+                     (org-export-as 'html nil nil t '(:with-toc nil))))
+              (setq ascii
+                    (let ((org-ascii-charset 'utf-8))
+                      (org-export-as 'ascii nil nil t
+                                     '(:with-toc nil))))
+              (list (sort (mapcar (lambda (cell)
+                                    (symbol-name (car cell)))
+                                  org-babel-library-of-babel)
+                          #'string<)
+                    (nth 0 call-info)
+                    (assq :var (nth 2 call-info))
+                    (assq :results (nth 2 call-info))
+                    (nth 0 inline-info)
+                    (assq :var (nth 2 inline-info))
+                    (assq :results (nth 2 inline-info))
+                    after-call
+                    after-inline
+                    ast
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle html))))
+                            '("LOB Export" "Run" "Run:a=2" "Run:b=3"
+                              "I:a=2"))
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle ascii))))
+                            '("LOB Export" "Run:a=2" "Run:b=3" "I:a=2"))
+                    html
+                    ascii))))
+      (when (file-directory-p root) (delete-directory root t)))))"##,
+    );
+}
