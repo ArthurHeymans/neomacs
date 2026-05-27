@@ -25,6 +25,7 @@ mod footnote_edit;
 mod habit_workflow;
 mod id_link;
 mod inlinetask_workflow;
+mod link_backends;
 mod link_export;
 mod link_runtime;
 mod list_checkbox;
