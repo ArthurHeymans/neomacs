@@ -9815,6 +9815,39 @@ fn lookup_key_returned_submenu_symbol_has_bound_value() {
 }
 
 #[test]
+fn lookup_key_matches_literal_t_and_nil_events_like_gnu_emacs() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = partial_bootstrap_eval_until("keymap", false);
+    let result = eval
+        .eval_str(
+            r#"(list
+             (let ((map (make-sparse-keymap)))
+               (define-key-after map [t] 'default-command)
+               (list map (lookup-key map [t])
+                     (lookup-key map [x])
+                     (lookup-key map [x] t)))
+             (let ((map (make-sparse-keymap)))
+               (define-key map [nil] 'nil-event-command)
+               (list map (lookup-key map [nil])
+                     (lookup-key map [x] t))))"#,
+        )
+        .expect("evaluate literal t/nil key event probe");
+    let outer = crate::emacs_core::value::list_to_vec(&result).expect("outer result list");
+    assert_eq!(outer.len(), 2);
+
+    let t_case = crate::emacs_core::value::list_to_vec(&outer[0]).expect("t result list");
+    assert_eq!(t_case.len(), 4);
+    assert_eq!(t_case[1], Value::symbol("default-command"));
+    assert_eq!(t_case[2], Value::NIL);
+    assert_eq!(t_case[3], Value::symbol("default-command"));
+
+    let nil_case = crate::emacs_core::value::list_to_vec(&outer[1]).expect("nil result list");
+    assert_eq!(nil_case.len(), 3);
+    assert_eq!(nil_case[1], Value::symbol("nil-event-command"));
+    assert_eq!(nil_case[2], Value::NIL);
+}
+
+#[test]
 fn set_language_info_alist_reuses_chinese_submenu_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
     let mut eval = partial_bootstrap_eval_until("language/chinese", false);

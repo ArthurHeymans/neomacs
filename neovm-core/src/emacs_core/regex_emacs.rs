@@ -258,20 +258,14 @@ pub(crate) struct CompiledPattern {
     /// Value = list of inclusive (start_char, end_char) character ranges.
     pub multibyte_charsets: HashMap<usize, Vec<(char, char)>>,
 
-    /// Per-charset class flags for `[[:word:]]` and `[[:space:]]`,
-    /// which GNU resolves at match time via `BUFFER_SYNTAX(c)` and
-    /// not at compile time. Bit layout:
+    /// Per-charset POSIX character class flags.
     ///
-    ///   - bit 0 (`CHARSET_CLASS_BIT_WORD`)  → `[[:word:]]`
-    ///   - bit 1 (`CHARSET_CLASS_BIT_SPACE`) → `[[:space:]]`
-    ///
-    /// At match time the charset matcher takes the union of the
-    /// raw bitmap and the syntax-driven bits, so a per-buffer
-    /// override of `_` to `Sword` extends `[[:word:]]` correctly.
-    /// Mirrors GNU `regex-emacs.c:re_wctype_to_bit` (line 1635) +
-    /// `execute_charset` (regex-emacs.c:3795-3802). See audit
-    /// finding #8 in `drafts/regex-search-audit.md`.
-    pub charset_class_bits: HashMap<usize, u8>,
+    /// GNU stores POSIX classes in the charset range-table bits
+    /// (`regex-emacs.c:re_wctype_to_bit`) and checks `re_iswctype`
+    /// while executing the charset.  The ASCII bitmap remains the fast path,
+    /// but these bits preserve the runtime predicate for multibyte characters
+    /// and for syntax-table-sensitive classes such as `word` and `space`.
+    pub charset_class_bits: HashMap<usize, u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -323,11 +317,23 @@ impl CaseTranslation {
     }
 }
 
-/// Bit set on a `Charset`/`CharsetNot` opcode for `[[:word:]]`. The
-/// matcher resolves it via the buffer syntax table at match time.
-pub const CHARSET_CLASS_BIT_WORD: u8 = 1 << 0;
-/// Bit set on a `Charset`/`CharsetNot` opcode for `[[:space:]]`.
-pub const CHARSET_CLASS_BIT_SPACE: u8 = 1 << 1;
+const CHARSET_CLASS_BIT_ALNUM: u32 = 1 << 0;
+const CHARSET_CLASS_BIT_ALPHA: u32 = 1 << 1;
+const CHARSET_CLASS_BIT_BLANK: u32 = 1 << 2;
+const CHARSET_CLASS_BIT_CNTRL: u32 = 1 << 3;
+const CHARSET_CLASS_BIT_DIGIT: u32 = 1 << 4;
+const CHARSET_CLASS_BIT_GRAPH: u32 = 1 << 5;
+const CHARSET_CLASS_BIT_LOWER: u32 = 1 << 6;
+const CHARSET_CLASS_BIT_PRINT: u32 = 1 << 7;
+const CHARSET_CLASS_BIT_PUNCT: u32 = 1 << 8;
+const CHARSET_CLASS_BIT_SPACE: u32 = 1 << 9;
+const CHARSET_CLASS_BIT_UPPER: u32 = 1 << 10;
+const CHARSET_CLASS_BIT_XDIGIT: u32 = 1 << 11;
+const CHARSET_CLASS_BIT_ASCII: u32 = 1 << 12;
+const CHARSET_CLASS_BIT_WORD: u32 = 1 << 13;
+const CHARSET_CLASS_BIT_NONASCII: u32 = 1 << 14;
+const CHARSET_CLASS_BIT_UNIBYTE: u32 = 1 << 15;
+const CHARSET_CLASS_BIT_MULTIBYTE: u32 = 1 << 16;
 
 impl CompiledPattern {
     pub fn new() -> Self {
@@ -1592,7 +1598,7 @@ fn compile_charset(
     // Bitmask of class flags for `[[:word:]]` / `[[:space:]]`. The
     // matcher checks these against the buffer syntax table at run
     // time so per-mode word/space definitions take effect.
-    let mut class_bits: u8 = 0;
+    let mut class_bits: u32 = 0;
 
     // Special case: ] at start is literal
     let mut first = true;
@@ -1882,19 +1888,10 @@ fn apply_posix_class(
     buffer: &mut Vec<u8>,
     bitmap_start: usize,
     mb_ranges: &mut Vec<(char, char)>,
-    class_bits: &mut u8,
+    class_bits: &mut u32,
     translate: Option<&CaseTranslation>,
 ) -> Result<(), RegexCompileError> {
-    // GNU `regex-emacs.c:2100-2101` records `BIT_SPACE` and
-    // `BIT_WORD` on the charset so the matcher can later consult
-    // the buffer syntax table at run time. We do the same via
-    // `class_bits` and the `[[:word:]]`/`[[:space:]]` arms below.
-    // Audit finding #8 in `drafts/regex-search-audit.md`.
-    match name {
-        "word" => *class_bits |= CHARSET_CLASS_BIT_WORD,
-        "space" => *class_bits |= CHARSET_CLASS_BIT_SPACE,
-        _ => {}
-    }
+    *class_bits |= posix_class_bit(name)?;
     // --- ASCII bitmap bits ------------------------------------------------
     //
     // Each class enumerates which bytes in 0x00..=0xFF should be
@@ -1975,12 +1972,11 @@ fn apply_posix_class(
 
     // --- Multibyte coverage ----------------------------------------------
     //
-    // Classes that include non-ASCII code points need to reach the
-    // matcher's multibyte dispatch. GNU uses a range-table bit
-    // (`re_wctype_to_bit`) that triggers `re_iswctype` at match time;
-    // neomacs's equivalent is the `multibyte_charsets` map of
-    // (start, end) ranges built in `compile_charset`. We append the
-    // appropriate ranges here.
+    // GNU does not expand multibyte POSIX classes into concrete ranges at
+    // compile time.  It records class bits and calls `re_iswctype` while
+    // executing the charset.  `class_bits` above is the Neomacs equivalent.
+    // These explicit ranges remain only for the two classes that are pure
+    // broad range tests and were represented this way historically.
     match name {
         // Non-ASCII entirely: 0x80..=max Unicode scalar.
         "nonascii" | "multibyte" => {
@@ -1990,6 +1986,31 @@ fn apply_posix_class(
     }
 
     Ok(())
+}
+
+fn posix_class_bit(name: &str) -> Result<u32, RegexCompileError> {
+    match name {
+        "alnum" => Ok(CHARSET_CLASS_BIT_ALNUM),
+        "alpha" => Ok(CHARSET_CLASS_BIT_ALPHA),
+        "blank" => Ok(CHARSET_CLASS_BIT_BLANK),
+        "cntrl" => Ok(CHARSET_CLASS_BIT_CNTRL),
+        "digit" => Ok(CHARSET_CLASS_BIT_DIGIT),
+        "graph" => Ok(CHARSET_CLASS_BIT_GRAPH),
+        "lower" => Ok(CHARSET_CLASS_BIT_LOWER),
+        "print" => Ok(CHARSET_CLASS_BIT_PRINT),
+        "punct" => Ok(CHARSET_CLASS_BIT_PUNCT),
+        "space" => Ok(CHARSET_CLASS_BIT_SPACE),
+        "upper" => Ok(CHARSET_CLASS_BIT_UPPER),
+        "xdigit" => Ok(CHARSET_CLASS_BIT_XDIGIT),
+        "ascii" => Ok(CHARSET_CLASS_BIT_ASCII),
+        "word" => Ok(CHARSET_CLASS_BIT_WORD),
+        "nonascii" => Ok(CHARSET_CLASS_BIT_NONASCII),
+        "unibyte" => Ok(CHARSET_CLASS_BIT_UNIBYTE),
+        "multibyte" => Ok(CHARSET_CLASS_BIT_MULTIBYTE),
+        _ => Err(RegexCompileError {
+            message: format!("Invalid character class name: {}", name),
+        }),
+    }
 }
 
 /// Parse an interval \{n,m\} from the pattern.
@@ -2346,6 +2367,25 @@ fn default_char_has_category(c: char, cat: u8) -> bool {
     }
 }
 
+fn unicode_blank_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{202f}' | '\u{205f}' | '\u{3000}'
+    )
+}
+
+fn unicode_line_or_paragraph_separator(c: char) -> bool {
+    matches!(c, '\u{2028}' | '\u{2029}')
+}
+
+fn unicode_graphic_char(c: char) -> bool {
+    !unicode_blank_char(c) && !unicode_line_or_paragraph_separator(c) && !c.is_control()
+}
+
+fn unicode_printable_char(c: char) -> bool {
+    !c.is_control()
+}
+
 /// Match a compiled pattern against input text.
 ///
 /// This is the core matching function, equivalent to GNU's `re_match_2_internal`.
@@ -2462,6 +2502,65 @@ pub(crate) fn re_match(
         } else {
             None
         }
+    };
+    let posix_class_matches = |code: u32, bits: u32| -> bool {
+        let byte = emacs_char_to_unibyte(code);
+        let ch = syntax_char(code);
+        let is_real_ascii = code < 0x80;
+        let ascii_alnum = |b: u8| b.is_ascii_alphabetic() || b.is_ascii_digit();
+        let ascii_alpha = |b: u8| b.is_ascii_alphabetic();
+
+        (bits & CHARSET_CLASS_BIT_ALNUM != 0
+            && if is_real_ascii {
+                ascii_alnum(code as u8)
+            } else {
+                ch.is_alphanumeric()
+            })
+            || (bits & CHARSET_CLASS_BIT_ALPHA != 0
+                && if is_real_ascii {
+                    ascii_alpha(code as u8)
+                } else {
+                    ch.is_alphabetic()
+                })
+            || (bits & CHARSET_CLASS_BIT_BLANK != 0
+                && if is_real_ascii {
+                    matches!(code, 0x20 | 0x09)
+                } else {
+                    unicode_blank_char(ch)
+                })
+            || (bits & CHARSET_CLASS_BIT_CNTRL != 0 && code < 0x20)
+            || (bits & CHARSET_CLASS_BIT_DIGIT != 0
+                && is_real_ascii
+                && (code as u8).is_ascii_digit())
+            || (bits & CHARSET_CLASS_BIT_GRAPH != 0
+                && byte.map_or_else(
+                    || unicode_graphic_char(ch),
+                    |b| b > b' ' && !(0x7f..=0xa0).contains(&b),
+                ))
+            || (bits & CHARSET_CLASS_BIT_LOWER != 0 && ch.is_lowercase())
+            || (bits & CHARSET_CLASS_BIT_PRINT != 0
+                && byte.map_or_else(
+                    || unicode_printable_char(ch),
+                    |b| b >= b' ' && !(0x7f..=0x9f).contains(&b),
+                ))
+            || (bits & CHARSET_CLASS_BIT_PUNCT != 0
+                && if is_real_ascii {
+                    let b = code as u8;
+                    b > b' ' && b < 0x7f && !ascii_alnum(b)
+                } else {
+                    syntax.char_syntax(ch) != SyntaxClass::Word
+                })
+            || (bits & CHARSET_CLASS_BIT_SPACE != 0
+                && syntax.char_syntax(ch) == SyntaxClass::Whitespace)
+            || (bits & CHARSET_CLASS_BIT_UPPER != 0 && ch.is_uppercase())
+            || (bits & CHARSET_CLASS_BIT_XDIGIT != 0
+                && is_real_ascii
+                && (code as u8).is_ascii_hexdigit())
+            || (bits & CHARSET_CLASS_BIT_ASCII != 0 && is_real_ascii)
+            || (bits & CHARSET_CLASS_BIT_WORD != 0 && syntax.char_syntax(ch) == SyntaxClass::Word)
+            || (bits & CHARSET_CLASS_BIT_NONASCII != 0 && !is_real_ascii)
+            || (bits & CHARSET_CLASS_BIT_UNIBYTE != 0 && byte.is_some())
+            || (bits & CHARSET_CLASS_BIT_MULTIBYTE != 0 && byte.is_none())
     };
 
     // Helper: decode an Emacs character at position.
@@ -2767,25 +2866,16 @@ pub(crate) fn re_match(
                     false
                 };
 
-                // GNU `regex-emacs.c:execute_charset` at lines
-                // 3795-3802 takes the union of the bitmap with the
-                // class flags consulted via the buffer syntax table.
-                // For `[[:word:]]`/`[[:space:]]` this lets per-mode
-                // overrides (e.g. `_` is `Sword` in `python-mode`)
-                // extend the charset at match time. Audit finding
-                // #8 in `drafts/regex-search-audit.md`.
+                // GNU `regex-emacs.c:execute_charset` takes the union of the
+                // bitmap/ranges with POSIX class bits stored in the charset
+                // range table.  This is required for multibyte `[:alnum:]`
+                // and for syntax-table-sensitive `[:word:]`/`[:space:]`.
                 let in_set = in_set
                     || pattern
                         .charset_class_bits
                         .get(&charset_op_pos)
                         .copied()
-                        .map(|bits| {
-                            (bits & CHARSET_CLASS_BIT_WORD != 0
-                                && syntax.char_syntax(syntax_char(orig_ch)) == SyntaxClass::Word)
-                                || (bits & CHARSET_CLASS_BIT_SPACE != 0
-                                    && syntax.char_syntax(syntax_char(orig_ch))
-                                        == SyntaxClass::Whitespace)
-                        })
+                        .map(|bits| posix_class_matches(orig_ch, bits))
                         .unwrap_or(false);
 
                 let matched = if negate { !in_set } else { in_set };

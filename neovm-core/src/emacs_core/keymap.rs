@@ -1001,11 +1001,7 @@ fn events_match(a: &Value, b: &Value) -> bool {
     let a = normalize(a);
     let b = normalize(b);
 
-    match (a.kind(), b.kind()) {
-        (ValueKind::Fixnum(x), ValueKind::Fixnum(y)) => x == y,
-        (ValueKind::Symbol(x), ValueKind::Symbol(y)) => x == y,
-        _ => false,
-    }
+    eq_value(&a, &b)
 }
 
 pub(crate) fn expand_meta_prefix_char_events_in_obarray(

@@ -816,6 +816,21 @@ fn posix_class_word_matches_ascii_letters_and_digits_but_not_punct() {
 }
 
 #[test]
+fn posix_class_alnum_and_alpha_match_multibyte_letters_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let mut md = None;
+    let r = string_match_full("[[:alnum:]]+", "标签:tail", 0, &mut md);
+    assert_eq!(r, Ok(Some(0)));
+    assert_eq!(md.unwrap().groups[0], Some((0, 2)));
+
+    let mut md = None;
+    let r = string_match_full("[[:alpha:]]+", "任务42", 0, &mut md);
+    assert_eq!(r, Ok(Some(0)));
+    assert_eq!(md.unwrap().groups[0], Some((0, 2)));
+}
+
+#[test]
 fn posix_class_nonascii_matches_only_chars_at_or_above_u0080() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
