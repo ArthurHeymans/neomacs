@@ -288,22 +288,22 @@ impl RenderApp {
             } else {
                 self.set_primary_current_frame(Some(frame));
                 if gui_menu_bar.is_none() {
-                    self.chrome_interaction.clear_menu_bar();
+                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_menu_bar());
                 }
                 if let Some(tool_bar) = gui_tool_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(tool_bar.height);
                     self.ensure_toolbar_icon_textures(&tool_bar.items);
                 } else if gui_tool_bar.is_none() {
-                    self.chrome_interaction.clear_toolbar();
+                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_toolbar());
                 }
                 if let Some(compact_bar) = gui_compact_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(compact_bar.height);
                     self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
                 } else if gui_compact_bar.is_none() {
-                    self.chrome_interaction.clear_compact_bar();
+                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_compact_bar());
                 }
                 if self.primary_tab_bar().is_none() {
-                    self.chrome_interaction.clear_tab_bar();
+                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_tab_bar());
                 }
                 if let Some(primary_frame) = self.primary_frame.as_mut() {
                     primary_frame.menu_bar = gui_menu_bar;

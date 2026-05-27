@@ -152,7 +152,9 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             self.set_primary_popup_menu(None);
-                            self.chrome_interaction.menu_bar_active = None;
+                            self.with_primary_chrome_interaction_mut(|chrome| {
+                                chrome.menu_bar_active = None;
+                            });
                             self.mark_primary_dirty();
                         }
                         Key::Named(NamedKey::ArrowDown) => {
@@ -184,14 +186,18 @@ impl RenderApp {
                                             index: global_idx as i32,
                                         });
                                         self.set_primary_popup_menu(None);
-                                        self.chrome_interaction.menu_bar_active = None;
+                                        self.with_primary_chrome_interaction_mut(|chrome| {
+                                            chrome.menu_bar_active = None;
+                                        });
                                         self.mark_primary_dirty();
                                     }
                                 } else {
                                     self.comms
                                         .send_input(InputEvent::MenuSelection { index: -1 });
                                     self.set_primary_popup_menu(None);
-                                    self.chrome_interaction.menu_bar_active = None;
+                                    self.with_primary_chrome_interaction_mut(|chrome| {
+                                        chrome.menu_bar_active = None;
+                                    });
                                     self.mark_primary_dirty();
                                 }
                             }

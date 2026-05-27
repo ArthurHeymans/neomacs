@@ -1122,7 +1122,7 @@ impl RenderApp {
                 GuiFrameChromeOverlays {
                     native_chrome: &self.chrome,
                     titlebar_background,
-                    chrome_interaction: self.chrome_interaction,
+                    chrome_interaction: primary_frame.chrome_interaction,
                     menu_bar: primary_frame.menu_bar.as_ref().map(|menu_bar| {
                         GuiFrameMenuBarOverlay {
                             items: &menu_bar.items,

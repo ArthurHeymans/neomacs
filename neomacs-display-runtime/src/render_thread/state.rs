@@ -338,7 +338,6 @@ pub(super) struct RenderApp {
     pub(super) toolbar_icon_textures: HashMap<String, u32>,
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
-    pub(super) chrome_interaction: GuiChromeInteractionState,
 
     // Primary native IME state; preedit text/active state lives on primary_frame.
     pub(super) ime_enabled: bool,
@@ -429,7 +428,6 @@ impl RenderApp {
             toolbar_icon_textures: HashMap::new(),
             toolbar_icon_size: 24,
             toolbar_padding: 5,
-            chrome_interaction: GuiChromeInteractionState::default(),
             ime_enabled: false,
             last_ime_cursor_area: None,
             scroll_indicators_enabled: false,
@@ -620,6 +618,23 @@ impl RenderApp {
     pub(super) fn primary_tab_bar(&self) -> Option<&FrameTabBarState> {
         self.primary_current_frame()
             .and_then(|frame| frame.tab_bar.as_ref())
+    }
+
+    pub(super) fn primary_chrome_interaction(&self) -> GuiChromeInteractionState {
+        self.primary_frame
+            .as_ref()
+            .map_or(GuiChromeInteractionState::default(), |frame| {
+                frame.chrome_interaction
+            })
+    }
+
+    pub(super) fn with_primary_chrome_interaction_mut(
+        &mut self,
+        f: impl FnOnce(&mut GuiChromeInteractionState),
+    ) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            f(&mut primary_frame.chrome_interaction);
+        }
     }
 
     pub(super) fn primary_ime_preedit_active(&self) -> bool {

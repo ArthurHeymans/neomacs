@@ -249,7 +249,7 @@ impl RenderApp {
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
                 self.set_primary_popup_menu(None);
-                self.chrome_interaction.menu_bar_active = None;
+                self.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None);
                 for window_state in self.frame_windows.windows.values_mut() {
                     if window_state.render.popup_menu.is_some() {
                         window_state.render.popup_menu = None;
