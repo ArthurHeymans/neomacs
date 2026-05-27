@@ -409,10 +409,54 @@ fn org_include_export_environment_reference_combo() {
                     (plist-get info :title)
                     (plist-get info :author)
                     (plist-get info :with-toc)
-                    (replace-regexp-in-string
-                     "org[[:alnum:]]+"
-                     "org-id"
-                     (org-export-as 'html nil nil t nil)))))))
+                     (replace-regexp-in-string
+                      "org[[:alnum:]]+"
+                      "org-id"
+                      (org-export-as 'html nil nil t nil)))))))
       (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_macro_expand_nested_arg_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-macro)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+MACRO: greet Hello, $1!\n")
+    (insert "#+MACRO: wrap /$1/\n")
+    (insert "#+MACRO: twice $1 and $1\n")
+    (insert "#+MACRO: concat $1$2\n")
+    (insert "#+MACRO: nested {{{wrap($1)}}} plus $2\n\n")
+    (insert "* Section\n")
+    (insert "Greet: {{{greet(World)}}}\n")
+    (insert "Wrap: {{{wrap(important)}}}\n")
+    (insert "Twice: {{{twice(repeated)}}}\n")
+    (insert "Concat: {{{concat(foo,bar)}}}\n")
+    (insert "Nested: {{{nested(bold,extra)}}}\n")
+    (let ((before (buffer-substring-no-properties
+                   (point-min) (point-max))))
+      ;; Collect and replace
+      (let ((macros (org-macro--collect-macros)))
+        (org-macro-replace-all macros)
+        (let ((after (buffer-substring-no-properties
+                      (point-min) (point-max)))
+              (macro-names (sort (mapcar #'car macros) #'string<))
+              (macro-vals (mapcar (lambda (m)
+                                    (list (car m) (cdr m)))
+                                  macros)))
+          ;; Export after expansion
+          (let* ((html (org-export-as 'html nil nil t nil))
+                 (has-greet (string-match-p "Hello, World!" html))
+                 (has-italic (string-match-p "<i>" html)))
+            (list before
+                  after
+                  macro-names
+                  macro-vals
+                  (list has-greet has-italic))))))))"##,
     );
 }
