@@ -733,8 +733,8 @@ impl RenderApp {
     }
 
     pub(super) fn set_primary_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
-            window_state.native.mouse_hidden_for_typing = hidden;
+        if let Some(window_state) = self.primary_window_state_mut() {
+            window_state.set_mouse_hidden_for_typing(hidden);
         } else {
             self.mouse_hidden_for_typing = hidden;
         }

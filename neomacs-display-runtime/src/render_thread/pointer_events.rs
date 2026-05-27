@@ -1336,10 +1336,7 @@ impl RenderApp {
                     window_state.render.frame_dirty = true;
                 }
 
-                if window_state.native.mouse_hidden_for_typing {
-                    window_state.native.window.set_cursor_visible(true);
-                    window_state.native.mouse_hidden_for_typing = false;
-                }
+                window_state.set_mouse_hidden_for_typing(false);
 
                 let (ev_x, ev_y, target_fid) =
                     Self::pointer_target_for_frame_window(window_state, lx, ly);
@@ -1363,10 +1360,9 @@ impl RenderApp {
         self.set_primary_mouse_pos((lx, ly));
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
-        if self.primary_mouse_hidden_for_typing() {
-            if let Some(window) = self.primary_window() {
-                window.set_cursor_visible(true);
-            }
+        if let Some(primary_state) = self.primary_window_state_mut() {
+            primary_state.set_mouse_hidden_for_typing(false);
+        } else if self.primary_mouse_hidden_for_typing() {
             self.set_primary_mouse_hidden_for_typing(false);
         }
 

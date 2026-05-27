@@ -3,7 +3,6 @@
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{RenderCommand, ToolBarItem};
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
-use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
 const GNU_TOOL_BAR_BASE_PADDING: f32 = 5.0;
@@ -558,14 +557,12 @@ impl RenderApp {
                     if let Some(cursor) = self.primary_cursor_mut() {
                         cursor.clear_target();
                     }
-                    self.reset_primary_ime_cursor_area();
-                    self.clear_primary_ime_preedit();
-                    if let Some(window) = self.primary_window() {
-                        window.set_ime_cursor_area(
-                            PhysicalPosition::new(0.0, 0.0),
-                            PhysicalSize::new(1.0, 1.0),
-                        );
+                    if let Some(primary_state) = self.primary_window_state_mut() {
+                        primary_state.reset_ime_cursor_area();
+                    } else {
+                        self.reset_primary_ime_cursor_area();
                     }
+                    self.clear_primary_ime_preedit();
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
                     let removed = window_state
@@ -584,14 +581,7 @@ impl RenderApp {
                         .is_some_and(|target| target.frame_id == frame_id)
                     {
                         window_state.render.cursor.clear_target();
-                        window_state.native.last_ime_cursor_area = None;
-                        window_state.render.ime_preedit_active = false;
-                        window_state.render.ime_preedit_text.clear();
-                        window_state.native.window.set_ime_cursor_area(
-                            PhysicalPosition::new(0.0, 0.0),
-                            PhysicalSize::new(1.0, 1.0),
-                        );
-                        window_state.render.frame_dirty = true;
+                        window_state.clear_ime_preedit();
                     }
                 }
                 self.mark_primary_dirty();

@@ -1,7 +1,6 @@
 use super::frame_windows::GuiFrameWindowState;
 use super::{ImeCursorArea, RenderApp};
 use crate::render_thread::cursor::CursorTarget;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 impl RenderApp {
     fn ime_cursor_area_for_window_target(
@@ -69,16 +68,7 @@ impl RenderApp {
         let Some(window_state) = self.primary_window_state_mut() else {
             return;
         };
-        let native = &mut window_state.native;
-        if native.last_ime_cursor_area == Some(area) {
-            return;
-        }
-
-        native.window.set_ime_cursor_area(
-            PhysicalPosition::new(area.x as f64, area.y as f64),
-            PhysicalSize::new(area.width as f64, area.height as f64),
-        );
-        native.last_ime_cursor_area = Some(area);
+        window_state.update_ime_cursor_area(area);
     }
 
     /// Update a secondary frame window's IME cursor area when composition is active.
@@ -91,15 +81,7 @@ impl RenderApp {
         }
 
         let area = Self::ime_cursor_area_for_window_target(window_state, target);
-        if window_state.native.last_ime_cursor_area == Some(area) {
-            return;
-        }
-
-        window_state.native.window.set_ime_cursor_area(
-            PhysicalPosition::new(area.x as f64, area.y as f64),
-            PhysicalSize::new(area.width as f64, area.height as f64),
-        );
-        window_state.native.last_ime_cursor_area = Some(area);
+        window_state.update_ime_cursor_area(area);
     }
 
     pub(super) fn tick_frame_window_cursor_blink(

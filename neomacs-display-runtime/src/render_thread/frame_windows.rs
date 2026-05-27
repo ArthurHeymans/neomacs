@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Fullscreen, Window, WindowId};
 
@@ -226,6 +227,38 @@ impl GuiFrameWindowState {
     pub(super) fn set_decorations(&mut self, decorated: bool) {
         self.native.chrome.decorations_enabled = decorated;
         self.native.window.set_decorations(decorated);
+        self.render.frame_dirty = true;
+    }
+
+    pub(super) fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
+        if self.native.mouse_hidden_for_typing != hidden {
+            self.native.window.set_cursor_visible(!hidden);
+            self.native.mouse_hidden_for_typing = hidden;
+        }
+    }
+
+    pub(super) fn reset_ime_cursor_area(&mut self) {
+        self.native.last_ime_cursor_area = None;
+        self.native
+            .window
+            .set_ime_cursor_area(PhysicalPosition::new(0.0, 0.0), PhysicalSize::new(1.0, 1.0));
+    }
+
+    pub(super) fn update_ime_cursor_area(&mut self, area: ImeCursorArea) {
+        if self.native.last_ime_cursor_area == Some(area) {
+            return;
+        }
+        self.native.window.set_ime_cursor_area(
+            PhysicalPosition::new(area.x as f64, area.y as f64),
+            PhysicalSize::new(area.width as f64, area.height as f64),
+        );
+        self.native.last_ime_cursor_area = Some(area);
+    }
+
+    pub(super) fn clear_ime_preedit(&mut self) {
+        self.render.ime_preedit_active = false;
+        self.render.ime_preedit_text.clear();
+        self.reset_ime_cursor_area();
         self.render.frame_dirty = true;
     }
 }

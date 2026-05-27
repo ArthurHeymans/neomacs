@@ -7,7 +7,6 @@ use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
 use std::collections::HashSet;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 impl RenderApp {
     fn ingest_frame_window_root_frame(
@@ -82,13 +81,7 @@ impl RenderApp {
             }
         } else {
             window_state.render.cursor.clear_target();
-            window_state.native.last_ime_cursor_area = None;
-            window_state.render.ime_preedit_active = false;
-            window_state.render.ime_preedit_text.clear();
-            window_state
-                .native
-                .window
-                .set_ime_cursor_area(PhysicalPosition::new(0.0, 0.0), PhysicalSize::new(1.0, 1.0));
+            window_state.clear_ime_preedit();
         }
     }
 
@@ -401,14 +394,12 @@ impl RenderApp {
             if let Some(cursor) = self.primary_cursor_mut() {
                 cursor.clear_target();
             }
-            self.reset_primary_ime_cursor_area();
-            self.clear_primary_ime_preedit();
-            if let Some(window) = self.primary_window() {
-                window.set_ime_cursor_area(
-                    PhysicalPosition::new(0.0, 0.0),
-                    PhysicalSize::new(1.0, 1.0),
-                );
+            if let Some(primary_state) = self.primary_window_state_mut() {
+                primary_state.reset_ime_cursor_area();
+            } else {
+                self.reset_primary_ime_cursor_area();
             }
+            self.clear_primary_ime_preedit();
         }
 
         let mut live_visual_cursor_ids = HashSet::new();

@@ -318,18 +318,17 @@ impl RenderApp {
                             );
                             if state == ElementState::Pressed {
                                 if is_primary {
-                                    if !self.primary_mouse_hidden_for_typing()
-                                        && let Some(window) = self.primary_window()
+                                    if let Some(primary_state) = self.primary_window_state_mut() {
+                                        primary_state.set_mouse_hidden_for_typing(true);
+                                    } else if !self.primary_mouse_hidden_for_typing()
+                                        && self.primary_window().is_some()
                                     {
-                                        window.set_cursor_visible(false);
                                         self.set_primary_mouse_hidden_for_typing(true);
                                     }
                                 } else if let Some(window_state) =
                                     self.frame_windows.get_by_winit_mut(window_id)
-                                    && !window_state.native.mouse_hidden_for_typing
                                 {
-                                    window_state.native.window.set_cursor_visible(false);
-                                    window_state.native.mouse_hidden_for_typing = true;
+                                    window_state.set_mouse_hidden_for_typing(true);
                                 }
                             }
                             if state == ElementState::Pressed {
