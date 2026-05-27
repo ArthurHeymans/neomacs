@@ -201,3 +201,42 @@ fn org_icalendar_combine_agenda_files_filter_hook_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_texinfo_export_menu_definition_table_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-texinfo)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Texinfo Combo\n")
+    (insert "#+AUTHOR: Ada\n")
+    (insert "#+OPTIONS: toc:nil num:t\n")
+    (insert "* First Node\n")
+    (insert "Paragraph with *bold*, /italic/, =code= and [[https://example.org][link]].\n")
+    (insert "- Function :: Describe function entry\n")
+    (insert "- Variable :: Describe variable entry\n\n")
+    (insert "#+CAPTION: Values\n")
+    (insert "| Name | Count |\n|------+-------|\n| A | 1 |\n| B | 2 |\n")
+    (insert "#+begin_src emacs-lisp -n\n(+ 1 2)\n#+end_src\n")
+    (insert "** Child Node\n")
+    (insert "#+begin_example\nliteral @ braces { }\n#+end_example\n")
+    (insert "* Second/Node\n")
+    (insert "Trailing paragraph with \\alpha and H_2O.\n")
+    (let* ((org-export-with-toc nil)
+           (texi (org-export-as 'texinfo nil nil t nil))
+           (normalized
+            (replace-regexp-in-string "org[[:alnum:]]+" "org-id" texi)))
+      (list (not (null (string-match-p "@node First Node" texi)))
+            (not (null (string-match-p "@menu" texi)))
+            (not (null (string-match-p "@table" texi)))
+            (not (null (string-match-p "@item Function" texi)))
+            (not (null (string-match-p "@multitable" texi)))
+            (not (null (string-match-p "@example" texi)))
+            (not (null (string-match-p "@code" texi)))
+            (not (null (string-match-p "Second/Node" texi)))
+            normalized))))"##,
+    );
+}
