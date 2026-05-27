@@ -1080,6 +1080,62 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_result_insert_update_replace_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Block with placeholder result
+      (insert "#+NAME: counter\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(random 1000)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+RESULTS: counter\n")
+      (insert ": placeholder\n\n")
+      ;; Execute - should replace placeholder
+      (goto-char (point-min))
+      (search-forward "counter")
+      (org-babel-execute-src-block)
+      (let ((after-exec (buffer-substring-no-properties
+                         (point-min) (point-max)))
+            (result-1 (org-babel-read-result)))
+        ;; Execute again - should replace previous result
+        (goto-char (point-min))
+        (search-forward "counter")
+        (org-babel-execute-src-block)
+        (let ((after-reexec (buffer-substring-no-properties
+                             (point-min) (point-max)))
+              (result-2 (org-babel-read-result)))
+          ;; Remove result
+          (goto-char (point-min))
+          (search-forward "counter")
+          (org-babel-remove-result)
+          (let ((after-remove (buffer-substring-no-properties
+                               (point-min) (point-max))))
+            ;; Execute again - should create new result
+            (goto-char (point-min))
+            (search-forward "counter")
+            (org-babel-execute-src-block)
+            (let ((after-new (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                  (result-3 (org-babel-read-result)))
+              (list after-exec
+                    (integerp result-1)
+                    after-reexec
+                    (integerp result-2)
+                    after-remove
+                    after-new
+                    (integerp result-3))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_result_type_string_number_list_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
