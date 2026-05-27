@@ -50,7 +50,7 @@ pub enum InputEvent {
         y: f32,
         pressed: bool,
         modifiers: u32,
-        /// Target frame for child frame hit testing (0 = parent frame)
+        /// Emacs frame_id targeted by hit testing (root frame or child frame)
         target_frame_id: u64,
         /// WebKit view ID hit by render-thread glyph search (0 = none)
         webkit_id: u32,
@@ -62,7 +62,7 @@ pub enum InputEvent {
         x: f32,
         y: f32,
         modifiers: u32,
-        /// Target frame for child frame hit testing (0 = parent frame)
+        /// Emacs frame_id targeted by hit testing (root frame or child frame)
         target_frame_id: u64,
     },
     MouseScroll {
@@ -73,7 +73,7 @@ pub enum InputEvent {
         modifiers: u32,
         /// True if deltas are in pixels (touchpad), false if in lines (mouse wheel)
         pixel_precise: bool,
-        /// Target frame for child frame hit testing (0 = parent frame)
+        /// Emacs frame_id targeted by hit testing (root frame or child frame)
         target_frame_id: u64,
         /// WebKit view ID hit by render-thread glyph search (0 = none)
         webkit_id: u32,

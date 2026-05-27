@@ -1,4 +1,5 @@
 use super::RenderApp;
+use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::thread_comm::{RenderCommand, ThreadComms};
 use neomacs_display_protocol::PopupMenuItem;
 use std::collections::HashMap;
@@ -254,4 +255,25 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
             .is_some()
     );
     assert!(app.primary_dirty());
+}
+
+#[test]
+fn adopted_primary_pointer_target_uses_real_frame_id() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.scale_factor,
+        app.primary_fps_enabled(),
+    ));
+    app.frame_windows.adopt_primary_frame_id(0x1000);
+    app.set_primary_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)));
+
+    let (x, y, frame_id) = app.pointer_target_at(12.0, 34.0);
+
+    assert_eq!((x, y), (12.0, 34.0));
+    assert_eq!(frame_id, 0x1000);
 }
