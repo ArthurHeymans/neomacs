@@ -231,3 +231,91 @@ fn org_markup_entities_fontlock_export_combo() {
                         "--" "\\\\mathsf{X}"))))))"##,
     );
 }
+
+#[test]
+fn org_emphasize_region_replace_remove_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (let ((org-hide-emphasis-markers t)
+          (org-pretty-entities t))
+      (org-mode)
+      (insert "#+TITLE: Emphasize\n")
+      (insert "* H\n")
+      (insert "Alpha beta gamma \\alpha.\n")
+      (insert "Second line with words.\n")
+      (cl-labels
+          ((mark-word
+            (word)
+            (goto-char (point-min))
+            (search-forward word)
+            (let ((beg (match-beginning 0))
+                  (end (match-end 0)))
+              (goto-char beg)
+              (push-mark end t t)
+              (setq mark-active t
+                    transient-mark-mode t))))
+           (prop-at
+            (needle)
+            (save-excursion
+              (goto-char (point-min))
+              (search-forward needle)
+              (list needle
+                    (get-text-property (match-beginning 0) 'face)
+                    (get-text-property (match-beginning 0) 'invisible)
+                    (get-text-property (match-beginning 0) 'display)
+                    (get-text-property (match-beginning 0) 'org-emphasis)))))
+        (mark-word "beta")
+        (org-emphasize ?*)
+        (let ((after-bold
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (mark-word "beta")
+          (org-emphasize ?/)
+          (let ((after-replace
+                 (buffer-substring-no-properties (point-min) (point-max))))
+            (mark-word "beta")
+            (org-emphasize ?\s)
+            (let ((after-remove
+                   (buffer-substring-no-properties (point-min) (point-max))))
+              (goto-char (point-min))
+              (search-forward "gamma")
+              (end-of-line)
+              (org-emphasize ?=)
+              (insert "code")
+              (forward-char)
+              (font-lock-ensure (point-min) (point-max))
+              (let* ((tree (org-element-parse-buffer))
+                     (objects
+                      (org-element-map tree '(bold italic code entity)
+                        (lambda (object)
+                          (list (org-element-type object)
+                                (buffer-substring-no-properties
+                                 (org-element-property :begin object)
+                                 (org-element-property :end object))))))
+                     (props (mapcar #'prop-at
+                                    '("Alpha" "beta" "\\alpha" "=code=")))
+                     (html (org-export-as 'html nil nil t '(:with-toc nil)))
+                     (ascii (let ((org-ascii-charset 'utf-8))
+                              (org-export-as 'ascii nil nil t
+                                             '(:with-toc nil)))))
+                (list after-bold
+                      after-replace
+                      after-remove
+                      objects
+                      props
+                      (mapcar (lambda (needle)
+                                (not (null (string-match-p needle html))))
+                              '("Alpha beta gamma" "<code>code</code>"
+                                "&alpha;"))
+                      (mapcar (lambda (needle)
+                                (not (null (string-match-p needle ascii))))
+                              '("Alpha beta gamma" "=code=" "α"))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))"##,
+    );
+}
