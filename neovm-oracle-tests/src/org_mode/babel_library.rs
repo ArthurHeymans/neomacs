@@ -148,3 +148,88 @@ fn org_babel_sbe_table_formula_literal_header_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_babel_local_call_table_cache_inline_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-lob)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (let ((org-confirm-babel-evaluate nil)
+          (org-babel-default-lob-header-args
+           '((:exports . "results") (:results . "replace"))))
+      (org-mode)
+      (insert "#+PROPERTY: header-args:emacs-lisp :results value replace\n")
+      (insert "#+NAME: nums\n")
+      (insert "| item | n |\n")
+      (insert "|------+---|\n")
+      (insert "| a    | 2 |\n")
+      (insert "| b    | 5 |\n\n")
+      (insert "#+NAME: shape\n")
+      (insert "#+begin_src emacs-lisp :var rows=nums factor=1 :cache yes\n")
+      (insert "(mapcar (lambda (row)\n")
+      (insert "          (let ((label (car row))\n")
+      (insert "                (n (string-to-number (cadr row))))\n")
+      (insert "            (list label n (* factor n))))\n")
+      (insert "        rows)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+CALL: shape(rows=nums[2:3,*], factor=10) :results value table replace :cache yes\n\n")
+      (insert "Inline call_shape[:results raw replace](rows=nums[2:2,*], factor=3) end.\n")
+      (let (call-info call-noeval call-pos call-read inline-info inline-read
+            after-first after-second no-info)
+        (goto-char (point-min))
+        (search-forward "#+CALL")
+        (setq call-info (org-babel-lob-get-info)
+              call-noeval (org-babel-lob-get-info nil t))
+        (org-babel-execute-maybe)
+        (setq call-pos (org-babel-where-is-src-block-result nil call-info))
+        (goto-char call-pos)
+        (forward-line 1)
+        (setq call-read (org-babel-read-result))
+        (setq after-first
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (search-forward "call_shape")
+        (setq inline-info (org-babel-lob-get-info))
+        (org-babel-execute-maybe)
+        (setq inline-read
+              (save-excursion
+                (goto-char (point-min))
+                (search-forward "Inline")
+                (buffer-substring-no-properties
+                 (line-beginning-position) (line-end-position))))
+        (goto-char (point-min))
+        (search-forward "| b")
+        (search-forward "5")
+        (replace-match "7" t t)
+        (goto-char (point-min))
+        (search-forward "#+CALL")
+        (org-babel-execute-maybe)
+        (setq after-second
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-max))
+        (setq no-info (org-babel-lob-get-info))
+        (list (nth 0 call-info)
+              (nth 1 call-info)
+              (assq :var (nth 2 call-info))
+              (assq :cache (nth 2 call-info))
+              (assq :results (nth 2 call-info))
+              (assq :exports (nth 2 call-info))
+              (nth 4 call-info)
+              (nth 5 call-info)
+              (assq :var (nth 2 call-noeval))
+              call-read
+              after-first
+              (nth 0 inline-info)
+              (assq :var (nth 2 inline-info))
+              (assq :results (nth 2 inline-info))
+              inline-read
+              after-second
+              no-info)))))"##,
+    );
+}
