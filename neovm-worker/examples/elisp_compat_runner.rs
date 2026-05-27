@@ -1,5 +1,6 @@
 use neovm_core::TaskScheduler;
 use neovm_core::emacs_core::print_value;
+use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::value_reader::read_all;
 use neovm_host_abi::{LispValue, Signal, TaskError, TaskOptions};
 use neovm_worker::{WorkerConfig, WorkerRuntime};
@@ -94,7 +95,8 @@ fn main() {
     });
     let workers = rt.start_dummy_workers();
 
-    let forms = match read_all(&source) {
+    let parse_obarray = Obarray::new();
+    let forms = match read_all(&source, &parse_obarray) {
         Ok(forms) => forms,
         Err(err) => {
             eprintln!("failed to parse forms: {}", err.message);

@@ -299,33 +299,29 @@ impl FontMetricsService {
         );
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                let face = self
-                    .font_system
-                    .db()
-                    .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
-                return Some(SelectedFontInfo {
-                    // TTC/variable collections frequently expose several
-                    // regional aliases, and fontdb may report the file's first
-                    // alias instead of the family we explicitly resolved for
-                    // this character. Preserve the selector's family so
-                    // `font-at` mirrors GNU Emacs' realized face semantics.
-                    family: resolved.family.clone(),
-                    postscript_name: Some(face.post_script_name.clone())
-                        .filter(|name| !name.is_empty()),
-                    // Variable fonts often report the container face's
-                    // metadata weight here even when shaping used a different
-                    // requested instance. Preserve the resolved CSS weight so
-                    // `font-at` mirrors GNU Emacs' realized face semantics.
-                    weight: FontWeight(resolved.weight),
-                    slant: font_slant_from_fontdb(face.style),
-                    width: font_width_from_stretch_number(face.stretch.to_number()),
-                });
-            }
-        }
-
-        None
+        let glyph = buffer
+            .layout_runs()
+            .find_map(|run| run.glyphs.iter().next())?;
+        let face = self
+            .font_system
+            .db()
+            .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
+        Some(SelectedFontInfo {
+            // TTC/variable collections frequently expose several regional
+            // aliases, and fontdb may report the file's first alias instead of
+            // the family we explicitly resolved for this character. Preserve
+            // the selector's family so `font-at` mirrors GNU Emacs' realized
+            // face semantics.
+            family: resolved.family.clone(),
+            postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
+            // Variable fonts often report the container face's metadata weight
+            // here even when shaping used a different requested instance.
+            // Preserve the resolved CSS weight so `font-at` mirrors GNU Emacs'
+            // realized face semantics.
+            weight: FontWeight(resolved.weight),
+            slant: font_slant_from_fontdb(face.style),
+            width: font_width_from_stretch_number(face.stretch.to_number()),
+        })
     }
 
     /// Measure a single character's advance width using cosmic-text shaping.
@@ -359,15 +355,10 @@ impl FontMetricsService {
         );
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        // Extract advance width from the first glyph in layout runs
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                return glyph.w;
-            }
-        }
-
-        // Fallback: return font_size * 0.6 as rough monospace estimate
-        font_size * 0.6
+        buffer
+            .layout_runs()
+            .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+            .unwrap_or(font_size * 0.6)
     }
 
     fn resolve_font_for_char(
@@ -526,15 +517,10 @@ impl FontMetricsService {
                 None,
             );
             buffer.shape_until_scroll(&mut self.font_system, false);
-            let mut w = font_size * 0.6;
-            for run in buffer.layout_runs() {
-                for glyph in run.glyphs.iter() {
-                    w = glyph.w;
-                    break;
-                }
-                break;
-            }
-            w
+            buffer
+                .layout_runs()
+                .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+                .unwrap_or(font_size * 0.6)
         };
 
         // Control chars (0-31) and DEL (127) get space width
@@ -563,20 +549,10 @@ impl FontMetricsService {
             );
             buffer.shape_until_scroll(&mut self.font_system, false);
 
-            let mut found = false;
-            for run in buffer.layout_runs() {
-                for glyph in run.glyphs.iter() {
-                    widths[cp as usize] = glyph.w;
-                    found = true;
-                    break;
-                }
-                if found {
-                    break;
-                }
-            }
-            if !found {
-                widths[cp as usize] = space_width;
-            }
+            widths[cp as usize] = buffer
+                .layout_runs()
+                .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+                .unwrap_or(space_width);
         }
 
         widths

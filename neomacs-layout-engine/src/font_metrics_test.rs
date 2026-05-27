@@ -36,24 +36,20 @@ fn realized_face_info(
     );
     buffer.shape_until_scroll(&mut svc.font_system, false);
 
-    for run in buffer.layout_runs() {
-        for glyph in run.glyphs.iter() {
-            let face = svc
-                .font_system
-                .db()
-                .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
-            return Some(SelectedFontInfo {
-                family: resolved.family.clone(),
-                postscript_name: Some(face.post_script_name.clone())
-                    .filter(|name| !name.is_empty()),
-                weight: FontWeight(face.weight.0),
-                slant: font_slant_from_fontdb(face.style),
-                width: font_width_from_stretch_number(face.stretch.to_number()),
-            });
-        }
-    }
-
-    None
+    let glyph = buffer
+        .layout_runs()
+        .find_map(|run| run.glyphs.iter().next())?;
+    let face = svc
+        .font_system
+        .db()
+        .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
+    Some(SelectedFontInfo {
+        family: resolved.family.clone(),
+        postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
+        weight: FontWeight(face.weight.0),
+        slant: font_slant_from_fontdb(face.style),
+        width: font_width_from_stretch_number(face.stretch.to_number()),
+    })
 }
 
 // ---------------------------------------------------------------
@@ -589,12 +585,10 @@ fn measure_with_raw_fontsystem(
         None,
     );
     buffer.shape_until_scroll(font_system, false);
-    for run in buffer.layout_runs() {
-        for glyph in run.glyphs.iter() {
-            return glyph.w;
-        }
-    }
-    0.0
+    buffer
+        .layout_runs()
+        .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
+        .unwrap_or(0.0)
 }
 
 #[test]
