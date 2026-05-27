@@ -1015,10 +1015,66 @@ fn org_babel_execute_header_override_noweb_deep_state_combo() {
                    (list (org-element-type el)
                          (org-element-property :name el)
                          (org-element-property :value el))))))
-          (list compute-result
-                after-compute
-                output-result
-                after-output
-                results)))))))"##,
+           (list compute-result
+                 after-compute
+                 output-result
+                 after-output
+                 results)))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Block A: produces a list
+      (insert "#+NAME: producer\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((:x 1) (:y 2) (:z 3))\n")
+      (insert "#+end_src\n\n")
+      ;; Block B: uses producer result
+      (insert "#+NAME: consumer\n")
+      (insert "#+begin_src emacs-lisp :var data=producer :results value replace\n")
+      (insert "(mapcar (lambda (item)\n")
+      (insert "          (list (car item) (* 10 (cadr item))))\n")
+      (insert "        data)\n")
+      (insert "#+end_src\n\n")
+      ;; Block C: uses consumer result
+      (insert "#+NAME: final\n")
+      (insert "#+begin_src emacs-lisp :var data=consumer :results output replace\n")
+      (insert "(dolist (item data)\n")
+      (insert "  (princ (format \"%s=%s\\n\" (car item) (cadr item))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all in order
+      (dolist (name '("producer" "consumer" "final"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read all results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        ;; Parse elements
+        (let ((elements
+               (org-element-map (org-element-parse-buffer)
+                   '(src-block fixed-width)
+                 (lambda (el)
+                   (list (org-element-type el)
+                         (org-element-property :name el)
+                         (org-element-property :value el))))))
+          (list (nreverse results)
+                elements
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
     );
 }
