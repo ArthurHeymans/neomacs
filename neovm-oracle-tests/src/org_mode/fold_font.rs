@@ -1599,3 +1599,188 @@ fn org_fold_mixed_deep_objects_reveal_font_roundtrip_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_fold_repeated_deep_heading_merge_font_regression_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'org-fold-core)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-hide-emphasis-markers t)
+          (org-cycle-separator-lines 0)
+          (org-startup-folded 'showeverything))
+      (org-mode)
+      (insert "* TODO Project :root:\n")
+      (insert "Project intro with /emphasis/ and [[https://example.test][link]].\n")
+      (insert "** TODO Area A :a:\n")
+      (insert "Area A body.\n")
+      (insert "*** TODO Thread A1\n")
+      (insert "Thread A1 body.\n")
+      (insert "**** TODO Fourth A1\n")
+      (insert "Fourth A1 body before cycles.\n")
+      (insert "***** WAIT Fifth A1\n")
+      (insert "Fifth A1 body.\n")
+      (insert "****** DONE Sixth A1\n")
+      (insert "Sixth A1 body.\n")
+      (insert "**** TODO Fourth A2\n")
+      (insert "Fourth A2 body.\n")
+      (insert "** TODO Area B :b:\n")
+      (insert "*** NEXT Thread B1\n")
+      (insert "**** TODO Fourth B1\n")
+      (insert "Fourth B1 body.\n")
+      (insert "***** TODO Fifth B1\n")
+      (insert "Fifth B1 body.\n")
+      (insert "* Tail\nTail body.\n")
+      (let ((needles
+             '("Project" "Area A" "Thread A1" "Fourth A1"
+               "Fourth A1 body" "Fifth A1" "Fifth A1 body"
+               "Sixth A1" "Sixth A1 body" "Fourth A2"
+               "Area B" "Thread B1" "Fourth B1" "Fifth B1"
+               "Tail"))
+            states)
+        (let ((headings
+               (lambda ()
+                 (font-lock-ensure (point-min) (point-max))
+                 (let (out)
+                   (goto-char (point-min))
+                   (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                     (let ((beg (line-beginning-position)))
+                       (push (list (match-string 1)
+                                   (match-string 2)
+                                   (org-outline-level)
+                                   (get-text-property beg 'face)
+                                   (get-text-property
+                                    (match-beginning 2) 'face)
+                                   (get-text-property beg 'invisible)
+                                   (org-fold-folded-p beg 'headline)
+                                   (org-fold-get-region-at-point
+                                    '(outline headline)
+                                    (match-beginning 2)))
+                             out)))
+                   (nreverse out))))
+              (visibility
+               (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward needle)
+                      (let ((pos (match-beginning 0)))
+                        (list needle
+                              (line-number-at-pos pos)
+                              (current-column)
+                              (invisible-p pos)
+                              (get-text-property pos 'invisible)
+                              (get-text-property pos 'face)))))
+                  needles)))
+              (fold-regions
+               (lambda ()
+                 (sort
+                  (mapcar (lambda (region)
+                            (list (nth 0 region)
+                                  (nth 1 region)
+                                  (nth 2 region)))
+                          (org-fold-core-get-regions
+                           :specs '(org-fold-outline)
+                           :from (point-min)
+                           :to (point-max)
+                           :relative t))
+                  (lambda (a b)
+                    (if (= (car a) (car b))
+                        (< (nth 1 a) (nth 1 b))
+                      (< (car a) (car b)))))))
+              (snapshot
+               (lambda (label)
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (funcall visibility)
+                       (funcall headings)
+                       (funcall fold-regions)
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))))))
+          (push (funcall snapshot 'initial) states)
+          (goto-char (point-min))
+          (search-forward "Fourth A1")
+          (beginning-of-line)
+          (dotimes (_ 6)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-fourth-a1) states))
+          (goto-char (point-min))
+          (search-forward "Fifth A1")
+          (beginning-of-line)
+          (dotimes (_ 4)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-fifth-a1) states))
+          (goto-char (point-min))
+          (search-forward "Area A")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (goto-char (point-min))
+          (search-forward "Fourth A1 body before cycles.")
+          (end-of-line)
+          (insert "\nFourth A1 inserted while ancestor hidden.")
+          (push (funcall snapshot 'hidden-ancestor-edit) states)
+          (org-fold-show-subtree)
+          (goto-char (point-min))
+          (search-forward "Sixth A1")
+          (beginning-of-line)
+          (org-demote-subtree)
+          (search-forward "Sixth A1")
+          (beginning-of-line)
+          (org-promote-subtree)
+          (push (funcall snapshot 'sixth-level-roundtrip) states)
+          (goto-char (point-min))
+          (search-forward "Fourth B1")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (org-fold-show-context 'default)
+          (push (funcall snapshot 'context-fourth-b1) states)
+          (goto-char (point-min))
+          (dotimes (_ 7)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((merged nil)
+                (bad-levels nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+              (let ((stars (length (match-string 1)))
+                    (level (org-outline-level)))
+                (unless (= stars level)
+                  (push (list (match-string 0) stars level) bad-levels))))
+            (push (funcall snapshot 'final) states)
+            (list (nreverse states)
+                  (nreverse merged)
+                  (nreverse bad-levels)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward needle nil t)))
+                   '("Fourth A1 inserted while ancestor hidden."
+                     "****** DONE Sixth A1"
+                     "***** TODO Fifth B1"))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
