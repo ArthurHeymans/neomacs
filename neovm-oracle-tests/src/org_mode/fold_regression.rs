@@ -342,7 +342,92 @@ fn org_fold_startup_content_drawer_deep_cycle_hidden_edit_regression_combo() {
                      "Inserted sixth body."
                      "******* WAIT Seventh level"
                      "***** TODO Beta fifth"))
-                  (buffer-substring-no-properties
-                   (point-min) (point-max)))))))))"##,
+                   (buffer-substring-no-properties
+                    (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_indirect_buffer_decouple_edit_font_regression_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'org-fold-core)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-startup-folded 'showeverything))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "Root body.\n")
+      (insert "** TODO Alpha\n")
+      (insert "Alpha body.\n")
+      (insert "*** TODO Alpha child\n")
+      (insert "Alpha child body.\n")
+      (insert "**** TODO Alpha L4\n")
+      (insert "Alpha L4 body.\n")
+      (insert "***** DONE Alpha L5\n")
+      (insert "Alpha L5 body.\n")
+      (insert "** TODO Beta\n")
+      (insert "Beta body.\n")
+      (insert "* Tail\n")
+      (insert "Tail body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      (org-fold-hide-sublevels 2)
+      ;; Create indirect buffer
+      (let ((clone (clone-indirect-buffer nil nil)))
+        (with-current-buffer clone
+          (org-fold-core-decouple-indirect-buffer-folds)
+          ;; Show subtree in clone
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-fold-show-subtree)
+          ;; Hide L5 in clone
+          (search-forward "Alpha L5")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          ;; Edit while L5 hidden
+          (end-of-line)
+          (insert "\n***** TODO Inserted under hidden L5\nInserted body.\n")
+          (font-lock-ensure (point-min) (point-max))
+          ;; Check for merged headings
+          (let ((merged nil)
+                (bad-levels nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+              (let ((stars (length (match-string 1)))
+                    (level (org-outline-level)))
+                (unless (= stars level)
+                  (push (list (match-string 0) stars level)
+                        bad-levels))))
+            ;; Global cycles
+            (goto-char (point-min))
+            (dotimes (_ 5) (org-cycle-global))
+            (org-fold-show-all)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((clone-final (buffer-substring-no-properties
+                                (point-min) (point-max))))
+              ;; Check base buffer
+              (with-current-buffer (buffer-base-buffer)
+                (let ((base-final (buffer-substring-no-properties
+                                   (point-min) (point-max))))
+                  (kill-buffer clone)
+                  (list (nreverse merged)
+                        (nreverse bad-levels)
+                        (search-forward "Inserted under hidden L5" nil t)
+                        clone-final
+                        base-final))))))))))"##,
     );
 }
