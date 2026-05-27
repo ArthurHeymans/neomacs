@@ -443,3 +443,66 @@ fn org_refile_completion_new_parent_verify_history_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_refile_active_region_reverse_order_log_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let* ((file (make-temp-file "org-refile-region" nil ".org"
+                               "* Inbox
+Loose note line
+Continued context
+** TODO Task A :inbox:
+Task body
+** TODO Task B :inbox:
+Task B body
+* Projects
+** Target
+*** Existing child
+"))
+         (events nil))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect file)
+          (org-mode)
+          (let ((org-refile-active-region-within-subtree t)
+                (org-log-refile 'time)
+                (org-log-into-drawer t)
+                (org-reverse-note-order nil)
+                (org-after-refile-insert-hook
+                 (list (lambda ()
+                         (push (org-get-heading t t t t) events)))))
+            (let ((target-pos (save-excursion
+                                (goto-char (point-min))
+                                (search-forward "Target")
+                                (line-beginning-position))))
+              (goto-char (point-min))
+              (search-forward "Loose note line")
+              (beginning-of-line)
+              (let ((beg (point)))
+                (search-forward "Continued context")
+                (end-of-line)
+                (transient-mark-mode 1)
+                (set-mark beg)
+                (activate-mark)
+                (org-refile nil nil (list "Target" file nil target-pos)))
+              (goto-char (point-min))
+              (search-forward "Task A")
+              (beginning-of-line)
+              (org-refile-reverse
+               nil nil (list "Target" file nil target-pos) "Reverse")
+              (save-buffer)
+              (list (nreverse events)
+                    (plist-get org-bookmark-names-plist :last-refile)
+                    (replace-regexp-in-string
+                     "- Refiled on \\[.*\\]"
+                     "- Refiled on [stamp]"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
