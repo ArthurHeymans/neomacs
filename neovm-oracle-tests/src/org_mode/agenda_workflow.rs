@@ -316,3 +316,181 @@ fn org_agenda_bulk_mark_toggle_regexp_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_agenda_clockreport_archives_mode_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-clock)
+  (let* ((file (make-temp-file
+                "org-agenda-clockreport" nil ".org"
+                "#+CATEGORY: Report
+* TODO Alpha :work:
+SCHEDULED: <2026-05-27 Wed>
+CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00
+* TODO Beta :ARCHIVE:
+SCHEDULED: <2026-05-27 Wed>
+CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30
+* TODO Gamma :work:
+SCHEDULED: <2026-05-28 Thu>
+CLOCK: [2026-05-28 Thu 08:00]--[2026-05-28 Thu 08:45] =>  0:45
+"))
+         (org-agenda-files (list file))
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-span 2)
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-clockreport-parameter-plist
+          '(:link nil :maxlevel 3 :fileskip0 t))
+         (org-agenda-prefix-format "%-8:c%?-12t% s"))
+    (unwind-protect
+        (progn
+          (org-agenda-list nil "2026-05-27" 2)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((initial (buffer-substring-no-properties
+                            (point-min) (point-max))))
+              (org-agenda-clockreport-mode)
+              (let ((clockreport (buffer-substring-no-properties
+                                  (point-min) (point-max)))
+                    (clock-mode org-agenda-clockreport-mode))
+                (org-agenda-archives-mode)
+                (let ((archives (buffer-substring-no-properties
+                                 (point-min) (point-max)))
+                      (archive-mode org-agenda-archives-mode))
+                  (list (mapcar (lambda (needle)
+                                  (not (null (string-match-p needle initial))))
+                                '("Alpha" "Beta" "Gamma"))
+                        (mapcar (lambda (needle)
+                                  (not (null (string-match-p needle clockreport))))
+                                '("Clock summary" "Alpha" "Gamma" "1:00" "0:45"))
+                        clock-mode
+                        (mapcar (lambda (needle)
+                                  (not (null (string-match-p needle archives))))
+                                '("Alpha" "Beta" "Gamma" "1:30"))
+                        archive-mode
+                        clockreport
+                        archives)))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
+
+#[test]
+fn org_agenda_entry_text_switch_context_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((file (make-temp-file
+                "org-agenda-entry-text" nil ".org"
+                "#+CATEGORY: Text
+* TODO Alpha :work:
+First line.
+Second line.
+Third line.
+* TODO Beta :home:
+Beta body.
+"))
+         (org-agenda-files (list file))
+         (org-agenda-prefix-format "%-8:c% s")
+         (org-agenda-entry-text-maxlines 2))
+    (unwind-protect
+        (progn
+          (org-todo-list)
+          (with-current-buffer org-agenda-buffer-name
+            (goto-char (point-min))
+            (search-forward "Alpha")
+            (beginning-of-line)
+            (let ((before (buffer-substring-no-properties
+                           (point-min) (point-max))))
+              (org-agenda-entry-text-mode 2)
+              (let ((with-text (buffer-substring-no-properties
+                                (point-min) (point-max)))
+                    (mode-on org-agenda-entry-text-mode))
+                (org-agenda-switch-to)
+                (let ((source (with-current-buffer (find-file-noselect file)
+                                (list (org-get-heading t t t t)
+                                      (buffer-substring-no-properties
+                                       (line-beginning-position)
+                                       (line-end-position))))))
+                  (with-current-buffer org-agenda-buffer-name
+                    (org-agenda-entry-text-mode)
+                    (list (not (null (string-match-p "First line" before)))
+                          (mapcar (lambda (needle)
+                                    (not (null
+                                          (string-match-p needle with-text))))
+                                  '("First line" "Second line" "Third line"
+                                    "Beta body"))
+                          mode-on
+                          source
+                          org-agenda-entry-text-mode
+                          (buffer-substring-no-properties
+                           (point-min) (point-max)))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
+
+#[test]
+fn org_agenda_archive_sibling_source_mutation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-archive)
+  (let* ((file (make-temp-file
+                "org-agenda-archive-sibling" nil ".org"
+                "#+CATEGORY: Archive
+* TODO Keep
+* DONE Finished
+:PROPERTIES:
+:Effort: 0:30
+:END:
+Body.
+* TODO Later
+"))
+         (org-agenda-files (list file))
+         (org-agenda-prefix-format "%-8:c% s")
+         (org-archive-location "::* Archive"))
+    (unwind-protect
+        (progn
+          (org-todo-list)
+          (with-current-buffer org-agenda-buffer-name
+            (goto-char (point-min))
+            (search-forward "Finished")
+            (beginning-of-line)
+            (org-agenda-archive-to-archive-sibling)
+            (let ((agenda-after (buffer-substring-no-properties
+                                 (point-min) (point-max))))
+              (with-current-buffer (find-file-noselect file)
+                (let ((text (buffer-substring-no-properties
+                             (point-min) (point-max))))
+                  (list (mapcar (lambda (needle)
+                                  (not (null
+                                        (string-match-p needle agenda-after))))
+                                '("Keep" "Finished" "Later"))
+                        (mapcar (lambda (needle)
+                                  (not (null (string-match-p needle text))))
+                                '("* Archive" "** DONE Finished" ":Effort:"
+                                  "Body." "* TODO Later"))
+                        agenda-after
+                        text))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
