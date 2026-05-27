@@ -26,6 +26,11 @@ test/manual/etags/c-src/dostorture.c whitespace=cr-at-eol
 test/manual/etags/cp-src/c.C whitespace=cr-at-eol
 test/manual/etags/html-src/algrthms.html whitespace=cr-at-eol
 
+# Lisp sources are byte-compiled through Emacs' coding-cookie path.  A
+# Windows checkout must not rewrite them to CRLF; files that declare
+# utf-8-unix are malformed if their source bytes contain CRLF line endings.
+*.el text eol=lf
+
 # The todo-mode file format includes trailing whitespace.
 *.tod[aorty] -whitespace=blank-at-eol
 
