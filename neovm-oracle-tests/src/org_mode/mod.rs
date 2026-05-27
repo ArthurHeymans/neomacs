@@ -74,6 +74,7 @@ mod navigation_edit;
 mod nu_operations;
 mod num_workflow;
 mod omega_strict;
+mod omicron_deep;
 mod org_indent_workflow;
 mod ox_org_native;
 mod pcomplete_workflow;
