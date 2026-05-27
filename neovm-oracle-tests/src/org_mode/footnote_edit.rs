@@ -187,3 +187,75 @@ fn org_footnote_missing_duplicate_normalize_sort_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_footnote_action_context_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Body\n")
+    (insert "Paragraph anchor and old ref[fn:old].\n")
+    (insert "Link [[https://example.org][link anchor]] text.\n")
+    (insert "| table anchor | value |\n")
+    (insert "#+begin_src emacs-lisp\n")
+    (insert "src anchor\n")
+    (insert "#+end_src\n")
+    (insert "#+begin_verse\n")
+    (insert "verse anchor\n")
+    (insert "#+end_verse\n")
+    (insert "* Footnotes\n")
+    (insert "[fn:old] Old definition\n")
+    (let ((probe
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (search-forward needle)
+               (goto-char (match-beginning 0))
+               (let ((context (org-element-context)))
+                 (list needle
+                       (org-element-type context)
+                       (org-footnote-in-valid-context-p)
+                       (org-footnote--allow-reference-p)
+                       (org-footnote-at-reference-p)
+                       (org-footnote-at-definition-p)))))))
+          (org-footnote-auto-label 'confirm)
+          (org-footnote-define-inline nil)
+          (org-footnote-auto-adjust t)
+          (org-footnote-section "Footnotes")
+          (org-footnote-fill-after-inline-note-extraction nil))
+      (let ((before (mapcar probe
+                            '("Paragraph" "old ref" "link anchor"
+                              "table anchor" "src anchor" "verse anchor"
+                              "Old definition"))))
+        (goto-char (point-min))
+        (search-forward "Paragraph")
+        (cl-letf (((symbol-function 'read-string)
+                   (lambda (&rest _) "custom-label")))
+          (org-footnote-new))
+        (insert "Custom definition")
+        (let ((after-new (buffer-substring-no-properties
+                          (point-min) (point-max))))
+          (goto-char (point-min))
+          (search-forward "[fn:custom-label]")
+          (org-footnote-action)
+          (let ((after-action-def
+                 (list (line-number-at-pos)
+                       (org-footnote-at-definition-p))))
+            (cl-letf (((symbol-function 'read-char-exclusive)
+                       (lambda (&rest _) ?S)))
+              (org-footnote-action t))
+            (list before
+                  after-new
+                  after-action-def
+                  (org-footnote-all-labels)
+                  (org-footnote--collect-references 'anonymous)
+                  (org-footnote--collect-definitions)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
