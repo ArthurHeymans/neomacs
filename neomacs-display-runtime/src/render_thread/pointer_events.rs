@@ -1102,9 +1102,11 @@ impl RenderApp {
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
-            if let Some(renderer) = self.renderer.as_ref() {
+            if let (Some(renderer), Some(primary_frame)) =
+                (self.renderer.as_ref(), self.primary_frame.as_mut())
+            {
                 renderer.trigger_transient_click_halo(
-                    &mut self.renderer_effects,
+                    &mut primary_frame.renderer_effects,
                     mouse_pos.0,
                     mouse_pos.1,
                     now,

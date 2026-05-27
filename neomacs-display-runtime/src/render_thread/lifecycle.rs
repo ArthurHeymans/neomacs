@@ -267,7 +267,7 @@ impl RenderApp {
         }
 
         // Keep dirty if frame-owned renderer effects are still active.
-        if self.renderer_effects.needs_redraw() {
+        if self.primary_renderer_effects_need_redraw() {
             self.mark_primary_dirty();
         }
 
@@ -305,7 +305,7 @@ impl RenderApp {
             tracing::debug!(
                 frame_dirty = self.primary_dirty(),
                 has_active_content,
-                renderer_effects_need_redraw = self.renderer_effects.needs_redraw(),
+                renderer_effects_need_redraw = self.primary_renderer_effects_need_redraw(),
                 cursor_animating = self.primary_cursor().animating,
                 cursor_size_animating = self.primary_cursor().size_animating,
                 idle_dim_active = self
@@ -328,7 +328,7 @@ impl RenderApp {
             || self.frame_windows.any_dirty()
             || self.primary_cursor().animating
             || self.primary_cursor().size_animating
-            || self.renderer_effects.needs_redraw()
+            || self.primary_renderer_effects_need_redraw()
             || self
                 .frame_windows
                 .windows

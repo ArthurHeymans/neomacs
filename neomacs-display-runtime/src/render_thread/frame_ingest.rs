@@ -370,17 +370,21 @@ impl RenderApp {
                 };
 
             if target_moved && had_target && self.effects.typing_ripple.enabled {
-                if let Some(renderer) = self.renderer.as_ref() {
+                if let (Some(renderer), Some(primary_frame)) =
+                    (self.renderer.as_ref(), self.primary_frame.as_mut())
+                {
                     let cx = new_target.x + new_target.width / 2.0;
                     let cy = new_target.y + new_target.height / 2.0;
-                    renderer.spawn_transient_ripple(&mut self.renderer_effects, cx, cy);
+                    renderer.spawn_transient_ripple(&mut primary_frame.renderer_effects, cx, cy);
                 }
             }
 
             if target_moved && had_target && self.effects.cursor_trail_fade.enabled {
-                if let Some(renderer) = self.renderer.as_ref() {
+                if let (Some(renderer), Some(primary_frame)) =
+                    (self.renderer.as_ref(), self.primary_frame.as_mut())
+                {
                     renderer.record_transient_cursor_trail(
-                        &mut self.renderer_effects,
+                        &mut primary_frame.renderer_effects,
                         old_cursor_rect.0,
                         old_cursor_rect.1,
                         old_cursor_rect.2,

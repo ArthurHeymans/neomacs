@@ -928,7 +928,7 @@ impl RenderApp {
                 let glyph_atlas = &mut primary_frame.glyph_atlas;
                 let mouse_pos = primary_frame.mouse_pos;
 
-                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
                     renderer.render_frame_glyphs(
                         unsafe { &*current_view },
@@ -949,7 +949,7 @@ impl RenderApp {
             if let (Some(renderer), Some(primary_frame)) =
                 (self.renderer.as_mut(), self.primary_frame.as_mut())
             {
-                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     detect_frame_transitions(
                         renderer,
                         &mut primary_frame.transitions,
@@ -964,8 +964,10 @@ impl RenderApp {
                     );
                 });
             }
-            if self.renderer_effects.needs_redraw() {
-                self.mark_primary_dirty();
+            if let Some(primary_frame) = self.primary_frame.as_mut()
+                && primary_frame.renderer_effects.needs_redraw()
+            {
+                primary_frame.frame_dirty = true;
             }
 
             // Blit current offscreen to surface
@@ -995,7 +997,7 @@ impl RenderApp {
             let glyph_atlas = &mut primary_frame.glyph_atlas;
             let mouse_pos = primary_frame.mouse_pos;
 
-            renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+            renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                 renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
                 renderer.render_frame_glyphs(
                     &surface_view,
@@ -1011,8 +1013,10 @@ impl RenderApp {
                 );
             });
         }
-        if self.renderer_effects.needs_redraw() {
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_frame.as_mut()
+            && primary_frame.renderer_effects.needs_redraw()
+        {
+            primary_frame.frame_dirty = true;
         }
 
         // Render child frames as floating overlays on top of the parent frame
@@ -1026,7 +1030,7 @@ impl RenderApp {
                     // Pass animated cursor only if it belongs to this child frame.
                     let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
                     let cursor_blink_on = primary_frame.cursor.blink_on;
-                    renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                    renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                         renderer.render_child_frame(
                             &surface_view,
                             &child_entry.frame,
@@ -1048,8 +1052,10 @@ impl RenderApp {
                 }
             }
         }
-        if self.renderer_effects.needs_redraw() {
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_frame.as_mut()
+            && primary_frame.renderer_effects.needs_redraw()
+        {
+            primary_frame.frame_dirty = true;
         }
 
         // Render floating WebKit overlays above frame contents but below GUI chrome.
@@ -1064,7 +1070,7 @@ impl RenderApp {
             (&mut self.renderer, self.primary_frame.as_mut())
         {
             if let Some(frame) = primary_frame.current_frame.as_ref() {
-                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     Self::render_frame_common_overlays(
                         renderer,
                         &surface_view,
@@ -1077,8 +1083,10 @@ impl RenderApp {
                 });
             }
         }
-        if self.renderer_effects.needs_redraw() {
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_frame.as_mut()
+            && primary_frame.renderer_effects.needs_redraw()
+        {
+            primary_frame.frame_dirty = true;
         }
 
         tracing::trace!(

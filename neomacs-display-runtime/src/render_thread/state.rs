@@ -14,7 +14,7 @@ use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
 use neomacs_display_protocol::{EffectsConfig, TransitionPolicy};
-use neomacs_renderer_wgpu::{PopupMenuState, RendererFrameEffects, TooltipState, WgpuRenderer};
+use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
 use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
@@ -302,9 +302,6 @@ pub(super) struct RenderApp {
 
     // Transition defaults applied to primary and secondary frame render state.
     pub(super) transition_policy: TransitionPolicy,
-    /// Renderer runtime effects owned by the primary GUI frame window.
-    pub(super) renderer_effects: RendererFrameEffects,
-
     // WebKit state (video cache is managed by renderer)
     #[cfg(feature = "wpe-webkit")]
     pub(super) wpe_backend: Option<WpeBackend>,
@@ -416,7 +413,6 @@ impl RenderApp {
             cursor_defaults: CursorState::default(),
             effects: EffectsConfig::default(),
             transition_policy: TransitionPolicy::default(),
-            renderer_effects: RendererFrameEffects::default(),
             #[cfg(feature = "wpe-webkit")]
             wpe_backend: None,
             #[cfg(feature = "wpe-webkit")]
@@ -599,6 +595,12 @@ impl RenderApp {
         self.primary_frame
             .as_ref()
             .is_some_and(|frame| frame.transitions.has_active())
+    }
+
+    pub(super) fn primary_renderer_effects_need_redraw(&self) -> bool {
+        self.primary_frame
+            .as_ref()
+            .is_some_and(|frame| frame.renderer_effects.needs_redraw())
     }
 
     pub(super) fn sync_primary_transition_policy_from_default(&mut self) {
