@@ -258,3 +258,70 @@ fn org_clock_resolve_open_clock_ranges_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_clock_shift_display_overlay_cleanup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-clock-into-drawer "LOGBOOK")
+          (org-clock-display-default-range 'today)
+          (org-clock-out-remove-zero-time-clocks t))
+      (org-mode)
+      (insert "* TODO Alpha\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00\n")
+      (insert ":END:\n")
+      (insert "* TODO Beta\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:00] =>  0:00\n")
+      (insert ":END:\n")
+      (let ((snapshot
+             (lambda (label)
+               (org-clock-sum "2026-05-27" "2026-05-28" nil
+                              :clock-sum-probe)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (org-get-heading t t t t)
+                                (get-text-property
+                                 (line-beginning-position)
+                                 :clock-sum-probe)
+                                (mapcar
+                                 (lambda (ov)
+                                   (list (overlay-start ov)
+                                         (overlay-end ov)
+                                         (overlay-get ov 'face)
+                                         (overlay-get ov 'display)))
+                                 (overlays-at (line-end-position)))))))
+                      '("Alpha" "Beta"))
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+        (goto-char (point-min))
+        (search-forward "09:00")
+        (org-clock-timestamps-up 15)
+        (search-forward "10:00")
+        (org-clock-timestamps-down 10)
+        (let ((after-shift (funcall snapshot 'after-shift)))
+          (org-clock-display '(4))
+          (let ((after-display (funcall snapshot 'after-display)))
+            (org-clock-remove-overlays)
+            (goto-char (point-min))
+            (search-forward "Beta")
+            (beginning-of-line)
+            (org-clock-in nil (encode-time 0 0 12 27 5 2026))
+            (org-clock-out nil t (encode-time 0 0 12 27 5 2026))
+            (org-clock-remove-empty-clock-drawer)
+            (list after-shift
+                  after-display
+                  (funcall snapshot 'after-cleanup)))))))"##,
+    );
+}
