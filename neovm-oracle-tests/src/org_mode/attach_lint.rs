@@ -429,3 +429,104 @@ fn org_attach_archive_delete_and_sync_empty_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_attach_new_delete_all_id_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-attach)
+  (let* ((root (make-temp-file "org-attach-new" t))
+         (org-file (expand-file-name "notes.org" root))
+         (source (expand-file-name "source.txt" root))
+         (org-attach-id-dir (expand-file-name "data" root))
+         (org-attach-preferred-new-method 'id)
+         (org-attach-store-link-p 'attached)
+         (org-attach-auto-tag "ATTACH")
+         (org-stored-links nil)
+         (events nil)
+         (new-buffer nil)
+         (org-attach-after-change-hook
+          (list (lambda (dir)
+                  (push (list 'hook
+                              (file-relative-name dir root)
+                              (and (file-directory-p dir)
+                                   (sort (org-attach-file-list dir) #'string<)))
+                        events)))))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "source body\n"))
+          (with-temp-file org-file
+            (insert "#+FILETAGS: :global:\n")
+            (insert "* TODO Attach lifecycle :work:\n")
+            (insert ":PROPERTIES:\n:ID: attach-new-fixed\n:END:\n")
+            (insert "See [[attachment:source.txt][source]].\n"))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (goto-char (point-min))
+            (search-forward "* TODO")
+            (beginning-of-line)
+            (let* ((org-buffer (current-buffer))
+                   (no-fs-dir (org-attach-dir nil 'no-fs-check))
+                   (existing-before (org-attach-dir))
+                   (tags-before (org-get-tags nil t)))
+              (org-attach-attach source nil 'cp)
+              (let* ((dir (org-attach-dir))
+                     (after-attach-files
+                      (sort (org-attach-file-list dir) #'string<))
+                     (after-attach-tags (org-get-tags nil t))
+                     (links-after-attach org-stored-links)
+                     (source-inside
+                      (with-temp-buffer
+                        (insert-file-contents (expand-file-name "source.txt" dir))
+                        (buffer-string))))
+                (org-attach-new "draft-note.org")
+                (setq new-buffer (current-buffer))
+                (insert "#+TITLE: Draft\n\n* Nested\nBody from new buffer.\n")
+                (save-buffer)
+                (let ((new-file (file-relative-name (buffer-file-name) root))
+                      (new-buffer-name (buffer-name)))
+                  (with-current-buffer org-buffer
+                    (org-attach-sync)
+                    (let* ((after-new-files
+                            (sort (org-attach-file-list dir) #'string<))
+                           (after-sync-tags (org-get-tags nil t))
+                           (draft-inside
+                            (with-temp-buffer
+                              (insert-file-contents
+                               (expand-file-name "draft-note.org" dir))
+                              (buffer-string))))
+                      (org-attach-delete-all t)
+                      (let ((dir-exists-after-delete (file-exists-p dir))
+                            (tags-after-delete (org-get-tags nil t)))
+                        (org-attach-sync)
+                        (list (file-relative-name no-fs-dir root)
+                              existing-before
+                              tags-before
+                              after-attach-files
+                              after-attach-tags
+                              links-after-attach
+                              source-inside
+                              new-file
+                              new-buffer-name
+                              after-new-files
+                              draft-inside
+                              after-sync-tags
+                              dir-exists-after-delete
+                              tags-after-delete
+                              (org-get-tags nil t)
+                              (nreverse events)
+                              (replace-regexp-in-string
+                               (regexp-quote root)
+                               "<root>"
+                               (buffer-substring-no-properties
+                                (point-min) (point-max)))))))))))
+      (when (and new-buffer (buffer-live-p new-buffer))
+        (kill-buffer new-buffer))
+      (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
