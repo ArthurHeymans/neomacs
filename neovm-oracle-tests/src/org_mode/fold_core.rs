@@ -413,3 +413,75 @@ fn org_fold_drawer_block_hide_show_all_recovery_deep_state_combo() {
                      (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_fold_subtree_edit_hidden_body_reveal_font_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert "Alpha body.\n")
+    (insert "** Beta\n")
+    (insert "Beta body.\n")
+    (insert "*** Gamma\n")
+    (insert "Gamma body.\n")
+    (insert "**** Delta\n")
+    (insert "Delta body.\n")
+    (insert "* Sibling\n")
+    (insert "Sibling body.\n")
+    ;; Hide Beta subtree
+    (goto-char (point-min))
+    (search-forward "Beta")
+    (beginning-of-line)
+    (org-fold-hide-subtree)
+    ;; Edit while hidden: insert after Beta heading
+    (end-of-line)
+    (insert "\n** Inserted after Beta\nInserted body.\n")
+    ;; Check state after hidden edit
+    (let ((after-edit
+           (mapcar
+            (lambda (needle)
+              (save-excursion
+                (goto-char (point-min))
+                (if (search-forward needle nil t)
+                    (list needle
+                          (line-number-at-pos)
+                          (invisible-p (point))
+                          (org-outline-level))
+                    (list needle 'not-found nil nil))))
+            '("Alpha" "Beta" "Gamma" "Delta" "Inserted" "Sibling"))))
+      ;; Show all
+      (org-fold-show-all)
+      ;; Check final state
+      (let ((after-show
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (line-number-at-pos)
+                            (invisible-p (point))
+                            (org-outline-level))
+                      (list needle 'not-found nil nil))))
+              '("Alpha" "Beta" "Gamma" "Delta" "Inserted" "Sibling")))
+            ;; Check merged
+            (merged nil))
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (list after-edit
+              after-show
+              (nreverse merged)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
