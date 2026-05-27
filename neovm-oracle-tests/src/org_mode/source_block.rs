@@ -491,6 +491,88 @@ fn org_babel_header_merge_insert_result_lifecycle_combo() {
 }
 
 #[test]
+fn org_babel_result_read_hide_replace_remove_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: table-calc\n")
+    (insert "#+begin_src emacs-lisp :results value table replace\n")
+    (insert "'((1 2) (3 4))\n")
+    (insert "#+end_src\n")
+    (insert "#+RESULTS: table-calc\n")
+    (insert "| 1 | 2 |\n| 3 | 4 |\n\n")
+    (insert "#+NAME: drawer-calc\n")
+    (insert "#+begin_src emacs-lisp :results output drawer replace\n")
+    (insert "(princ \"line one\\nline two\")\n")
+    (insert "#+end_src\n")
+    (insert "#+RESULTS: drawer-calc\n")
+    (insert ":results:\nline one\nline two\n:end:\n")
+    (let ((offset (lambda (pos) (and pos (- pos (point-min)))))
+          table-pos drawer-pos table-read drawer-read hidden shown
+          after-replace after-remove)
+      (setq table-pos (org-babel-find-named-result "table-calc")
+            drawer-pos (org-babel-find-named-result "drawer-calc"))
+      (goto-char table-pos)
+      (setq table-read (org-babel-read-result))
+      (goto-char drawer-pos)
+      (setq drawer-read (org-babel-read-result))
+      (org-babel-result-hide-all)
+      (setq hidden
+            (mapcar
+             (lambda (needle)
+               (let ((pos (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (point))))
+                 (list needle
+                       (invisible-p pos)
+                       (get-text-property pos 'invisible))))
+             '("| 1 | 2 |" "line one" "line two")))
+      (org-babel-show-result-all)
+      (setq shown
+            (mapcar
+             (lambda (needle)
+               (let ((pos (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (point))))
+                 (list needle
+                       (invisible-p pos)
+                       (get-text-property pos 'invisible))))
+             '("| 1 | 2 |" "line one" "line two")))
+      (goto-char (point-min))
+      (search-forward "table-calc")
+      (search-forward "begin_src")
+      (let ((info (org-babel-get-src-block-info)))
+        (org-babel-insert-result
+         '((5 6) (7 8))
+         '("replace" "table")
+         info nil "emacs-lisp")
+        (setq after-replace
+              (buffer-substring-no-properties (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "drawer-calc")
+      (search-forward "begin_src")
+      (org-babel-remove-result)
+      (setq after-remove
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (list (funcall offset table-pos)
+            (funcall offset drawer-pos)
+            table-read
+            drawer-read
+            hidden
+            shown
+            after-replace
+            after-remove))))"##,
+    );
+}
+
+#[test]
 fn org_babel_tangle_write_noweb_comments_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
