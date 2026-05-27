@@ -336,3 +336,113 @@ fn org_babel_lob_noweb_export_result_replacement_combo() {
       (when (file-directory-p root) (delete-directory root t)))))"##,
     );
 }
+
+#[test]
+fn org_babel_execute_buffer_call_inline_remove_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-lob)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (let ((org-confirm-babel-evaluate nil)
+          (org-babel-default-lob-header-args
+           '((:exports . "results") (:results . "replace"))))
+      (org-mode)
+      (insert "#+PROPERTY: header-args:emacs-lisp :results value replace\n")
+      (insert "#+NAME: nums\n")
+      (insert "| key | n |\n")
+      (insert "|-----+---|\n")
+      (insert "| a   | 2 |\n")
+      (insert "| b   | 4 |\n\n")
+      (insert "#+NAME: rows->table\n")
+      (insert "#+begin_src emacs-lisp :var rows=nums[2:3,*] :var factor=1 :results value table replace\n")
+      (insert "(mapcar (lambda (row)\n")
+      (insert "          (list (car row)\n")
+      (insert "                (string-to-number (cadr row))\n")
+      (insert "                (* factor (string-to-number (cadr row)))))\n")
+      (insert "        rows)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: scalar\n")
+      (insert "#+begin_src emacs-lisp :var label=\"x\" :var n=0 :results value replace\n")
+      (insert "(format \"%s:%s\" label (* n n))\n")
+      (insert "#+end_src\n\n")
+      (insert "* Calls\n")
+      (insert "#+CALL: rows->table(rows=nums[2:3,*], factor=3) :results value table replace\n\n")
+      (insert "Inline call_scalar[:results value replace](label=\"sq\", n=5) and ")
+      (insert "call_scalar[:results value replace](label=\"cube\", n=3) done.\n")
+      (let (mapped before after-first call-table inline-line removed-line
+            after-edit after-remove executable-types parsed-results)
+        (org-babel-map-call-lines nil
+          (let ((ctx (org-element-context)))
+            (push (list (org-element-type ctx)
+                        (org-element-property :call ctx)
+                        (org-element-property :arguments ctx)
+                        (org-element-property :inside-header ctx)
+                        (org-element-property :end-header ctx)
+                        (org-element-property :begin ctx)
+                        (org-element-property :end ctx))
+                  mapped)))
+        (setq before (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (org-babel-execute-buffer)
+        (setq after-first
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (search-forward "#+CALL")
+        (setq call-table
+              (save-excursion
+                (goto-char (org-babel-where-is-src-block-result))
+                (forward-line 1)
+                (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "Inline")
+        (setq inline-line
+              (buffer-substring-no-properties
+               (line-beginning-position) (line-end-position)))
+        (search-forward "call_scalar")
+        (org-babel-remove-inline-result)
+        (setq removed-line
+              (buffer-substring-no-properties
+               (line-beginning-position) (line-end-position)))
+        (goto-char (point-min))
+        (search-forward "| b")
+        (search-forward "4")
+        (replace-match "6" t t)
+        (goto-char (point-min))
+        (search-forward "#+CALL")
+        (org-babel-lob-execute-maybe)
+        (setq after-edit
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (org-babel-map-executables nil
+          (push (org-element-type (org-element-context)) executable-types))
+        (setq parsed-results
+              (org-element-map (org-element-parse-buffer)
+                  '(babel-call inline-babel-call macro table)
+                (lambda (el)
+                  (list (org-element-type el)
+                        (org-element-property :call el)
+                        (org-element-property :key el)
+                        (org-element-property :value el)
+                        (org-element-property :begin el)
+                        (org-element-property :end el)))))
+        (goto-char (point-min))
+        (search-forward "#+CALL")
+        (org-babel-remove-result nil t)
+        (setq after-remove
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (list (nreverse mapped)
+              before
+              after-first
+              call-table
+              inline-line
+              removed-line
+              after-edit
+              (sort (mapcar #'symbol-name executable-types) #'string<)
+              parsed-results
+              after-remove)))))"##,
+    );
+}
