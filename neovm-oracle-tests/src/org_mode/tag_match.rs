@@ -101,3 +101,80 @@ fn org_global_tags_completion_table_files_combo() {
         (when (file-exists-p file) (delete-file file))))))"##,
     );
 }
+
+#[test]
+fn org_tags_group_inheritance_todo_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-tag-inheritance t)
+          (org-tags-exclude-from-inheritance '("secret"))
+          (org-tags-match-list-sublevels t)
+          (org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
+          (org-tag-alist '((:startgrouptag)
+                           ("project")
+                           (:grouptags)
+                           ("work")
+                           ("lab")
+                           (:endgrouptag))))
+      (org-mode)
+      (insert "#+CATEGORY: Mixed\n")
+      (insert "* TODO Parent :project:secret:\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Score: 5\n:END:\n")
+      (insert "** NEXT Alpha :urgent:lab:\n")
+      (insert ":PROPERTIES:\n:Effort: 0:30\n:Score: 8\n:END:\nAlpha body\n")
+      (insert "** WAIT Beta :hold:\n")
+      (insert ":PROPERTIES:\n:Effort: 1:15\n:Score: 3\n:END:\nBeta body\n")
+      (insert "** DONE Gamma :urgent:ARCHIVE:\n")
+      (insert ":PROPERTIES:\n:Effort: 2:00\n:Score: 9\n:END:\nGamma body\n")
+      (insert "* TODO Home :home:\n")
+      (insert ":PROPERTIES:\n:Owner: Bea\n:Score: 7\n:END:\n")
+      (insert "** NEXT Delta :work:\n")
+      (insert ":PROPERTIES:\n:Effort: 0:45\n:Score: 6\n:END:\nDelta body\n")
+      (org-set-regexps-and-options)
+      (let* ((org--matcher-tags-todo-only nil)
+             (main (org-make-tags-matcher
+                    "+project+{urg\\|lab}-ARCHIVE+TODO<>\"DONE\"+Score>=5/NEXT|TODO"))
+             (main-todo-only org--matcher-tags-todo-only)
+             (main-hits
+              (org-scan-tags
+               (lambda ()
+                 (list (org-get-heading t t t t)
+                       (org-get-tags nil t)
+                       (org-entry-get nil "Owner" t)
+                       (org-entry-get nil "Score")
+                       (org-get-category)
+                       (org-current-level)))
+               (cdr main)
+               main-todo-only))
+             (local-secret (org-make-tags-matcher "+secret" t))
+             (local-secret-hits
+              (org-scan-tags
+               (lambda ()
+                 (list (org-get-heading t t t t)
+                       (org-get-tags nil t)))
+               (cdr local-secret)
+               nil))
+             (level-two (org-make-tags-matcher "+project+Score>=6"))
+             (level-two-hits
+              (org-scan-tags
+               (lambda ()
+                 (list (org-get-heading t t t t)
+                       (org-current-level)
+                       (org-entry-get nil "Score")))
+               (cdr level-two)
+               nil
+               2)))
+        (list
+         (car main)
+         main-todo-only
+         main-hits
+         (car local-secret)
+         local-secret-hits
+         (car level-two)
+         level-two-hits)))))"##,
+    );
+}
