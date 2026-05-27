@@ -1243,3 +1243,50 @@ fn org_agenda_bulk_mark_tag_filter_effort_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_entry_text_switch_context_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-entry" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'day)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+            (insert "Alpha body paragraph.\n")
+            (insert "* WAIT Beta :home:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+            (insert "Beta body paragraph.\n"))
+          (org-agenda-list nil "2026-05-27" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((agenda-text
+                   (replace-regexp-in-string
+                    (regexp-quote root) "<root>"
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))
+              (goto-char (point-min))
+              (search-forward "Alpha")
+              (beginning-of-line)
+              (let ((entry-text
+                     (org-agenda-get-some-entry-text
+                      (point) 100)))
+                (let ((cat (org-entry-get (point) "CATEGORY"))
+                      (effort (org-entry-get (point) "Effort")))
+                  (list agenda-text entry-text cat effort)))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
