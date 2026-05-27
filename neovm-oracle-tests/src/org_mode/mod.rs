@@ -85,6 +85,7 @@ mod timer_workflow;
 mod todo_dependencies;
 mod ultra_strict;
 mod yank_dnd;
+mod yotta_strict;
 mod zetta_strict;
 
 #[test]
