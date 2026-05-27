@@ -1080,6 +1080,51 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_assign_header_var_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Named block with default var
+      (insert "#+NAME: doubler\n")
+      (insert "#+begin_src emacs-lisp :var n=5 :results value replace\n")
+      (insert "(list :input n :doubled (* n 2) :squared (* n n))\n")
+      (insert "#+end_src\n\n")
+      ;; Override var
+      (insert "#+NAME: tripler\n")
+      (insert "#+begin_src emacs-lisp :var n=10 :results value replace\n")
+      (insert "(list :input n :tripled (* n 3) :squared (* n n))\n")
+      (insert "#+end_src\n\n")
+      ;; Call with different var
+      (insert "#+CALL: doubler(n=20) :results value replace\n\n")
+      ;; Execute
+      (dolist (name '("doubler" "tripler"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Execute call
+      (goto-char (point-min))
+      (search-forward "CALL:")
+      (org-babel-lob-execute-maybe)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_error_handling_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
