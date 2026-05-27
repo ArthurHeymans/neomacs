@@ -81,6 +81,7 @@ mod ox_org_native;
 mod pcomplete_workflow;
 mod persist_workflow;
 mod peta_strict;
+mod phi_combos;
 mod pi_operations;
 mod planning_timestamp;
 mod plot_workflow;
