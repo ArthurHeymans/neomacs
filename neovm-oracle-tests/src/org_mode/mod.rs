@@ -1465,6 +1465,7 @@ mod strong_edge_deep_7;
 mod strong_exa_combos;
 mod strong_final_combos;
 mod strong_final_comprehensive;
+mod strong_final_deep;
 mod strong_final_edge;
 mod strong_giga_combos;
 mod strong_integration_combos;
