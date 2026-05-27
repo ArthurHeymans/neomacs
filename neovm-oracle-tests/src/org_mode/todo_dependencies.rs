@@ -457,6 +457,67 @@ fn org_ordered_region_statistics_hook_combo() {
                 blocked-summary
                 after-first
                 region-summary
-                final-summary))))))"##,
+                 final-summary))))))"##,
+    );
+}
+
+#[test]
+fn org_todo_state_transition_log_drawer_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-log-done 'time)
+          (org-log-into-drawer t)
+          (org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE" "CANCELED"))))
+      (org-mode)
+      (insert "* TODO Alpha\n")
+      (insert "** NEXT Sub A\n")
+      (insert "** WAIT Sub B\n")
+      (insert "* DONE Beta\n")
+      (let ((snap (lambda ()
+                    (list (buffer-substring-no-properties
+                           (point-min) (point-max))
+                          (org-element-map (org-element-parse-buffer)
+                              '(headline planning drawer)
+                            (lambda (el)
+                              (list (org-element-type el)
+                                    (org-element-property :raw-value el)
+                                    (org-element-property :todo-keyword el))))))))
+        ;; Initial state
+        (let ((initial (funcall snap)))
+          ;; Transition Sub A to WAIT
+          (goto-char (point-min))
+          (search-forward "Sub A")
+          (beginning-of-line)
+          (org-todo "WAIT")
+          (let ((after-a (funcall snap)))
+            ;; Transition Sub B to DONE
+            (goto-char (point-min))
+            (search-forward "Sub B")
+            (beginning-of-line)
+            (org-todo "DONE")
+            (let ((after-b (funcall snap)))
+              ;; Transition Alpha to CANCELED
+              (goto-char (point-min))
+              (search-forward "Alpha")
+              (beginning-of-line)
+              (org-todo "CANCELED")
+              (let ((after-alpha (funcall snap)))
+                ;; Extract log drawer contents
+                (let ((log-entries nil))
+                  (goto-char (point-min))
+                  (while (re-search-forward ":LOGBOOK:" nil t)
+                    (let ((beg (point)))
+                      (when (re-search-forward ":END:" nil t)
+                        (push (buffer-substring-no-properties beg (point))
+                              log-entries))))
+                  (list initial
+                        after-a
+                        after-b
+                        after-alpha
+                        (nreverse log-entries)))))))))))"##,
     );
 }
