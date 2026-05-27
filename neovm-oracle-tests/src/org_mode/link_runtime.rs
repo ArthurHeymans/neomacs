@@ -91,3 +91,137 @@ fn org_link_store_props_mail_date_combo() {
           (plist-get org-store-link-plist :description))))"##,
     );
 }
+
+#[test]
+fn org_link_navigation_toggle_context_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Links\n")
+    (insert "[[https://example.org/a][Alpha]] plain https://example.org/b\n")
+    (insert "[[file:/tmp/demo.txt::12][File line]] and [[#target][Target]]\n")
+    (insert "* Target\n:PROPERTIES:\n:CUSTOM_ID: target\n:END:\n")
+    (font-lock-ensure (point-min) (point-max))
+    (let ((snap
+           (lambda (label)
+             (let ((context (org-element-context)))
+               (list label
+                     (point)
+                     (org-element-type context)
+                     (org-element-property :type context)
+                     (org-element-property :path context)
+                     (org-element-property :raw-link context)
+                     org-link-descriptive
+                     (get-text-property (point) 'invisible)
+                     (get-text-property (point) 'display))))))
+      (goto-char (point-min))
+      (org-next-link)
+      (let ((first (funcall snap 'first)))
+        (org-next-link)
+        (let ((second (funcall snap 'second)))
+          (org-next-link)
+          (let ((third (funcall snap 'third)))
+            (org-previous-link)
+            (let ((back (funcall snap 'back)))
+              (org-toggle-link-display)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-toggle (funcall snap 'toggle)))
+                (list first
+                      second
+                      third
+                      back
+                      after-toggle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
+fn org_link_abbrev_expand_open_from_string_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let ((org-link-abbrev-alist-local
+         '(("bug" . "https://bugs.example/%s")
+           ("hex" . "https://hex.example/%h")))
+        (org-link-abbrev-alist
+         '(("doc" . "https://docs.example/%s")))
+        calls)
+    (org-link-set-parameters
+     "probe-open"
+     :follow (lambda (path arg) (push (list path arg) calls)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H\n")
+      (insert "See <<radio target>> and [[probe-open:value%20x][open me]].\n")
+      (insert "* Destination\n:PROPERTIES:\n:CUSTOM_ID: dest\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "probe-open")
+      (org-link-open-from-string "[[probe-open:from-string][Open]]" '(4))
+      (let ((custom (save-excursion
+                      (org-link-open-from-string "[[#dest]]")
+                      (org-get-heading t t t t)))
+            (radio (save-excursion
+                     (org-link-open-from-string "[[radio target]]")
+                     (buffer-substring-no-properties
+                      (point) (line-end-position)))))
+        (list (mapcar #'org-link-expand-abbrev
+                      '("bug:123" "doc:topic" "hex:a b/c" "plain:x"))
+              (nreverse calls)
+              custom
+              radio
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_link_store_region_file_context_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let ((file (make-temp-file "org-link-store" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Alpha\nBody one\n** Beta\nBody two\n"))
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (setq org-stored-links nil
+                  org-store-link-plist nil)
+            (goto-char (point-min))
+            (search-forward "Beta")
+            (let ((at-heading (org-store-link nil nil)))
+              (push-mark (line-beginning-position) t t)
+              (end-of-line)
+              (let ((from-region (org-store-link nil nil))
+                    (plist org-store-link-plist)
+                    (stored org-stored-links))
+                (list (replace-regexp-in-string
+                       (regexp-quote file) "<file>" at-heading)
+                      (replace-regexp-in-string
+                       (regexp-quote file) "<file>" from-region)
+                      (plist-get plist :description)
+                      (mapcar (lambda (entry)
+                                (list (replace-regexp-in-string
+                                       (regexp-quote file) "<file>"
+                                       (car entry))
+                                      (cdr entry)))
+                              stored)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
