@@ -130,8 +130,132 @@ fn org_custom_link_activation_completion_export_combo() {
                 (nreverse store-calls)
                 org-store-link-plist
                 org-stored-links
-                (buffer-substring-no-properties
-                 (point-min) (point-max)))))))"##,
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_id_cross_file_folded_context_store_open_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-id-cross" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root))
+         (org-id-locations-file (expand-file-name ".org-id-locations" root))
+         (org-id-track-globally t)
+         (org-stored-links nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Project :work:\n")
+            (insert ":PROPERTIES:\n:ID: proj-aaa-111\n:END:\n")
+            (insert "Project body.\n")
+            (insert "** TODO Task one\n")
+            (insert ":PROPERTIES:\n:ID: task-bbb-222\n:END:\n")
+            (insert "Task one body.\n")
+            (insert "*** Detail\n")
+            (insert "Detail body.\n")
+            (insert "** DONE Task two\n")
+            (insert ":PROPERTIES:\n:ID: task-ccc-333\n:END:\n")
+            (insert "Task two body.\n"))
+          (with-temp-file file-b
+            (insert "* Refs\n")
+            (insert "Link to [[id:task-bbb-222][Task one]].\n")
+            (insert "Link to [[id:proj-aaa-111][Project]].\n"))
+          (org-id-update-id-locations (list file-a file-b) t)
+          (let ((results nil))
+            (with-current-buffer (find-file-noselect file-a)
+              (org-mode)
+              (org-fold-hide-sublevels 1)
+              (goto-char (point-min))
+              (search-forward "Task one")
+              (beginning-of-line)
+              (let ((org-link-descriptive t)
+                    (link (org-store-link nil)))
+                (push (list 'store-from-hidden
+                            (and link
+                                 (string-match-p "id:task-bbb-222" link)))
+                      results))
+              (org-fold-show-all)
+              (goto-char (point-min))
+              (search-forward "Task two")
+              (beginning-of-line)
+              (let ((link (org-store-link nil)))
+                (push (list 'store-from-visible
+                            (and link
+                                 (string-match-p "id:task-ccc-333" link)))
+                      results))
+              (kill-buffer))
+            (with-current-buffer (find-file-noselect file-b)
+              (org-mode)
+              (goto-char (point-min))
+              (search-forward "Task one")
+              (beginning-of-line)
+              (let ((link-info (org-element-context)))
+                (push (list 'link-type
+                            (org-element-property :type link-info)
+                            (org-element-property :path link-info))
+                      results))
+              (let ((stored (org-store-link nil)))
+                (push (list 'store-from-b stored) results))
+              (kill-buffer))
+            (let ((marker (org-id-find "task-ccc-333" t)))
+              (push (list 'find-task-ccc
+                          (markerp marker)
+                          (and marker (marker-position marker))
+                          (and marker
+                               (buffer-file-name
+                                (marker-buffer marker))))
+                    results))
+            (let ((marker (org-id-find "proj-aaa-111" t)))
+              (push (list 'find-proj
+                          (markerp marker)
+                          (and marker (marker-position marker))
+                          (and marker
+                               (buffer-file-name
+                                (marker-buffer marker))))
+                    results))
+            (list (mapcar
+                   (lambda (entry)
+                     (if (and (listp entry) (eq (car entry) 'find-task-ccc))
+                         (list (nth 0 entry)
+                               (nth 1 entry)
+                               (nth 2 entry)
+                               (and (nth 3 entry)
+                                    (replace-regexp-in-string
+                                     (regexp-quote root) "<root>"
+                                     (nth 3 entry))))
+                       (if (and (listp entry) (eq (car entry) 'find-proj))
+                           (list (nth 0 entry)
+                                 (nth 1 entry)
+                                 (nth 2 entry)
+                                 (and (nth 3 entry)
+                                      (replace-regexp-in-string
+                                       (regexp-quote root) "<root>"
+                                       (nth 3 entry))))
+                         (if (and (listp entry) (eq (car entry) 'store-from-b))
+                             (list (car entry)
+                                   (and (nth 1 entry)
+                                        (replace-regexp-in-string
+                                         (regexp-quote root) "<root>"
+                                         (nth 1 entry))))
+                           entry))))
+                   (nreverse results))
+                  (replace-regexp-in-string
+                   (regexp-quote root) "<root>"
+                   (mapconcat #'identity
+                              (mapcar (lambda (s)
+                                        (replace-regexp-in-string
+                                         (regexp-quote root) "<root>" s))
+                                      org-stored-links)
+                              "\n")))))
+      (delete-directory root t))))"##,
     );
 }
 
