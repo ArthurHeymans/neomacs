@@ -63,6 +63,65 @@ fn org_read_date_relative_default_time_combo() {
 }
 
 #[test]
+fn org_timestamp_time_range_eval_parse_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Ranges\n")
+    (insert "Inline <2026-05-27 Wed 09:15>--<2026-05-27 Wed 11:45>\n")
+    (insert "Reverse <2026-05-28 Thu 14:00>--<2026-05-28 Thu 12:30>\n")
+    (insert "| Task | Range | Diff |\n")
+    (insert "| A | <2026-05-27 Wed 10:00>--<2026-05-29 Fri 12:30> | |\n")
+    (goto-char (point-min))
+    (search-forward "Inline")
+    (let ((messages nil))
+      (cl-letf (((symbol-function 'message)
+                 (lambda (fmt &rest args)
+                   (push (apply #'format fmt args) messages))))
+        (org-evaluate-time-range nil)
+        (let ((inline-message (car messages)))
+          (goto-char (point-min))
+          (search-forward "Reverse")
+          (org-evaluate-time-range t)
+          (let ((after-reverse
+                 (buffer-substring-no-properties
+                  (line-beginning-position) (line-end-position))))
+            (goto-char (point-min))
+            (search-forward "| A |")
+            (org-evaluate-time-range t)
+            (let ((after-table
+                   (buffer-substring-no-properties
+                    (line-beginning-position) (line-end-position))))
+              (list inline-message
+                    after-reverse
+                    after-table
+                    (mapcar #'org-get-compact-tod
+                            '("09:15" "09:15-11:45" "23:50-00:10"
+                              "bad"))
+                    (mapcar (lambda (s)
+                              (list s
+                                    (org-time-string-to-absolute s)
+                                    (format-time-string
+                                     "%Y-%m-%d %H:%M"
+                                     (org-time-string-to-time s))
+                                    (org-time-string-to-seconds s)))
+                            '("<2026-05-27 Wed>"
+                              "<2026-05-27 Wed 09:15>"))
+                    (condition-case err
+                        (org-time-string-to-absolute
+                         "%%(diary-date 5 27 2026)")
+                      (error (cons (car err) (cdr err))))
+                    (nreverse messages)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
 fn org_planning_repeater_warning_element_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
