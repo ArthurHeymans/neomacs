@@ -276,6 +276,96 @@ fn org_archive_all_done_tag_then_move_old_combo() {
 }
 
 #[test]
+fn org_archive_property_locations_hooks_files_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-archive)
+  (let* ((root (make-temp-file "org-archive-props" t))
+         (source (expand-file-name "source.org" root))
+         (archive-a (expand-file-name "archive-a.org" root))
+         (archive-b (expand-file-name "archive-b.org" root))
+         (events nil)
+         (org-archive-location "%s_archive::* Default Archive")
+         (org-archive-save-context-info
+          '(file category todo olpath itags ltags))
+         (org-archive-subtree-add-inherited-tags t)
+         (org-archive-subtree-save-file-p t)
+         (org-archive-hook
+          (list (lambda ()
+                  (push (list (org-get-heading t t t t)
+                              (org-current-level)
+                              (org-get-tags nil t))
+                        events)))))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "#+CATEGORY: Cases\n")
+            (insert "* Project :client:\n")
+            (insert ":PROPERTIES:\n:ARCHIVE: " archive-a "::* Project Archive\n:END:\n")
+            (insert "** DONE Task A :done:\n")
+            (insert "Body A\n")
+            (insert "** TODO Active\n")
+            (insert "* Other :ops:\n")
+            (insert ":PROPERTIES:\n:ARCHIVE: " archive-b "::* Other Archive\n:END:\n")
+            (insert "** DONE Task B :closed:\n")
+            (insert "Body B\n"))
+          (with-current-buffer (find-file-noselect source)
+            (org-mode)
+            (goto-char (point-min))
+            (search-forward "Task A")
+            (beginning-of-line)
+            (let ((loc-a (org-archive--compute-location
+                          (org-entry-get nil "ARCHIVE" t))))
+              (org-archive-subtree)
+              (goto-char (point-min))
+              (search-forward "Task B")
+              (beginning-of-line)
+              (let ((loc-b (org-archive--compute-location
+                            (org-entry-get nil "ARCHIVE" t))))
+                (org-archive-subtree)
+                (save-buffer)
+                (list (list (file-relative-name (car loc-a) root)
+                            (cdr loc-a))
+                      (list (file-relative-name (car loc-b) root)
+                            (cdr loc-b))
+                      (nreverse events)
+                      (sort (mapcar (lambda (file)
+                                      (file-relative-name file root))
+                                    (org-all-archive-files))
+                            #'string<)
+                      (sort (mapcar (lambda (file)
+                                      (file-relative-name file root))
+                                    (org-add-archive-files
+                                     (list source)))
+                            #'string<)
+                      (replace-regexp-in-string
+                       (regexp-quote root)
+                       "<root>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))
+                      (with-current-buffer (find-file-noselect archive-a)
+                        (replace-regexp-in-string
+                         (regexp-quote root)
+                         "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))))
+                      (with-current-buffer (find-file-noselect archive-b)
+                        (replace-regexp-in-string
+                         (regexp-quote root)
+                         "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))))))
+      (dolist (file (list source archive-a archive-b))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+        (when (file-exists-p file) (delete-file file)))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_refile_completion_new_parent_verify_history_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
