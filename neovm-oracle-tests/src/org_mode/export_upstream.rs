@@ -530,6 +530,48 @@ fn upstream_ox_get_caption() {
        (goto-char (point-min))
        (let* ((tree (org-element-parse-buffer))
               (table (car (org-element-map tree 'table #'identity))))
-         (org-export-get-caption table t))))))"##,
+          (org-export-get-caption table t))))))"##,
+    );
+}
+
+#[test]
+fn org_export_headline_number_category_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Numbering\n")
+    (insert "#+CATEGORY: test-cat\n\n")
+    (insert "* Alpha\n")
+    (insert "** Beta\n")
+    (insert "*** Gamma\n")
+    (insert "** Delta\n")
+    (insert "* Epsilon\n")
+    (let* ((tree (org-element-parse-buffer))
+           (info (org-combine-plists
+                  (org-export--get-buffer-attributes)
+                  (org-export-get-environment)))
+           (headlines (org-element-map tree 'headline #'identity))
+           (numbers (mapcar (lambda (h)
+                              (org-export-get-headline-number h info))
+                            headlines))
+           (categories (mapcar (lambda (h)
+                                 (org-export-get-category h info))
+                               headlines))
+           (tags (mapcar (lambda (h)
+                           (org-export-get-tags h info))
+                         headlines))
+           (todo (mapcar (lambda (h)
+                           (org-export-get-todo-keyword h info))
+                         headlines)))
+      (list numbers categories tags todo
+            (mapcar (lambda (h)
+                      (list (org-element-property :level h)
+                            (org-element-property :raw-value h)))
+                    headlines)))))"##,
     );
 }
