@@ -919,3 +919,57 @@ fn org_clock_agenda_filter_tag_effort_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_clock_agenda_multi_file_scope_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-multi" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Project A\n")
+            (insert "** Task A1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert ":END:\n")
+            (insert "** Task A2\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\n")
+            (insert ":END:\n"))
+          (with-temp-file file-b
+            (insert "* Project B\n")
+            (insert "** Task B1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:30] =>  1:30\n")
+            (insert ":END:\n"))
+          (let* ((table-a (with-current-buffer (find-file-noselect file-a)
+                            (org-mode)
+                            (org-clock-get-table-data
+                             nil '(:maxlevel 2 :scope buffer))))
+                 (table-b (with-current-buffer (find-file-noselect file-b)
+                            (org-mode)
+                            (org-clock-get-table-data
+                             nil '(:maxlevel 2 :scope buffer))))
+                 (rows-a (mapcar (lambda (row)
+                                   (list (nth 0 row)
+                                         (substring-no-properties (nth 1 row))
+                                         (nth 4 row)))
+                                 (nth 2 table-a)))
+                 (rows-b (mapcar (lambda (row)
+                                   (list (nth 0 row)
+                                         (substring-no-properties (nth 1 row))
+                                         (nth 4 row)))
+                                 (nth 2 table-b))))
+            (list (nth 1 table-a) rows-a (nth 1 table-b) rows-b))))
+      (dolist (f (list file-a file-b))
+        (when (get-file-buffer f) (kill-buffer (get-file-buffer f))))
+      (delete-directory root t))))"##,
+    );
+}
