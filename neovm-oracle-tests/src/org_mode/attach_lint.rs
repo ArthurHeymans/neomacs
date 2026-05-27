@@ -606,8 +606,63 @@ fn org_lint_include_macro_planning_percent_combo() {
                     (replace-regexp-in-string
                      (regexp-quote root)
                      "<root>"
-                     (buffer-substring-no-properties
-                      (point-min) (point-max)))))))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_attach_lint_missing_dir_stale_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-attach)
+  (require 'org-lint)
+  (let* ((root (make-temp-file "org-attach-lint" t))
+         (file (expand-file-name "task.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Task\n")
+            (insert ":PROPERTIES:\n:ID: lint-test-id\n:ATTACH_DIR: missing-dir\n:END:\n")
+            (insert "Body with [[attachment:missing-file.txt]] link.\n\n")
+            (insert "* Other\n")
+            (insert ":PROPERTIES:\n:ID: other-id\n:END:\n"))
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (let* ((ast (org-element-parse-buffer))
+                   (lint-reports
+                    (condition-case nil
+                        (org-lint ast)
+                      (error nil)))
+                   (attach-dir (org-attach-dir))
+                   (has-missing-dir
+                    (and lint-reports
+                         (some (lambda (r)
+                                 (string-match-p "missing-dir"
+                                                  (or (nth 1 r) "")))
+                               lint-reports)))
+                   (headlines
+                    (org-element-map ast 'headline
+                      (lambda (h)
+                        (list (org-element-property :raw-value h)
+                              (org-element-property :level h)))))
+                   (links
+                    (org-element-map ast 'link
+                      (lambda (lk)
+                        (list (org-element-property :type lk)
+                              (org-element-property :path lk))))))
+              (kill-buffer)
+              (list (length lint-reports)
+                    has-missing-dir
+                    headlines
+                    links
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>"
+                     (or attach-dir "nil"))))))
       (delete-directory root t))))"##,
     );
 }
