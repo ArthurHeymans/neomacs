@@ -848,10 +848,75 @@ fn org_babel_execute_var_table_output_header_deep_state_combo() {
                  (lambda (el)
                    (list (org-element-type el)
                          (org-element-property :value el))))))
-          (list compute-result
-                after-compute
-                output-result
-                after-output
-                results-els)))))))"##,
+           (list compute-result
+                 after-compute
+                 output-result
+                 after-output
+                 results-els)))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_header_arg_merge_property_inherit_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Set file-level property
+      (insert "#+PROPERTY: header-args :results value replace\n\n")
+      ;; Block with its own header
+      (insert "#+NAME: merged\n")
+      (insert "#+begin_src emacs-lisp :var x=10\n")
+      (insert "(list :x x :doubled (* x 2))\n")
+      (insert "#+end_src\n\n")
+      ;; Block with :results output override
+      (insert "#+NAME: output-block\n")
+      (insert "#+begin_src emacs-lisp :results output\n")
+      (insert "(princ (format \"output-mode=%s\" 'output))\n")
+      (insert "#+end_src\n\n")
+      ;; Block with :file
+      (let* ((root (make-temp-file "org-babel-merge" t))
+             (out-file (expand-file-name "result.txt" root)))
+        (unwind-protect
+            (progn
+              (insert "#+NAME: file-writer\n")
+              (insert "#+begin_src emacs-lisp :file " out-file "\n")
+              (insert "(with-temp-file \"" out-file "\"\n  (insert \"file-content\"))\n  \"done\"\n")
+              (insert "#+end_src\n\n")
+              ;; Execute merged
+              (goto-char (point-min))
+              (search-forward "merged")
+              (org-babel-execute-src-block)
+              (let ((merged-result (org-babel-read-result)))
+                ;; Execute output-block
+                (goto-char (point-min))
+                (search-forward "output-block")
+                (org-babel-execute-src-block)
+                (let ((output-result (org-babel-read-result)))
+                  ;; Execute file-writer
+                  (goto-char (point-min))
+                  (search-forward "file-writer")
+                  (org-babel-execute-src-block)
+                  (let ((file-result (org-babel-read-result))
+                        (file-content
+                         (when (file-exists-p out-file)
+                           (with-temp-buffer
+                             (insert-file-contents out-file)
+                             (buffer-string)))))
+                    (list merged-result
+                          output-result
+                          file-result
+                          (replace-regexp-in-string
+                           (regexp-quote root) "<root>"
+                           (or file-content "no-file"))
+                          (buffer-substring-no-properties
+                           (point-min) (point-max))))))))
+          (delete-directory root t))))))"##,
     );
 }
