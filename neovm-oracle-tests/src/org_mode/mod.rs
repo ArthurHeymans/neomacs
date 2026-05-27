@@ -1461,6 +1461,7 @@ mod strong_divergence_hunt_5;
 mod strong_divergence_hunt_6;
 mod strong_divergence_hunt_7;
 mod strong_divergence_hunt_8;
+mod strong_divergence_hunt_9;
 mod strong_edge_combos;
 mod strong_edge_deep;
 mod strong_edge_deep_2;
