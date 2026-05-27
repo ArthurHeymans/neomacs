@@ -343,3 +343,50 @@ fn org_link_open_file_search_targets_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_export_resolve_links_reference_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: tbl\n")
+    (insert "#+CAPTION: Table caption\n")
+    (insert "| a | b |\n| 1 | 2 |\n\n")
+    (insert "* Target heading\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: custom-target\n:END:\n")
+    (insert "<<radio target>> body.\n")
+    (insert "#+begin_src emacs-lisp -n -r\n")
+    (insert "(message \"hi\") ;; (call)\n")
+    (insert "#+end_src\n")
+    (insert "Links: [[tbl]] [[*Target heading]] [[#custom-target]] ")
+    (insert "[[radio target]] [[(call)]].\n")
+    (let* ((tree (org-element-parse-buffer))
+           (info (org-export-get-environment 'html nil nil))
+           (links (org-element-map tree 'link #'identity))
+           (table (org-element-map tree 'table #'identity nil t))
+           (src (org-element-map tree 'src-block #'identity nil t))
+           (headline (org-element-map tree 'headline #'identity nil t))
+           (resolve
+            (lambda (link)
+              (let ((raw (org-element-property :raw-link link)))
+                (list raw
+                      (org-element-type
+                       (org-export-resolve-link link info))
+                      (org-export-get-reference
+                       (org-export-resolve-link link info) info))))))
+      (list (mapcar resolve links)
+            (org-export-get-caption table)
+            (org-export-get-reference table info)
+            (org-export-get-reference src info)
+            (org-export-get-reference headline info)
+            (org-export-get-ordinal table info)
+            (org-export-resolve-coderef "call" info)
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
