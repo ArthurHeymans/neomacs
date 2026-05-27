@@ -240,3 +240,56 @@ fn org_texinfo_export_menu_definition_table_combo() {
             normalized))))"##,
     );
 }
+
+#[test]
+fn org_man_export_sections_lists_tables_refs_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-man)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: neomacs-test\n")
+    (insert "#+SUBTITLE: Org Man Combo\n")
+    (insert "#+AUTHOR: Ada\n")
+    (insert "#+DATE: 2026-05-27\n")
+    (insert "#+OPTIONS: toc:nil num:nil author:t\n")
+    (insert "* NAME\n")
+    (insert "neomacs-test - exercise Org man export [fn:one]\n")
+    (insert "* SYNOPSIS\n")
+    (insert "#+begin_src sh\nneomacs-test --flag=value FILE\n#+end_src\n")
+    (insert "* DESCRIPTION\n")
+    (insert "Paragraph with *bold*, /italic/, =code=, ~verbatim~, -- dash, and [[https://example.org/path?a=1&b=2][site]].\n")
+    (insert "- option-a :: first option with H_2O and \\alpha\n")
+    (insert "- option-b :: second option with [[#details][details]]\n\n")
+    (insert "#+CAPTION: Exit status\n")
+    (insert "| Code | Meaning |\n|------+---------|\n| 0 | ok |\n| 2 | failed |\n")
+    (insert "** Details\n")
+    (insert "#+NAME: details\n")
+    (insert "Target paragraph with <<radio-target>> and [[radio-target][radio]].\n")
+    (insert "#+begin_example\nliteral .SH should be escaped\nliteral backslash \\\\\n#+end_example\n")
+    (insert "* SEE ALSO\n")
+    (insert "[[man:emacs(1)][emacs(1)]] and [[https://gnu.org][GNU]].\n")
+    (insert "[fn:one] Footnote text with /markup/ and [[https://example.org/fn][url]].\n")
+    (let* ((org-export-with-toc nil)
+           (org-export-with-broken-links t)
+           (man (org-export-as 'man nil nil t nil))
+           (normalized
+            (replace-regexp-in-string
+             "[ \t]+$" ""
+             (replace-regexp-in-string
+              "org[[:alnum:]]+"
+              "org-id"
+              man))))
+      (list (not (null (string-match-p "^\\.TH" man)))
+            (not (null (string-match-p "^\\.SH NAME" man)))
+            (not (null (string-match-p "^\\.SH SYNOPSIS" man)))
+            (not (null (string-match-p "^\\.SS Details" man)))
+            (not (null (string-match-p "option-a" man)))
+            (not (null (string-match-p "Exit status" man)))
+            (not (null (string-match-p "emacs(1)" man)))
+            (not (null (string-match-p "Footnote" man)))
+            normalized))))"##,
+    );
+}
