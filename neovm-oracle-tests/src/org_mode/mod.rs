@@ -62,6 +62,7 @@ mod mobile_workflow;
 mod mouse_workflow;
 mod navigation_edit;
 mod num_workflow;
+mod omega_strict;
 mod ox_org_native;
 mod pcomplete_workflow;
 mod persist_workflow;
