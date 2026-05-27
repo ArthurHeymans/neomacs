@@ -455,6 +455,58 @@ fn org_export_derived_backend_transcoder_combo() {
 }
 
 #[test]
+fn org_export_options_tags_toc_num_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Options Test\n")
+    (insert "#+OPTIONS: tags:nil toc:2 num:t\n")
+    (insert "#+FILETAGS: :test:demo:\n\n")
+    (insert "* Section One :alpha:\n")
+    (insert "First section.\n\n")
+    (insert "** Sub 1.1\n")
+    (insert "Sub content.\n\n")
+    (insert "*** Sub 1.1.1\n")
+    (insert "Deep content.\n\n")
+    (insert "* Section Two :beta:\n")
+    (insert "Second section.\n\n")
+    (let* ((html (org-export-as 'html nil nil t nil))
+           ;; Check TOC depth
+           (toc-h2-count
+            (let ((c 0) (s 0))
+              (while (string-match "<li><a href" html s)
+                (setq s (match-end 0) c (1+ c)))
+              c))
+           ;; Check tags removed
+           (has-tag (string-match-p "alpha" html))
+           ;; Check numbering
+           (has-num (string-match-p "1\\." html))
+           ;; Check section content
+           (has-section-one (string-match-p "Section One" html))
+           (has-section-two (string-match-p "Section Two" html))
+           ;; Check toc depth limit
+           (toc-has-1-1 (string-match-p "Sub 1\\.1" html))
+           (toc-has-1-1-1 (string-match-p "Sub 1\\.1\\.1" html)))
+      (list toc-h2-count
+            has-tag
+            has-num
+            has-section-one
+            has-section-two
+            toc-has-1-1
+            toc-has-1-1-1
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+" "sec:org-id"
+             (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+                                       html)))))))"##,
+    );
+}
+
+#[test]
 fn org_export_filter_babel_call_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
