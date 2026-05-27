@@ -75,6 +75,7 @@ mod mu_deep;
 mod navigation_edit;
 mod nu_operations;
 mod num_workflow;
+mod omega2_combos;
 mod omega_strict;
 mod omicron_deep;
 mod org_indent_workflow;
