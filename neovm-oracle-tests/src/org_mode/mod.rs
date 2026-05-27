@@ -26,6 +26,7 @@ mod link_export;
 mod link_runtime;
 mod list_checkbox;
 mod macro_include;
+mod mobile_workflow;
 mod planning_timestamp;
 mod property_log;
 mod publish_workflow;
