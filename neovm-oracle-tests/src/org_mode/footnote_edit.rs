@@ -315,3 +315,58 @@ fn org_footnote_local_normalize_nested_missing_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_footnote_label_definition_section_adjust_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Body\n")
+    (insert "A[fn:1] B[fn:3] inline[fn::Inline note].\n")
+    (insert "* Footnotes\n")
+    (insert "[fn:1] One definition\n")
+    (insert "[fn:2] Unused two\n")
+    (insert "[fn:3] Three definition\n")
+    (insert "* Footnotes\n")
+    (insert "[fn:dup] Duplicate section definition\n")
+    (let ((org-footnote-section "Footnotes")
+          (org-footnote-auto-adjust 'renumber)
+          (org-footnote-fill-after-inline-note-extraction nil))
+      (let ((initial
+             (list (mapcar #'org-footnote-normalize-label
+                           '("fn:abc" "  fn:spaced  " " plain " "   "))
+                   (org-footnote-unique-label)
+                   (org-footnote-unique-label '("1" "2" "4"))
+                   (org-footnote-get-definition "fn:1")
+                   (org-footnote-get-definition "3")
+                   (org-footnote-get-definition "missing")
+                   (org-footnote-all-labels)
+                   (org-footnote--collect-definitions))))
+        (let ((deleted-defs (org-footnote--collect-definitions t))
+              (after-delete-defs
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (org-footnote--clear-footnote-section)
+          (let ((after-clear
+                 (buffer-substring-no-properties (point-min) (point-max))))
+            (goto-char (point-min))
+            (search-forward "B")
+            (org-footnote-new)
+            (insert "New auto-adjust definition")
+            (org-footnote-auto-adjust-maybe)
+            (let ((after-adjust
+                   (buffer-substring-no-properties (point-min) (point-max))))
+              (list initial
+                    deleted-defs
+                    after-delete-defs
+                    after-clear
+                    (org-footnote-all-labels)
+                    (org-footnote--collect-references 'anonymous)
+                    (org-footnote--collect-definitions)
+                    after-adjust)))))))"##,
+    );
+}
