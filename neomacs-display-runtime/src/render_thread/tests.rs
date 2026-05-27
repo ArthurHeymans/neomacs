@@ -141,8 +141,8 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     app.handle_window_command(RenderCommand::DestroyWindow { emacs_frame_id: 0 })
         .expect("destroy primary window");
 
-    assert!(app.primary_native.is_none());
-    assert!(app.primary_frame.is_none());
+    assert!(app.primary_window_state.is_none());
+    assert!(app.primary_render_state().is_none());
     assert!(app.primary_current_frame().is_none());
     assert!(!app.primary_dirty());
     assert!(app.primary_window_destroyed);
@@ -155,7 +155,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
     let Some(device) = make_test_device() else {
         return;
     };
-    app.primary_frame = Some(super::frame_windows::GuiFrameRenderState::new(
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
         app.scale_factor,
@@ -169,7 +169,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
 
     assert_eq!(app.frame_windows.primary_frame_id(), Some(0x1000));
     assert_eq!(
-        app.primary_frame.as_ref().map(|frame| frame.emacs_frame_id),
+        app.primary_render_state().map(|frame| frame.emacs_frame_id),
         Some(0x1000)
     );
 }

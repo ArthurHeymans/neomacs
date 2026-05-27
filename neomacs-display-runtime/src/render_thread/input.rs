@@ -179,8 +179,7 @@ impl RenderApp {
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
         let padding_x = 8.0_f32;
         let char_width = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
         let menu_width = self
             .primary_compact_bar()
@@ -204,8 +203,7 @@ impl RenderApp {
         }
         let padding_x = 8.0_f32;
         let char_width = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
         let mut item_x = padding_x;
         for item in &compact_bar.menu_items {
@@ -264,8 +262,7 @@ impl RenderApp {
         let padding_x = 8.0_f32;
         let tab_padding = 12.0_f32;
         let char_width = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
 
         let mut tab_x = padding_x;
@@ -293,8 +290,7 @@ impl RenderApp {
         }
         let padding_x = 8.0_f32;
         let char_width = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
 
         let mut item_x = padding_x;

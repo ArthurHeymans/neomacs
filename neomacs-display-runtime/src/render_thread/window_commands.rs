@@ -231,8 +231,11 @@ impl RenderApp {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
                 if emacs_frame_id == 0 {
                     self.frame_windows.clear_primary_mapping();
-                    self.primary_native = None;
-                    self.primary_frame = None;
+                    self.primary_window_state = None;
+                    #[cfg(test)]
+                    {
+                        self.primary_render_state_for_tests = None;
+                    }
                     self.primary_window_destroyed = true;
                 } else {
                     self.frame_windows.request_destroy(emacs_frame_id);
@@ -242,7 +245,7 @@ impl RenderApp {
             RenderCommand::AdoptPrimaryFrame { emacs_frame_id } => {
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame.emacs_frame_id = emacs_frame_id;
                 }
                 Ok(())

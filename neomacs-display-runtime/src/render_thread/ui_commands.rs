@@ -171,7 +171,7 @@ impl RenderApp {
                     window_state.render.frame_dirty = true;
                 }
                 if !self.transition_policy.crossfade_enabled {
-                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
                         primary_frame.transitions.crossfades.clear();
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
@@ -179,7 +179,7 @@ impl RenderApp {
                     }
                 }
                 if !self.transition_policy.scroll_enabled {
-                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
                         primary_frame.transitions.scroll_slides.clear();
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
@@ -205,8 +205,7 @@ impl RenderApp {
                     items.len()
                 );
                 let (fs, lh, cw) = if emacs_frame_id == 0 {
-                    self.primary_frame
-                        .as_ref()
+                    self.primary_render_state()
                         .map(|a| {
                             let atlas = &a.glyph_atlas;
                             (
@@ -274,8 +273,7 @@ impl RenderApp {
                 tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
                 let (fs, lh, cw, screen_w, screen_h) = if emacs_frame_id == 0 {
                     let (fs, lh, cw) = self
-                        .primary_frame
-                        .as_ref()
+                        .primary_render_state()
                         .map(|primary_frame| {
                             let atlas = &primary_frame.glyph_atlas;
                             (
@@ -355,11 +353,11 @@ impl RenderApp {
                 {
                     self.set_primary_visual_bell_start(Some(now));
                     if self.effects.cursor_error_pulse.enabled {
-                        if let (Some(renderer), Some(primary_frame)) =
-                            (self.renderer.as_ref(), self.primary_frame.as_mut())
+                        if let (Some(renderer), Some(primary_state)) =
+                            (self.renderer.as_ref(), self.primary_window_state.as_mut())
                         {
                             renderer.trigger_transient_cursor_error_pulse(
-                                &mut primary_frame.renderer_effects,
+                                &mut primary_state.render.renderer_effects,
                                 now,
                             );
                         }
@@ -376,11 +374,11 @@ impl RenderApp {
                             let at_top = info.window_start <= 1;
                             let at_bottom = info.window_end >= info.buffer_size;
                             if at_top || at_bottom {
-                                if let (Some(renderer), Some(primary_frame)) =
-                                    (self.renderer.as_ref(), self.primary_frame.as_mut())
+                                if let (Some(renderer), Some(primary_state)) =
+                                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
                                 {
                                     renderer.trigger_transient_edge_snap(
-                                        &mut primary_frame.renderer_effects,
+                                        &mut primary_state.render.renderer_effects,
                                         info.bounds,
                                         info.mode_line_height,
                                         at_top,
@@ -475,7 +473,7 @@ impl RenderApp {
             }
             RenderCommand::SetShowFps { enabled } => {
                 self.primary_fps_enabled = enabled;
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame.fps.enabled = enabled;
                     primary_frame.frame_dirty = true;
                 }
@@ -632,7 +630,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame.tool_bar = Some(tool_bar);
                 } else {
                     self.pending_primary_tool_bar = Some(tool_bar);
@@ -672,7 +670,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame.menu_bar = Some(menu_bar);
                 } else {
                     self.pending_primary_menu_bar = Some(menu_bar);

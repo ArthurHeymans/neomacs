@@ -19,7 +19,9 @@ use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
-use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowManager};
+use super::frame_windows::{
+    GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
+};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::{WpeBackend, WpeWebView};
@@ -264,8 +266,8 @@ pub(super) struct RenderGpuContext {
 
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
-    /// Native state for the adopted primary GUI frame window.
-    pub(super) primary_native: Option<GuiFrameNativeWindowState>,
+    /// Window state for the adopted primary GUI frame.
+    pub(super) primary_window_state: Option<GuiFrameWindowState>,
     pub(super) primary_window_destroyed: bool,
     pub(super) width: u32,
     pub(super) height: u32,
@@ -275,8 +277,8 @@ pub(super) struct RenderApp {
     // Shared wgpu context used by the primary surface and secondary windows.
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
-    /// Frame-owned render state for the adopted primary GUI frame.
-    pub(super) primary_frame: Option<GuiFrameRenderState>,
+    #[cfg(test)]
+    pub(super) primary_render_state_for_tests: Option<GuiFrameRenderState>,
 
     // Face cache built from frame data
     pub(super) faces: HashMap<u32, Face>,
@@ -383,7 +385,7 @@ impl RenderApp {
 
         Self {
             comms,
-            primary_native: None,
+            primary_window_state: None,
             primary_window_destroyed: false,
             width,
             height,
@@ -392,7 +394,8 @@ impl RenderApp {
             scale_factor: 1.0,
             gpu: None,
             renderer: None,
-            primary_frame: None,
+            #[cfg(test)]
+            primary_render_state_for_tests: None,
             faces: HashMap::new(),
             modifiers: 0,
             mouse_hidden_for_typing: false,
@@ -461,27 +464,72 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn primary_current_frame(&self) -> Option<&FrameGlyphBuffer> {
-        self.primary_frame
+    pub(super) fn primary_window_state(&self) -> Option<&GuiFrameWindowState> {
+        self.primary_window_state.as_ref()
+    }
+
+    pub(super) fn primary_window_state_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
+        self.primary_window_state.as_mut()
+    }
+
+    pub(super) fn primary_render_state(&self) -> Option<&GuiFrameRenderState> {
+        self.primary_window_state
             .as_ref()
+            .map(|window_state| &window_state.render)
+            .or_else(|| {
+                #[cfg(test)]
+                {
+                    self.primary_render_state_for_tests.as_ref()
+                }
+                #[cfg(not(test))]
+                {
+                    None
+                }
+            })
+    }
+
+    pub(super) fn primary_render_state_mut(&mut self) -> Option<&mut GuiFrameRenderState> {
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            Some(&mut window_state.render)
+        } else {
+            #[cfg(test)]
+            {
+                self.primary_render_state_for_tests.as_mut()
+            }
+            #[cfg(not(test))]
+            {
+                None
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_primary_render_state_for_tests(&mut self, render: GuiFrameRenderState) {
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            window_state.render = render;
+        } else {
+            self.primary_render_state_for_tests = Some(render);
+        }
+    }
+
+    pub(super) fn primary_current_frame(&self) -> Option<&FrameGlyphBuffer> {
+        self.primary_render_state()
             .and_then(|frame| frame.current_frame.as_ref())
     }
 
     pub(super) fn primary_current_frame_mut(&mut self) -> Option<&mut FrameGlyphBuffer> {
-        self.primary_frame
-            .as_mut()
+        self.primary_render_state_mut()
             .and_then(|frame| frame.current_frame.as_mut())
     }
 
     pub(super) fn set_primary_current_frame(&mut self, frame: Option<FrameGlyphBuffer>) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.current_frame = frame;
         }
     }
 
     pub(super) fn primary_dirty(&self) -> bool {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .is_some_and(|frame| frame.frame_dirty)
     }
 
@@ -490,31 +538,28 @@ impl RenderApp {
     }
 
     pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.frame_dirty = dirty;
         }
     }
 
     pub(super) fn primary_fps_enabled(&self) -> bool {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .map_or(self.primary_fps_enabled, |frame| frame.fps.enabled)
     }
 
     pub(super) fn primary_popup_menu(&self) -> Option<&PopupMenuState> {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .and_then(|frame| frame.popup_menu.as_ref())
     }
 
     pub(super) fn primary_popup_menu_mut(&mut self) -> Option<&mut PopupMenuState> {
-        self.primary_frame
-            .as_mut()
+        self.primary_render_state_mut()
             .and_then(|frame| frame.popup_menu.as_mut())
     }
 
     pub(super) fn set_primary_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.popup_menu = popup_menu;
         } else {
             self.pending_primary_popup_menu = popup_menu;
@@ -522,7 +567,7 @@ impl RenderApp {
     }
 
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.tooltip = tooltip;
         } else {
             self.pending_primary_tooltip = tooltip;
@@ -530,7 +575,7 @@ impl RenderApp {
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.visual_bell_start = start;
             primary_frame.frame_dirty = primary_frame.frame_dirty || start.is_some();
         } else {
@@ -539,76 +584,78 @@ impl RenderApp {
     }
 
     pub(super) fn primary_mouse_pos(&self) -> (f32, f32) {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .map_or((0.0, 0.0), |frame| frame.mouse_pos)
     }
 
     pub(super) fn set_primary_mouse_pos(&mut self, mouse_pos: (f32, f32)) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.mouse_pos = mouse_pos;
         }
     }
 
     pub(super) fn primary_cursor(&self) -> &CursorState {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .map_or(&self.cursor_defaults, |frame| &frame.cursor)
     }
 
     pub(super) fn primary_cursor_mut(&mut self) -> Option<&mut CursorState> {
-        self.primary_frame.as_mut().map(|frame| &mut frame.cursor)
+        self.primary_render_state_mut()
+            .map(|frame| &mut frame.cursor)
     }
 
     pub(super) fn primary_child_frames(&self) -> &ChildFrameManager {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .map_or(&self.pending_primary_child_frames, |frame| {
                 &frame.child_frames
             })
     }
 
     pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
-            &mut primary_frame.child_frames
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            &mut window_state.render.child_frames
+        } else if cfg!(test) {
+            #[cfg(test)]
+            {
+                if let Some(primary_frame) = self.primary_render_state_for_tests.as_mut() {
+                    return &mut primary_frame.child_frames;
+                }
+            }
+            &mut self.pending_primary_child_frames
         } else {
             &mut self.pending_primary_child_frames
         }
     }
 
     pub(super) fn primary_transitions_active(&self) -> bool {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .is_some_and(|frame| frame.transitions.has_active())
     }
 
     pub(super) fn primary_renderer_effects_need_redraw(&self) -> bool {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .is_some_and(|frame| frame.renderer_effects.needs_redraw())
     }
 
     pub(super) fn sync_primary_transition_policy_from_default(&mut self) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
-            primary_frame.transitions.policy = self.transition_policy;
+        let transition_policy = self.transition_policy;
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.transitions.policy = transition_policy;
         }
     }
 
     pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .and_then(|frame| frame.menu_bar.as_ref())
     }
 
     pub(super) fn primary_tool_bar(&self) -> Option<&GuiToolBarState> {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .and_then(|frame| frame.tool_bar.as_ref())
     }
 
     pub(super) fn primary_compact_bar(&self) -> Option<&GuiCompactBarState> {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .and_then(|frame| frame.compact_bar.as_ref())
     }
 
@@ -618,21 +665,23 @@ impl RenderApp {
     }
 
     pub(super) fn primary_window(&self) -> Option<&Arc<Window>> {
-        self.primary_native.as_ref().map(|native| &native.window)
+        self.primary_window_state()
+            .map(|window_state| &window_state.native.window)
     }
 
     pub(super) fn primary_surface(&self) -> Option<&wgpu::Surface<'static>> {
-        self.primary_native.as_ref().map(|native| &native.surface)
+        self.primary_window_state()
+            .map(|window_state| &window_state.native.surface)
     }
 
     pub(super) fn primary_surface_config_mut(&mut self) -> Option<&mut wgpu::SurfaceConfiguration> {
-        self.primary_native
-            .as_mut()
-            .map(|native| &mut native.surface_config)
+        self.primary_window_state_mut()
+            .map(|window_state| &mut window_state.native.surface_config)
     }
 
     pub(super) fn configure_primary_surface(&mut self, width: u32, height: u32) {
-        if let (Some(native), Some(gpu)) = (self.primary_native.as_mut(), &self.gpu) {
+        if let (Some(window_state), Some(gpu)) = (self.primary_window_state.as_mut(), &self.gpu) {
+            let native = &mut window_state.native;
             native.width = width;
             native.height = height;
             native.surface_config.width = width;
@@ -644,10 +693,9 @@ impl RenderApp {
     }
 
     pub(super) fn primary_native_size(&self) -> (u32, u32) {
-        self.primary_native
-            .as_ref()
-            .map_or((self.width, self.height), |native| {
-                (native.width, native.height)
+        self.primary_window_state()
+            .map_or((self.width, self.height), |window_state| {
+                (window_state.native.width, window_state.native.height)
             })
     }
 
@@ -658,58 +706,58 @@ impl RenderApp {
     }
 
     pub(super) fn primary_scale_factor(&self) -> f64 {
-        self.primary_native
-            .as_ref()
-            .map_or(self.scale_factor, |native| native.scale_factor)
+        self.primary_window_state()
+            .map_or(self.scale_factor, |window_state| {
+                window_state.native.scale_factor
+            })
     }
 
     pub(super) fn primary_chrome(&self) -> &WindowChrome {
-        self.primary_native
-            .as_ref()
-            .map_or(&self.chrome, |native| &native.chrome)
+        self.primary_window_state()
+            .map_or(&self.chrome, |window_state| &window_state.native.chrome)
     }
 
     pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
-        self.primary_native
+        self.primary_window_state
             .as_mut()
-            .map_or(&mut self.chrome, |native| &mut native.chrome)
+            .map_or(&mut self.chrome, |window_state| {
+                &mut window_state.native.chrome
+            })
     }
 
     pub(super) fn primary_mouse_hidden_for_typing(&self) -> bool {
-        self.primary_native
-            .as_ref()
-            .map_or(self.mouse_hidden_for_typing, |native| {
-                native.mouse_hidden_for_typing
+        self.primary_window_state()
+            .map_or(self.mouse_hidden_for_typing, |window_state| {
+                window_state.native.mouse_hidden_for_typing
             })
     }
 
     pub(super) fn set_primary_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if let Some(native) = self.primary_native.as_mut() {
-            native.mouse_hidden_for_typing = hidden;
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            window_state.native.mouse_hidden_for_typing = hidden;
         } else {
             self.mouse_hidden_for_typing = hidden;
         }
     }
 
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
-        if let Some(native) = self.primary_native.as_mut() {
-            native.ime_enabled = enabled;
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            window_state.native.ime_enabled = enabled;
         } else {
             self.ime_enabled = enabled;
         }
     }
 
     pub(super) fn reset_primary_ime_cursor_area(&mut self) {
-        if let Some(native) = self.primary_native.as_mut() {
-            native.last_ime_cursor_area = None;
+        if let Some(window_state) = self.primary_window_state.as_mut() {
+            window_state.native.last_ime_cursor_area = None;
         } else {
             self.last_ime_cursor_area = None;
         }
     }
 
     pub(super) fn primary_chrome_interaction(&self) -> GuiChromeInteractionState {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .map_or(GuiChromeInteractionState::default(), |frame| {
                 frame.chrome_interaction
             })
@@ -719,19 +767,18 @@ impl RenderApp {
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
     ) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             f(&mut primary_frame.chrome_interaction);
         }
     }
 
     pub(super) fn primary_ime_preedit_active(&self) -> bool {
-        self.primary_frame
-            .as_ref()
+        self.primary_render_state()
             .is_some_and(|frame| frame.ime_preedit_active)
     }
 
     pub(super) fn set_primary_ime_preedit(&mut self, text: String) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.ime_preedit_active = !text.is_empty();
             primary_frame.ime_preedit_text = text;
             primary_frame.frame_dirty = true;
@@ -739,7 +786,7 @@ impl RenderApp {
     }
 
     pub(super) fn clear_primary_ime_preedit(&mut self) {
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.ime_preedit_active = false;
             primary_frame.ime_preedit_text.clear();
             primary_frame.frame_dirty = true;

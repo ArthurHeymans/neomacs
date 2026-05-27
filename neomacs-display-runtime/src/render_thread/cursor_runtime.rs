@@ -57,17 +57,19 @@ impl RenderApp {
     /// Update IME cursor area only when IME is active and the rectangle changed.
     pub(super) fn update_ime_cursor_area_if_needed(&mut self, target: &CursorTarget) {
         if !self
-            .primary_native
-            .as_ref()
-            .map_or(self.ime_enabled, |native| native.ime_enabled)
+            .primary_window_state()
+            .map_or(self.ime_enabled, |window_state| {
+                window_state.native.ime_enabled
+            })
             && !self.primary_ime_preedit_active()
         {
             return;
         }
         let area = self.ime_cursor_area_for_target(target);
-        let Some(native) = self.primary_native.as_mut() else {
+        let Some(window_state) = self.primary_window_state_mut() else {
             return;
         };
+        let native = &mut window_state.native;
         if native.last_ime_cursor_area == Some(area) {
             return;
         }
@@ -121,8 +123,22 @@ impl RenderApp {
 
     /// Update cursor blink state, returns true if blink toggled.
     pub(super) fn tick_cursor_blink(&mut self) -> bool {
-        let Some(primary_frame) = self.primary_frame.as_mut() else {
-            return false;
+        let cursor_wake_enabled = self.effects.cursor_wake.enabled;
+        let renderer = self.renderer.as_ref();
+        let primary_frame = if let Some(window_state) = self.primary_window_state.as_mut() {
+            &mut window_state.render
+        } else {
+            #[cfg(test)]
+            {
+                let Some(primary_frame) = self.primary_render_state_for_tests.as_mut() else {
+                    return false;
+                };
+                primary_frame
+            }
+            #[cfg(not(test))]
+            {
+                return false;
+            }
         };
         let cursor = &mut primary_frame.cursor;
         if !cursor.blink_enabled || cursor.target_cloned().is_none() {
@@ -133,8 +149,8 @@ impl RenderApp {
             let was_off = !cursor.blink_on;
             cursor.blink_on = !cursor.blink_on;
             cursor.last_blink_toggle = now;
-            if was_off && cursor.blink_on && self.effects.cursor_wake.enabled {
-                if let Some(renderer) = self.renderer.as_ref() {
+            if was_off && cursor.blink_on && cursor_wake_enabled {
+                if let Some(renderer) = renderer {
                     renderer
                         .trigger_transient_cursor_wake(&mut primary_frame.renderer_effects, now);
                 }

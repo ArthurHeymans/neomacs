@@ -455,7 +455,15 @@ impl RenderApp {
     /// Ensure offscreen textures exist (lazily created)
     pub(super) fn ensure_offscreen_textures(&mut self) {
         let (w, h) = self.primary_native_size();
-        let Some(primary_frame) = self.primary_frame.as_mut() else {
+        let renderer = match self.renderer.as_ref() {
+            Some(r) => r,
+            None => return,
+        };
+        let Some(primary_frame) = self
+            .primary_window_state
+            .as_mut()
+            .map(|state| &mut state.render)
+        else {
             return;
         };
         if primary_frame.transitions.offscreen_a.is_some()
@@ -463,10 +471,6 @@ impl RenderApp {
         {
             return;
         }
-        let renderer = match self.renderer.as_ref() {
-            Some(r) => r,
-            None => return,
-        };
         if primary_frame.transitions.offscreen_a.is_none() {
             let (tex, view) = renderer.create_offscreen_texture(w, h);
             let bg = renderer.create_texture_bind_group(&view);
@@ -483,7 +487,7 @@ impl RenderApp {
     pub(super) fn current_offscreen_view_and_bg(
         &self,
     ) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
-        let transitions = &self.primary_frame.as_ref()?.transitions;
+        let transitions = &self.primary_render_state()?.transitions;
         let (_, view, bg) = if transitions.current_is_a {
             transitions.offscreen_a.as_ref()?
         } else {
@@ -501,7 +505,11 @@ impl RenderApp {
         };
 
         let (width, height) = self.primary_native_size();
-        let Some(primary_frame) = self.primary_frame.as_mut() else {
+        let Some(primary_frame) = self
+            .primary_window_state
+            .as_mut()
+            .map(|state| &mut state.render)
+        else {
             return;
         };
         let transitions = &mut primary_frame.transitions;

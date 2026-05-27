@@ -194,7 +194,7 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
-                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                     }
                     self.pending_primary_floating_webkits
@@ -346,7 +346,7 @@ impl RenderApp {
                         width,
                         height,
                     };
-                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
                         let primary_len = primary_frame.floating_webkits.len();
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                         if primary_frame.floating_webkits.len() != primary_len {
@@ -368,7 +368,7 @@ impl RenderApp {
                     if emacs_frame_id == 0
                         || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                     {
-                        if let Some(primary_frame) = self.primary_frame.as_mut() {
+                        if let Some(primary_frame) = self.primary_render_state_mut() {
                             primary_frame.floating_webkits.push(overlay);
                             primary_frame.frame_dirty = true;
                         } else {
@@ -390,7 +390,7 @@ impl RenderApp {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
-                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
                         let primary_len = primary_frame.floating_webkits.len();
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                         if primary_frame.floating_webkits.len() != primary_len {

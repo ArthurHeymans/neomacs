@@ -1,7 +1,9 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
-use crate::render_thread::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState};
+use crate::render_thread::frame_windows::{
+    GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState,
+};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::WgpuRenderer;
@@ -186,26 +188,28 @@ impl RenderApp {
             queue: queue.clone(),
         });
         self.renderer = Some(renderer);
-        self.primary_native = Some(GuiFrameNativeWindowState {
-            window,
-            surface,
-            surface_config: config,
-            width: self.width,
-            height: self.height,
-            scale_factor: self.scale_factor,
-            mouse_hidden_for_typing: self.mouse_hidden_for_typing,
-            ime_enabled: self.ime_enabled,
-            last_ime_cursor_area: self.last_ime_cursor_area,
-            chrome: self.chrome.clone(),
+        self.primary_window_state = Some(GuiFrameWindowState {
+            native: GuiFrameNativeWindowState {
+                window,
+                surface,
+                surface_config: config,
+                width: self.width,
+                height: self.height,
+                scale_factor: self.scale_factor,
+                mouse_hidden_for_typing: self.mouse_hidden_for_typing,
+                ime_enabled: self.ime_enabled,
+                last_ime_cursor_area: self.last_ime_cursor_area,
+                chrome: self.chrome.clone(),
+            },
+            render: primary_frame,
         });
-        self.primary_frame = Some(primary_frame);
         let pending_tool_items = self
-            .primary_frame
+            .primary_render_state()
             .as_ref()
             .and_then(|frame| frame.tool_bar.as_ref())
             .map(|tool_bar| tool_bar.items.clone());
         let pending_compact_tool_items = self
-            .primary_frame
+            .primary_render_state()
             .as_ref()
             .and_then(|frame| frame.compact_bar.as_ref())
             .map(|compact_bar| compact_bar.tool_items.clone());
@@ -263,7 +267,7 @@ impl RenderApp {
             renderer.resize(width, height);
         }
 
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             // Invalidate offscreen textures and active transitions for the old size.
             primary_frame.transitions.offscreen_a = None;
             primary_frame.transitions.offscreen_b = None;
@@ -273,11 +277,11 @@ impl RenderApp {
 
         // Trigger resize padding transition
         if self.effects.resize_padding.enabled {
-            if let (Some(renderer), Some(primary_frame)) =
-                (self.renderer.as_ref(), self.primary_frame.as_mut())
+            if let (Some(renderer), Some(primary_state)) =
+                (self.renderer.as_ref(), self.primary_window_state.as_mut())
             {
                 renderer.trigger_transient_resize_padding(
-                    &mut primary_frame.renderer_effects,
+                    &mut primary_state.render.renderer_effects,
                     std::time::Instant::now(),
                 );
             }

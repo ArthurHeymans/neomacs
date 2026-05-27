@@ -91,7 +91,7 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
     let Some(device) = make_test_device() else {
         return;
     };
-    app.primary_frame = Some(GuiFrameRenderState::new(
+    app.set_primary_render_state_for_tests(GuiFrameRenderState::new(
         0,
         &device,
         app.scale_factor,
@@ -131,8 +131,7 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
         color: Color::WHITE,
         frame_id: 0,
     });
-    app.primary_frame
-        .as_mut()
+    app.primary_render_state_mut()
         .expect("primary frame")
         .visual_cursors
         .insert(-1, state);

@@ -28,7 +28,7 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 primary_frame.typing_speed.key_press_times.push(now);
             }
             self.mark_primary_dirty();
@@ -44,7 +44,7 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 primary_frame.idle_dim.last_activity_time = now;
             }
             self.mark_primary_dirty();
@@ -538,13 +538,13 @@ impl RenderApp {
                     effective_scale
                 );
                 self.scale_factor = effective_scale;
-                if let Some(native) = self.primary_native.as_mut() {
-                    native.scale_factor = effective_scale;
+                if let Some(window_state) = self.primary_window_state_mut() {
+                    window_state.native.scale_factor = effective_scale;
                 }
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.set_scale_factor(effective_scale as f32);
                 }
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame
                         .glyph_atlas
                         .set_scale_factor(effective_scale as f32);

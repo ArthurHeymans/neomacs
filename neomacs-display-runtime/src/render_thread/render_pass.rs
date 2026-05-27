@@ -850,13 +850,13 @@ impl RenderApp {
         if self.primary_current_frame().is_none()
             || self.primary_surface().is_none()
             || self.renderer.is_none()
-            || self.primary_frame.is_none()
+            || self.primary_render_state().is_none()
         {
             return;
         }
 
         self.prepare_frame_state_for_render();
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             Self::update_fps_counter(&mut primary_frame.fps);
         }
 
@@ -902,13 +902,12 @@ impl RenderApp {
 
         // Check if we need offscreen rendering (for transitions)
         let need_offscreen = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .is_some_and(|frame| frame.transitions.policy.needs_offscreen());
 
         if need_offscreen {
             // Swap: previous ← current
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 primary_frame.transitions.current_is_a = !primary_frame.transitions.current_is_a;
             }
 
@@ -920,7 +919,11 @@ impl RenderApp {
                 .current_offscreen_view_and_bg()
                 .map(|(v, bg)| (v as *const wgpu::TextureView, bg))
             {
-                let primary_frame = self.primary_frame.as_mut().expect("checked in render");
+                let primary_frame = &mut self
+                    .primary_window_state
+                    .as_mut()
+                    .expect("checked in render")
+                    .render;
                 let frame = primary_frame
                     .current_frame
                     .as_ref()
@@ -948,8 +951,9 @@ impl RenderApp {
 
             // Detect transitions (compare window_infos)
             if let (Some(renderer), Some(primary_frame)) =
-                (self.renderer.as_mut(), self.primary_frame.as_mut())
+                (self.renderer.as_mut(), self.primary_window_state.as_mut())
             {
+                let primary_frame = &mut primary_frame.render;
                 renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     detect_frame_transitions(
                         renderer,
@@ -965,7 +969,7 @@ impl RenderApp {
                     );
                 });
             }
-            if let Some(primary_frame) = self.primary_frame.as_mut()
+            if let Some(primary_frame) = self.primary_render_state_mut()
                 && primary_frame.renderer_effects.needs_redraw()
             {
                 primary_frame.frame_dirty = true;
@@ -989,7 +993,11 @@ impl RenderApp {
             self.render_transitions(&surface_view);
         } else {
             // Simple path: render directly to surface
-            let primary_frame = self.primary_frame.as_mut().expect("checked in render");
+            let primary_frame = &mut self
+                .primary_window_state
+                .as_mut()
+                .expect("checked in render")
+                .render;
             let frame = primary_frame
                 .current_frame
                 .as_ref()
@@ -1014,7 +1022,7 @@ impl RenderApp {
                 );
             });
         }
-        if let Some(primary_frame) = self.primary_frame.as_mut()
+        if let Some(primary_frame) = self.primary_render_state_mut()
             && primary_frame.renderer_effects.needs_redraw()
         {
             primary_frame.frame_dirty = true;
@@ -1022,9 +1030,10 @@ impl RenderApp {
 
         // Render child frames as floating overlays on top of the parent frame
         if let (Some(renderer), Some(primary_frame)) =
-            (&mut self.renderer, self.primary_frame.as_mut())
-            && !primary_frame.child_frames.is_empty()
+            (&mut self.renderer, self.primary_window_state.as_mut())
+            && !primary_frame.render.child_frames.is_empty()
         {
+            let primary_frame = &mut primary_frame.render;
             let child_ids = primary_frame.child_frames.sorted_for_rendering().to_vec();
             for child_id in child_ids {
                 if let Some(child_entry) = primary_frame.child_frames.frames.get(&child_id) {
@@ -1053,7 +1062,7 @@ impl RenderApp {
                 }
             }
         }
-        if let Some(primary_frame) = self.primary_frame.as_mut()
+        if let Some(primary_frame) = self.primary_render_state_mut()
             && primary_frame.renderer_effects.needs_redraw()
         {
             primary_frame.frame_dirty = true;
@@ -1061,7 +1070,7 @@ impl RenderApp {
 
         // Render floating WebKit overlays above frame contents but below GUI chrome.
         #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.primary_frame.as_ref()
+        if let Some(primary_frame) = self.primary_render_state()
             && !primary_frame.floating_webkits.is_empty()
         {
             if let Some(ref renderer) = self.renderer {
@@ -1070,8 +1079,9 @@ impl RenderApp {
         }
 
         if let (Some(renderer), Some(primary_frame)) =
-            (&mut self.renderer, self.primary_frame.as_mut())
+            (&mut self.renderer, self.primary_window_state.as_mut())
         {
+            let primary_frame = &mut primary_frame.render;
             if let Some(frame) = primary_frame.current_frame.as_ref() {
                 renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     Self::render_frame_common_overlays(
@@ -1086,7 +1096,7 @@ impl RenderApp {
                 });
             }
         }
-        if let Some(primary_frame) = self.primary_frame.as_mut()
+        if let Some(primary_frame) = self.primary_render_state_mut()
             && primary_frame.renderer_effects.needs_redraw()
         {
             primary_frame.frame_dirty = true;
@@ -1100,8 +1110,7 @@ impl RenderApp {
         );
         let toolbar_y_origin = self.toolbar_y_origin();
         let primary_ime_preedit_text = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map(|frame| frame.ime_preedit_text.clone())
             .unwrap_or_default();
         let ime_preedit = Self::frame_ime_preedit_overlay(
@@ -1115,8 +1124,10 @@ impl RenderApp {
             .primary_current_frame()
             .map(|f| (f.background.r, f.background.g, f.background.b));
         let primary_chrome = self.primary_chrome().clone();
-        if let (Some(renderer), Some(primary_frame)) = (&self.renderer, self.primary_frame.as_mut())
+        if let (Some(renderer), Some(primary_frame)) =
+            (&self.renderer, self.primary_window_state.as_mut())
         {
+            let primary_frame = &mut primary_frame.render;
             Self::render_frame_chrome_overlays(
                 renderer,
                 &surface_view,
@@ -1169,7 +1180,8 @@ impl RenderApp {
         }
 
         if let Some(ref renderer) = self.renderer {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if let Some(primary_state) = self.primary_window_state.as_mut() {
+                let primary_frame = &mut primary_state.render;
                 Self::render_frame_visual_bell_overlay(
                     renderer,
                     &surface_view,
@@ -1185,8 +1197,10 @@ impl RenderApp {
         let fps_window_count = self
             .primary_current_frame()
             .map_or(0, |f| f.window_infos.len());
-        if let (Some(renderer), Some(primary_frame)) = (&self.renderer, self.primary_frame.as_mut())
+        if let (Some(renderer), Some(primary_frame)) =
+            (&self.renderer, self.primary_window_state.as_mut())
         {
+            let primary_frame = &mut primary_frame.render;
             Self::render_frame_fps_overlay(
                 renderer,
                 &surface_view,
@@ -1203,8 +1217,9 @@ impl RenderApp {
 
         if self.effects.typing_speed.enabled {
             if let (Some(renderer), Some(primary_frame)) =
-                (&self.renderer, self.primary_frame.as_mut())
+                (&self.renderer, self.primary_window_state.as_mut())
             {
+                let primary_frame = &mut primary_frame.render;
                 if let Some(frame) = primary_frame.current_frame.as_ref() {
                     Self::render_frame_typing_speed_overlay(
                         renderer,

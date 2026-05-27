@@ -55,16 +55,16 @@ fn make_test_device() -> Option<wgpu::Device> {
 }
 
 fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState> {
-    if app.primary_frame.is_none() {
+    if app.primary_render_state().is_none() {
         let device = make_test_device()?;
-        app.primary_frame = Some(GuiFrameRenderState::new(
+        app.set_primary_render_state_for_tests(GuiFrameRenderState::new(
             0,
             &device,
             app.scale_factor,
             false,
         ));
     }
-    app.primary_frame.as_mut()
+    app.primary_render_state_mut()
 }
 
 fn toolbar_item(index: u32) -> ToolBarItem {

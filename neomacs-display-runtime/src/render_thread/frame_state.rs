@@ -62,11 +62,12 @@ impl RenderApp {
         }
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            let face_count = self.faces.len();
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),
-                    self.faces.len()
+                    face_count
                 );
                 primary_frame.glyph_atlas.clear();
             }
@@ -78,15 +79,13 @@ impl RenderApp {
 
     fn apply_visual_cursor_animations(&mut self) {
         if self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .is_none_or(|frame| frame.visual_cursors.is_empty())
         {
             return;
         }
         let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
-            .primary_frame
-            .as_ref()
+            .primary_render_state()
             .map(|frame| frame.visual_cursors.iter())
             .into_iter()
             .flatten()

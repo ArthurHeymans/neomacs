@@ -305,7 +305,7 @@ impl RenderApp {
                 if self.primary_tab_bar().is_none() {
                     self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_tab_bar());
                 }
-                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if let Some(primary_frame) = self.primary_render_state_mut() {
                     primary_frame.menu_bar = gui_menu_bar;
                     primary_frame.tool_bar = gui_tool_bar;
                     primary_frame.compact_bar = gui_compact_bar;
@@ -369,21 +369,25 @@ impl RenderApp {
                 };
 
             if target_moved && had_target && self.effects.typing_ripple.enabled {
-                if let (Some(renderer), Some(primary_frame)) =
-                    (self.renderer.as_ref(), self.primary_frame.as_mut())
+                if let (Some(renderer), Some(primary_state)) =
+                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
                 {
                     let cx = new_target.x + new_target.width / 2.0;
                     let cy = new_target.y + new_target.height / 2.0;
-                    renderer.spawn_transient_ripple(&mut primary_frame.renderer_effects, cx, cy);
+                    renderer.spawn_transient_ripple(
+                        &mut primary_state.render.renderer_effects,
+                        cx,
+                        cy,
+                    );
                 }
             }
 
             if target_moved && had_target && self.effects.cursor_trail_fade.enabled {
-                if let (Some(renderer), Some(primary_frame)) =
-                    (self.renderer.as_ref(), self.primary_frame.as_mut())
+                if let (Some(renderer), Some(primary_state)) =
+                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
                 {
                     renderer.record_transient_cursor_trail(
-                        &mut primary_frame.renderer_effects,
+                        &mut primary_state.render.renderer_effects,
                         old_cursor_rect.0,
                         old_cursor_rect.1,
                         old_cursor_rect.2,
@@ -427,26 +431,35 @@ impl RenderApp {
                 color: cursor.color,
                 frame_id: 0,
             };
-            let Some(primary_frame) = self.primary_frame.as_mut() else {
+            let cursor_defaults = (
+                self.cursor_defaults.anim_enabled,
+                self.cursor_defaults.anim_speed,
+                self.cursor_defaults.anim_style,
+                self.cursor_defaults.anim_duration,
+                self.cursor_defaults.trail_size,
+                self.cursor_defaults.size_transition_enabled,
+                self.cursor_defaults.size_transition_duration,
+            );
+            let Some(primary_frame) = self.primary_render_state_mut() else {
                 continue;
             };
             let state = primary_frame
                 .visual_cursors
                 .entry(cursor.window_id)
                 .or_default();
-            state.anim_enabled = self.cursor_defaults.anim_enabled;
-            state.anim_speed = self.cursor_defaults.anim_speed;
-            state.anim_style = self.cursor_defaults.anim_style;
-            state.anim_duration = self.cursor_defaults.anim_duration;
-            state.trail_size = self.cursor_defaults.trail_size;
-            state.size_transition_enabled = self.cursor_defaults.size_transition_enabled;
-            state.size_transition_duration = self.cursor_defaults.size_transition_duration;
+            state.anim_enabled = cursor_defaults.0;
+            state.anim_speed = cursor_defaults.1;
+            state.anim_style = cursor_defaults.2;
+            state.anim_duration = cursor_defaults.3;
+            state.trail_size = cursor_defaults.4;
+            state.size_transition_enabled = cursor_defaults.5;
+            state.size_transition_duration = cursor_defaults.6;
             let (_had_target, target_moved) = state.set_target(target);
             if target_moved {
                 self.mark_primary_dirty();
             }
         }
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame
                 .visual_cursors
                 .retain(|id, _| live_visual_cursor_ids.contains(id));

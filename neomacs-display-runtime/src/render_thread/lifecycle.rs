@@ -193,7 +193,7 @@ impl RenderApp {
         }
 
         // Tick cursor animation
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             if primary_frame.cursor.tick_animation() {
                 primary_frame.frame_dirty = true;
             }
@@ -204,7 +204,7 @@ impl RenderApp {
             }
         }
         let mut visual_cursor_dirty = false;
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             for cursor in primary_frame.visual_cursors.values_mut() {
                 visual_cursor_dirty |= cursor.tick_animation();
             }
@@ -214,7 +214,7 @@ impl RenderApp {
         }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             if primary_frame.cursor.tick_size_animation() {
                 primary_frame.frame_dirty = true;
             }
@@ -225,7 +225,7 @@ impl RenderApp {
             }
         }
         let mut visual_cursor_size_dirty = false;
-        if let Some(primary_frame) = self.primary_frame.as_mut() {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             for cursor in primary_frame.visual_cursors.values_mut() {
                 visual_cursor_size_dirty |= cursor.tick_size_animation();
             }
@@ -235,8 +235,9 @@ impl RenderApp {
         }
 
         if self.effects.idle_dim.enabled {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
-                if Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &self.effects.idle_dim) {
+            let idle_dim_config = self.effects.idle_dim.clone();
+            if let Some(primary_frame) = self.primary_render_state_mut() {
+                if Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &idle_dim_config) {
                     primary_frame.frame_dirty = true;
                 }
             }
@@ -249,7 +250,7 @@ impl RenderApp {
                 }
             }
         } else {
-            if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 primary_frame.idle_dim.active = false;
                 primary_frame.idle_dim.current_alpha = 0.0;
             }
@@ -307,8 +308,7 @@ impl RenderApp {
                 cursor_animating = self.primary_cursor().animating,
                 cursor_size_animating = self.primary_cursor().size_animating,
                 idle_dim_active = self
-                    .primary_frame
-                    .as_ref()
+                    .primary_render_state()
                     .is_some_and(|frame| frame.idle_dim.active),
                 transitions_active = self.primary_transitions_active(),
                 "requesting redraw"
@@ -374,10 +374,10 @@ impl RenderApp {
         }
         // Drop renderer (holds device/queue references, textures, pipelines)
         drop(self.renderer.take());
-        // Drop glyph atlas (holds device reference)
-        drop(self.primary_frame.take());
-        // Drop primary native state (surface holds wl_surface proxy if on Wayland)
-        drop(self.primary_native.take());
+        // Drop adopted primary state (surface holds wl_surface proxy if on Wayland)
+        drop(self.primary_window_state.take());
+        #[cfg(test)]
+        drop(self.primary_render_state_for_tests.take());
         // Drop multi-window state (secondary surfaces)
         self.frame_windows.destroy_all();
         // Leak the adapter to prevent eglTerminate crash on Wayland.

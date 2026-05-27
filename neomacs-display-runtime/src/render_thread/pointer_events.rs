@@ -307,7 +307,7 @@ impl RenderApp {
 
     fn pointer_target_at(&self, x: f32, y: f32) -> (f32, f32, u64) {
         #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.primary_frame.as_ref() {
+        if let Some(primary_frame) = self.primary_render_state() {
             if Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some() {
                 return (x, y, 0);
             }
@@ -326,7 +326,7 @@ impl RenderApp {
 
         #[cfg(feature = "wpe-webkit")]
         if target_fid == 0 {
-            if let Some(primary_frame) = self.primary_frame.as_ref() {
+            if let Some(primary_frame) = self.primary_render_state() {
                 if let Some((id, rx, ry)) =
                     Self::floating_webkit_hit_test(&primary_frame.floating_webkits, ev_x, ev_y)
                 {
@@ -1145,11 +1145,11 @@ impl RenderApp {
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
-            if let (Some(renderer), Some(primary_frame)) =
-                (self.renderer.as_ref(), self.primary_frame.as_mut())
+            if let (Some(renderer), Some(primary_state)) =
+                (self.renderer.as_ref(), self.primary_window_state.as_mut())
             {
                 renderer.trigger_transient_click_halo(
-                    &mut primary_frame.renderer_effects,
+                    &mut primary_state.render.renderer_effects,
                     mouse_pos.0,
                     mouse_pos.1,
                     now,
