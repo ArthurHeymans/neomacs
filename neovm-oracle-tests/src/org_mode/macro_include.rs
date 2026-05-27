@@ -176,3 +176,67 @@ fn org_macro_counter_nested_replacement_combo() {
                (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_include_nested_macro_footnote_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (require 'org-macro)
+  (let* ((root (make-temp-file "org-include-nested" t))
+         (sub (expand-file-name "sub" root))
+         (inner (expand-file-name "inner.org" sub))
+         (outer (expand-file-name "outer.org" root)))
+    (unwind-protect
+        (progn
+          (make-directory sub)
+          (with-temp-file inner
+            (insert "#+MACRO: inner /Inner $1/\n")
+            (insert "* Inner Head\n")
+            (insert "Inner body {{{inner(value)}}} [fn:inner].\n")
+            (insert "[fn:inner] Inner footnote.\n"))
+          (with-temp-file outer
+            (insert "#+MACRO: outer *Outer $1*\n")
+            (insert "* Outer Head\n")
+            (insert "Outer body {{{outer(value)}}}.\n")
+            (insert "#+INCLUDE: \"sub/inner.org\" :minlevel 2\n")
+            (insert "[fn:outer] Outer footnote.\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+TITLE: Main\n")
+            (insert "#+MACRO: main =Main $1=\n")
+            (insert "* Main Head\n")
+            (insert "Main body {{{main(value)}}} [fn:outer].\n")
+            (insert "#+INCLUDE: \"" outer "\" :minlevel 2\n")
+            (goto-char (point-min))
+            (org-export-expand-include-keyword nil root nil nil nil)
+            (let* ((expanded (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                   (templates (org-macro--collect-macros))
+                   (macro-output (progn
+                                   (org-macro-replace-all templates)
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max))))
+                   (tree (org-element-parse-buffer))
+                   (html (replace-regexp-in-string
+                          "org[[:alnum:]]+"
+                          "org-id"
+                          (org-export-as 'html nil nil t nil))))
+              (list (mapcar #'car templates)
+                    (org-element-map tree 'headline
+                      (lambda (h)
+                        (list (org-element-property :level h)
+                              (org-element-property :raw-value h))))
+                    (org-element-map tree 'footnote-definition
+                      (lambda (f) (org-element-property :label f)))
+                    expanded
+                    macro-output
+                    (not (null (string-match-p "<b>Outer value</b>" html)))
+                    (not (null (string-match-p "<i>Inner value</i>" html)))
+                    (not (null (string-match-p "footnotes" html)))
+                    html)))))
+      (delete-directory root t))))"##,
+    );
+}
