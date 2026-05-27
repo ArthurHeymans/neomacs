@@ -367,3 +367,127 @@ fn org_clocktable_properties_shift_recalc_ast_combo() {
             after-left))))"##,
     );
 }
+
+#[test]
+fn org_dblock_update_all_errors_indentation_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (let ((writes nil)
+        (messages nil))
+    (defun org-dblock-write:oracle-safe (params)
+      (push (list 'safe
+                  (plist-get params :name)
+                  (plist-get params :label)
+                  (plist-get params :content)
+                  (plist-get params :indentation-column))
+            writes)
+      (insert (format "- label :: %s\n" (plist-get params :label)))
+      (insert "#+begin_quote\n")
+      (insert (format "content=%S\n" (plist-get params :content)))
+      (insert "#+end_quote\n"))
+    (defun org-dblock-write:oracle-error (params)
+      (push (list 'error
+                  (plist-get params :name)
+                  (plist-get params :reason)
+                  (plist-get params :content)
+                  (plist-get params :indentation-column))
+            writes)
+      (error "oracle-error %S" (plist-get params :reason)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Dynamic blocks\n")
+      (insert "  #+BEGIN: oracle-safe :label \"indented\"\n")
+      (insert "  old safe line\n")
+      (insert "  #+END:\n\n")
+      (insert "#+BEGIN: oracle-missing :label \"missing\"\n")
+      (insert "stale missing body\n")
+      (insert "#+END:\n\n")
+      (insert "#+BEGIN: oracle-error :reason bad-news\n")
+      (insert "stale error body\n")
+      (insert "#+END:\n\n")
+      (insert "#+BEGIN: oracle-safe :label \"after-error\" :items (1 2)\n")
+      (insert "- old item\n")
+      (insert "#+END:\n")
+      (let ((initial (buffer-substring-no-properties
+                      (point-min) (point-max)))
+            first-update all-update unterminated-error begin-errors
+            dblock-positions ast)
+        (cl-letf (((symbol-function 'message)
+                   (lambda (fmt &rest args)
+                     (push (apply #'format fmt args) messages))))
+          (goto-char (point-min))
+          (search-forward "oracle-safe")
+          (org-update-dblock)
+          (setq first-update
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))
+          (goto-char (point-min))
+          (setq all-update
+                (condition-case err
+                    (progn
+                      (org-update-all-dblocks)
+                      (list 'ok
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))))
+                  (error
+                   (list 'error (cons (car err) (cdr err))
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))))))
+          (goto-char (point-max))
+          (insert "\n#+BEGIN: oracle-safe :label \"unterminated\"\n")
+          (insert "unterminated body\n")
+          (setq unterminated-error
+                (condition-case err
+                    (progn (org-update-all-dblocks) 'no-error)
+                  (error (cons (car err) (cdr err)))))
+          (setq begin-errors
+                (mapcar
+                 (lambda (needle)
+                   (goto-char (point-min))
+                   (search-forward needle)
+                   (condition-case err
+                       (progn (org-beginning-of-dblock)
+                              (list needle 'ok (line-number-at-pos)))
+                     (error (list needle (cons (car err) (cdr err))))))
+                 '("label :: indented" "stale missing" "stale error"
+                   "unterminated body" "Dynamic blocks"))))
+        (goto-char (point-min))
+        (setq dblock-positions
+              (let (out)
+                (while (re-search-forward org-dblock-start-re nil t)
+                  (push (list (match-string 1)
+                              (match-string 3)
+                              (line-number-at-pos)
+                              (current-indentation)
+                              (save-excursion
+                                (condition-case err
+                                    (progn (org-prepare-dblock)
+                                           (buffer-substring-no-properties
+                                            (point) (line-end-position)))
+                                  (error (cons (car err) (cdr err)))))))
+                        out))
+                (nreverse out)))
+        (setq ast
+              (org-element-map (org-element-parse-buffer)
+                  '(dynamic-block quote-block plain-list headline)
+                (lambda (e)
+                  (list (org-element-type e)
+                        (org-element-property :block-name e)
+                        (org-element-property :begin e)
+                        (org-element-property :end e)))))
+        (list initial
+              first-update
+              all-update
+              unterminated-error
+              begin-errors
+              dblock-positions
+              ast
+              (nreverse writes)
+              (nreverse messages)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
