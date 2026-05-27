@@ -36,6 +36,20 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn record_idle_dim_activity(&mut self, window_id: WindowId) {
+        if !self.effects.idle_dim.enabled {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if self.frame_windows.is_primary_winit(window_id) {
+            self.idle_dim.last_activity_time = now;
+            self.frame_dirty = true;
+        } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+            window_state.render.idle_dim.last_activity_time = now;
+            window_state.render.frame_dirty = true;
+        }
+    }
+
     pub(super) fn handle_window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -238,6 +252,7 @@ impl RenderApp {
                                     pressed: true,
                                     emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                                 });
+                                self.record_idle_dim_activity(window_id);
                                 self.record_typing_speed_keypress(window_id);
                                 handled_via_text = true;
                             } else if let Some(keysyms) =
@@ -262,6 +277,7 @@ impl RenderApp {
                                         emacs_frame_id: self
                                             .emacs_frame_for_window_event(window_id),
                                     });
+                                    self.record_idle_dim_activity(window_id);
                                     self.record_typing_speed_keypress(window_id);
                                 }
                                 handled_via_text = true;
@@ -307,7 +323,7 @@ impl RenderApp {
                                 self.record_typing_speed_keypress(window_id);
                             }
                             if self.effects.idle_dim.enabled {
-                                self.last_activity_time = std::time::Instant::now();
+                                self.record_idle_dim_activity(window_id);
                             }
                             self.comms.send_input(InputEvent::Key {
                                 keysym,
@@ -378,6 +394,9 @@ impl RenderApp {
                     state.alt_key(),
                     state.super_key()
                 );
+                if self.modifiers != old_modifiers {
+                    self.record_idle_dim_activity(window_id);
+                }
             }
 
             WindowEvent::Ime(ime_event) => match ime_event {
@@ -442,6 +461,7 @@ impl RenderApp {
                                 pressed: true,
                                 emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                             });
+                            self.record_idle_dim_activity(window_id);
                             self.record_typing_speed_keypress(window_id);
                         }
                     }

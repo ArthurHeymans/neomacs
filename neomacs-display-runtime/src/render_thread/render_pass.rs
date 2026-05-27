@@ -1,5 +1,5 @@
 use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
-use super::state::TypingSpeedState;
+use super::state::{IdleDimState, TypingSpeedState};
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
@@ -7,6 +7,17 @@ use super::{RenderApp, surface_readback};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 impl RenderApp {
+    fn with_idle_dim_alpha<R>(
+        renderer: &mut WgpuRenderer,
+        idle_dim: &IdleDimState,
+        f: impl FnOnce(&mut WgpuRenderer) -> R,
+    ) -> R {
+        renderer.set_idle_dim_alpha(idle_dim.current_alpha);
+        let result = f(renderer);
+        renderer.set_idle_dim_alpha(0.0);
+        result
+    }
+
     fn update_typing_speed_state(state: &mut TypingSpeedState) -> bool {
         let now = std::time::Instant::now();
         let window_secs = 5.0_f64;
@@ -559,18 +570,20 @@ impl RenderApp {
         scroll_indicators_enabled: bool,
     ) {
         renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            renderer.render_frame_glyphs(
-                surface_view,
-                frame,
-                &mut render.glyph_atlas,
-                faces,
-                native.width,
-                native.height,
-                cursor_visible,
-                root_animated_cursor,
-                render.mouse_pos,
-                bg_gradient,
-            );
+            Self::with_idle_dim_alpha(renderer, &render.idle_dim, |renderer| {
+                renderer.render_frame_glyphs(
+                    surface_view,
+                    frame,
+                    &mut render.glyph_atlas,
+                    faces,
+                    native.width,
+                    native.height,
+                    cursor_visible,
+                    root_animated_cursor,
+                    render.mouse_pos,
+                    bg_gradient,
+                );
+            });
         });
         let renderer_effects_still_active = render.renderer_effects.is_active();
 
@@ -705,21 +718,22 @@ impl RenderApp {
                 let frame = self.current_frame.as_ref().expect("checked in render");
                 let renderer = self.renderer.as_mut().expect("checked in render");
                 let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
-                renderer.set_idle_dim_alpha(self.idle_dim_current_alpha);
 
                 // SAFETY: current_view is valid for the duration of this block
-                renderer.render_frame_glyphs(
-                    unsafe { &*current_view },
-                    frame,
-                    glyph_atlas,
-                    &self.faces,
-                    self.width,
-                    self.height,
-                    self.cursor.blink_on,
-                    root_animated_cursor,
-                    self.mouse_pos,
-                    bg_gradient,
-                );
+                Self::with_idle_dim_alpha(renderer, &self.idle_dim, |renderer| {
+                    renderer.render_frame_glyphs(
+                        unsafe { &*current_view },
+                        frame,
+                        glyph_atlas,
+                        &self.faces,
+                        self.width,
+                        self.height,
+                        self.cursor.blink_on,
+                        root_animated_cursor,
+                        self.mouse_pos,
+                        bg_gradient,
+                    );
+                });
             }
 
             // Detect transitions (compare window_infos)
@@ -746,20 +760,21 @@ impl RenderApp {
             let frame = self.current_frame.as_ref().expect("checked in render");
             let renderer = self.renderer.as_mut().expect("checked in render");
             let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
-            renderer.set_idle_dim_alpha(self.idle_dim_current_alpha);
 
-            renderer.render_frame_glyphs(
-                &surface_view,
-                frame,
-                glyph_atlas,
-                &self.faces,
-                self.width,
-                self.height,
-                self.cursor.blink_on,
-                root_animated_cursor,
-                self.mouse_pos,
-                bg_gradient,
-            );
+            Self::with_idle_dim_alpha(renderer, &self.idle_dim, |renderer| {
+                renderer.render_frame_glyphs(
+                    &surface_view,
+                    frame,
+                    glyph_atlas,
+                    &self.faces,
+                    self.width,
+                    self.height,
+                    self.cursor.blink_on,
+                    root_animated_cursor,
+                    self.mouse_pos,
+                    bg_gradient,
+                );
+            });
         }
 
         // Render child frames as floating overlays on top of the parent frame

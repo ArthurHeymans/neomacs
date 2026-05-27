@@ -1,4 +1,5 @@
 use super::RenderApp;
+use super::state::IdleDimState;
 use super::state::{
     RenderGpuContext, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
@@ -223,37 +224,24 @@ impl RenderApp {
             }
         }
 
-        // Tick idle dimming
         if self.effects.idle_dim.enabled {
-            let idle_time = self.last_activity_time.elapsed();
-            let target_alpha = if idle_time >= self.effects.idle_dim.delay {
-                self.effects.idle_dim.opacity
-            } else {
-                0.0
-            };
-            let diff = target_alpha - self.idle_dim_current_alpha;
-            if diff.abs() > 0.001 {
-                let fade_speed = if self.effects.idle_dim.fade_duration.as_secs_f32() > 0.0 {
-                    1.0 / self.effects.idle_dim.fade_duration.as_secs_f32() * 0.016
-                } else {
-                    1.0
-                };
-                if diff > 0.0 {
-                    self.idle_dim_current_alpha = (self.idle_dim_current_alpha
-                        + fade_speed * self.effects.idle_dim.opacity)
-                        .min(target_alpha);
-                } else {
-                    self.idle_dim_current_alpha = (self.idle_dim_current_alpha
-                        - fade_speed * self.effects.idle_dim.opacity)
-                        .max(0.0);
+            if Self::tick_idle_dim_state(&mut self.idle_dim, &self.effects.idle_dim) {
+                self.frame_dirty = true;
+            }
+            for window_state in self.frame_windows.windows.values_mut() {
+                if Self::tick_idle_dim_state(
+                    &mut window_state.render.idle_dim,
+                    &self.effects.idle_dim,
+                ) {
+                    window_state.render.frame_dirty = true;
                 }
-                self.idle_dim_active = true;
-                self.frame_dirty = true;
-            } else if self.idle_dim_current_alpha > 0.001 {
-                self.idle_dim_active = true;
-                self.frame_dirty = true;
-            } else {
-                self.idle_dim_active = false;
+            }
+        } else {
+            self.idle_dim.active = false;
+            self.idle_dim.current_alpha = 0.0;
+            for window_state in self.frame_windows.windows.values_mut() {
+                window_state.render.idle_dim.active = false;
+                window_state.render.idle_dim.current_alpha = 0.0;
             }
         }
 
@@ -308,7 +296,7 @@ impl RenderApp {
                     renderer_has_animated_borders = renderer.has_animated_borders,
                     cursor_animating = self.cursor.animating,
                     cursor_size_animating = self.cursor.size_animating,
-                    idle_dim_active = self.idle_dim_active,
+                    idle_dim_active = self.idle_dim.active,
                     transitions_active = self.transitions.has_active(),
                     "requesting redraw"
                 );
@@ -331,7 +319,6 @@ impl RenderApp {
                 .windows
                 .values()
                 .any(|ws| ws.render.cursor.is_animating())
-            || self.idle_dim_active
             || self.transitions.has_active()
         {
             // Active rendering: cap at ~240fps to avoid spinning
@@ -399,5 +386,41 @@ impl RenderApp {
         }
 
         tracing::info!("GPU resources cleaned up");
+    }
+}
+
+impl RenderApp {
+    fn tick_idle_dim_state(
+        state: &mut IdleDimState,
+        config: &neomacs_display_protocol::effect_config::IdleDimConfig,
+    ) -> bool {
+        let idle_time = state.last_activity_time.elapsed();
+        let target_alpha = if idle_time >= config.delay {
+            config.opacity
+        } else {
+            0.0
+        };
+        let diff = target_alpha - state.current_alpha;
+        if diff.abs() > 0.001 {
+            let fade_speed = if config.fade_duration.as_secs_f32() > 0.0 {
+                1.0 / config.fade_duration.as_secs_f32() * 0.016
+            } else {
+                1.0
+            };
+            if diff > 0.0 {
+                state.current_alpha =
+                    (state.current_alpha + fade_speed * config.opacity).min(target_alpha);
+            } else {
+                state.current_alpha = (state.current_alpha - fade_speed * config.opacity).max(0.0);
+            }
+            state.active = true;
+            true
+        } else if state.current_alpha > 0.001 {
+            state.active = true;
+            false
+        } else {
+            state.active = false;
+            false
+        }
     }
 }

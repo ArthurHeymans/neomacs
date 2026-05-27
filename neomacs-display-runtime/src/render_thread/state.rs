@@ -148,6 +148,23 @@ pub(super) struct TypingSpeedState {
     pub(super) displayed_wpm: f32,
 }
 
+/// Idle dim overlay state for one native GUI frame window.
+pub(super) struct IdleDimState {
+    pub(super) last_activity_time: Instant,
+    pub(super) current_alpha: f32,
+    pub(super) active: bool,
+}
+
+impl Default for IdleDimState {
+    fn default() -> Self {
+        Self {
+            last_activity_time: Instant::now(),
+            current_alpha: 0.0,
+            active: false,
+        }
+    }
+}
+
 impl Default for FpsCounter {
     fn default() -> Self {
         Self {
@@ -377,9 +394,7 @@ pub(super) struct RenderApp {
     pub(super) extra_line_spacing: f32,
     /// Extra letter spacing in pixels (added between characters)
     pub(super) extra_letter_spacing: f32,
-    pub(super) last_activity_time: Instant,
-    pub(super) idle_dim_current_alpha: f32,
-    pub(super) idle_dim_active: bool,
+    pub(super) idle_dim: IdleDimState,
     pub(super) typing_speed: TypingSpeedState,
 
     /// Shared monitor info (populated in resumed(), read from FFI thread)
@@ -486,9 +501,7 @@ impl RenderApp {
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
             typing_speed: TypingSpeedState::default(),
-            last_activity_time: Instant::now(),
-            idle_dim_current_alpha: 0.0,
-            idle_dim_active: false,
+            idle_dim: IdleDimState::default(),
             shared_monitors: Some(shared_monitors),
             monitors_populated: false,
             last_monitor_snapshot: Vec::new(),

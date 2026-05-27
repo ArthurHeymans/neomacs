@@ -353,6 +353,7 @@ impl RenderApp {
         state: ElementState,
         button: MouseButton,
     ) {
+        self.record_idle_dim_activity(window_id);
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
         if !self.frame_windows.is_primary_winit(window_id) {
             let mut event = None;
@@ -1084,6 +1085,7 @@ impl RenderApp {
         window_id: WindowId,
         position: PhysicalPosition<f64>,
     ) {
+        self.record_idle_dim_activity(window_id);
         if !self.frame_windows.is_primary_winit(window_id) {
             let mut event = None;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
@@ -1282,10 +1284,6 @@ impl RenderApp {
         self.mouse_pos = (lx, ly);
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
-        if self.effects.idle_dim.enabled {
-            self.last_activity_time = std::time::Instant::now();
-        }
-
         if self.mouse_hidden_for_typing {
             if let Some(ref window) = self.window {
                 window.set_cursor_visible(true);
@@ -1472,6 +1470,7 @@ impl RenderApp {
                     webkit_rel_x: wk_rx,
                     webkit_rel_y: wk_ry,
                 });
+                self.record_idle_dim_activity(window_id);
             }
             return;
         }
@@ -1500,5 +1499,6 @@ impl RenderApp {
             webkit_rel_x: wk_rx,
             webkit_rel_y: wk_ry,
         });
+        self.record_idle_dim_activity(window_id);
     }
 }
