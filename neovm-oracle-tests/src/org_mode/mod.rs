@@ -86,6 +86,7 @@ mod sort_workflow;
 mod source_block;
 mod sparse_tree;
 mod strong_advanced;
+mod strong_comprehensive;
 mod strong_edge_cases;
 mod strong_multi_step;
 mod strong_tests;
