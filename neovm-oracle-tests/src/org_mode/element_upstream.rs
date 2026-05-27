@@ -671,7 +671,7 @@ fn upstream_org_element_create_basic() {
 // ── org-element-lineage ──────────────────────────────────────────────
 
 #[test]
-fn upstream_org_element_lineage() {
+fn upstream_org_element_lineage_filtered_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"(progn
