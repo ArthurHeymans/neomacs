@@ -639,3 +639,107 @@ fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
         (when (file-exists-p file) (delete-file file))))))"##,
     );
 }
+
+#[test]
+fn org_capture_template_escape_clipboard_elisp_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (let* ((root (make-temp-file "org-capture-template" t))
+         (snippet (expand-file-name "snippet.txt" root))
+         (org-capture--prompt-history-table
+          (make-hash-table :test #'equal))
+         (kill-ring '("Kill value"))
+         (kill-ring-yank-pointer kill-ring)
+         (prompts nil))
+    (unwind-protect
+        (progn
+          (with-temp-file snippet
+            (insert "Snippet %u stays literal\n")
+            (insert "Second line\n"))
+          (with-temp-buffer
+            (let ((buffer-file-name "/tmp/source capture.org")
+                  (org-store-link-plist
+                   '(:annotation "[[file:/tmp/source capture.org::*Head][Head]]"
+                     :initial "Initial\n  second"
+                     :custom "CustomValue")))
+              (org-mode)
+              (insert "#+TAGS: work urgent home\n")
+              (insert "#+PROPERTY: Owner_ALL Ada Bea Cy\n")
+              (insert "* Head\n:PROPERTIES:\n:Owner: Ada\n:END:\n")
+              (goto-char (point-min))
+              (search-forward "Head")
+              (beginning-of-line)
+              (let ((org-capture-plist
+                     (list :template
+                           (concat
+                            "\\% escaped and \\\\%i literal\n"
+                            "%[" snippet "]"
+                            "* TODO %^{Title|Default|One|Two} :%^g:\n"
+                            "Chosen again %\\1\n"
+                            "Initial: %i\n"
+                            "Annotation: %a\n"
+                            "Bare: %l\n"
+                            "Link-only: %L\n"
+                            "Clip: %C\n"
+                            "Clip link: %L\n"
+                            "Plist: %:custom\n"
+                            "Elisp: %(concat \"%:custom\" \"|\" \"%i\" \"|\" \"%a\")\n"
+                            "Date: %<%Y-%m-%d %H:%M>\n"
+                            "Owner: %^{Owner|Ada}p\n")
+                           :default-time
+                           (encode-time 0 30 8 27 5 2026)
+                           :buffer (current-buffer)
+                           :pos (point-marker)
+                           :target-entry-p t)))
+                (cl-letf (((symbol-function 'org-get-x-clipboard)
+                           (lambda (type)
+                             (pcase type
+                               ('PRIMARY "Primary text")
+                               ('CLIPBOARD "https://clip.example/path")
+                               (_ nil))))
+                          ((symbol-function 'org-completing-read)
+                           (lambda (prompt collection &rest _)
+                             (push (list 'string prompt collection) prompts)
+                             "Two"))
+                          ((symbol-function 'completing-read-multiple)
+                           (lambda (prompt collection &rest _)
+                             (push (list 'tags prompt
+                                         (sort
+                                          (mapcar (lambda (entry)
+                                                    (if (consp entry)
+                                                        (car entry)
+                                                      entry))
+                                                  collection)
+                                          #'string<))
+                                   prompts)
+                             '("work" "urgent")))
+                          ((symbol-function 'read-string)
+                           (lambda (prompt &optional initial history default
+                                           &rest _)
+                             (push (list 'read-string prompt initial
+                                         (and (symbolp history) history)
+                                         default)
+                                   prompts)
+                             initial))
+                          ((symbol-function 'org-read-property-value)
+                           (lambda (property pom default &rest _)
+                             (push (list 'property property
+                                         (marker-position pom)
+                                         default)
+                                   prompts)
+                             "Bea")))
+                  (let ((filled (org-capture-fill-template)))
+                    (list filled
+                          (nreverse prompts)
+                          (gethash "Title"
+                                   org-capture--prompt-history-table)
+                          org-store-link-plist
+                          (buffer-substring-no-properties
+                           (point-min) (point-max)))))))))
+      (delete-directory root t))))"##,
+    );
+}
