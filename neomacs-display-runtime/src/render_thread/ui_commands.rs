@@ -462,7 +462,6 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetTitlebarHeight { height } => {
-                self.chrome.titlebar_height = height;
                 self.primary_chrome_mut().titlebar_height = height;
                 self.frame_windows.chrome_defaults.titlebar_height = height;
                 for window_state in self.frame_windows.windows.values_mut() {
@@ -486,7 +485,6 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetCornerRadius { radius } => {
-                self.chrome.corner_radius = radius;
                 self.primary_chrome_mut().corner_radius = radius;
                 self.frame_windows.chrome_defaults.corner_radius = radius;
                 for window_state in self.frame_windows.windows.values_mut() {

@@ -43,10 +43,12 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowTitle { title } => {
+                self.primary_chrome_mut().title = title.clone();
                 if let Some(primary_state) = self.primary_window_state_mut() {
-                    primary_state.set_title(title);
-                } else {
-                    self.chrome.title = title;
+                    primary_state.native.window.set_title(&title);
+                    if !primary_state.native.chrome.decorations_enabled {
+                        primary_state.render.frame_dirty = true;
+                    }
                 }
                 Ok(())
             }
@@ -148,7 +150,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowDecorated { decorated } => {
-                self.chrome.decorations_enabled = decorated;
+                self.primary_chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.chrome_defaults.decorations_enabled = decorated;
                 if let Some(primary_state) = self.primary_window_state_mut() {
                     primary_state.set_decorations(decorated);
