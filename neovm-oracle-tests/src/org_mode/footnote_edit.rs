@@ -91,3 +91,99 @@ fn org_footnote_reference_definition_navigation_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_footnote_auto_label_inline_adjust_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Body\n")
+    (insert "Alpha sentence. Beta sentence.\n")
+    (goto-char (point-min))
+    (search-forward "Alpha")
+    (let ((org-footnote-auto-label t)
+          (org-footnote-define-inline t)
+          (org-footnote-auto-adjust 'sort)
+          (org-footnote-fill-after-inline-note-extraction nil))
+      (org-footnote-new)
+      (insert "Inline A")
+      (goto-char (point-min))
+      (search-forward "Beta")
+      (let ((org-footnote-define-inline nil))
+        (org-footnote-new)
+        (insert "Definition B"))
+      (org-footnote-normalize)
+      (list (org-footnote-all-labels)
+            (org-footnote--collect-references 'anonymous)
+            (org-footnote--collect-definitions)
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_footnote_delete_label_references_definitions_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Text\n")
+    (insert "A[fn:keep] B[fn:drop] C[fn:drop] D[fn::Anon]\n\n")
+    (insert "[fn:keep] Keep definition\n")
+    (insert "[fn:drop] Drop definition 1\n")
+    (insert "[fn:drop] Drop definition 2\n")
+    (let ((refs (org-footnote-delete-references "drop"))
+          (defs (org-footnote-delete-definitions "drop")))
+      (goto-char (point-min))
+      (search-forward "Anon")
+      (let ((anon-deleted (org-footnote-delete)))
+        (list refs
+              defs
+              anon-deleted
+              (org-footnote-all-labels)
+              (org-footnote--collect-references 'anonymous)
+              (org-footnote--collect-definitions)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_footnote_missing_duplicate_normalize_sort_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* H\n")
+    (insert "First[fn:z] missing[fn:missing] again[fn:z].\n")
+    (insert "** Local\n")
+    (insert "Nested[fn:local]\n")
+    (insert "[fn:local] Local def\n")
+    (insert "* Footnotes\n")
+    (insert "[fn:z] First Z\n")
+    (insert "[fn:z] Duplicate Z\n")
+    (insert "[fn:unused] Unused def\n")
+    (let ((org-footnote-section "Footnotes")
+          (org-footnote-fill-after-inline-note-extraction nil))
+      (org-footnote-normalize)
+      (org-footnote-sort)
+      (list (org-footnote-all-labels)
+            (org-footnote--collect-references 'anonymous)
+            (org-footnote--collect-definitions)
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
