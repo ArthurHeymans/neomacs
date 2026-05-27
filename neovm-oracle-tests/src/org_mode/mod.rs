@@ -53,6 +53,7 @@ mod link_runtime;
 mod lint_upstream;
 mod list_checkbox;
 mod macro_include;
+mod mega_strict;
 mod misc_upstream;
 mod misc_upstream_2;
 mod mobile_workflow;
