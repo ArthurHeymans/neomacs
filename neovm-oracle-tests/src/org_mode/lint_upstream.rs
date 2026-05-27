@@ -238,6 +238,39 @@ fn upstream_org_lint_obsolete_syntax() {
      (with-temp-buffer (org-mode)
        (insert "#+BEGIN_LaTeX\n\\textbf{Text}\n#+END_LaTeX")
        (goto-char (point-min))
-       (org-lint '(deprecated-export-blocks))))))"##,
+        (org-lint '(deprecated-export-blocks))))))"##,
+    );
+}
+
+#[test]
+fn org_lint_multi_checker_report_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-lint)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer (org-mode)
+      (insert "#+NAME: dup\n#+NAME: dup\n")
+      (insert "#+begin_src\nmissing language\n#+end_src\n")
+      (insert "[fn:missing]\n")
+      (insert "#+BEGIN_HTML\n<p>raw</p>\n#+END_HTML\n")
+      (insert "* TODO Task\nSCHEDULED: <2026-05-27 Wed>\nDEADLINE: <2026-05-26 Tue>\n")
+      (let* ((ast (org-element-parse-buffer))
+             (dup-name (org-lint-duplicate-name ast))
+             (no-lang (org-lint-missing-language-in-src-block ast))
+             (undef-fn (org-lint-undefined-footnote-reference ast))
+             (deprecated (org-lint-deprecated-export-blocks ast))
+             (sched-after-deadline
+              (condition-case nil
+                  (org-lint-scheduled-after-deadline ast)
+                (error nil))))
+        (list (mapcar (lambda (r) (list (car r) (nth 1 r))) dup-name)
+              (mapcar (lambda (r) (list (car r) (nth 1 r))) no-lang)
+              (mapcar (lambda (r) (list (car r) (nth 1 r))) undef-fn)
+              (mapcar (lambda (r) (list (car r) (nth 1 r))) deprecated)
+              (length dup-name)
+              (length no-lang)
+              (length undef-fn))))))"##,
     );
 }
