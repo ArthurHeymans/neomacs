@@ -383,3 +383,68 @@ fn org_startup_log_options_todo_property_combo() {
                   (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_property_inherit_literal_special_views_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance '("Owner" "NilLike" "Effort"))
+          (org-property-format ":%s: %s")
+          (changes nil))
+      (add-hook 'org-property-changed-functions
+                (lambda (key value) (push (list key value) changes))
+                nil t)
+      (org-mode)
+      (insert "#+CATEGORY: DemoCat\n")
+      (insert "#+PROPERTY: Owner_ALL Ada Bea Cy\n")
+      (insert "#+COLUMNS: %25ITEM %TODO %PRIORITY %Owner %Effort{:}\n")
+      (insert "* TODO Parent [#B]\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:NilLike: nil\n:Effort: 1:00\n:END:\n")
+      (insert "** WAIT Child [#C]\n")
+      (insert ":PROPERTIES:\n:Local: child-only\n:END:\n")
+      (goto-char (point-min))
+      (org-set-regexps-and-options)
+      (search-forward "Child")
+      (beginning-of-line)
+      (let ((inherit-flags
+             (mapcar #'org-property-inherit-p
+                     '("Owner" "Local" "Effort" "CATEGORY" "NilLike")))
+            (literal-values
+             (list (org-entry-get nil "NilLike" 'inherit)
+                   (org-entry-get nil "NilLike" 'inherit 'literal-nil)
+                   (org-entry-get-with-inheritance "NilLike")
+                   (org-entry-get-with-inheritance "NilLike" 'literal-nil)))
+            (special-before
+             (list (org-entry-get nil "TODO")
+                   (org-entry-get nil "PRIORITY")
+                   (org-entry-get nil "CATEGORY")
+                   (org-entry-get nil "ITEM")
+                   (org-property-or-variable-value "COLUMNS" 'inherit)))
+            (props-standard-before (org-entry-properties nil 'standard))
+            (props-special-before (org-entry-properties nil 'special))
+            (props-all-before (org-entry-properties nil)))
+        (org-entry-put nil "TODO" "DONE")
+        (org-entry-put nil "PRIORITY" "A")
+        (org-entry-put nil "Owner" "Bea")
+        (org-entry-put nil "NilLike" nil)
+        (org-entry-delete nil "Local")
+        (list inherit-flags
+              literal-values
+              special-before
+              props-standard-before
+              props-special-before
+              props-all-before
+              (nreverse changes)
+              (org-entry-properties nil 'standard)
+              (org-entry-properties nil 'special)
+              (org-entry-get nil "TODO")
+              (org-entry-get nil "PRIORITY")
+              (org-entry-get nil "NilLike" 'inherit 'literal-nil)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
