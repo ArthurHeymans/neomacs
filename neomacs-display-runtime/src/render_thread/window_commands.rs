@@ -1,11 +1,9 @@
 //! Window and chrome render commands.
 
 use super::RenderApp;
-use super::state::window_size_from_emacs_pixels;
-use super::x11_hints::apply_window_geometry_hints;
 use crate::thread_comm::RenderCommand;
 use winit::dpi::PhysicalPosition;
-use winit::window::{CursorIcon, Fullscreen, UserAttentionType};
+use winit::window::{CursorIcon, UserAttentionType};
 
 impl RenderApp {
     pub(super) fn handle_window_command(
@@ -45,12 +43,10 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowTitle { title } => {
-                self.primary_chrome_mut().title = title.clone();
-                if let Some(window) = self.primary_window() {
-                    window.set_title(&title);
-                }
-                if !self.primary_chrome().decorations_enabled {
-                    self.mark_primary_dirty();
+                if let Some(primary_state) = self.primary_window_state_mut() {
+                    primary_state.set_title(title);
+                } else {
+                    self.chrome.title = title;
                 }
                 Ok(())
             }
@@ -59,19 +55,9 @@ impl RenderApp {
                 title,
             } => {
                 if emacs_frame_id == 0 {
-                    self.primary_chrome_mut().title = title.clone();
-                    if let Some(window) = self.primary_window() {
-                        window.set_title(&title);
-                    }
-                    if !self.primary_chrome().decorations_enabled {
-                        self.mark_primary_dirty();
-                    }
+                    self.handle_window_command(RenderCommand::SetWindowTitle { title })?;
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.native.chrome.title = title.clone();
-                    window_state.native.window.set_title(&title);
-                    if !window_state.native.chrome.decorations_enabled {
-                        window_state.render.frame_dirty = true;
-                    }
+                    window_state.set_title(title);
                 } else {
                     tracing::warn!(
                         "SetFrameWindowTitle requested for unknown frame_id=0x{:x}",
@@ -81,23 +67,8 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowFullscreen { mode } => {
-                if let Some(window) = self.primary_window().cloned() {
-                    match mode {
-                        3 => {
-                            window.set_fullscreen(Some(Fullscreen::Borderless(None)));
-                            self.primary_chrome_mut().is_fullscreen = true;
-                        }
-                        4 => {
-                            window.set_maximized(true);
-                            self.primary_chrome_mut().is_fullscreen = false;
-                        }
-                        _ => {
-                            window.set_fullscreen(None);
-                            window.set_maximized(false);
-                            self.primary_chrome_mut().is_fullscreen = false;
-                        }
-                    }
-                    self.mark_primary_dirty();
+                if let Some(primary_state) = self.primary_window_state_mut() {
+                    primary_state.set_fullscreen_mode(mode);
                 }
                 Ok(())
             }
@@ -115,9 +86,8 @@ impl RenderApp {
             }
             RenderCommand::SetWindowSize { width, height } => {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
-                if let Some(window) = self.primary_window() {
-                    let size = window_size_from_emacs_pixels(width, height);
-                    let _ = window.request_inner_size(size);
+                if let Some(primary_state) = self.primary_window_state.as_ref() {
+                    primary_state.request_inner_size(width, height);
                 }
                 Ok(())
             }
@@ -133,16 +103,15 @@ impl RenderApp {
                     width,
                     height
                 );
-                let size = window_size_from_emacs_pixels(width, height);
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(window) = self.primary_window() {
-                        apply_window_geometry_hints(window, geometry_hints);
-                        let _ = window.request_inner_size(size);
+                    if let Some(primary_state) = self.primary_window_state.as_ref() {
+                        primary_state.apply_geometry_hints(geometry_hints);
+                        primary_state.request_inner_size(width, height);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
-                    apply_window_geometry_hints(&window_state.native.window, geometry_hints);
-                    let _ = window_state.native.window.request_inner_size(size);
+                    window_state.apply_geometry_hints(geometry_hints);
+                    window_state.request_inner_size(width, height);
                 } else {
                     tracing::warn!(
                         "ResizeWindow requested for unknown frame_id=0x{:x}",
@@ -165,11 +134,11 @@ impl RenderApp {
                 );
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(window) = self.primary_window() {
-                        apply_window_geometry_hints(window, geometry_hints);
+                    if let Some(primary_state) = self.primary_window_state.as_ref() {
+                        primary_state.apply_geometry_hints(geometry_hints);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
-                    apply_window_geometry_hints(&window_state.native.window, geometry_hints);
+                    window_state.apply_geometry_hints(geometry_hints);
                 } else {
                     tracing::warn!(
                         "SetFrameGeometryHints requested for unknown frame_id=0x{:x}",
@@ -180,17 +149,13 @@ impl RenderApp {
             }
             RenderCommand::SetWindowDecorated { decorated } => {
                 self.chrome.decorations_enabled = decorated;
-                self.primary_chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.chrome_defaults.decorations_enabled = decorated;
-                if let Some(window) = self.primary_window() {
-                    window.set_decorations(decorated);
+                if let Some(primary_state) = self.primary_window_state_mut() {
+                    primary_state.set_decorations(decorated);
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.native.chrome.decorations_enabled = decorated;
-                    window_state.native.window.set_decorations(decorated);
-                    window_state.render.frame_dirty = true;
+                    window_state.set_decorations(decorated);
                 }
-                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::RequestAttention { urgent } => {

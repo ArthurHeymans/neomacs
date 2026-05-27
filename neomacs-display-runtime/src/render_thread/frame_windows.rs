@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
@@ -182,6 +182,50 @@ impl GuiFrameWindowState {
         self.render
             .glyph_atlas
             .set_scale_factor(effective_scale as f32);
+        self.render.frame_dirty = true;
+    }
+
+    pub(super) fn set_title(&mut self, title: String) {
+        self.native.chrome.title = title.clone();
+        self.native.window.set_title(&title);
+        if !self.native.chrome.decorations_enabled {
+            self.render.frame_dirty = true;
+        }
+    }
+
+    pub(super) fn set_fullscreen_mode(&mut self, mode: u32) {
+        match mode {
+            3 => {
+                self.native
+                    .window
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                self.native.chrome.is_fullscreen = true;
+            }
+            4 => {
+                self.native.window.set_maximized(true);
+                self.native.chrome.is_fullscreen = false;
+            }
+            _ => {
+                self.native.window.set_fullscreen(None);
+                self.native.window.set_maximized(false);
+                self.native.chrome.is_fullscreen = false;
+            }
+        }
+        self.render.frame_dirty = true;
+    }
+
+    pub(super) fn request_inner_size(&self, width: u32, height: u32) {
+        let size = window_size_from_emacs_pixels(width, height);
+        let _ = self.native.window.request_inner_size(size);
+    }
+
+    pub(super) fn apply_geometry_hints(&self, geometry_hints: GuiFrameGeometryHints) {
+        apply_window_geometry_hints(&self.native.window, geometry_hints);
+    }
+
+    pub(super) fn set_decorations(&mut self, decorated: bool) {
+        self.native.chrome.decorations_enabled = decorated;
+        self.native.window.set_decorations(decorated);
         self.render.frame_dirty = true;
     }
 }
