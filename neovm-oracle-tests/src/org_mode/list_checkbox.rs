@@ -978,3 +978,70 @@ fn org_list_send_item_struct_navigation_kill_combo() {
                  (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_checkbox_toggle_counter_stats_toggle_cycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Tasks [0/4]\n")
+    (insert "- [ ] Item A\n")
+    (insert "  - [ ] Sub A1\n")
+    (insert "  - [ ] Sub A2\n")
+    (insert "- [ ] Item B\n")
+    (insert "  - [ ] Sub B1\n")
+    (insert "- [ ] Item C\n")
+    (insert "- [ ] Item D\n")
+    (let ((snap (lambda ()
+                  (list (buffer-substring-no-properties
+                         (point-min) (point-max))
+                        (org-element-map (org-element-parse-buffer) 'item
+                          (lambda (item)
+                            (list (org-element-property :checkbox item)
+                                  (org-element-property :counter item))))))))
+      ;; Toggle Sub A1
+      (goto-char (point-min))
+      (search-forward "Sub A1")
+      (beginning-of-line)
+      (org-toggle-checkbox)
+      (let ((after-a1 (funcall snap)))
+        ;; Toggle Sub A2
+        (goto-char (point-min))
+        (search-forward "Sub A2")
+        (beginning-of-line)
+        (org-toggle-checkbox)
+        (let ((after-a2 (funcall snap)))
+          ;; Update counters
+          (goto-char (point-min))
+          (org-update-checkbox-count)
+          (let ((after-count (funcall snap)))
+            ;; Toggle Item B
+            (goto-char (point-min))
+            (search-forward "Item B")
+            (beginning-of-line)
+            (org-toggle-checkbox)
+            (let ((after-b (funcall snap)))
+              ;; Cycle checkbox states on Item C
+              (goto-char (point-min))
+              (search-forward "Item C")
+              (beginning-of-line)
+              (org-toggle-checkbox)
+              (org-toggle-checkbox)
+              (let ((after-c-cycle (funcall snap)))
+                ;; Stats update
+                (goto-char (point-min))
+                (org-update-statistics-cookies t)
+                (let ((after-stats (funcall snap)))
+                  (list after-a1
+                        after-a2
+                        after-count
+                        after-b
+                        after-c-cycle
+                        after-stats)))))))))))"##,
+    );
+}
