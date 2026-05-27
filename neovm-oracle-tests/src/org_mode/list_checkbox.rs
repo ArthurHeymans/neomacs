@@ -227,3 +227,62 @@ fn org_ordered_alpha_list_sort_renumber_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_descriptive_generic_roundtrip_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "- [X] Term *A* :: First line\n")
+    (insert "  continuation with =code=\n")
+    (insert "  1. [@3] child three\n")
+    (insert "  2. [ ] child off\n")
+    (insert "- [-] Term B :: second line\n")
+    (goto-char (point-min))
+    (let* ((parsed (org-list-to-lisp))
+           (generic
+            (org-list-to-generic
+             parsed
+             (list :backend 'org
+                   :raw t
+                   :dstart (lambda (depth) (format "<dl depth=%d>" depth))
+                   :dend "</dl>"
+                   :ostart (lambda (depth) (format "<ol depth=%d>" depth))
+                   :oend "</ol>"
+                   :dtstart "<dt>"
+                   :dtend "</dt>"
+                   :ddstart "<dd>"
+                   :ddend "</dd>"
+                   :istart (lambda (type depth)
+                             (format "<item type=%S depth=%d>" type depth))
+                   :icount (lambda (type depth count)
+                             (format "<item type=%S depth=%d count=%d>"
+                                     type depth count))
+                   :iend "</item>"
+                   :isep "|"
+                   :cbon "{X}"
+                   :cboff "{ }"
+                   :cbtrans "{-}"
+                   :ifmt (lambda (type contents)
+                           (format "[%S]%s" type contents)))))
+           (html (org-list-to-html parsed '(:raw t)))
+           (org (org-list-to-org parsed))
+           (subtree (org-list-to-subtree parsed 2)))
+      (org-list-to-lisp t)
+      (insert org)
+      (list parsed
+            generic
+            (list (string-match-p "<dl" html)
+                  (string-match-p "Term" html)
+                  (string-match-p "child three" html))
+            org
+            subtree
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
