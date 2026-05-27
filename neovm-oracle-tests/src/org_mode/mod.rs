@@ -1469,6 +1469,7 @@ mod strong_final_edge;
 mod strong_giga_combos;
 mod strong_integration_combos;
 mod strong_mega_combos;
+mod strong_multistep_workflows;
 mod strong_peta_combos;
 mod strong_state_advanced;
 mod strong_state_capture;
