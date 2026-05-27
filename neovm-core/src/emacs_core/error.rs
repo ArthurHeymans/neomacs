@@ -429,7 +429,10 @@ fn format_value_in_state(
         return super::print::print_value_stateful_with_buffers(value, Some(buffers), options);
     }
     match value.kind() {
-        ValueKind::Cons | ValueKind::Veclike(VecLikeType::Vector) => {
+        ValueKind::Cons
+        | ValueKind::String
+        | ValueKind::Veclike(VecLikeType::Vector)
+        | ValueKind::Veclike(VecLikeType::Record) => {
             if let Some(index) = format_cycle_stack_index(value) {
                 return format!("#{index}");
             }
@@ -438,9 +441,6 @@ fn format_value_in_state(
                 format_value_in_state_slow(obarray, buffers, frames, threads, value, options);
             pop_format_cycle_object(pushed);
             rendered
-        }
-        ValueKind::String | ValueKind::Veclike(VecLikeType::Record) => {
-            format_value_in_state_slow(obarray, buffers, frames, threads, value, options)
         }
         _ => super::print::print_value_with_options(value, options),
     }
@@ -639,15 +639,9 @@ fn format_cons_in_state(
                 }
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
-                let pushed = if first {
-                    false
-                } else {
-                    push_format_cycle_object(&cursor)
-                };
                 out.push_str(&format_value_in_state(
                     obarray, buffers, frames, threads, &pair_car, options,
                 ));
-                pop_format_cycle_object(pushed);
                 cursor = pair_cdr;
                 first = false;
             }
@@ -729,7 +723,14 @@ pub(crate) fn format_value_bytes_in_state_with_options(
             rendered
         }
         ValueKind::String => {
-            format_string_bytes_in_state(obarray, buffers, frames, threads, value, options)
+            if let Some(index) = format_cycle_stack_index(value) {
+                return format!("#{index}").into_bytes();
+            }
+            let pushed = push_format_cycle_object(value);
+            let rendered =
+                format_string_bytes_in_state(obarray, buffers, frames, threads, value, options);
+            pop_format_cycle_object(pushed);
+            rendered
         }
         ValueKind::Veclike(VecLikeType::Record) => {
             if let Some(index) = format_cycle_stack_index(value) {
@@ -988,15 +989,9 @@ fn append_cons_bytes_in_state(
                 }
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
-                let pushed = if first {
-                    false
-                } else {
-                    push_format_cycle_object(&cursor)
-                };
                 out.extend(format_value_bytes_in_state_with_options(
                     obarray, buffers, frames, threads, &pair_car, options,
                 ));
-                pop_format_cycle_object(pushed);
                 cursor = pair_cdr;
                 first = false;
             }

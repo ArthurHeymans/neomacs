@@ -136,6 +136,33 @@ fn format_time_string_iso_format() {
 }
 
 #[test]
+fn format_time_string_iso_week_directives_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let cases = [
+        (1609459200, "2020|20|53|5|2021-01-01"),
+        (1609372800, "2020|20|53|4|2020-12-31"),
+        (1577750400, "2020|20|01|2|2019-12-31"),
+        (1483228800, "2016|16|52|7|2017-01-01"),
+        (1767225600, "2026|26|01|4|2026-01-01"),
+    ];
+    for (timestamp, expected) in cases {
+        let result = builtin_format_time_string(vec![
+            Value::string("%G|%g|%V|%u|%Y-%m-%d"),
+            Value::fixnum(timestamp),
+            Value::T,
+        ]);
+        assert_eq!(result.unwrap().as_utf8_str().unwrap(), expected);
+    }
+
+    let result = builtin_format_time_string(vec![
+        Value::string("%-V|%-G|%-g"),
+        Value::fixnum(1767225600),
+        Value::T,
+    ]);
+    assert_eq!(result.unwrap().as_utf8_str().unwrap(), "1|2026|26");
+}
+
+#[test]
 fn format_time_string_ampm() {
     crate::test_utils::init_test_tracing();
     // 2000-01-01 15:30:00 UTC = 946684800 + 15*3600 + 30*60 = 946740600

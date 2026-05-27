@@ -4,6 +4,7 @@ use super::*;
 use crate::emacs_core::builtins::{builtin_puthash, builtin_remhash};
 use crate::emacs_core::value::{
     HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, next_float_id,
+    set_string_text_properties_for_value,
 };
 
 #[test]
@@ -220,6 +221,51 @@ fn print_propertized_string_properties_keep_buffer_context() {
     assert_eq!(
         print_value_with_buffers(&value, &buffers),
         r#"#("x" 0 1 (owner #<killed buffer>))"#
+    );
+}
+
+#[test]
+fn print_propertized_string_parent_cycle_matches_gnu_default_cycle_path() {
+    crate::test_utils::init_test_tracing();
+    let text = Value::string("body");
+    let parent = Value::list(vec![Value::symbol("section"), Value::NIL, text]);
+    set_string_text_properties_for_value(
+        text,
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 4,
+            plist: Value::list(vec![Value::keyword(":parent"), parent]),
+        }],
+    );
+
+    assert_eq!(
+        print_value(&Value::list(vec![text])),
+        r#"(#("body" 0 4 (:parent (section nil #1))))"#
+    );
+    assert_eq!(
+        print_value_bytes(&Value::list(vec![text])),
+        br#"(#("body" 0 4 (:parent (section nil #1))))"#
+    );
+}
+
+#[test]
+fn print_circle_preprocess_traverses_string_text_property_plists_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let text = Value::string("body");
+    let parent = Value::list(vec![Value::symbol("section"), Value::NIL, text]);
+    set_string_text_properties_for_value(
+        text,
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 4,
+            plist: Value::list(vec![Value::keyword(":parent"), parent]),
+        }],
+    );
+
+    let options = PrintOptions::new(false, true, None, None);
+    assert_eq!(
+        print_value_with_options(&Value::list(vec![text]), options),
+        r#"(#1=#("body" 0 4 (:parent (section nil #1#))))"#
     );
 }
 

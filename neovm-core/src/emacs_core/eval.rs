@@ -12844,6 +12844,20 @@ impl Context {
         declared_special
     }
 
+    pub(crate) fn lexbound_p_in_specpdl(&self, sym_id: SymId) -> bool {
+        // Mirrors GNU eval.c `lexbound_p`: scan saved
+        // `internal-interpreter-environment` values on the specpdl, not the
+        // current lexical environment.
+        for binding in self.specpdl.iter().rev() {
+            if let SpecBinding::LexicalEnv { old_lexenv } = binding
+                && lexenv_assq(*old_lexenv, sym_id).is_some()
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Assign a value to a variable identified by SymId.
     /// Uses the SymId directly for lexenv/dynamic lookup, preserving
     /// uninterned symbol identity (like Emacs's EQ-based setq).

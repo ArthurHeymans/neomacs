@@ -1647,6 +1647,24 @@ fn re_search_forward_multiline_anchor_respects_real_line_start() {
     assert_eq!(buf.text.text_range(s2, e2), "2");
 }
 
+#[test]
+fn re_search_forward_bound_is_not_artificial_line_end() {
+    crate::test_utils::init_test_tracing();
+    let mut buf = make_test_buffer("* TODO Alpha\n:LOGBOOK:\nCLOCK: \n:END:\n* TODO Beta\n");
+    buf.goto_byte(30);
+    let mut md = None;
+
+    // GNU `search_buffer_re` passes the full visible buffer to
+    // `re_search_2` and passes the search bound separately as STOP.
+    // Therefore `$` does not match merely because the bound is just after
+    // point; it only matches before a real newline or at the real string end.
+    let result = re_search_forward(&mut buf, "^[ \t]*$", Some(31), true, false, &mut md);
+
+    assert_eq!(result, Ok(None));
+    assert_eq!(buf.pt_byte, 30);
+    assert!(md.is_none());
+}
+
 // -----------------------------------------------------------------------
 // Buffer search: re_search_backward
 // -----------------------------------------------------------------------

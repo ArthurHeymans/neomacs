@@ -1573,19 +1573,13 @@ pub fn re_search_forward_with_posix(
         }
         CompiledSearchPattern::Emacs(cp) => {
             let range = (limit_rel - start_rel) as isize;
-            regex_emacs::re_search(
-                cp.as_ref(),
-                &text[..limit_rel],
-                start_rel,
-                range,
-                &syn,
-                start_rel,
+            regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
+                |(_pos, regs)| {
+                    let mut md = buffer_match_data_from_registers(&regs, region_start);
+                    md.searched_buffer = Some(buffer_id);
+                    md
+                },
             )
-            .map(|(_pos, regs)| {
-                let mut md = buffer_match_data_from_registers(&regs, region_start);
-                md.searched_buffer = Some(buffer_id);
-                md
-            })
         }
     });
 
@@ -1723,7 +1717,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, region_start, buf.zv_byte, |text| {
         regex_emacs::re_search(
             compiled.as_ref(),
-            &text[..limit_rel],
+            text,
             start_rel,
             (limit_rel - start_rel) as isize,
             &syn,

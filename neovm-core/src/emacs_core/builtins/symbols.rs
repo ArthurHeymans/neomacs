@@ -324,6 +324,16 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let documentation = args.get(1).copied().unwrap_or(Value::NIL);
 
+    if !eval.obarray().is_special_id(symbol) && eval.lexbound_p_in_specpdl(symbol) {
+        return Err(signal(
+            "error",
+            vec![
+                Value::string("Defining as dynamic an already lexical var"),
+                args[0],
+            ],
+        ));
+    }
+
     eval.note_macro_expansion_mutation();
     eval.obarray_mut().make_special_id(symbol);
 

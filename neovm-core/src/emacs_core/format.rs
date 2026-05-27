@@ -75,6 +75,41 @@ fn days_in_month(y: i64, m: u32) -> u32 {
     }
 }
 
+fn days_in_year(y: i64) -> i32 {
+    if is_leap_year(y) { 366 } else { 365 }
+}
+
+fn iso_week_days(yday: i32, wday: i32) -> i32 {
+    const ISO_WEEK_START_WDAY: i32 = 1;
+    const ISO_WEEK1_WDAY: i32 = 4;
+    const YDAY_MINIMUM: i32 = -366;
+    let big_enough_multiple_of_7 = (-YDAY_MINIMUM / 7 + 2) * 7;
+    yday - (yday - wday + ISO_WEEK1_WDAY + big_enough_multiple_of_7) % 7 + ISO_WEEK1_WDAY
+        - ISO_WEEK_START_WDAY
+}
+
+fn iso_week_year_and_number(tm: &BrokenDownTime) -> (i64, i32) {
+    let mut year_adjust = 0;
+    let mut days = iso_week_days(tm.yearday as i32, tm.weekday as i32);
+
+    if days < 0 {
+        year_adjust = -1;
+        days = iso_week_days(
+            tm.yearday as i32 + days_in_year(tm.year - 1),
+            tm.weekday as i32,
+        );
+    } else {
+        let next_year_days =
+            iso_week_days(tm.yearday as i32 - days_in_year(tm.year), tm.weekday as i32);
+        if next_year_days >= 0 {
+            year_adjust = 1;
+            days = next_year_days;
+        }
+    }
+
+    (tm.year + year_adjust, days / 7 + 1)
+}
+
 /// Convert a Unix timestamp (seconds since 1970-01-01 00:00:00 UTC) into
 /// broken-down UTC time fields.  No external crate needed.
 fn unix_to_broken_down(timestamp: i64) -> BrokenDownTime {
@@ -310,6 +345,33 @@ fn format_time(
                 'Y' => result.push_str(&format!("{:04}", tm.year)),
                 'y' => result.push_str(&format!("{:02}", tm.year % 100)),
                 'C' => result.push_str(&format!("{:02}", tm.year / 100)),
+                'G' | 'g' | 'V' => {
+                    let (iso_year, iso_week) = iso_week_year_and_number(tm);
+                    match chars[i] {
+                        'G' => {
+                            if suppress_pad {
+                                result.push_str(&iso_year.to_string());
+                            } else {
+                                result.push_str(&format!("{:04}", iso_year));
+                            }
+                        }
+                        'g' => {
+                            let short_year = iso_year.rem_euclid(100);
+                            if suppress_pad {
+                                result.push_str(&short_year.to_string());
+                            } else {
+                                result.push_str(&format!("{:02}", short_year));
+                            }
+                        }
+                        _ => {
+                            if suppress_pad {
+                                result.push_str(&iso_week.to_string());
+                            } else {
+                                result.push_str(&format!("{:02}", iso_week));
+                            }
+                        }
+                    }
+                }
                 'm' => {
                     if suppress_pad {
                         result.push_str(&tm.month.to_string());

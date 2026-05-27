@@ -5067,6 +5067,52 @@ fn defvar_only_sets_if_unbound() {
 }
 
 #[test]
+fn defining_outer_lexical_binding_dynamic_errors_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(eval '(let ((vm-same-scope-special nil))
+                       (defvar vm-same-scope-special 1)
+                       vm-same-scope-special)
+                    t)"#
+        ),
+        "OK nil"
+    );
+    assert_eq!(
+        eval_one(
+            r#"(condition-case err
+                   (eval '(let ((vm-late-special-defvar nil))
+                            (eval '(defvar vm-late-special-defvar 1) t))
+                         t)
+                 (error err))"#
+        ),
+        "OK (error \"Defining as dynamic an already lexical var\" vm-late-special-defvar)"
+    );
+    assert_eq!(
+        eval_one(
+            r#"(condition-case err
+                   (eval '(let ((vm-late-special-internal nil))
+                            (eval '(internal--define-uninitialized-variable
+                                     'vm-late-special-internal)
+                                  t))
+                         t)
+                 (error err))"#
+        ),
+        "OK (error \"Defining as dynamic an already lexical var\" vm-late-special-internal)"
+    );
+    assert_eq!(
+        eval_one(
+            r#"(condition-case err
+                   (eval '(let ((vm-late-special-defconst nil))
+                            (eval '(defconst vm-late-special-defconst 1) t))
+                         t)
+                 (error err))"#
+        ),
+        "OK (error \"Defining as dynamic an already lexical var\" vm-late-special-defconst)"
+    );
+}
+
+#[test]
 fn defconst_updates_dynamic_binding_without_enforcing_constancy() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

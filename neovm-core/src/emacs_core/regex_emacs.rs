@@ -2861,7 +2861,7 @@ pub(crate) fn re_match(
             }
 
             RegexOp::EndLine => {
-                if d >= stop || text[d] == b'\n' {
+                if d >= text.len() || text[d] == b'\n' {
                     // At end of line — succeed
                 } else {
                     try_fail!('main_loop);
@@ -2875,7 +2875,7 @@ pub(crate) fn re_match(
             }
 
             RegexOp::EndBuf => {
-                if d != stop {
+                if d != text.len() {
                     try_fail!('main_loop);
                 }
             }

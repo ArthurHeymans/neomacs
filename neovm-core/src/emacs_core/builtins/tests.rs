@@ -1958,6 +1958,44 @@ fn make_indirect_buffer_clone_and_hook_semantics_follow_buffer_c() {
 }
 
 #[test]
+fn make_indirect_buffer_clone_copies_lisp_local_var_cells() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let base = create_unique_test_buffer(&mut eval, "*mib-local-clone-base*");
+    let base_id = base.as_buffer_id().expect("expected buffer object");
+    let sym = intern("mib-cloned-local");
+
+    eval.set_buffer_local_binding_by_id(base_id, sym, Value::fixnum(1))
+        .expect("install base buffer-local binding");
+
+    let cloned = builtin_make_indirect_buffer(
+        &mut eval,
+        vec![base, Value::string("*mib-local-clone*"), Value::T],
+    )
+    .expect("clone indirect buffer");
+    let cloned_id = cloned
+        .as_buffer_id()
+        .expect("expected cloned buffer object");
+
+    eval.set_buffer_local_binding_by_id(cloned_id, sym, Value::fixnum(2))
+        .expect("update cloned buffer-local binding");
+
+    assert_eq!(
+        eval.buffers
+            .get(base_id)
+            .and_then(|buf| buf.buffer_local_value("mib-cloned-local")),
+        Some(Value::fixnum(1)),
+        "GNU clone_per_buffer_values allocates fresh local_var_alist cells for the indirect buffer"
+    );
+    assert_eq!(
+        eval.buffers
+            .get(cloned_id)
+            .and_then(|buf| buf.buffer_local_value("mib-cloned-local")),
+        Some(Value::fixnum(2))
+    );
+}
+
+#[test]
 fn make_indirect_buffer_clone_nil_resets_buffer_state() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
@@ -10295,6 +10333,43 @@ fn prin1_to_string_uses_gnu_default_cycle_tail_indices() {
             Value::string("(a b a b . #2)"),
             Value::string("(b c a b c . #2)"),
         ])
+    );
+}
+
+#[test]
+fn prin1_runtime_path_detects_string_cycles_through_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval
+        .eval_str(
+            r#"
+            (let* ((s "body")
+                   (p (list 'section nil s)))
+              (put-text-property 0 4 :parent p s)
+              (erase-buffer)
+              (let ((printed (prin1-to-string (list t s))))
+                (prin1 (list t s) (current-buffer))
+                (list printed (buffer-string))))
+            "#,
+        )
+        .expect("prin1 should detect active string text-property cycles like GNU");
+
+    let printed = crate::emacs_core::value::list_to_vec(&result)
+        .expect("result should be a proper list")
+        .into_iter()
+        .map(|value| {
+            value
+                .as_runtime_string_owned()
+                .expect("result item should be a string")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        printed,
+        vec![
+            r#"(t #("body" 0 4 (:parent (section nil #1))))"#.to_string(),
+            r#"(t #("body" 0 4 (:parent (section nil #1))))"#.to_string(),
+        ]
     );
 }
 

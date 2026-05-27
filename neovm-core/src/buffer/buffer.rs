@@ -1277,6 +1277,29 @@ pub(crate) fn set_local_var_alist_entry(
     *alist = Value::cons(cell, *alist);
 }
 
+/// Copy Lisp-level buffer-local bindings for a cloned indirect buffer.
+///
+/// GNU `clone_per_buffer_values` calls `buffer_lisp_local_variables(from, 1)`,
+/// which allocates fresh alist cells by walking `from->local_var_alist` and
+/// prepending `(SYMBOL . VALUE)` for each entry. Values themselves are not
+/// deep-copied, but the alist structure and each binding cons are distinct.
+pub(crate) fn clone_lisp_local_variables(
+    alist: crate::emacs_core::value::Value,
+) -> crate::emacs_core::value::Value {
+    use crate::emacs_core::value::Value;
+
+    let mut result = Value::NIL;
+    let mut cursor = alist;
+    while cursor.is_cons() {
+        let entry = cursor.cons_car();
+        cursor = cursor.cons_cdr();
+        if entry.is_cons() {
+            result = Value::cons(Value::cons(entry.cons_car(), entry.cons_cdr()), result);
+        }
+    }
+    result
+}
+
 /// Remove `key` from a buffer-local alist in place. Mirrors GNU's
 /// `Fdelq`-over-`Fassq` pattern in `Fkill_local_variable`
 /// (`data.c:2349-2378`).
@@ -3154,6 +3177,7 @@ impl BufferManager {
             let mut cloned = root.clone();
             cloned.id = id;
             cloned.set_name_value(Value::string(name));
+            cloned.local_var_alist = clone_lisp_local_variables(root.local_var_alist);
             cloned
         } else {
             let name_value = Value::string(name);

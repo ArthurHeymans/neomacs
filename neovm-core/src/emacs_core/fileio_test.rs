@@ -4369,6 +4369,49 @@ fn test_write_region_visit_sets_file_name_and_clears_modified() {
 }
 
 #[test]
+fn test_write_region_visit_updates_recorded_modtime_and_size() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let dir = std::env::temp_dir().join("neovm_write_region_modtime");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let out_path = dir.join("visited.txt");
+    fs::write(&out_path, b"a").unwrap();
+    let out_str = out_path.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .set_buffer_file_name(current, Value::string(&out_str))
+        .expect("set visited file");
+    builtin_set_visited_file_modtime(&mut eval, vec![Value::NIL])
+        .expect("record initial visited file modtime");
+
+    eval.buffers.current_buffer_mut().unwrap().insert("a\nb\n");
+    builtin_write_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(&out_str),
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("write-region with visit should succeed");
+
+    assert_eq!(
+        builtin_verify_visited_file_modtime(&mut eval, vec![])
+            .expect("verify-visited-file-modtime after visiting write"),
+        Value::T
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_write_region_string_start_numeric_append_and_visit_string_semantics() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;

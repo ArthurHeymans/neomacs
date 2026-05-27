@@ -199,10 +199,7 @@ fn is_print_circle_candidate(value: &Value, print_gensym: bool) -> bool {
         ValueKind::Veclike(VecLikeType::Lambda) => true,
         ValueKind::Veclike(VecLikeType::Macro) => true,
         ValueKind::Veclike(VecLikeType::ByteCode) => true,
-        ValueKind::String => {
-            // Non-empty strings only
-            value.as_utf8_str().map_or(false, |s| !s.is_empty())
-        }
+        ValueKind::String => string_print_circle_candidate(value),
         ValueKind::Symbol(id) if print_gensym => {
             // Uninterned symbols only
             let name = resolve_sym_lisp_string(id);
@@ -210,6 +207,10 @@ fn is_print_circle_candidate(value: &Value, print_gensym: bool) -> bool {
         }
         _ => false,
     }
+}
+
+fn string_print_circle_candidate(value: &Value) -> bool {
+    value.as_lisp_string().is_some_and(|s| !s.is_empty())
 }
 
 fn is_uninterned_symbol(value: &Value) -> bool {
@@ -455,6 +456,7 @@ fn print_preprocess(value: &Value, state: &mut PrintCircleState, options: PrintO
                     }
                 });
             }
+            ValueKind::String => push_string_text_property_plists(obj, &mut stack),
             _ => {}
         }
     }
@@ -539,11 +541,20 @@ fn print_preprocess_external(value: &Value, table_value: Value, options: PrintOp
                     }
                 });
             }
+            ValueKind::String => push_string_text_property_plists(obj, &mut stack),
             _ => {}
         }
     }
 
     remove_print_number_table_t_entries(table_value);
+}
+
+fn push_string_text_property_plists(value: Value, stack: &mut Vec<Value>) {
+    if let Some(runs) = get_string_text_properties_for_value(value) {
+        for run in runs.into_iter().rev() {
+            stack.push(run.plist);
+        }
+    }
 }
 
 /// Entry point for stateful printing (circle/level/length aware).
@@ -605,6 +616,7 @@ pub(crate) fn default_cycle_candidate_key(value: &Value) -> Option<u64> {
         | ValueKind::Veclike(VecLikeType::Lambda)
         | ValueKind::Veclike(VecLikeType::Macro)
         | ValueKind::Veclike(VecLikeType::ByteCode) => object_identity_key(value),
+        ValueKind::String if string_print_circle_candidate(value) => object_identity_key(value),
         _ => None,
     }
 }
@@ -689,15 +701,17 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Float => out.push_str(&format_float_with_options(value.xfloat(), state.options)),
         ValueKind::Symbol(id) => out.push_str(&format_symbol(id, state.options)),
         ValueKind::String => {
-            let ls = value.as_lisp_string().unwrap();
-            if state.options.print_noescape {
-                out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
-            } else {
-                match get_string_text_properties_for_value(*value) {
-                    Some(runs) => write_lisp_propertized_string_stateful(ls, &runs, out, state),
-                    None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
+            with_default_cycle_guard(value, out, state, |out, state| {
+                let ls = value.as_lisp_string().unwrap();
+                if state.options.print_noescape {
+                    out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
+                } else {
+                    match get_string_text_properties_for_value(*value) {
+                        Some(runs) => write_lisp_propertized_string_stateful(ls, &runs, out, state),
+                        None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
+                    }
                 }
-            }
+            });
         }
         ValueKind::Cons => {
             with_default_cycle_guard(value, out, state, |out, state| {
@@ -1654,6 +1668,10 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Symbol(id) => append_symbol_bytes(id, out, options),
         ValueKind::String => {
+            if append_bytes_cycle_ref_if_any(value, out) {
+                return;
+            }
+            let pushed = push_bytes_cycle_object(value);
             let ls = value.as_lisp_string().unwrap();
             if options.print_noescape {
                 out.extend_from_slice(ls.as_bytes());
@@ -1675,6 +1693,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
                     out.extend_from_slice(&str_bytes);
                 }
             }
+            pop_bytes_cycle_object(pushed);
         }
         ValueKind::Cons => {
             if append_bytes_cycle_ref_if_any(value, out) {

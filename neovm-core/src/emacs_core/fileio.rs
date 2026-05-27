@@ -5194,12 +5194,38 @@ pub(crate) fn builtin_write_region(
     }
     drop(file);
 
+    let visiting_modtime = if visit_file.is_some() {
+        let meta = std::fs::metadata(&resolved_path).map_err(|err| {
+            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
+        })?;
+        let mtime = meta.modified().map_err(|err| {
+            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
+        })?;
+        let dur = mtime
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        Some((
+            dur.as_secs() as i64,
+            dur.subsec_nanos() as i32,
+            meta.len() as i64,
+        ))
+    } else {
+        None
+    };
+
     let wrote_message_path = visit_file.clone();
     if let Some(visit_path) = visit_file {
         let _ = eval
             .buffers
             .set_buffer_file_name(current_id, Value::heap_string(visit_path));
         let _ = eval.buffers.set_buffer_modified_flag(current_id, false);
+        if let Some((sec, nsec, size)) = visiting_modtime {
+            if let Some(buf) = eval.buffers.get_mut(current_id) {
+                buf.modtime_sec = Some(sec);
+                buf.modtime_nsec = Some(nsec);
+                buf.modtime_size = Some(size);
+            }
+        }
     }
 
     eval.set_variable("last-coding-system-used", Value::symbol(&coding_system));
