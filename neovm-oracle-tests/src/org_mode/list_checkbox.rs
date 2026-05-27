@@ -561,3 +561,129 @@ fn org_list_make_subtree_checkbox_counter_roundtrip_combo() {
                   after-level-edits))))))"##,
     );
 }
+
+#[test]
+fn org_list_checkbox_dependency_sort_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-enforce-todo-checkbox-dependencies t)
+          (org-todo-keywords '((sequence "TODO" "NEXT" "|" "DONE")))
+          (org-cycle-include-plain-lists 'integrate))
+      (org-mode)
+      (insert "* TODO Project [0/4] [0%]\n")
+      (insert "- [ ] Zebra [0/2]\n")
+      (insert "  - [ ] Zebra child b\n")
+      (insert "  - [X] Zebra child a\n")
+      (insert "- [-] Alpha [1/2]\n")
+      (insert "  - [X] Alpha done\n")
+      (insert "  - [ ] Alpha todo\n")
+      (insert "- [ ] Mango\n")
+      (insert "- [X] Done item\n")
+      (let ((snapshot
+             (lambda (label)
+               (let* ((struct (org-list-struct))
+                      (prevs (org-list-prevs-alist struct))
+                      (parents (org-list-parents-alist struct))
+                      (items (org-list-get-all-items (point-min) struct prevs)))
+                 (list label
+                       (condition-case err
+                           (save-excursion
+                             (goto-char (point-min))
+                             (org-entry-blocked-p))
+                         (error (cons (car err) (cdr err))))
+                       (mapcar
+                        (lambda (item)
+                          (save-excursion
+                            (goto-char item)
+                            (list (- item (point-min))
+                                  (buffer-substring-no-properties
+                                   item (line-end-position))
+                                  (org-list-get-checkbox item struct)
+                                  (org-list-get-parent item struct parents)
+                                  (org-list-get-children item struct parents)
+                                  (org-list-get-item-number
+                                   item struct prevs parents)
+                                  (org-list-get-list-type item struct prevs)
+                                  (invisible-p item))))
+                        items)
+                       (org-list-to-lisp)
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))
+            states)
+        (goto-char (point-min))
+        (let ((blocked-attempt
+               (condition-case err
+                   (progn (org-todo "DONE") 'ok)
+                 (error (cons (car err) (cdr err))))))
+          (push (list 'initial blocked-attempt
+                      (funcall snapshot 'initial-state))
+                states))
+        (goto-char (point-min))
+        (search-forward "Alpha todo")
+        (org-toggle-checkbox)
+        (search-forward "Zebra child b")
+        (org-toggle-checkbox)
+        (goto-char (point-min))
+        (search-forward "Mango")
+        (org-toggle-checkbox)
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (push (funcall snapshot 'after-checks) states)
+        (goto-char (point-min))
+        (search-forward "Zebra child a")
+        (beginning-of-line)
+        (org-move-item-up)
+        (goto-char (point-min))
+        (search-forward "Mango")
+        (beginning-of-line)
+        (org-indent-item-tree)
+        (push (funcall snapshot 'after-move-indent) states)
+        (org-outdent-item-tree)
+        (goto-char (point-min))
+        (search-forward "Zebra")
+        (beginning-of-line)
+        (org-sort-list nil ?a)
+        (org-list-repair)
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (push (funcall snapshot 'after-sort-repair) states)
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-cycle)
+        (push (funcall snapshot 'after-cycle) states)
+        (org-fold-show-all)
+        (goto-char (point-min))
+        (let ((done-attempt
+               (condition-case err
+                   (progn (org-todo "DONE") 'ok)
+                 (error (cons (car err) (cdr err))))))
+          (push (list 'done-attempt done-attempt
+                      (org-get-todo-state)
+                      (funcall snapshot 'after-done))
+                states))
+        (list (nreverse states)
+              (org-element-map (org-element-parse-buffer)
+                  '(headline item)
+                (lambda (el)
+                  (pcase (org-element-type el)
+                    ('headline
+                     (list 'headline
+                           (org-element-property :todo-keyword el)
+                           (org-element-property :raw-value el)))
+                    ('item
+                     (list 'item
+                           (org-element-property :checkbox el)
+                           (org-element-property :counter el)
+                           (org-element-property :tag el))))))
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
