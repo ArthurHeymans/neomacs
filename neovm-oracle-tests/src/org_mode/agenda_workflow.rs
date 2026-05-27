@@ -787,3 +787,138 @@ DEADLINE: <2026-05-20 Wed +1w>
       (delete-file file))))"##,
     );
 }
+
+#[test]
+fn org_agenda_date_shift_redo_marker_source_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((file (make-temp-file
+                "org-agenda-date-shift" nil ".org"
+                "#+CATEGORY: Shift
+* TODO Window :work:ship:
+SCHEDULED: <2026-05-27 Wed 09:00>
+DEADLINE: <2026-05-29 Fri>
+:PROPERTIES:
+:Effort: 1:00
+:END:
+* TODO Range :work:call:
+<2026-05-27 Wed 13:00-14:00>
+* WAIT Future :home:
+SCHEDULED: <2026-05-28 Thu 08:30>
+"))
+         (org-agenda-files (list file))
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-span 3)
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-prefix-format "%?-12t%-8:c%5e %s")
+         (org-timestamp-rounding-minutes '(0 15))
+         (org-log-reschedule nil)
+         (org-log-redeadline nil))
+    (unwind-protect
+        (progn
+          (org-agenda-list nil "2026-05-27" 3)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((line-summary
+                   (lambda ()
+                     (let (rows)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (while (re-search-forward
+                                 "^[ \t]*Shift:.*\\(Window\\|Range\\|Future\\)"
+                                 nil t)
+                           (let* ((pos (line-beginning-position))
+                                  (marker (or (get-text-property pos
+                                                                 'org-hd-marker)
+                                              (get-text-property pos
+                                                                 'org-marker)))
+                                  (heading
+                                   (and (markerp marker)
+                                        (marker-buffer marker)
+                                        (with-current-buffer
+                                            (marker-buffer marker)
+                                          (save-excursion
+                                            (goto-char marker)
+                                            (org-get-heading t t t t))))))
+                             (push (list
+                                    (buffer-substring-no-properties
+                                     pos (line-end-position))
+                                    (get-text-property pos 'type)
+                                    (get-text-property pos 'todo-state)
+                                    (get-text-property pos 'time-of-day)
+                                    (get-text-property pos 'duration)
+                                    (get-text-property pos 'effort-minutes)
+                                    heading)
+                                   rows))))
+                       (nreverse rows)))))
+              (let ((initial (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                    (initial-summary (funcall line-summary)))
+                (org-agenda-filter-apply '("+work") 'tag t)
+                (let ((filtered (buffer-substring-no-properties
+                                 (point-min) (point-max)))
+                      (tag-filter org-agenda-tag-filter))
+                  (org-agenda-filter-remove-all)
+                  (goto-char (point-min))
+                  (search-forward "Window")
+                  (beginning-of-line)
+                  (org-agenda-date-later 2)
+                  (let ((after-window-display
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))))
+                    (goto-char (point-min))
+                    (search-forward "Range")
+                    (beginning-of-line)
+                    (org-agenda-date-later-hours 2)
+                    (let ((after-range-display
+                           (buffer-substring-no-properties
+                            (line-beginning-position) (line-end-position)))
+                          (source-after-edits
+                           (with-current-buffer (find-file-noselect file)
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))))
+                      (org-agenda-redo)
+                      (let ((after-redo
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                            (after-redo-summary (funcall line-summary)))
+                        (list
+                         (mapcar (lambda (needle)
+                                   (not (null
+                                         (string-match-p needle initial))))
+                                 '("Window" "Range" "Future"
+                                   "09:00" "13:00-14:00" "08:30"))
+                         initial-summary
+                         tag-filter
+                         (mapcar (lambda (needle)
+                                   (not (null
+                                         (string-match-p needle filtered))))
+                                 '("Window" "Range" "Future"))
+                         after-window-display
+                         after-range-display
+                         (mapcar (lambda (needle)
+                                   (not (null
+                                         (string-match-p needle
+                                                         source-after-edits))))
+                                 '("SCHEDULED: <2026-05-29 Fri 09:00>"
+                                   "<2026-05-27 Wed 15:00-16:00>"
+                                   "DEADLINE: <2026-05-29 Fri>"
+                                   "SCHEDULED: <2026-05-28 Thu 08:30>"))
+                         (mapcar (lambda (needle)
+                                   (not (null
+                                         (string-match-p needle after-redo))))
+                                 '("Window" "Range" "Future"
+                                   "15:00-16:00" "08:30"))
+                         after-redo-summary
+                         source-after-edits)))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
