@@ -148,3 +148,90 @@ fn org_goto_outline_path_completion_command_combo() {
                       (mapcar #'marker-position org-mark-ring))))))))"##,
     );
 }
+
+#[test]
+fn org_goto_exit_commands_and_tag_search_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-goto)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Match in title\n")
+    (insert "Body Match should be ignored.\n")
+    (insert "* Tag only :Match:\n")
+    (insert "** Nested Match\n")
+    (insert "*** Leaf\n")
+    (insert "* Final\n")
+    (let (map-auto map-manual forward backward exits errors)
+      (let ((org-goto-auto-isearch t))
+        (org-goto--set-map)
+        (setq map-auto
+              (list (lookup-key org-goto-map [t])
+                    (lookup-key org-goto-map "1")
+                    (lookup-key org-goto-map "q")
+                    (lookup-key org-goto-map "\C-m"))))
+      (let ((org-goto-auto-isearch nil))
+        (org-goto--set-map)
+        (setq map-manual
+              (list (lookup-key org-goto-map [t])
+                    (lookup-key org-goto-map "1")
+                    (lookup-key org-goto-map "q")
+                    (lookup-key org-goto-map "n")
+                    (lookup-key org-goto-map "\C-m"))))
+      (goto-char (point-min))
+      (let ((isearch-forward t))
+        (org-goto--local-search-headings "Match" nil t)
+        (push (list (line-number-at-pos)
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position)))
+              forward)
+        (org-goto--local-search-headings "Match" nil t)
+        (push (list (line-number-at-pos)
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position)))
+              forward)
+        (org-goto--local-search-headings "Match" nil t)
+        (push (list (line-number-at-pos)
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position)))
+              forward))
+      (goto-char (point-max))
+      (let ((isearch-forward nil))
+        (org-goto--local-search-headings "Match" nil t)
+        (push (list (line-number-at-pos)
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position)))
+              backward))
+      (dolist (cmd '(org-goto-left org-goto-right org-goto-quit))
+        (goto-char (point-min))
+        (search-forward "Nested Match")
+        (beginning-of-line)
+        (push
+         (catch 'exit
+           (funcall cmd)
+           'no-throw)
+         exits)
+        (push (list cmd
+                    org-goto-exit-command
+                    (and org-goto-selected-point
+                         (line-number-at-pos org-goto-selected-point)))
+              exits))
+      (dolist (cmd '(org-goto-left org-goto-right))
+        (goto-char (point-min))
+        (search-forward "Body Match")
+        (push
+         (condition-case err
+             (progn (funcall cmd) 'no-error)
+           (error (cons (car err) (cdr err))))
+         errors))
+      (list map-auto
+            map-manual
+            (nreverse forward)
+            (nreverse backward)
+            (nreverse exits)
+            (nreverse errors)))))"##,
+    );
+}
