@@ -104,6 +104,7 @@ mod theta_combos;
 mod timer_workflow;
 mod todo_dependencies;
 mod ultra_strict;
+mod upsilon_operations;
 mod xenna_strict;
 mod xi_combos;
 mod yank_dnd;
