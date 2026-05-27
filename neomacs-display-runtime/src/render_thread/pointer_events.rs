@@ -295,7 +295,7 @@ impl RenderApp {
 
     fn glyphs_for_pointer_target(&self, target_fid: u64) -> Option<&[FrameGlyph]> {
         if target_fid != 0 {
-            self.child_frames
+            self.primary_child_frames()
                 .frames
                 .get(&target_fid)
                 .map(|entry| entry.frame.glyphs.as_slice())
@@ -310,7 +310,7 @@ impl RenderApp {
         if Self::floating_webkit_hit_test(&self.floating_webkits, x, y).is_some() {
             return (x, y, 0);
         }
-        if let Some((fid, local_x, local_y)) = self.child_frames.hit_test(x, y) {
+        if let Some((fid, local_x, local_y)) = self.primary_child_frames().hit_test(x, y) {
             (local_x, local_y, fid)
         } else {
             (x, y, 0)
@@ -1048,7 +1048,7 @@ impl RenderApp {
         let (ev_x, ev_y, target_fid) =
             self.pointer_target_at(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
         if target_fid != 0 {
-            if let Some(entry) = self.child_frames.frames.get(&target_fid) {
+            if let Some(entry) = self.primary_child_frames().frames.get(&target_fid) {
                 tracing::trace!(
                     "Child frame hit: fid={} abs=({:.1},{:.1}) size=({:.1}x{:.1}) mouse=({:.1},{:.1}) local=({:.1},{:.1})",
                     target_fid,

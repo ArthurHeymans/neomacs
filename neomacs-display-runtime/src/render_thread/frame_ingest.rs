@@ -94,7 +94,7 @@ impl RenderApp {
 
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
-        self.child_frames.tick();
+        self.primary_child_frames_mut().tick();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             let frame_id = display_state.frame_id;
             let parent_id = display_state.parent_id;
@@ -284,7 +284,7 @@ impl RenderApp {
             }
 
             if parent_id != 0 {
-                self.child_frames.update_frame(frame);
+                self.primary_child_frames_mut().update_frame(frame);
             } else {
                 self.set_primary_current_frame(Some(frame));
                 if let Some(menu_bar) = gui_menu_bar {
@@ -337,7 +337,7 @@ impl RenderApp {
             });
 
         if active_cursor.is_none() {
-            for (_, entry) in &self.child_frames.frames {
+            for (_, entry) in &self.primary_child_frames().frames {
                 if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
                     active_cursor = Some(CursorTarget {
                         window_id: cursor.window_id,

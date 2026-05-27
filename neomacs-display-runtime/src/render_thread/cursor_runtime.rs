@@ -36,7 +36,7 @@ impl RenderApp {
     pub(super) fn ime_cursor_area_for_target(&self, target: &CursorTarget) -> ImeCursorArea {
         // If cursor is in a child frame, offset by the child's absolute position.
         let (ime_off_x, ime_off_y) = if target.frame_id != 0 {
-            self.child_frames
+            self.primary_child_frames()
                 .frames
                 .get(&target.frame_id)
                 .map(|e| (e.abs_x as f64, e.abs_y as f64))

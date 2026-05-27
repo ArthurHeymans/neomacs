@@ -149,6 +149,10 @@ impl RenderApp {
             primary_frame.frame_dirty = true;
         }
         primary_frame.cursor.copy_config_from(&self.cursor_defaults);
+        primary_frame.child_frames = std::mem::replace(
+            &mut self.pending_primary_child_frames,
+            crate::render_thread::child_frames::ChildFrameManager::new(),
+        );
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",

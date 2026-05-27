@@ -1011,34 +1011,35 @@ impl RenderApp {
         }
 
         // Render child frames as floating overlays on top of the parent frame
-        if !self.child_frames.is_empty() {
-            for &child_id in self.child_frames.sorted_for_rendering() {
-                if let Some(child_entry) = self.child_frames.frames.get(&child_id) {
-                    if let (Some(renderer), Some(primary_frame)) =
-                        (&mut self.renderer, &mut self.primary_frame)
-                    {
-                        // Pass animated cursor only if it belongs to this child frame
-                        let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
-                        renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
-                            renderer.render_child_frame(
-                                &surface_view,
-                                &child_entry.frame,
-                                child_entry.abs_x,
-                                child_entry.abs_y,
-                                &mut primary_frame.glyph_atlas,
-                                &self.faces,
-                                self.width,
-                                self.height,
-                                primary_frame.cursor.blink_on,
-                                child_anim,
-                                self.child_frame_corner_radius,
-                                self.child_frame_shadow_enabled,
-                                self.child_frame_shadow_layers,
-                                self.child_frame_shadow_offset,
-                                self.child_frame_shadow_opacity,
-                            );
-                        });
-                    }
+        if let (Some(renderer), Some(primary_frame)) =
+            (&mut self.renderer, self.primary_frame.as_mut())
+            && !primary_frame.child_frames.is_empty()
+        {
+            let child_ids = primary_frame.child_frames.sorted_for_rendering().to_vec();
+            for child_id in child_ids {
+                if let Some(child_entry) = primary_frame.child_frames.frames.get(&child_id) {
+                    // Pass animated cursor only if it belongs to this child frame.
+                    let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
+                    let cursor_blink_on = primary_frame.cursor.blink_on;
+                    renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                        renderer.render_child_frame(
+                            &surface_view,
+                            &child_entry.frame,
+                            child_entry.abs_x,
+                            child_entry.abs_y,
+                            &mut primary_frame.glyph_atlas,
+                            &self.faces,
+                            self.width,
+                            self.height,
+                            cursor_blink_on,
+                            child_anim,
+                            self.child_frame_corner_radius,
+                            self.child_frame_shadow_enabled,
+                            self.child_frame_shadow_layers,
+                            self.child_frame_shadow_offset,
+                            self.child_frame_shadow_opacity,
+                        );
+                    });
                 }
             }
         }
@@ -1087,7 +1088,7 @@ impl RenderApp {
             &self.ime_preedit_text,
             self.primary_cursor().target_cloned(),
             0,
-            &self.child_frames,
+            self.primary_child_frames(),
         );
         let titlebar_background = self
             .primary_current_frame()

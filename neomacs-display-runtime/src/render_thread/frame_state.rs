@@ -33,10 +33,20 @@ impl RenderApp {
         if let Some(frame) = self.primary_current_frame() {
             self.faces = frame.faces.clone();
         }
-        for entry in self.child_frames.frames.values() {
-            for (face_id, face) in &entry.frame.faces {
-                self.faces.entry(*face_id).or_insert_with(|| face.clone());
-            }
+        let primary_child_faces: Vec<_> = self
+            .primary_child_frames()
+            .frames
+            .values()
+            .flat_map(|entry| {
+                entry
+                    .frame
+                    .faces
+                    .iter()
+                    .map(|(id, face)| (*id, face.clone()))
+            })
+            .collect();
+        for (face_id, face) in primary_child_faces {
+            self.faces.entry(face_id).or_insert(face);
         }
         for window_state in self.frame_windows.windows.values() {
             if let Some(frame) = window_state.render.current_frame.as_ref() {

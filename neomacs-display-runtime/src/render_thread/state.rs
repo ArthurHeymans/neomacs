@@ -328,8 +328,8 @@ pub(super) struct RenderApp {
 
     // Top-level GUI frame windows.
     pub(super) frame_windows: GuiFrameWindowManager,
-    // Child frames (posframe, which-key-posframe, etc.)
-    pub(super) child_frames: ChildFrameManager,
+    // Child frames received before primary frame render state exists.
+    pub(super) pending_primary_child_frames: ChildFrameManager,
     // Child frame visual style
     pub(super) child_frame_corner_radius: f32,
     pub(super) child_frame_shadow_enabled: bool,
@@ -433,7 +433,7 @@ impl RenderApp {
             #[cfg(feature = "neo-term")]
             shared_terminals,
             frame_windows: GuiFrameWindowManager::new(),
-            child_frames: ChildFrameManager::new(),
+            pending_primary_child_frames: ChildFrameManager::new(),
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
             child_frame_shadow_layers: 4,
@@ -582,6 +582,22 @@ impl RenderApp {
 
     pub(super) fn primary_cursor_mut(&mut self) -> Option<&mut CursorState> {
         self.primary_frame.as_mut().map(|frame| &mut frame.cursor)
+    }
+
+    pub(super) fn primary_child_frames(&self) -> &ChildFrameManager {
+        self.primary_frame
+            .as_ref()
+            .map_or(&self.pending_primary_child_frames, |frame| {
+                &frame.child_frames
+            })
+    }
+
+    pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            &mut primary_frame.child_frames
+        } else {
+            &mut self.pending_primary_child_frames
+        }
     }
 
     pub(super) fn sync_primary_cursor_config_from_defaults(&mut self) {

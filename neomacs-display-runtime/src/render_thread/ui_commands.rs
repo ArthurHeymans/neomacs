@@ -544,7 +544,7 @@ impl RenderApp {
             }
             RenderCommand::RemoveChildFrame { frame_id } => {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
-                self.child_frames.remove_frame(frame_id);
+                self.primary_child_frames_mut().remove_frame(frame_id);
                 if self
                     .primary_cursor()
                     .target_cloned()
