@@ -8,11 +8,13 @@
 
 use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::value::Value;
+use strum::{EnumString, IntoStaticStr};
 
 pub const GNU_FRAME_PARAM_COUNT: usize = 54;
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum FrameParam {
     AutoRaise = 0,
     AutoLower,
@@ -137,62 +139,7 @@ impl FrameParam {
     }
 
     pub fn name(self) -> &'static str {
-        match self {
-            Self::AutoRaise => "auto-raise",
-            Self::AutoLower => "auto-lower",
-            Self::BackgroundColor => "background-color",
-            Self::BorderColor => "border-color",
-            Self::BorderWidth => "border-width",
-            Self::CursorColor => "cursor-color",
-            Self::CursorType => "cursor-type",
-            Self::Font => "font",
-            Self::ForegroundColor => "foreground-color",
-            Self::IconName => "icon-name",
-            Self::IconType => "icon-type",
-            Self::ChildFrameBorderWidth => "child-frame-border-width",
-            Self::InternalBorderWidth => "internal-border-width",
-            Self::RightDividerWidth => "right-divider-width",
-            Self::BottomDividerWidth => "bottom-divider-width",
-            Self::MenuBarLines => "menu-bar-lines",
-            Self::MouseColor => "mouse-color",
-            Self::Name => "name",
-            Self::ScrollBarWidth => "scroll-bar-width",
-            Self::ScrollBarHeight => "scroll-bar-height",
-            Self::Title => "title",
-            Self::Unsplittable => "unsplittable",
-            Self::VerticalScrollBars => "vertical-scroll-bars",
-            Self::HorizontalScrollBars => "horizontal-scroll-bars",
-            Self::Visibility => "visibility",
-            Self::TabBarLines => "tab-bar-lines",
-            Self::ToolBarLines => "tool-bar-lines",
-            Self::ScrollBarForeground => "scroll-bar-foreground",
-            Self::ScrollBarBackground => "scroll-bar-background",
-            Self::ScreenGamma => "screen-gamma",
-            Self::LineSpacing => "line-spacing",
-            Self::LeftFringe => "left-fringe",
-            Self::RightFringe => "right-fringe",
-            Self::WaitForWm => "wait-for-wm",
-            Self::Fullscreen => "fullscreen",
-            Self::FontBackend => "font-backend",
-            Self::Alpha => "alpha",
-            Self::Sticky => "sticky",
-            Self::ToolBarPosition => "tool-bar-position",
-            Self::InhibitDoubleBuffering => "inhibit-double-buffering",
-            Self::Undecorated => "undecorated",
-            Self::ParentFrame => "parent-frame",
-            Self::SkipTaskbar => "skip-taskbar",
-            Self::NoFocusOnMap => "no-focus-on-map",
-            Self::NoAcceptFocus => "no-accept-focus",
-            Self::ZGroup => "z-group",
-            Self::OverrideRedirect => "override-redirect",
-            Self::NoSpecialGlyphs => "no-special-glyphs",
-            Self::AlphaBackground => "alpha-background",
-            Self::BordersRespectAlphaBackground => "borders-respect-alpha-background",
-            Self::UseFrameSynchronization => "use-frame-synchronization",
-            Self::Shaded => "shaded",
-            Self::NsAppearance => "ns-appearance",
-            Self::NsTransparentTitlebar => "ns-transparent-titlebar",
-        }
+        self.into()
     }
 
     pub fn symbol(self) -> Value {
@@ -200,63 +147,7 @@ impl FrameParam {
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "auto-raise" => Self::AutoRaise,
-            "auto-lower" => Self::AutoLower,
-            "background-color" => Self::BackgroundColor,
-            "border-color" => Self::BorderColor,
-            "border-width" => Self::BorderWidth,
-            "cursor-color" => Self::CursorColor,
-            "cursor-type" => Self::CursorType,
-            "font" => Self::Font,
-            "foreground-color" => Self::ForegroundColor,
-            "icon-name" => Self::IconName,
-            "icon-type" => Self::IconType,
-            "child-frame-border-width" => Self::ChildFrameBorderWidth,
-            "internal-border-width" => Self::InternalBorderWidth,
-            "right-divider-width" => Self::RightDividerWidth,
-            "bottom-divider-width" => Self::BottomDividerWidth,
-            "menu-bar-lines" => Self::MenuBarLines,
-            "mouse-color" => Self::MouseColor,
-            "name" => Self::Name,
-            "scroll-bar-width" => Self::ScrollBarWidth,
-            "scroll-bar-height" => Self::ScrollBarHeight,
-            "title" => Self::Title,
-            "unsplittable" => Self::Unsplittable,
-            "vertical-scroll-bars" => Self::VerticalScrollBars,
-            "horizontal-scroll-bars" => Self::HorizontalScrollBars,
-            "visibility" => Self::Visibility,
-            "tab-bar-lines" => Self::TabBarLines,
-            "tool-bar-lines" => Self::ToolBarLines,
-            "scroll-bar-foreground" => Self::ScrollBarForeground,
-            "scroll-bar-background" => Self::ScrollBarBackground,
-            "screen-gamma" => Self::ScreenGamma,
-            "line-spacing" => Self::LineSpacing,
-            "left-fringe" => Self::LeftFringe,
-            "right-fringe" => Self::RightFringe,
-            "wait-for-wm" => Self::WaitForWm,
-            "fullscreen" => Self::Fullscreen,
-            "font-backend" => Self::FontBackend,
-            "alpha" => Self::Alpha,
-            "sticky" => Self::Sticky,
-            "tool-bar-position" => Self::ToolBarPosition,
-            "inhibit-double-buffering" => Self::InhibitDoubleBuffering,
-            "undecorated" => Self::Undecorated,
-            "parent-frame" => Self::ParentFrame,
-            "skip-taskbar" => Self::SkipTaskbar,
-            "no-focus-on-map" => Self::NoFocusOnMap,
-            "no-accept-focus" => Self::NoAcceptFocus,
-            "z-group" => Self::ZGroup,
-            "override-redirect" => Self::OverrideRedirect,
-            "no-special-glyphs" => Self::NoSpecialGlyphs,
-            "alpha-background" => Self::AlphaBackground,
-            "borders-respect-alpha-background" => Self::BordersRespectAlphaBackground,
-            "use-frame-synchronization" => Self::UseFrameSynchronization,
-            "shaded" => Self::Shaded,
-            "ns-appearance" => Self::NsAppearance,
-            "ns-transparent-titlebar" => Self::NsTransparentTitlebar,
-            _ => return None,
-        })
+        name.parse().ok()
     }
 
     pub fn from_symbol_id(symbol: SymId) -> Option<Self> {

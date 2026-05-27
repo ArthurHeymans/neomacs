@@ -5,6 +5,7 @@ use bitflags::bitflags;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
+use strum::{EnumString, IntoStaticStr};
 
 bitflags! {
     /// Face attributes flags
@@ -51,12 +52,18 @@ pub enum BoxType {
 /// IDs 0–19 in every frame's face cache; dynamic faces start at
 /// [`BasicFaceId::SENTINEL`].
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum BasicFaceId {
     Default = 0,
     ModeLine = 1,
     ModeLineInactive = 2,
     ToolBar = 3,
+    #[strum(
+        to_string = "fringe",
+        serialize = "left-fringe",
+        serialize = "right-fringe"
+    )]
     Fringe = 4,
     HeaderLine = 5,
     HeaderLineInactive = 6,
@@ -81,29 +88,12 @@ impl BasicFaceId {
 
     /// Look up a basic face by its canonical name.
     pub fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "default" => Some(Self::Default),
-            "mode-line" => Some(Self::ModeLine),
-            "mode-line-inactive" => Some(Self::ModeLineInactive),
-            "tool-bar" => Some(Self::ToolBar),
-            "fringe" | "left-fringe" | "right-fringe" => Some(Self::Fringe),
-            "header-line" => Some(Self::HeaderLine),
-            "header-line-inactive" => Some(Self::HeaderLineInactive),
-            "scroll-bar" => Some(Self::ScrollBar),
-            "border" => Some(Self::Border),
-            "cursor" => Some(Self::Cursor),
-            "mouse" => Some(Self::Mouse),
-            "menu" => Some(Self::Menu),
-            "vertical-border" => Some(Self::VerticalBorder),
-            "window-divider" => Some(Self::WindowDivider),
-            "window-divider-first-pixel" => Some(Self::WindowDividerFirstPixel),
-            "window-divider-last-pixel" => Some(Self::WindowDividerLastPixel),
-            "internal-border" => Some(Self::InternalBorder),
-            "child-frame-border" => Some(Self::ChildFrameBorder),
-            "tab-bar" => Some(Self::TabBar),
-            "tab-line" => Some(Self::TabLine),
-            _ => None,
-        }
+        name.parse().ok()
+    }
+
+    /// Return the canonical basic face name.
+    pub fn name(self) -> &'static str {
+        self.into()
     }
 }
 

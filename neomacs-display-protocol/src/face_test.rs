@@ -1,6 +1,61 @@
 use super::*;
 
 #[test]
+fn basic_face_ids_preserve_gnu_slots_and_names() {
+    let faces = [
+        (BasicFaceId::Default, 0, "default"),
+        (BasicFaceId::ModeLine, 1, "mode-line"),
+        (BasicFaceId::ModeLineInactive, 2, "mode-line-inactive"),
+        (BasicFaceId::ToolBar, 3, "tool-bar"),
+        (BasicFaceId::Fringe, 4, "fringe"),
+        (BasicFaceId::HeaderLine, 5, "header-line"),
+        (BasicFaceId::HeaderLineInactive, 6, "header-line-inactive"),
+        (BasicFaceId::ScrollBar, 7, "scroll-bar"),
+        (BasicFaceId::Border, 8, "border"),
+        (BasicFaceId::Cursor, 9, "cursor"),
+        (BasicFaceId::Mouse, 10, "mouse"),
+        (BasicFaceId::Menu, 11, "menu"),
+        (BasicFaceId::VerticalBorder, 12, "vertical-border"),
+        (BasicFaceId::WindowDivider, 13, "window-divider"),
+        (
+            BasicFaceId::WindowDividerFirstPixel,
+            14,
+            "window-divider-first-pixel",
+        ),
+        (
+            BasicFaceId::WindowDividerLastPixel,
+            15,
+            "window-divider-last-pixel",
+        ),
+        (BasicFaceId::InternalBorder, 16, "internal-border"),
+        (BasicFaceId::ChildFrameBorder, 17, "child-frame-border"),
+        (BasicFaceId::TabBar, 18, "tab-bar"),
+        (BasicFaceId::TabLine, 19, "tab-line"),
+    ];
+
+    for (face, id, name) in faces {
+        assert_eq!(u32::from(face), id);
+        assert_eq!(face.name(), name);
+        assert_eq!(BasicFaceId::from_name(name), Some(face));
+    }
+    assert_eq!(BasicFaceId::SENTINEL, 20);
+}
+
+#[test]
+fn basic_face_id_accepts_fringe_aliases() {
+    assert_eq!(BasicFaceId::from_name("fringe"), Some(BasicFaceId::Fringe));
+    assert_eq!(
+        BasicFaceId::from_name("left-fringe"),
+        Some(BasicFaceId::Fringe)
+    );
+    assert_eq!(
+        BasicFaceId::from_name("right-fringe"),
+        Some(BasicFaceId::Fringe)
+    );
+    assert_eq!(BasicFaceId::from_name("unknown-face"), None);
+}
+
+#[test]
 fn test_face_creation() {
     let face = Face::new(1);
     assert_eq!(face.id, 1);
