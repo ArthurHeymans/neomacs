@@ -248,3 +248,108 @@ fn org_pcomplete_keyword_tag_drawer_property_omission_combo() {
               (complete-at ":LO"))))))"##,
     );
 }
+
+#[test]
+fn org_pcomplete_repeated_options_babel_searchhead_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-pcomplete)
+  (require 'ob-core)
+  (require 'ob-shell)
+  (require 'ox)
+  (with-temp-buffer
+    (let ((buffer-file-name "/tmp/org-pcomplete-report.org")
+          (org-file-tags '("filetag" "shared"))
+          (org-link-abbrev-alist-local
+           '(("bug" . "https://bugs.example/%s")
+             ("doc" . "file:docs/%s")))
+          (org-link-abbrev-alist
+           '(("global" . "https://global.example/%s")
+             ("doc" . "file:global-docs/%s")))
+          (org-export-registered-backends nil)
+          (org-html-infojs-opts-table
+           '((path . "Path") (view . "View") (toc . "Toc")
+             (ltoc . "Local toc")))
+          (org-tag-alist
+           '((:startgroup)
+             ("work" . ?w) ("home" . ?h)
+             (:endgroup)
+             ("urgent" . ?u) ("blocked" . ?b)))
+          (org-todo-keywords
+           '((sequence "TODO(t)" "NEXT(n)" "WAIT(w@)" "|"
+                       "DONE(d!)" "CANCELED(c@)")))
+          (org-babel-load-languages
+           '((emacs-lisp . t) (shell . t) (python . nil)))
+          (org-src-lang-modes '(("shell" . sh) ("emacs-lisp" . emacs-lisp))))
+      (org-mode)
+      (org-set-regexps-and-options)
+      (insert "#+TITLE: \n")
+      (insert "#+STARTUP: hidestars fold\n")
+      (insert "#+OPTIONS: toc:nil author:nil to\n")
+      (insert "#+INFOJS_OPT: path:foo view:co\n")
+      (insert "#+TAGS: \n")
+      (insert "#+FILETAGS: \n")
+      (insert "#+BEGIN_SRC shell :res :exports\n")
+      (insert "echo hi\n")
+      (insert "#+END_SRC\n")
+      (insert "#+begin_src emacs-lisp :lex :session\n")
+      (insert "(+ 1 2)\n")
+      (insert "#+end_src\n")
+      (insert "#+BEGIN: clocktable :scope file :max\n")
+      (insert "#+END:\n")
+      (insert "* TODO Alpha Heading :work:ur\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":Effort_ALL: 0:15 0:30 1:00\n")
+      (insert ":Owner_ALL: Ada Bea Cy\n")
+      (insert ":Owner: Ada\n")
+      (insert ":Eff\n")
+      (insert ":END:\n")
+      (insert "** NEXT Beta Child With  Spaces\n")
+      (insert "[[*Alpha He\n")
+      (insert "[[bu\n")
+      (insert "\\bet\n")
+      (cl-labels
+          ((complete-at
+            (needle)
+            (goto-char (point-min))
+            (search-forward needle)
+            (let* ((thing (org-thing-at-point))
+                   (command (org-command-at-point))
+                   (args (org-parse-arguments))
+                   (capf (run-hook-with-args-until-success
+                          'completion-at-point-functions))
+                   (beg (nth 0 capf))
+                   (end (nth 1 capf))
+                   (table (nth 2 capf))
+                   (stub (and beg end
+                              (buffer-substring-no-properties beg end))))
+              (list needle
+                    thing
+                    command
+                    args
+                    stub
+                    (and stub
+                         (sort (all-completions stub table) #'string<))
+                    (and beg (- beg (point-min)))
+                    (and end (- end (point-min)))))))
+        (list (complete-at "#+TITLE: ")
+              (complete-at "fold")
+              (complete-at "to")
+              (complete-at "co")
+              (complete-at "#+TAGS: ")
+              (complete-at "#+FILETAGS: ")
+              (complete-at ":res")
+              (complete-at ":exports")
+              (complete-at ":lex")
+              (complete-at ":session")
+              (complete-at ":max")
+              (complete-at ":work:ur")
+              (complete-at ":Eff")
+              (complete-at "[[*Alpha He")
+              (complete-at "[[bu")
+              (complete-at "\\bet"))))))"##,
+    );
+}
