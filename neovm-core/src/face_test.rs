@@ -404,6 +404,57 @@ fn font_slant_from_symbol_all() {
     assert!(FontSlant::Italic.is_italic());
     assert!(FontSlant::Oblique.is_italic());
     assert!(!FontSlant::Normal.is_italic());
+    assert_eq!(FontSlant::Normal.symbol_name(), "normal");
+    assert_eq!(FontSlant::ReverseOblique.symbol_name(), "reverse-oblique");
+}
+
+#[test]
+fn font_width_from_symbol_all() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        FontWidth::from_symbol("ultra-condensed"),
+        Some(FontWidth::UltraCondensed)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("extra-condensed"),
+        Some(FontWidth::ExtraCondensed)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("condensed"),
+        Some(FontWidth::Condensed)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("compressed"),
+        Some(FontWidth::Condensed)
+    );
+    assert_eq!(FontWidth::from_symbol("narrow"), Some(FontWidth::Condensed));
+    assert_eq!(
+        FontWidth::from_symbol("semi-condensed"),
+        Some(FontWidth::SemiCondensed)
+    );
+    assert_eq!(FontWidth::from_symbol("normal"), Some(FontWidth::Normal));
+    assert_eq!(FontWidth::from_symbol("medium"), Some(FontWidth::Normal));
+    assert_eq!(FontWidth::from_symbol("regular"), Some(FontWidth::Normal));
+    assert_eq!(
+        FontWidth::from_symbol("semi-expanded"),
+        Some(FontWidth::SemiExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("expanded"),
+        Some(FontWidth::Expanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("extra-expanded"),
+        Some(FontWidth::ExtraExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("ultra-expanded"),
+        Some(FontWidth::UltraExpanded)
+    );
+    assert_eq!(FontWidth::from_symbol("unknown"), None);
+    assert_eq!(FontWidth::Condensed.symbol_name(), "condensed");
+    assert_eq!(FontWidth::Normal.symbol_name(), "normal");
+    assert_eq!(FontWidth::ExtraExpanded.symbol_name(), "extra-expanded");
 }
 
 // --- Face::to_plist round-trip ---

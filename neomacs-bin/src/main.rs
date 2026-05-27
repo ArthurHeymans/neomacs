@@ -61,7 +61,7 @@ use neovm_core::emacs_core::terminal::pure::{
 use neovm_core::emacs_core::{
     Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest, PopupMenuRequest,
 };
-use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth, LFaceAttr};
+use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameId, FrameParam, Window};
 
@@ -2473,30 +2473,6 @@ fn startup_font_weight_symbol(weight: FontWeight) -> &'static str {
     }
 }
 
-fn font_slant_symbol(slant: FontSlant) -> &'static str {
-    match slant {
-        FontSlant::Normal => "normal",
-        FontSlant::Italic => "italic",
-        FontSlant::Oblique => "oblique",
-        FontSlant::ReverseItalic => "reverse-italic",
-        FontSlant::ReverseOblique => "reverse-oblique",
-    }
-}
-
-fn font_width_symbol(width: FontWidth) -> &'static str {
-    match width {
-        FontWidth::UltraCondensed => "ultra-condensed",
-        FontWidth::ExtraCondensed => "extra-condensed",
-        FontWidth::Condensed => "condensed",
-        FontWidth::SemiCondensed => "semi-condensed",
-        FontWidth::Normal => "normal",
-        FontWidth::SemiExpanded => "semi-expanded",
-        FontWidth::Expanded => "expanded",
-        FontWidth::ExtraExpanded => "extra-expanded",
-        FontWidth::UltraExpanded => "ultra-expanded",
-    }
-}
-
 fn bootstrap_default_font_parameter(font_pixel_size: f32) -> Value {
     let mut metrics_svc = FontMetricsService::new();
     let selected = metrics_svc.select_font_for_char('M', "Monospace", 400, false, font_pixel_size);
@@ -2512,11 +2488,11 @@ fn bootstrap_default_font_parameter(font_pixel_size: f32) -> Value {
         .unwrap_or("regular");
     let slant = selected
         .as_ref()
-        .map(|font| font_slant_symbol(font.slant))
+        .map(|font| font.slant.symbol_name())
         .unwrap_or("normal");
     let width = selected
         .as_ref()
-        .map(|font| font_width_symbol(font.width))
+        .map(|font| font.width.symbol_name())
         .unwrap_or("normal");
 
     Value::vector(vec![
@@ -2554,7 +2530,7 @@ fn bootstrap_default_font_name(font_pixel_size: f32) -> Value {
         .unwrap_or("regular");
     let slant = selected
         .as_ref()
-        .map(|font| font_slant_symbol(font.slant))
+        .map(|font| font.slant.symbol_name())
         .unwrap_or("normal");
 
     Value::string(format!(

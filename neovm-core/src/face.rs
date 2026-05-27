@@ -14,6 +14,7 @@ use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::value::{Value, ValueKind, next_float_id};
 use crate::gc_trace::GcTrace;
 use std::collections::{HashMap, HashSet};
+use strum::{EnumString, IntoStaticStr};
 
 // X11 color table generated at compile time from etc/rgb.txt
 include!(concat!(env!("OUT_DIR"), "/x11_colors.rs"));
@@ -291,8 +292,10 @@ impl FontWeight {
 }
 
 /// Font slant.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum FontSlant {
+    #[strum(to_string = "normal", serialize = "roman")]
     Normal,
     Italic,
     Oblique,
@@ -302,14 +305,11 @@ pub enum FontSlant {
 
 impl FontSlant {
     pub fn from_symbol(name: &str) -> Option<Self> {
-        match name {
-            "normal" | "roman" => Some(Self::Normal),
-            "italic" => Some(Self::Italic),
-            "oblique" => Some(Self::Oblique),
-            "reverse-italic" => Some(Self::ReverseItalic),
-            "reverse-oblique" => Some(Self::ReverseOblique),
-            _ => None,
-        }
+        name.parse().ok()
+    }
+
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
     }
 
     pub fn is_italic(&self) -> bool {
@@ -318,12 +318,19 @@ impl FontSlant {
 }
 
 /// Font width (condensed, normal, expanded).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum FontWidth {
     UltraCondensed,
     ExtraCondensed,
+    #[strum(
+        to_string = "condensed",
+        serialize = "compressed",
+        serialize = "narrow"
+    )]
     Condensed,
     SemiCondensed,
+    #[strum(to_string = "normal", serialize = "medium", serialize = "regular")]
     Normal,
     SemiExpanded,
     Expanded,
@@ -333,18 +340,11 @@ pub enum FontWidth {
 
 impl FontWidth {
     pub fn from_symbol(name: &str) -> Option<Self> {
-        match name {
-            "ultra-condensed" => Some(Self::UltraCondensed),
-            "extra-condensed" => Some(Self::ExtraCondensed),
-            "condensed" | "compressed" | "narrow" => Some(Self::Condensed),
-            "semi-condensed" => Some(Self::SemiCondensed),
-            "normal" | "medium" | "regular" => Some(Self::Normal),
-            "semi-expanded" => Some(Self::SemiExpanded),
-            "expanded" => Some(Self::Expanded),
-            "extra-expanded" => Some(Self::ExtraExpanded),
-            "ultra-expanded" => Some(Self::UltraExpanded),
-            _ => None,
-        }
+        name.parse().ok()
+    }
+
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
     }
 }
 
@@ -559,13 +559,7 @@ impl Face {
         }
         if let Some(s) = &self.slant {
             items.push(Value::keyword("slant"));
-            items.push(Value::symbol(match s {
-                FontSlant::Normal => "normal",
-                FontSlant::Italic => "italic",
-                FontSlant::Oblique => "oblique",
-                FontSlant::ReverseItalic => "reverse-italic",
-                FontSlant::ReverseOblique => "reverse-oblique",
-            }));
+            items.push(Value::symbol(s.symbol_name()));
         }
         if let Some(h) = &self.height {
             items.push(Value::keyword("height"));

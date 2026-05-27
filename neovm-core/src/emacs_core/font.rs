@@ -1481,30 +1481,6 @@ fn font_weight_symbol(weight: FontWeight) -> &'static str {
     }
 }
 
-fn font_slant_symbol(slant: FontSlant) -> &'static str {
-    match slant {
-        FontSlant::Normal => "normal",
-        FontSlant::Italic => "italic",
-        FontSlant::Oblique => "oblique",
-        FontSlant::ReverseItalic => "reverse-italic",
-        FontSlant::ReverseOblique => "reverse-oblique",
-    }
-}
-
-fn font_width_symbol(width: FontWidth) -> &'static str {
-    match width {
-        FontWidth::UltraCondensed => "ultra-condensed",
-        FontWidth::ExtraCondensed => "extra-condensed",
-        FontWidth::Condensed => "condensed",
-        FontWidth::SemiCondensed => "semi-condensed",
-        FontWidth::Normal => "normal",
-        FontWidth::SemiExpanded => "semi-expanded",
-        FontWidth::Expanded => "expanded",
-        FontWidth::ExtraExpanded => "extra-expanded",
-        FontWidth::UltraExpanded => "ultra-expanded",
-    }
-}
-
 fn build_font_object(face: &RuntimeFace) -> Value {
     let mut elems = vec![Value::keyword(FONT_OBJECT_TAG)];
 
@@ -1533,10 +1509,10 @@ fn build_font_object(face: &RuntimeFace) -> Value {
         push_field("weight", Value::symbol(font_weight_symbol(weight)));
     }
     if let Some(slant) = face.slant {
-        push_field("slant", Value::symbol(font_slant_symbol(slant)));
+        push_field("slant", Value::symbol(slant.symbol_name()));
     }
     if let Some(width) = face.width {
-        push_field("width", Value::symbol(font_width_symbol(width)));
+        push_field("width", Value::symbol(width.symbol_name()));
     }
     if let Some(height) = &face.height {
         let value = face_height_to_font_value(height);
@@ -1580,10 +1556,10 @@ fn build_font_entity_for_spec_match(matched: &super::eval::ResolvedFontSpecMatch
         push_field("weight", Value::symbol(font_weight_symbol(weight)));
     }
     if let Some(slant) = matched.slant {
-        push_field("slant", Value::symbol(font_slant_symbol(slant)));
+        push_field("slant", Value::symbol(slant.symbol_name()));
     }
     if let Some(width) = matched.width {
-        push_field("width", Value::symbol(font_width_symbol(width)));
+        push_field("width", Value::symbol(width.symbol_name()));
     }
     if let Some(spacing) = matched.spacing {
         push_field("spacing", Value::fixnum(spacing as i64));
@@ -3381,27 +3357,11 @@ fn runtime_weight_to_lisp_value(weight: FontWeight) -> Value {
 }
 
 fn runtime_slant_to_lisp_value(slant: FontSlant) -> Value {
-    Value::symbol(match slant {
-        FontSlant::Normal => "normal",
-        FontSlant::Italic => "italic",
-        FontSlant::Oblique => "oblique",
-        FontSlant::ReverseItalic => "reverse-italic",
-        FontSlant::ReverseOblique => "reverse-oblique",
-    })
+    Value::symbol(slant.symbol_name())
 }
 
 fn runtime_width_to_lisp_value(width: FontWidth) -> Value {
-    Value::symbol(match width {
-        FontWidth::UltraCondensed => "ultra-condensed",
-        FontWidth::ExtraCondensed => "extra-condensed",
-        FontWidth::Condensed => "condensed",
-        FontWidth::SemiCondensed => "semi-condensed",
-        FontWidth::Normal => "normal",
-        FontWidth::SemiExpanded => "semi-expanded",
-        FontWidth::Expanded => "expanded",
-        FontWidth::ExtraExpanded => "extra-expanded",
-        FontWidth::UltraExpanded => "ultra-expanded",
-    })
+    Value::symbol(width.symbol_name())
 }
 
 pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) -> Value {
