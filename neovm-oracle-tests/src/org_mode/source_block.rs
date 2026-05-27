@@ -625,3 +625,92 @@ fn org_babel_tangle_write_noweb_comments_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_src_fontify_coderef_escape_inline_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-src)
+  (with-temp-buffer
+    (let ((org-src-fontify-natively t)
+          (org-src-block-faces '(("emacs-lisp" (:background "gray10"))))
+          (org-coderef-label-format "(ref:%s)")
+          (org-edit-src-content-indentation 2))
+      (org-mode)
+      (insert "* Code\n")
+      (insert "#+begin_src emacs-lisp -n -r :label-fmt \"<%s>\"\n")
+      (insert "(defun demo (x)                         <def>\n")
+      (insert "  ;; comment line\n")
+      (insert "  (let ((y (+ x 1)))                 <let>\n")
+      (insert "    y))\n")
+      (insert "#+end_src\n")
+      (insert "Inline src_emacs-lisp[:results raw]{(+ 1 2)} and src_text{plain}.\n")
+      (insert "#+begin_example -n -r\n")
+      (insert ",* escaped headline                  (ref:ex)\n")
+      (insert ",#+escaped keyword\n")
+      (insert "#+end_example\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let* ((tree (org-element-parse-buffer))
+             (src (car (org-element-map tree 'src-block #'identity)))
+             (example (car (org-element-map tree 'example-block #'identity)))
+             (inline (org-element-map tree 'inline-src-block
+                       (lambda (e)
+                         (list (org-element-property :language e)
+                               (org-element-property :value e)
+                               (org-element-property :parameters e)))))
+             (fmt-src (org-src-coderef-format src))
+             (fmt-ex (org-src-coderef-format example))
+             (regexp-src (org-src-coderef-regexp fmt-src))
+             (regexp-src-let (org-src-coderef-regexp fmt-src "let"))
+             (regexp-ex (org-src-coderef-regexp fmt-ex))
+             (probes
+              (mapcar
+               (lambda (needle)
+                 (save-excursion
+                   (goto-char (point-min))
+                   (search-forward needle)
+                   (list needle
+                         (get-text-property (match-beginning 0) 'face)
+                         (get-text-property (match-beginning 0)
+                                            'font-lock-face)
+                         (get-text-property (match-beginning 0)
+                                            'font-lock-fontified)
+                         (get-text-property (match-beginning 0) 'display))))
+               '("defun" "comment line" "(+ 1 2)" "src_text" "escaped headline")))
+             escaped-string unescaped-string region-after-unescape)
+        (setq escaped-string
+              (org-escape-code-in-string "* H\n#+K: v\n,,* already\nbody"))
+        (setq unescaped-string (org-unescape-code-in-string escaped-string))
+        (goto-char (point-min))
+        (search-forward ",* escaped headline")
+        (beginning-of-line)
+        (let ((beg (point)))
+          (search-forward ",#+escaped keyword")
+          (end-of-line)
+          (org-unescape-code-in-region beg (point))
+          (setq region-after-unescape
+                (buffer-substring-no-properties beg (point))))
+        (list (list fmt-src fmt-ex regexp-src regexp-src-let regexp-ex)
+              (mapcar (lambda (line)
+                        (list line
+                              (string-match regexp-src line)
+                              (and (string-match regexp-src line)
+                                   (match-string 3 line))
+                              (string-match regexp-src-let line)
+                              (and (string-match regexp-ex line)
+                                   (match-string 3 line))))
+                      '("(defun demo (x)                         <def>"
+                        "  (let ((y (+ x 1)))                 <let>"
+                        ",* escaped headline                  (ref:ex)"))
+              inline
+              probes
+              escaped-string
+              unescaped-string
+              region-after-unescape
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
