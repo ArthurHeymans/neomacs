@@ -52,6 +52,7 @@ mod fold_core;
 mod fold_font;
 mod fold_regression;
 mod footnote_edit;
+mod gamma2_combos;
 mod gamma_context;
 mod giga_strict;
 mod goto_workflow;
