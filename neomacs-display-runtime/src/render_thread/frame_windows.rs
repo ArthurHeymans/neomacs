@@ -15,7 +15,7 @@ use winit::window::{Window, WindowId};
 use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
 use super::state::{
-    FpsCounter, GuiChromeInteractionState, ImeCursorArea, WindowChrome,
+    FpsCounter, GuiChromeInteractionState, ImeCursorArea, TypingSpeedState, WindowChrome,
     effective_window_scale_factor, window_size_from_emacs_pixels,
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
@@ -79,6 +79,8 @@ pub(crate) struct GuiFrameRenderState {
     pub visual_bell_start: Option<Instant>,
     /// FPS overlay timing owned by this frame window.
     pub(super) fps: FpsCounter,
+    /// Typing-speed overlay state owned by this frame window.
+    pub(super) typing_speed: TypingSpeedState,
     /// Whether an IME preedit overlay is active in this frame window.
     pub ime_preedit_active: bool,
     /// Current IME preedit text for this frame window.
@@ -397,6 +399,7 @@ impl GuiFrameWindowManager {
                                     enabled: self.fps_enabled,
                                     ..FpsCounter::default()
                                 },
+                                typing_speed: TypingSpeedState::default(),
                                 ime_preedit_active: false,
                                 ime_preedit_text: String::new(),
                                 transitions: TransitionState::default(),

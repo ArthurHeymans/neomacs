@@ -1,4 +1,5 @@
 use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
+use super::state::TypingSpeedState;
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
@@ -6,6 +7,30 @@ use super::{RenderApp, surface_readback};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 impl RenderApp {
+    fn update_typing_speed_state(state: &mut TypingSpeedState) -> bool {
+        let now = std::time::Instant::now();
+        let window_secs = 5.0_f64;
+        state
+            .key_press_times
+            .retain(|t| now.duration_since(*t).as_secs_f64() < window_secs);
+        let count = state.key_press_times.len() as f64;
+        let target_wpm = if count > 1.0 {
+            let span = now.duration_since(state.key_press_times[0]).as_secs_f64();
+            if span > 0.1 {
+                (count / span) * 60.0 / 5.0
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        state.displayed_wpm += (target_wpm as f32 - state.displayed_wpm) * 0.15;
+        if state.displayed_wpm < 0.5 {
+            state.displayed_wpm = 0.0;
+        }
+        state.displayed_wpm > 0.5 || !state.key_press_times.is_empty()
+    }
+
     fn render_secondary_frame_window(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
@@ -497,6 +522,19 @@ impl RenderApp {
                 native.height,
             );
             render.frame_dirty = true;
+        }
+
+        if renderer.effects.typing_speed.enabled {
+            let keep_redrawing = Self::update_typing_speed_state(&mut render.typing_speed);
+            renderer.render_typing_speed(
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
+                render.typing_speed.displayed_wpm,
+            );
+            if keep_redrawing {
+                render.frame_dirty = true;
+            }
         }
     }
 
@@ -1003,37 +1041,20 @@ impl RenderApp {
 
         // Render typing speed indicator
         if self.effects.typing_speed.enabled {
-            let now = std::time::Instant::now();
-            let window_secs = 5.0_f64;
-            // Remove key presses older than the window
-            self.key_press_times
-                .retain(|t| now.duration_since(*t).as_secs_f64() < window_secs);
-            // Calculate chars/second, then WPM (5 chars per word, * 60 for minutes)
-            let count = self.key_press_times.len() as f64;
-            let target_wpm = if count > 1.0 {
-                let span = now.duration_since(self.key_press_times[0]).as_secs_f64();
-                if span > 0.1 {
-                    (count / span) * 60.0 / 5.0
-                } else {
-                    0.0
-                }
-            } else {
-                0.0
-            };
-            // Exponential smoothing
-            let alpha = 0.15_f32;
-            self.displayed_wpm += (target_wpm as f32 - self.displayed_wpm) * alpha;
-            if self.displayed_wpm < 0.5 {
-                self.displayed_wpm = 0.0;
-            }
+            let keep_redrawing = Self::update_typing_speed_state(&mut self.typing_speed);
 
             if let (Some(renderer), Some(glyph_atlas), Some(frame)) =
                 (&self.renderer, &mut self.glyph_atlas, &self.current_frame)
             {
-                renderer.render_typing_speed(&surface_view, frame, glyph_atlas, self.displayed_wpm);
+                renderer.render_typing_speed(
+                    &surface_view,
+                    frame,
+                    glyph_atlas,
+                    self.typing_speed.displayed_wpm,
+                );
             }
             // Keep redrawing while WPM is decaying
-            if self.displayed_wpm > 0.5 || !self.key_press_times.is_empty() {
+            if keep_redrawing {
                 self.frame_dirty = true;
             }
         }

@@ -139,6 +139,15 @@ pub(super) struct FpsCounter {
     pub(super) render_start: Instant,
 }
 
+/// Typing-speed overlay state for one native GUI frame window.
+#[derive(Default)]
+pub(super) struct TypingSpeedState {
+    /// Key press timestamps for WPM calculation.
+    pub(super) key_press_times: Vec<Instant>,
+    /// Smoothed WPM value for display.
+    pub(super) displayed_wpm: f32,
+}
+
 impl Default for FpsCounter {
     fn default() -> Self {
         Self {
@@ -371,10 +380,7 @@ pub(super) struct RenderApp {
     pub(super) last_activity_time: Instant,
     pub(super) idle_dim_current_alpha: f32,
     pub(super) idle_dim_active: bool,
-    /// Key press timestamps for WPM calculation
-    pub(super) key_press_times: Vec<Instant>,
-    /// Smoothed WPM value for display
-    pub(super) displayed_wpm: f32,
+    pub(super) typing_speed: TypingSpeedState,
 
     /// Shared monitor info (populated in resumed(), read from FFI thread)
     pub(super) shared_monitors: Option<SharedMonitorInfo>,
@@ -479,8 +485,7 @@ impl RenderApp {
             fps: FpsCounter::default(),
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
-            key_press_times: Vec::new(),
-            displayed_wpm: 0.0,
+            typing_speed: TypingSpeedState::default(),
             last_activity_time: Instant::now(),
             idle_dim_current_alpha: 0.0,
             idle_dim_active: false,

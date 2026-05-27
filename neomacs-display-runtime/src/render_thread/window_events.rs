@@ -22,6 +22,20 @@ impl RenderApp {
             })
     }
 
+    fn record_typing_speed_keypress(&mut self, window_id: WindowId) {
+        if !self.effects.typing_speed.enabled {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if self.frame_windows.is_primary_winit(window_id) {
+            self.typing_speed.key_press_times.push(now);
+            self.frame_dirty = true;
+        } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+            window_state.render.typing_speed.key_press_times.push(now);
+            window_state.render.frame_dirty = true;
+        }
+    }
+
     pub(super) fn handle_window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -224,6 +238,7 @@ impl RenderApp {
                                     pressed: true,
                                     emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                                 });
+                                self.record_typing_speed_keypress(window_id);
                                 handled_via_text = true;
                             } else if let Some(keysyms) =
                                 Self::translate_committed_text(s, self.modifiers)
@@ -247,6 +262,7 @@ impl RenderApp {
                                         emacs_frame_id: self
                                             .emacs_frame_for_window_event(window_id),
                                     });
+                                    self.record_typing_speed_keypress(window_id);
                                 }
                                 handled_via_text = true;
                             }
@@ -287,8 +303,8 @@ impl RenderApp {
                                     window_state.native.mouse_hidden_for_typing = true;
                                 }
                             }
-                            if self.effects.typing_speed.enabled && state == ElementState::Pressed {
-                                self.key_press_times.push(std::time::Instant::now());
+                            if state == ElementState::Pressed {
+                                self.record_typing_speed_keypress(window_id);
                             }
                             if self.effects.idle_dim.enabled {
                                 self.last_activity_time = std::time::Instant::now();
@@ -326,8 +342,8 @@ impl RenderApp {
 
             WindowEvent::RedrawRequested => {
                 if self.frame_windows.is_primary_winit(window_id) {
-                    self.render();
                     self.frame_dirty = false;
+                    self.render();
                 } else if let Some(emacs_fid) = self.frame_windows.emacs_frame_for_winit(window_id)
                 {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
@@ -426,6 +442,7 @@ impl RenderApp {
                                 pressed: true,
                                 emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                             });
+                            self.record_typing_speed_keypress(window_id);
                         }
                     }
                 }
