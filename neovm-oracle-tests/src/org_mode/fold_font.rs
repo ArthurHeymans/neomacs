@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_font_face_visibility_after_promote_demote_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* L1\n")
+      (insert "** L2\n")
+      (insert "*** L3\n")
+      (insert "**** L4\n")
+      (insert "***** L5\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Promote L4 to L3
+      (goto-char (point-min))
+      (search-forward "L4")
+      (beginning-of-line)
+      (org-promote-subtree)
+      ;; Demote L2 to L3
+      (goto-char (point-min))
+      (search-forward "L2")
+      (beginning-of-line)
+      (org-demote-subtree)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check state
+      (let ((headings
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (length (match-string 1))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face)
+                            (get-text-property (point) 'face))
+                      (list needle 'not-found nil nil nil))))
+              '("L1" "L2" "L3" "L4" "L5")))
+            (merged nil))
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (list headings
+              (nreverse merged)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_deep_heading_cycle_hidden_edit_font_regression_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
