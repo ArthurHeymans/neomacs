@@ -254,3 +254,52 @@ fn org_plot_collect_options_multi_series_line_combo() {
             (delete-directory root t)))))))"##,
     );
 }
+
+#[test]
+fn org_plot_time_series_type_detect_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-plot)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+PLOT: title:\"Time Series\" type:2d with:linespoints\n")
+    (insert "#+PLOT: timeind:t\n")
+    (insert "| Date | Value |\n")
+    (insert "|------+-------|\n")
+    (insert "| 2026-01-01 | 10 |\n")
+    (insert "| 2026-02-01 | 20 |\n")
+    (insert "| 2026-03-01 | 15 |\n")
+    (insert "| 2026-04-01 | 25 |\n")
+    (goto-char (point-min))
+    (let* ((opts (org-plot/collect-options '(:include t)))
+           (title (plist-get opts :title))
+           (type (plist-get opts :type))
+           (with (plist-get opts :with))
+           (timeind (plist-get opts :timeind))
+           (table (progn
+                    (goto-char (point-min))
+                    (search-forward "| Date")
+                    (org-table-to-lisp)))
+           (num-cols (length (nth 2 table))))
+      (let* ((root (make-temp-file "org-plot-ts" t))
+             (data-file (expand-file-name "data.tsv" root)))
+        (unwind-protect
+            (progn
+              (org-plot/gnuplot-to-data table data-file opts)
+              (let ((tsv (with-temp-buffer
+                           (insert-file-contents data-file)
+                           (buffer-string)))
+                    (script (org-plot/gnuplot-script
+                             table data-file num-cols opts)))
+                (list title type with timeind
+                      table
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>" tsv)
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>" script))))
+          (delete-directory root t))))))"##,
+    );
+}
