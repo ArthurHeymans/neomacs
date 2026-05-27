@@ -15,8 +15,8 @@ use winit::window::{Window, WindowId};
 use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
 use super::state::{
-    GuiChromeInteractionState, ImeCursorArea, WindowChrome, effective_window_scale_factor,
-    window_size_from_emacs_pixels,
+    FpsCounter, GuiChromeInteractionState, ImeCursorArea, WindowChrome,
+    effective_window_scale_factor, window_size_from_emacs_pixels,
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
@@ -77,6 +77,8 @@ pub(crate) struct GuiFrameRenderState {
     pub tooltip: Option<TooltipState>,
     /// Visual bell flash start time for this frame window.
     pub visual_bell_start: Option<Instant>,
+    /// FPS overlay timing owned by this frame window.
+    pub(super) fps: FpsCounter,
     /// Whether an IME preedit overlay is active in this frame window.
     pub ime_preedit_active: bool,
     /// Current IME preedit text for this frame window.
@@ -162,6 +164,8 @@ pub(crate) struct GuiFrameWindowManager {
     pub pending_destroys: Vec<u64>,
     /// Native chrome defaults applied to future secondary frame windows.
     pub(super) chrome_defaults: WindowChrome,
+    /// Whether future secondary frame windows should start with FPS enabled.
+    pub(super) fps_enabled: bool,
 }
 
 /// A request to create a new OS window.
@@ -183,6 +187,7 @@ impl GuiFrameWindowManager {
             pending_creates: Vec::new(),
             pending_destroys: Vec::new(),
             chrome_defaults: WindowChrome::default(),
+            fps_enabled: false,
         }
     }
 
@@ -388,6 +393,10 @@ impl GuiFrameWindowManager {
                                 popup_menu: None,
                                 tooltip: None,
                                 visual_bell_start: None,
+                                fps: FpsCounter {
+                                    enabled: self.fps_enabled,
+                                    ..FpsCounter::default()
+                                },
                                 ime_preedit_active: false,
                                 ime_preedit_text: String::new(),
                                 transitions: TransitionState::default(),

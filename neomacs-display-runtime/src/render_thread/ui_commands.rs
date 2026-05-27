@@ -439,6 +439,11 @@ impl RenderApp {
             }
             RenderCommand::SetShowFps { enabled } => {
                 self.fps.enabled = enabled;
+                self.frame_windows.fps_enabled = enabled;
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.render.fps.enabled = enabled;
+                    window_state.render.frame_dirty = true;
+                }
                 self.frame_dirty = true;
                 Ok(())
             }

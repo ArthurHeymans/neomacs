@@ -129,6 +129,7 @@ impl WebKitImportPolicy {
 }
 
 /// FPS counter and frame time tracking state.
+#[derive(Clone)]
 pub(super) struct FpsCounter {
     pub(super) enabled: bool,
     pub(super) last_instant: Instant,

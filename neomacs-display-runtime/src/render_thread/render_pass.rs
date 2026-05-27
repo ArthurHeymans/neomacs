@@ -19,6 +19,7 @@ impl RenderApp {
         scroll_indicators_enabled: bool,
     ) {
         let GuiFrameWindowState { native, render } = window_state;
+        Self::update_fps_counter(&mut render.fps);
         let Some(frame_for_decision) = render.current_frame_clone() else {
             return;
         };
@@ -467,6 +468,36 @@ impl RenderApp {
                 native.height,
             );
         }
+
+        if render.fps.enabled {
+            let frame_time = render.fps.render_start.elapsed().as_secs_f32() * 1000.0;
+            render.fps.frame_time_ms = render.fps.frame_time_ms * 0.9 + frame_time * 0.1;
+
+            let transition_count =
+                render.transitions.crossfades.len() + render.transitions.scroll_slides.len();
+            let stats_lines = vec![
+                format!(
+                    "{:.0} FPS | {:.1}ms",
+                    render.fps.display_value, render.fps.frame_time_ms
+                ),
+                format!(
+                    "{}g {}w {}t  {}x{}",
+                    frame.glyphs.len(),
+                    frame.window_infos.len(),
+                    transition_count,
+                    native.width,
+                    native.height
+                ),
+            ];
+            renderer.render_fps_overlay(
+                surface_view,
+                &stats_lines,
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
+            );
+            render.frame_dirty = true;
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -576,6 +607,7 @@ impl RenderApp {
         }
 
         self.prepare_frame_state_for_render();
+        Self::update_fps_counter(&mut self.fps);
 
         // Get surface texture
         let Some(surface) = self.surface.as_ref() else {

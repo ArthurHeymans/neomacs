@@ -1,11 +1,9 @@
-use super::RenderApp;
+use super::{FpsCounter, RenderApp};
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, PhysCursor, WindowCursorVisual};
 use std::collections::HashMap;
 
 impl RenderApp {
     pub(super) fn prepare_frame_state_for_render(&mut self) {
-        self.update_fps_state();
-
         #[cfg(feature = "neo-term")]
         self.update_terminals();
 
@@ -17,15 +15,15 @@ impl RenderApp {
         self.apply_visual_cursor_animations();
     }
 
-    fn update_fps_state(&mut self) {
-        if self.fps.enabled {
-            self.fps.render_start = std::time::Instant::now();
-            self.fps.frame_count += 1;
-            let elapsed = self.fps.last_instant.elapsed();
+    pub(super) fn update_fps_counter(fps: &mut FpsCounter) {
+        if fps.enabled {
+            fps.render_start = std::time::Instant::now();
+            fps.frame_count += 1;
+            let elapsed = fps.last_instant.elapsed();
             if elapsed.as_secs_f32() >= 1.0 {
-                self.fps.display_value = self.fps.frame_count as f32 / elapsed.as_secs_f32();
-                self.fps.frame_count = 0;
-                self.fps.last_instant = std::time::Instant::now();
+                fps.display_value = fps.frame_count as f32 / elapsed.as_secs_f32();
+                fps.frame_count = 0;
+                fps.last_instant = std::time::Instant::now();
             }
         }
     }
