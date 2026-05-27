@@ -235,3 +235,69 @@ fn org_goto_exit_commands_and_tag_search_combo() {
             (nreverse errors)))))"##,
     );
 }
+
+#[test]
+fn org_heading_navigation_level_position_tracking_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\nbody A\n** B\nbody B\n*** C\nbody C\n**** D\nbody D\n")
+    (insert "*** E\nbody E\n** F\nbody F\n*** G\nbody G\n* H\nbody H\n** I\nbody I\n")
+    (let ((track (lambda (fn &optional arg)
+                   (save-excursion
+                     (if arg (funcall fn arg) (funcall fn))
+                     (list (line-number-at-pos)
+                           (buffer-substring-no-properties
+                            (line-beginning-position)
+                            (line-end-position)))))))
+      ;; Start at beginning
+      (goto-char (point-min))
+      (list
+       ;; org-next-visible-heading forward
+       (funcall track #'org-next-visible-heading 1)
+       (funcall track #'org-next-visible-heading 1)
+       (funcall track #'org-next-visible-heading 1)
+       ;; org-previous-visible-heading backward
+       (funcall track #'org-previous-visible-heading 1)
+       (funcall track #'org-previous-visible-heading 1)
+       ;; org-forward-heading-same-level
+       (goto-char (point-min))
+       (funcall track #'org-forward-heading-same-level 1)
+       (funcall track #'org-forward-heading-same-level 1)
+       ;; org-backward-heading-same-level
+       (funcall track #'org-backward-heading-same-level 1)
+       ;; org-end-of-subtree
+       (goto-char (point-min))
+       (search-forward "** B")
+       (beginning-of-line)
+       (let ((end-pos (progn (org-end-of-subtree) (point))))
+         (list (line-number-at-pos end-pos)
+               (buffer-substring-no-properties
+                (line-beginning-position)
+                (line-end-position))))
+       ;; org-up-heading
+       (goto-char (point-min))
+       (search-forward "**** D")
+       (beginning-of-line)
+       (funcall track #'org-up-heading 1)
+       (funcall track #'org-up-heading 1)
+       ;; org-next-visible-heading with negative arg
+       (goto-char (point-min))
+       (search-forward "* H")
+       (beginning-of-line)
+       (funcall track #'org-next-visible-heading -1)
+       ;; Outline level at each heading
+       (goto-char (point-min))
+       (let (levels)
+         (while (re-search-forward "^\\(\\*+\\) " nil t)
+           (push (list (match-string 1)
+                       (org-outline-level)
+                       (line-number-at-pos))
+                 levels))
+         (nreverse levels)))))))"##,
+    );
+}
