@@ -914,11 +914,84 @@ SCHEDULED: <2026-05-28 Thu 08:30>
                                          (string-match-p needle after-redo))))
                                  '("Window" "Range" "Future"
                                    "15:00-16:00" "08:30"))
-                         after-redo-summary
-                         source-after-edits)))))))))
+                          after-redo-summary
+                          source-after-edits)))))))))
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-file file))))"##,
+    );
+}
+
+#[test]
+fn org_agenda_clockreport_mode_habit_consistency_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-habit)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-agenda-cr" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'week)
+         (org-agenda-start-day "2026-05-25")
+         (org-agenda-start-on-weekday 1)
+         (org-agenda-clockreport-mode t)
+         (org-agenda-show-log t)
+         (org-agenda-log-mode-items '(closed clock state))
+         (org-habit-show-habits t)
+         (org-habit-show-all-today t)
+         (org-habit-following-days 7)
+         (org-habit-preceding-days 14)
+         (org-agenda-use-time-grid nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+CATEGORY: Work\n")
+            (insert "* TODO Write report :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed .+2d/4d>\n")
+            (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 2:00\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-25 Sun 10:00]--[2026-05-25 Sun 11:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-26 Mon 09:00]--[2026-05-26 Mon 10:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "* TODO Review code :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-26 Mon 14:00]--[2026-05-26 Mon 15:30] =>  1:30\n")
+            (insert ":END:\n")
+            (insert "* DONE Deploy :ops:\n")
+            (insert "CLOSED: [2026-05-26 Mon 16:00]\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-26 Mon 15:30]--[2026-05-26 Mon 16:00] =>  0:30\n")
+            (insert ":END:\n"))
+          (org-agenda-list nil "2026-05-25" 7)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((agenda-text
+                   (buffer-substring-no-properties (point-min) (point-max)))
+                  (has-habit nil)
+                  (has-clockreport nil)
+                  (has-clocked nil))
+              (goto-char (point-min))
+              (setq has-habit
+                    (not (null (re-search-forward "habit" nil t))))
+              (goto-char (point-min))
+              (setq has-clockreport
+                    (not (null (re-search-forward "Clock report" nil t))))
+              (goto-char (point-min))
+              (setq has-clocked
+                    (not (null (re-search-forward "Clocked" nil t))))
+              (list has-habit
+                    has-clockreport
+                    has-clocked
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>"
+                     agenda-text)))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
     );
 }
