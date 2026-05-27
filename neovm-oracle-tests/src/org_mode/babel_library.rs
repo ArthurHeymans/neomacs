@@ -1080,6 +1080,61 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_error_handling_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil)
+          (org-babel-default-header-args '((:results . "value replace"))))
+      ;; Valid block
+      (insert "#+NAME: valid\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(+ 10 20)\n")
+      (insert "#+end_src\n\n")
+      ;; Block that returns nil
+      (insert "#+NAME: niler\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "nil\n")
+      (insert "#+end_src\n\n")
+      ;; Block that returns empty list
+      (insert "#+NAME: emptier\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'()\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dolist (name '("valid" "niler" "emptier"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        ;; Get buffer state
+        (let ((buf-text (buffer-substring-no-properties
+                         (point-min) (point-max)))
+              (elements
+               (org-element-map (org-element-parse-buffer)
+                   '(src-block fixed-width)
+                 (lambda (el)
+                   (list (org-element-type el)
+                         (org-element-property :name el)
+                         (org-element-property :value el))))))
+          (list (nreverse results)
+                elements
+                buf-text))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
