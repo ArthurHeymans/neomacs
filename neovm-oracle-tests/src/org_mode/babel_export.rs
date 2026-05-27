@@ -257,3 +257,52 @@ fn org_babel_tangle_noweb_comments_collect_combo() {
       (when (file-directory-p dir) (delete-directory dir t)))))"##,
     );
 }
+
+#[test]
+fn org_babel_export_inline_result_html_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-emacs-lisp)
+  (require 'ox-html)
+  (let ((org-confirm-babel-evaluate nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+TITLE: Babel Export\n\n")
+      (insert "* Section\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n(+ 3 4)\n#+end_src\n\n")
+      (insert "Call: call_adder[:results raw](a=2,b=3)\n\n")
+      (insert "#+NAME: adder\n")
+      (insert "#+begin_src emacs-lisp :var a=1 b=2 :results value replace\n")
+      (insert "(list :sum (+ a b) :product (* a b))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "(+ 3 4)")
+      (org-babel-execute-src-block)
+      (goto-char (point-min))
+      (search-forward "adder")
+      (org-babel-execute-src-block)
+      (let ((after-exec (buffer-substring-no-properties
+                         (point-min) (point-max)))
+            ;; Parse results
+            (results
+             (org-element-map (org-element-parse-buffer) 'fixed-width
+               (lambda (el)
+                 (org-element-property :value el))))
+            ;; Export
+            (html (org-export-as 'html nil nil t nil))
+            (has-7 (string-match-p "7" html))
+            (has-sum (string-match-p "sum" html)))
+        (list after-exec
+              results
+              has-7
+              has-sum
+              (replace-regexp-in-string
+               "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+               (replace-regexp-in-string
+                "sec:org[[:alnum:]-]+" "sec:org-id" html))))))))"##,
+    );
+}
