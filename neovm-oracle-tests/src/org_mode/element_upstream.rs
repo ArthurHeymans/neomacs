@@ -3549,3 +3549,62 @@ fn upstream_org_element_swap_a_b_extended() {
                 (org-element-map tree 'headline #'identity))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_context_parent_lineage_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha :work:\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+    (insert "Alpha body with *bold*.\n\n")
+    (insert "** Beta\n")
+    (insert "Beta body with [[https://example.org][link]].\n\n")
+    (insert "*** Gamma\n")
+    (insert "| A | B |\n|---+---|\n| 1 | 2 |\n\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+    ;; Parse and get context at various points
+    (let* ((tree (org-element-parse-buffer))
+           ;; At bold text
+           (ctx-bold (progn
+                       (goto-char (point-min))
+                       (search-forward "bold")
+                       (let ((el (org-element-context)))
+                         (list (org-element-type el)
+                               (org-element-type (org-element-parent el))
+                               (mapcar #'org-element-type
+                                       (org-element-lineage el nil t))))))
+           ;; At link
+           (ctx-link (progn
+                       (goto-char (point-min))
+                       (search-forward "example.org")
+                       (let ((el (org-element-context)))
+                         (list (org-element-type el)
+                               (org-element-property :type el)
+                               (org-element-property :path el)
+                               (org-element-type (org-element-parent el))))))
+           ;; At table cell
+           (ctx-cell (progn
+                       (goto-char (point-min))
+                       (search-forward "| 1 |")
+                       (forward-char 2)
+                       (let ((el (org-element-context)))
+                         (list (org-element-type el)
+                               (org-element-type (org-element-parent el))))))
+           ;; At src block
+           (ctx-src (progn
+                      (goto-char (point-min))
+                      (search-forward "(+ 1 2)")
+                      (let ((el (org-element-context)))
+                        (list (org-element-type el)
+                              (org-element-property :language el)
+                              (org-element-type (org-element-parent el)))))))
+      (list ctx-bold ctx-link ctx-cell ctx-src
+            (mapcar #'org-element-type
+                    (org-element-map tree t #'identity))))))"##,
+    );
+}
