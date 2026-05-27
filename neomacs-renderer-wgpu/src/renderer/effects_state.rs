@@ -253,6 +253,11 @@ impl WgpuRenderer {
             cursor_trail_positions: std::mem::take(&mut self.cursor_trail_positions),
             cursor_trail_last_pos: self.cursor_trail_last_pos,
             idle_dim_alpha: self.idle_dim_alpha,
+            noise_grain_frame: self.noise_grain_frame,
+            cursor_pulse_start: Some(self.cursor_pulse_start),
+            search_pulse_start: Some(self.search_pulse_start),
+            cursor_color_cycle_start: Some(self.cursor_color_cycle_start),
+            focus_ring_start: Some(self.focus_ring_start),
             cursor_wake_started: self.cursor_wake_started.take(),
             cursor_magnetism_entries: std::mem::take(&mut self.cursor_magnetism_entries),
             cursor_comet_positions: std::mem::take(&mut self.cursor_comet_positions),
@@ -325,6 +330,19 @@ impl WgpuRenderer {
         self.cursor_trail_positions = effects.cursor_trail_positions;
         self.cursor_trail_last_pos = effects.cursor_trail_last_pos;
         self.idle_dim_alpha = effects.idle_dim_alpha;
+        self.noise_grain_frame = effects.noise_grain_frame;
+        if let Some(start) = effects.cursor_pulse_start {
+            self.cursor_pulse_start = start;
+        }
+        if let Some(start) = effects.search_pulse_start {
+            self.search_pulse_start = start;
+        }
+        if let Some(start) = effects.cursor_color_cycle_start {
+            self.cursor_color_cycle_start = start;
+        }
+        if let Some(start) = effects.focus_ring_start {
+            self.focus_ring_start = start;
+        }
         self.cursor_wake_started = effects.cursor_wake_started;
         self.cursor_magnetism_entries = effects.cursor_magnetism_entries;
         self.cursor_comet_positions = effects.cursor_comet_positions;
