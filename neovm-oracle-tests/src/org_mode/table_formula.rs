@@ -509,6 +509,95 @@ fn org_table_marked_duration_lisp_create_columns_combo() {
 }
 
 #[test]
+fn org_table_structural_edit_formula_metadata_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+CONSTANTS: bonus=2\n")
+    (insert "#+NAME: scores\n")
+    (insert "| Name | Q1 | Q2 | Extra | Total |\n")
+    (insert "|------+----+----+-------+-------|\n")
+    (insert "| Ada | 3 | 4 | 1 | |\n")
+    (insert "| Bea | 5 | 2 | 0 | |\n")
+    (insert "| Cy | 1 | 6 | 3 | |\n")
+    (insert "|------+----+----+-------+-------|\n")
+    (insert "| Sum | | | | |\n")
+    (insert "#+TBLFM: $Total=vsum($Q1..$Extra)+$bonus::@>$Total=vsum(@2..@-1)\n")
+    (goto-char (point-min))
+    (org-table-recalculate-buffer-tables)
+    (let ((after-recalc
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (stored-before (org-table-get-stored-formulas)))
+      (goto-char (point-min))
+      (search-forward "Bea")
+      (beginning-of-line)
+      (org-table-insert-row 'below)
+      (org-table-put (org-table-current-dline) 1 "Dee" t)
+      (org-table-put (org-table-current-dline) 2 "2" t)
+      (org-table-put (org-table-current-dline) 3 "8" t)
+      (org-table-put (org-table-current-dline) 4 "4" t)
+      (org-table-copy-down 1)
+      (let ((after-insert-copy
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (goto-char (point-min))
+        (search-forward "Dee")
+        (beginning-of-line)
+        (org-table-move-row-up)
+        (goto-char (point-min))
+        (search-forward "Extra")
+        (org-table-move-column-left)
+        (let ((after-move
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-min))
+          (search-forward "Name")
+          (org-table-sort-lines nil ?N)
+          (goto-char (point-min))
+          (search-forward "Ada")
+          (org-table-goto-column 5)
+          (let ((field-before-delete
+                 (list (org-table-current-dline)
+                       (org-table-current-column)
+                       (org-table-get-field)
+                       (org-table-current-field-formula 'key 'noerror)
+                       (org-table-formula-substitute-names
+                        "$Total=vsum($Q1..$Extra)+$bonus"))))
+            (goto-char (point-min))
+            (search-forward "Q2")
+            (org-table-delete-column)
+            (goto-char (point-min))
+            (search-forward "Sum")
+            (beginning-of-line)
+            (org-table-insert-hline 'above)
+            (org-table-recalculate-buffer-tables)
+            (let ((stored-after (org-table-get-stored-formulas))
+                  (after-delete-hline
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))
+              (goto-char (point-min))
+              (search-forward "Ada")
+              (org-table-goto-column 4)
+              (list after-recalc
+                    stored-before
+                    after-insert-copy
+                    after-move
+                    field-before-delete
+                    stored-after
+                    (org-table-get-field)
+                    (org-table-current-field-formula 'key 'noerror)
+                    (org-table-get-remote-range "scores" "@2$2..@4$4")
+                    (org-table-convert-refs-to-rc "B3..D5")
+                    (org-table-convert-refs-to-an "@3$2..@5$4")
+                    (org-table-to-lisp)
+                    after-delete-hline))))))))"##,
+    );
+}
+
+#[test]
 fn org_table_hline_constants_range_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
