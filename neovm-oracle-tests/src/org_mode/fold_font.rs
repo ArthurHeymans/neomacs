@@ -856,3 +856,92 @@ fn org_cycle_plain_list_drawer_block_integrity_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_deep_visibility_property_cycle_recovery_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-max-level 5)
+          (org-cycle-global-at-bob t)
+          (org-cycle-hide-drawer-startup t)
+          (org-fontify-whole-heading-line t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "#+STARTUP: overview\n")
+      (insert "* Root\n")
+      (insert ":PROPERTIES:\n:VISIBILITY: children\n:END:\n")
+      (insert "root body\n")
+      (insert "** Alpha\nalpha body\n")
+      (insert "*** A1\nA1 body\n")
+      (insert "**** A1a\nA1a body\n")
+      (insert "***** A1a-i\nA1a-i body\n")
+      (insert "****** A1a-i-x\nA1a-i-x body\n")
+      (insert "** Beta\nbeta body\n")
+      (insert "*** B1\nB1 body\n")
+      (insert "**** B1a\nB1a body\n")
+      (insert "***** B1a-i\nB1a-i body\n")
+      (insert "* Tail\nTail body\n")
+      (let ((snapshot
+             (lambda (label)
+               (font-lock-ensure (point-min) (point-max))
+               (list label
+                     org-cycle-global-status
+                     org-cycle-subtree-status
+                     (mapcar
+                      (lambda (needle)
+                        (let ((pos (save-excursion
+                                     (goto-char (point-min))
+                                     (search-forward needle)
+                                     (point))))
+                          (list needle
+                                (invisible-p pos)
+                                (get-text-property
+                                 (line-beginning-position) 'face))))
+                      '("Root" ":VISIBILITY:" "root body" "Alpha"
+                        "alpha body" "A1" "A1 body" "A1a" "A1a body"
+                        "A1a-i" "A1a-i body" "A1a-i-x"
+                        "A1a-i-x body" "Beta" "beta body" "B1"
+                        "B1 body" "B1a-i body" "Tail" "Tail body"))
+                     (count-matches "^\\*+ " (point-min) (point-max))
+                     (split-string
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      "\n" t)))))
+            states)
+        (org-cycle-set-startup-visibility)
+        (push (funcall snapshot 'startup) states)
+        (goto-char (point-min))
+        (search-forward "A1a")
+        (beginning-of-line)
+        (dotimes (_ 4)
+          (org-cycle)
+          (push (funcall snapshot 'local-a1a) states))
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (push (funcall snapshot 'hide-beta) states)
+        (search-forward "B1a-i body")
+        (org-fold-show-context 'default)
+        (push (funcall snapshot 'context-beta) states)
+        (goto-char (point-min))
+        (dotimes (_ 4)
+          (org-cycle)
+          (push (funcall snapshot 'global-bob) states))
+        (org-fold-show-all)
+        (goto-char (point-min))
+        (search-forward "A1a-i-x body")
+        (end-of-line)
+        (insert "\npost recovery edit")
+        (push (funcall snapshot 'after-edit) states)
+        (list (nreverse states)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
