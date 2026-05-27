@@ -19,8 +19,9 @@ use strum::{EnumString, IntoStaticStr};
 // X11 color table generated at compile time from etc/rgb.txt
 include!(concat!(env!("OUT_DIR"), "/x11_colors.rs"));
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, EnumString, IntoStaticStr)]
 #[repr(usize)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
 pub enum LFaceAttr {
     Family = 1,
     Foundry,
@@ -44,28 +45,8 @@ pub enum LFaceAttr {
 }
 
 impl LFaceAttr {
-    pub(crate) const fn keyword(self) -> &'static str {
-        match self {
-            LFaceAttr::Family => ":family",
-            LFaceAttr::Foundry => ":foundry",
-            LFaceAttr::Width => ":width",
-            LFaceAttr::Height => ":height",
-            LFaceAttr::Weight => ":weight",
-            LFaceAttr::Slant => ":slant",
-            LFaceAttr::Underline => ":underline",
-            LFaceAttr::InverseVideo => ":inverse-video",
-            LFaceAttr::Foreground => ":foreground",
-            LFaceAttr::Background => ":background",
-            LFaceAttr::Stipple => ":stipple",
-            LFaceAttr::Overline => ":overline",
-            LFaceAttr::StrikeThrough => ":strike-through",
-            LFaceAttr::Box => ":box",
-            LFaceAttr::Font => ":font",
-            LFaceAttr::Inherit => ":inherit",
-            LFaceAttr::Fontset => ":fontset",
-            LFaceAttr::DistantForeground => ":distant-foreground",
-            LFaceAttr::Extend => ":extend",
-        }
+    pub(crate) fn keyword(self) -> &'static str {
+        self.into()
     }
 
     pub(crate) const fn is_discrete_boolean(self) -> bool {
@@ -80,28 +61,7 @@ impl LFaceAttr {
     }
 
     pub(crate) fn from_keyword(name: &str) -> Option<Self> {
-        match name {
-            ":family" => Some(LFaceAttr::Family),
-            ":foundry" => Some(LFaceAttr::Foundry),
-            ":width" => Some(LFaceAttr::Width),
-            ":height" => Some(LFaceAttr::Height),
-            ":weight" => Some(LFaceAttr::Weight),
-            ":slant" => Some(LFaceAttr::Slant),
-            ":underline" => Some(LFaceAttr::Underline),
-            ":inverse-video" => Some(LFaceAttr::InverseVideo),
-            ":foreground" => Some(LFaceAttr::Foreground),
-            ":background" => Some(LFaceAttr::Background),
-            ":stipple" => Some(LFaceAttr::Stipple),
-            ":overline" => Some(LFaceAttr::Overline),
-            ":strike-through" => Some(LFaceAttr::StrikeThrough),
-            ":box" => Some(LFaceAttr::Box),
-            ":font" => Some(LFaceAttr::Font),
-            ":inherit" => Some(LFaceAttr::Inherit),
-            ":fontset" => Some(LFaceAttr::Fontset),
-            ":distant-foreground" => Some(LFaceAttr::DistantForeground),
-            ":extend" => Some(LFaceAttr::Extend),
-            _ => None,
-        }
+        name.strip_prefix(':')?.parse().ok()
     }
 }
 

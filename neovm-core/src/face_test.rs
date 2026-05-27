@@ -24,6 +24,42 @@ fn color_from_name() {
 }
 
 #[test]
+fn lface_attr_keyword_mapping_matches_gnu_slots() {
+    crate::test_utils::init_test_tracing();
+    let attrs = [
+        (LFaceAttr::Family, 1, ":family"),
+        (LFaceAttr::Foundry, 2, ":foundry"),
+        (LFaceAttr::Width, 3, ":width"),
+        (LFaceAttr::Height, 4, ":height"),
+        (LFaceAttr::Weight, 5, ":weight"),
+        (LFaceAttr::Slant, 6, ":slant"),
+        (LFaceAttr::Underline, 7, ":underline"),
+        (LFaceAttr::InverseVideo, 8, ":inverse-video"),
+        (LFaceAttr::Foreground, 9, ":foreground"),
+        (LFaceAttr::Background, 10, ":background"),
+        (LFaceAttr::Stipple, 11, ":stipple"),
+        (LFaceAttr::Overline, 12, ":overline"),
+        (LFaceAttr::StrikeThrough, 13, ":strike-through"),
+        (LFaceAttr::Box, 14, ":box"),
+        (LFaceAttr::Font, 15, ":font"),
+        (LFaceAttr::Inherit, 16, ":inherit"),
+        (LFaceAttr::Fontset, 17, ":fontset"),
+        (LFaceAttr::DistantForeground, 18, ":distant-foreground"),
+        (LFaceAttr::Extend, 19, ":extend"),
+    ];
+
+    for (attr, index, keyword) in attrs {
+        assert_eq!(attr as usize, index);
+        assert_eq!(attr.keyword(), keyword);
+        assert_eq!(LFaceAttr::from_keyword(keyword), Some(attr));
+    }
+
+    assert_eq!(LFaceAttr::from_keyword("foreground"), None);
+    assert_eq!(LFaceAttr::from_keyword(":bold"), None);
+    assert_eq!(LFaceAttr::from_keyword(":italic"), None);
+}
+
+#[test]
 fn face_merge() {
     crate::test_utils::init_test_tracing();
     let base = Face {
