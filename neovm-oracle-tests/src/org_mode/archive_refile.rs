@@ -122,3 +122,155 @@ fn org_sparse_tree_match_visibility_and_map_combo() {
        (nreverse states)))))"##,
     );
 }
+
+#[test]
+fn org_refile_targets_cache_new_child_outline_path_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let* ((one (make-temp-file "org-refile-one" nil ".org"
+                              "#+TITLE: One\n* Projects\n** Alpha :work:\n*** Leaf\n* Inbox\n"))
+         (two (make-temp-file "org-refile-two" nil ".org"
+                              "#+TITLE: Two\n* Areas\n** Beta :home:\n"))
+         (org-refile-targets `((,(list one two) . (:maxlevel . 3))))
+         (org-refile-use-outline-path 'title)
+         (org-refile-use-cache t)
+         (normalize-file
+          (lambda (file)
+            (cond
+             ((null file) nil)
+             ((string-prefix-p "org-refile-one" file) "<one>")
+             ((string-prefix-p "org-refile-two" file) "<two>")
+             (t file))))
+         first second child)
+    (unwind-protect
+        (progn
+          (org-refile-cache-clear)
+          (setq first (mapcar (lambda (target)
+                                (list (car target)
+                                      (funcall normalize-file
+                                               (and (nth 1 target)
+                                                    (file-name-nondirectory
+                                                     (nth 1 target))))
+                                      (not (null (nth 3 target)))))
+                              (with-current-buffer (find-file-noselect one)
+                                (org-mode)
+                                (org-refile-get-targets))))
+          (setq second (mapcar (lambda (target)
+                                 (list (car target)
+                                       (funcall normalize-file
+                                                (and (nth 1 target)
+                                                     (file-name-nondirectory
+                                                      (nth 1 target))))
+                                       (not (null (nth 3 target)))))
+                               (with-current-buffer (find-file-noselect one)
+                                 (org-mode)
+                                 (org-refile-get-targets))))
+          (setq child
+                (with-current-buffer (find-file-noselect two)
+                  (org-mode)
+                  (let* ((targets (org-refile-get-targets))
+                         (parent (seq-find
+                                  (lambda (target)
+                                    (string-match-p "/Areas/Beta\\'" (car target)))
+                                  targets)))
+                    (org-refile-new-child parent "Gamma :new:")
+                    (save-buffer)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))
+          (list first
+                second
+                child
+                (not (null (org-refile-cache-get
+                            (expand-file-name one)
+                            "^\\*\\{1,3\\}[ \t]")))))
+      (dolist (file (list one two))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+        (when (file-exists-p file) (delete-file file))))))"##,
+    );
+}
+
+#[test]
+fn org_archive_sibling_reversed_order_stats_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-archive)
+  (with-temp-buffer
+    (let ((org-archive-reversed-order t)
+          (org-provide-todo-statistics t)
+          (org-todo-keywords '((sequence "TODO" "|" "DONE"))))
+      (org-mode)
+      (insert "* Parent [1/3]\n")
+      (insert "** DONE Old one\n")
+      (insert "Body one\n")
+      (insert "** DONE Old two\n")
+      (insert "Body two\n")
+      (insert "** TODO Keep\n")
+      (goto-char (point-min))
+      (search-forward "Old two")
+      (beginning-of-line)
+      (org-archive-to-archive-sibling)
+      (goto-char (point-min))
+      (search-forward "Old one")
+      (beginning-of-line)
+      (org-archive-to-archive-sibling)
+      (org-update-statistics-cookies t)
+      (list (replace-regexp-in-string
+             ":ARCHIVE_TIME: .*"
+             ":ARCHIVE_TIME: [stamp]"
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (mapcar
+             (lambda (needle)
+               (save-excursion
+                 (goto-char (point-min))
+                 (search-forward needle)
+                 (list needle
+                       (org-current-level)
+                       (not (null (org-invisible-p (line-end-position)))))))
+             '("Parent" "Archive" "Old one" "Old two" "Keep"))))))"##,
+    );
+}
+
+#[test]
+fn org_archive_all_done_tag_then_move_old_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-archive)
+  (with-temp-buffer
+    (let ((org-archive-location "::* Archived")
+          (org-archive-save-context-info '(time todo category olpath))
+          (org-archive-stamp-time nil)
+          (org-confirm-babel-evaluate nil))
+      (org-mode)
+      (insert "#+CATEGORY: Batch\n")
+      (insert "* Project\n")
+      (insert "** DONE Closed\nCLOSED: [2026-05-01 Fri]\n")
+      (insert "** DONE Old timestamp\nSCHEDULED: <2026-05-01 Fri>\n")
+      (insert "** TODO Active\nSCHEDULED: <2026-06-01 Mon>\n")
+      (insert "** DONE Fresh\nSCHEDULED: <2026-05-27 Wed>\n")
+      (goto-char (point-min))
+      (search-forward "Project")
+      (beginning-of-line)
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) t)))
+        (org-archive-all-done 'tag)
+        (org-archive-all-old nil))
+      (list (buffer-substring-no-properties (point-min) (point-max))
+            (org-map-entries
+             (lambda ()
+               (list (org-get-heading t t t t)
+                     (org-get-todo-state)
+                     (org-get-tags nil t)
+                     (org-entry-get nil "ARCHIVE_CATEGORY")
+                     (org-entry-get nil "ARCHIVE_TODO")))
+             nil nil)))))"##,
+    );
+}
