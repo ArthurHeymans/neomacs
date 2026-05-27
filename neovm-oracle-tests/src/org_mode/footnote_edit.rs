@@ -564,8 +564,62 @@ fn org_footnote_export_numbering_mutation_combo() {
                   (org-footnote--collect-references 'anonymous)
                   (org-footnote--collect-definitions)
                   refs-after
-                  ascii-after
-                  (buffer-substring-no-properties
-                   (point-min) (point-max))))))))"##,
+                   ascii-after
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_footnote_insert_sort_normalize_delete_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Section\n")
+    (insert "First ref[fn:beta] and second[fn:alpha].\n")
+    (insert "Third inline[fn:inline:Inline note text].\n\n")
+    (insert "[fn:alpha] Alpha definition.\n")
+    (insert "[fn:beta] Beta definition with *bold*.\n")
+    (let ((snap (lambda ()
+                  (list (org-footnote-all-labels)
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))
+      ;; Initial state
+      (let ((initial (funcall snap)))
+        ;; Insert a new footnote
+        (goto-char (point-min))
+        (search-forward "Third inline")
+        (end-of-line)
+        (org-footnote-new)
+        (insert "New footnote body.")
+        (let ((after-insert (funcall snap)))
+          ;; Normalize
+          (org-footnote-normalize)
+          (let ((after-normalize (funcall snap)))
+            ;; Sort
+            (org-footnote-sort)
+            (let ((after-sort (funcall snap)))
+              ;; Delete beta footnote
+              (org-footnote-delete "beta")
+              (let ((after-delete (funcall snap)))
+                ;; Action at footnote
+                (goto-char (point-min))
+                (search-forward "[fn:alpha")
+                (beginning-of-line)
+                (let ((action-result
+                       (condition-case nil
+                           (progn (org-footnote-action) 'ok)
+                         (error 'error))))
+                  (list initial
+                        after-insert
+                        after-normalize
+                        after-sort
+                        after-delete
+                        action-result))))))))))"##,
     );
 }
