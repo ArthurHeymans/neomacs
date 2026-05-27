@@ -968,3 +968,57 @@ fn org_babel_execute_result_type_handling_deep_state_combo() {
                (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_babel_execute_header_override_noweb_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: config\n")
+      (insert "#+begin_src emacs-lisp\n")
+      (insert "(defconst multiplier 3)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: compute\n")
+      (insert "#+begin_src emacs-lisp :var x=5 :noweb yes :results value replace\n")
+      (insert "(let ((m (progn <<config>> multiplier)))\n")
+      (insert "  (* x m))\n")
+      (insert "#+end_src\n\n")
+      (insert "#+begin_src emacs-lisp :results output replace :var val=compute\n")
+      (insert "(princ (format \"result=%s\" val))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute compute with noweb
+      (goto-char (point-min))
+      (search-forward "compute")
+      (org-babel-execute-src-block)
+      (let ((compute-result (org-babel-read-result))
+            (after-compute (buffer-substring-no-properties
+                            (point-min) (point-max))))
+        ;; Execute output with var reference
+        (goto-char (point-min))
+        (search-forward "princ")
+        (org-babel-execute-src-block)
+        (let ((output-result (org-babel-read-result))
+              (after-output (buffer-substring-no-properties
+                             (point-min) (point-max)))
+              ;; Parse results
+              (results
+               (org-element-map (org-element-parse-buffer)
+                   '(fixed-width src-block)
+                 (lambda (el)
+                   (list (org-element-type el)
+                         (org-element-property :name el)
+                         (org-element-property :value el))))))
+          (list compute-result
+                after-compute
+                output-result
+                after-output
+                results)))))))"##,
+    );
+}
