@@ -436,6 +436,61 @@ fn org_babel_tangle_collect_single_block_combo() {
 }
 
 #[test]
+fn org_babel_header_merge_insert_result_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+PROPERTY: header-args:emacs-lisp :results value replace drawer :exports both\n")
+    (insert "* Run\n")
+    (insert ":PROPERTIES:\n:header-args:emacs-lisp: :var base=5 :cache yes\n:END:\n")
+    (insert "#+NAME: calc\n")
+    (insert "#+begin_src emacs-lisp :var extra=7 :results value replace\n")
+    (insert "(+ base extra)\n")
+    (insert "#+end_src\n")
+    (goto-char (point-min))
+    (search-forward "begin_src")
+    (let* ((parsed (org-babel-parse-header-arguments
+                    ":results output drawer :var local=3 :exports code"))
+           (info (org-babel-get-src-block-info))
+           (merged (org-babel-merge-params (nth 2 info) parsed))
+           (processed (org-babel-process-params merged))
+           (hash (org-babel-sha1-hash info))
+           result-pos after-insert)
+      (org-babel-insert-result
+       "line one\nline two"
+       '("output" "drawer" "replace")
+       info
+       hash
+       "emacs-lisp"
+       "0.01")
+      (setq result-pos
+            (org-babel-where-is-src-block-result nil info hash))
+      (setq after-insert
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "begin_src")
+      (org-babel-remove-result info)
+      (list parsed
+            (nth 2 info)
+            merged
+            (list (assq :result-params processed)
+                  (assq :exports processed)
+                  (assq :cache processed)
+                  (assq :var processed))
+            (and result-pos (- result-pos (point-min)))
+            after-insert
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_tangle_write_noweb_comments_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
