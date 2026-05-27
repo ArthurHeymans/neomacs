@@ -191,3 +191,61 @@ fn org_columns_format_store_insert_delete_move_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_duration_parse_format_summary_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-duration)
+  (require 'org-colview)
+  (let ((org-duration-units '(("min" . 1) ("h" . 60) ("d" . 450)
+                              ("w" . 2250) ("pt" . 15)))
+        (org-duration-format '(("w" . nil) ("d" . nil)
+                               (special . h:mm)))
+        (samples '("" 7 "1:02" "2:03:30" "1d 2h 15min"
+                   "1w 2d 3:30" "4pt 0:45" "bad unit")))
+    (org-duration-set-regexps)
+    (let ((converted
+           (mapcar (lambda (sample)
+                     (list sample
+                           (org-duration-p sample)
+                           (condition-case err
+                               (org-duration-to-minutes sample)
+                             (error (cons (car err) (cdr err))))
+                           (and (stringp sample)
+                                (condition-case nil
+                                    (org-duration-to-minutes sample t)
+                                  (error 'canonical-error)))))
+                   samples))
+          (formatted
+           (mapcar (lambda (entry)
+                     (condition-case err
+                         (apply #'org-duration-from-minutes entry)
+                       (error (cons (car err) (cdr err)))))
+                   '((0) (75) (450) (2925) (-75)
+                     (2925 h:mm nil)
+                     (2925 h:mm:ss nil)
+                     (2925 (("d" . nil) ("h" . t) ("min" . t)) nil)
+                     (2925 (("d" . nil) ("h" . t) ("min" . t)) t)
+                     (75 ((special . 2)) nil))))
+          (hmm (mapcar #'org-duration-h:mm-only-p
+                       '(("1:02" "2:03")
+                         ("1:02:03" "2:03")
+                         ("1h" "2:03")
+                         ("1d 2:03")))))
+      (list converted
+            formatted
+            hmm
+            (org-columns--summary-sum-times
+             '("1:00" "2h" "3pt" "0:30") nil)
+            (org-columns--summary-min-time
+             '("1:00" "2h" "3pt" "0:30") nil)
+            (org-columns--summary-max-time
+             '("1:00" "2h" "3pt" "0:30") nil)
+            (org-columns--summary-mean-time
+             '("1:00" "2h" "3pt" "0:30") nil)))))"##,
+    );
+}
