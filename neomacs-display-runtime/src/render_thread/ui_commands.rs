@@ -203,7 +203,8 @@ impl RenderApp {
                     y,
                     items.len()
                 );
-                let (fs, lh, cw) = if emacs_frame_id == 0 {
+                let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
+                let (fs, lh, cw) = if is_primary_frame {
                     self.primary_render_state()
                         .map(|a| {
                             let atlas = &a.glyph_atlas;
@@ -230,7 +231,7 @@ impl RenderApp {
                 let mut menu = PopupMenuState::new(x, y, items, title, fs, lh, cw);
                 menu.face_fg = fg;
                 menu.face_bg = bg;
-                if emacs_frame_id == 0 {
+                if is_primary_frame {
                     self.set_primary_popup_menu(Some(menu));
                     self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
@@ -270,7 +271,8 @@ impl RenderApp {
                 bg_b,
             } => {
                 tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
-                let (fs, lh, cw, screen_w, screen_h) = if emacs_frame_id == 0 {
+                let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
+                let (fs, lh, cw, screen_w, screen_h) = if is_primary_frame {
                     let (fs, lh, cw) = self
                         .primary_render_state()
                         .map(|primary_frame| {
@@ -319,7 +321,7 @@ impl RenderApp {
                     lh,
                     cw,
                 );
-                if emacs_frame_id == 0 {
+                if is_primary_frame {
                     self.set_primary_tooltip(Some(tooltip));
                     self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
@@ -347,9 +349,7 @@ impl RenderApp {
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
                 let now = std::time::Instant::now();
-                if emacs_frame_id == 0
-                    || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
-                {
+                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_visual_bell_start(Some(now));
                     if self.effects.cursor_error_pulse.enabled {
                         if let (Some(renderer), Some(primary_state)) = (

@@ -1,5 +1,6 @@
 use super::RenderApp;
 use crate::thread_comm::{RenderCommand, ThreadComms};
+use neomacs_display_protocol::PopupMenuItem;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use winit::keyboard::{Key, NamedKey};
@@ -190,4 +191,67 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
         app.primary_render_state().map(|frame| frame.emacs_frame_id),
         Some(0x1000)
     );
+}
+
+#[test]
+fn adopted_primary_frame_id_targets_primary_popup_menu() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.scale_factor,
+        app.primary_fps_enabled(),
+    ));
+    app.frame_windows.adopt_primary_frame_id(0x1000);
+
+    app.handle_ui_command(RenderCommand::ShowPopupMenu {
+        emacs_frame_id: 0x1000,
+        x: 10.0,
+        y: 20.0,
+        items: vec![PopupMenuItem {
+            label: "Open".to_string(),
+            shortcut: String::new(),
+            enabled: true,
+            separator: false,
+            submenu: false,
+            depth: 0,
+        }],
+        title: None,
+        fg: None,
+        bg: None,
+    })
+    .expect("show popup on adopted primary");
+
+    assert!(app.primary_popup_menu().is_some());
+    assert!(app.primary_dirty());
+}
+
+#[test]
+fn adopted_primary_frame_id_targets_primary_visual_bell() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.scale_factor,
+        app.primary_fps_enabled(),
+    ));
+    app.frame_windows.adopt_primary_frame_id(0x1000);
+
+    app.handle_ui_command(RenderCommand::VisualBell {
+        emacs_frame_id: 0x1000,
+    })
+    .expect("visual bell on adopted primary");
+
+    assert!(
+        app.primary_render_state()
+            .and_then(|frame| frame.visual_bell_start)
+            .is_some()
+    );
+    assert!(app.primary_dirty());
 }

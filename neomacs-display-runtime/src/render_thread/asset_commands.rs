@@ -365,9 +365,7 @@ impl RenderApp {
                             window_state.render.frame_dirty = true;
                         }
                     }
-                    if emacs_frame_id == 0
-                        || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
-                    {
+                    if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                         if let Some(primary_frame) = self.primary_render_state_mut() {
                             primary_frame.floating_webkits.push(overlay);
                             primary_frame.frame_dirty = true;
@@ -409,9 +407,7 @@ impl RenderApp {
                             window_state.render.frame_dirty = true;
                         }
                     }
-                    if emacs_frame_id == 0
-                        || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
-                    {
+                    if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                         self.mark_primary_dirty();
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.frame_dirty = true;

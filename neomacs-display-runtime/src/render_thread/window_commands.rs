@@ -54,7 +54,7 @@ impl RenderApp {
                 emacs_frame_id,
                 title,
             } => {
-                if emacs_frame_id == 0 {
+                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.handle_window_command(RenderCommand::SetWindowTitle { title })?;
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.set_title(title);
@@ -103,7 +103,7 @@ impl RenderApp {
                     width,
                     height
                 );
-                if emacs_frame_id == 0 {
+                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.primary_geometry_hints = Some(geometry_hints);
                     if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
@@ -132,7 +132,7 @@ impl RenderApp {
                     geometry_hints.width_inc,
                     geometry_hints.height_inc
                 );
-                if emacs_frame_id == 0 {
+                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.primary_geometry_hints = Some(geometry_hints);
                     if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
@@ -194,9 +194,7 @@ impl RenderApp {
             }
             RenderCommand::DestroyWindow { emacs_frame_id } => {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
-                if emacs_frame_id == 0
-                    || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
-                {
+                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.frame_windows.take_primary_window();
                     self.frame_windows.clear_primary_mapping();
                     #[cfg(test)]

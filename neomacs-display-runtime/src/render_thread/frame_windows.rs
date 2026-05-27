@@ -392,6 +392,10 @@ impl GuiFrameWindowManager {
         self.primary_emacs_frame_id.unwrap_or(0)
     }
 
+    pub fn is_primary_frame_id(&self, emacs_frame_id: u64) -> bool {
+        emacs_frame_id == 0 || self.primary_emacs_frame_id == Some(emacs_frame_id)
+    }
+
     pub(super) fn primary_window(&self) -> Option<&GuiFrameWindowState> {
         self.primary_window.as_ref()
     }
