@@ -491,3 +491,70 @@ fn org_dblock_update_all_errors_indentation_lifecycle_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_clocktable_columnview_custom_dblock_update_regen_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha :work:\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+    (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n")
+    (insert ":END:\n")
+    (insert "** Sub A1\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n")
+    (insert ":END:\n")
+    (insert "* Beta :home:\n")
+    (insert ":PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 15:30] =>  0:30\n")
+    (insert ":END:\n")
+    (insert "#+BEGIN: clocktable :maxlevel 2 :scope file\n")
+    (insert "#+END:\n\n")
+    (insert "#+BEGIN: columnview :hlines 1 :id local\n")
+    (insert "#+END:\n\n")
+    (insert "#+BEGIN: clocktable :maxlevel 3 :scope file :block today\n")
+    (insert "#+END:\n")
+    (let ((snap (lambda ()
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      ;; Initial state
+      (let ((initial (funcall snap)))
+        ;; Update first clocktable
+        (goto-char (point-min))
+        (search-forward "clocktable :maxlevel 2")
+        (org-dblock-update)
+        (let ((after-ct1 (funcall snap)))
+          ;; Update columnview
+          (goto-char (point-min))
+          (search-forward "columnview")
+          (org-dblock-update)
+          (let ((after-col (funcall snap)))
+            ;; Update all dblocks
+            (org-dblock-update)
+            (let ((after-all (funcall snap)))
+              ;; Mutate clock data and re-update
+              (goto-char (point-min))
+              (search-forward "Sub A1")
+              (end-of-line)
+              (insert "\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 16:00]--[2026-05-27 Wed 16:30] =>  0:30\n:END:")
+              (goto-char (point-min))
+              (search-forward "clocktable :maxlevel 2")
+              (org-dblock-update)
+              (let ((after-mutate (funcall snap)))
+                (list initial
+                      after-ct1
+                      after-col
+                      after-all
+                      after-mutate)))))))))"##,
+    );
+}
