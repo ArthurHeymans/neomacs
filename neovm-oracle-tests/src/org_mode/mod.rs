@@ -1460,6 +1460,7 @@ mod strong_edge_deep_2;
 mod strong_edge_deep_3;
 mod strong_edge_deep_4;
 mod strong_edge_deep_5;
+mod strong_edge_deep_6;
 mod strong_exa_combos;
 mod strong_final_combos;
 mod strong_final_comprehensive;
