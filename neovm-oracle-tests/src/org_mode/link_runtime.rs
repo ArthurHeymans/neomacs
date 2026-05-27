@@ -1138,3 +1138,100 @@ fn org_link_attachment_custom_export_visibility_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_link_abbrev_safety_legacy_follow_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let ((warnings nil)
+        (follow-calls nil)
+        (org-link-abbrev-alist-local
+         '(("local" . "https://local.example/%s")
+           ("hexlocal" . "https://hex.local/%h")
+           ("unsafe" . "https://unsafe.example/%(oracle-link-unsafe)")
+           ("safe" . "https://safe.example/%(oracle-link-safe)")))
+        (org-link-abbrev-alist
+         '(("global" . "https://global.example/%s")
+           ("symbol" . oracle-link-symbol)
+           ("plain" . "https://plain.example/"))))
+    (defun oracle-link-safe (tag)
+      (format "safe:%s" (or tag "")))
+    (put 'oracle-link-safe 'org-link-abbrev-safe t)
+    (defun oracle-link-unsafe (tag)
+      (format "unsafe:%s" (or tag "")))
+    (defun oracle-link-symbol (tag)
+      (format "symbol:%s" (or tag "")))
+    (org-link-set-parameters
+     "legacy-follow"
+     :follow (lambda (path)
+               (push (list path 'one-arg) follow-calls)))
+    (org-link-set-parameters
+     "modern-follow"
+     :follow (lambda (path arg)
+               (push (list path arg 'two-arg) follow-calls)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Links\n")
+      (insert "[[legacy-follow:old/path][Legacy]]\n")
+      (insert "[[modern-follow:new/path][Modern]]\n")
+      (font-lock-ensure (point-min) (point-max))
+      (cl-letf (((symbol-function 'org-display-warning)
+                 (lambda (message)
+                   (push message warnings))))
+        (let* ((expanded
+                (mapcar #'org-link-expand-abbrev
+                        '("local:a b"
+                          "hexlocal:a b/c"
+                          "global:g h"
+                          "symbol:tag value"
+                          "plain:tail"
+                          "safe:abc"
+                          "unsafe:secret"
+                          "unsafe:again"
+                          "missing:value"
+                          "local")))
+               (after-abbrevs
+                (list org-link-abbrev-alist-local
+                      org-link-abbrev-alist
+                      warnings))
+               (props
+                (mapcar
+                 (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward needle)
+                     (list needle
+                           (get-text-property (match-beginning 0) 'face)
+                           (get-text-property (match-beginning 0) 'mouse-face)
+                           (keymapp
+                            (get-text-property
+                             (match-beginning 0) 'keymap)))))
+                 '("Legacy" "Modern"))))
+          (org-link-open-from-string
+           "[[legacy-follow:from-string][Legacy]]" '(4))
+          (org-link-open-from-string
+           "[[modern-follow:from-string][Modern]]" '(16))
+          (let* ((tree (org-element-parse-buffer))
+                 (links
+                  (org-element-map tree 'link
+                    (lambda (link)
+                      (list (org-element-property :type link)
+                            (org-element-property :path link)
+                            (org-element-property :raw-link link)
+                            (and (org-element-contents-begin link)
+                                 (buffer-substring-no-properties
+                                  (org-element-contents-begin link)
+                                  (org-element-contents-end link))))))))
+            (list expanded
+                  after-abbrevs
+                  props
+                  links
+                  (nreverse follow-calls)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
