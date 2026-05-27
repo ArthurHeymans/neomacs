@@ -177,3 +177,92 @@ fn org_columnview_dblock_filters_tblfm_links_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_custom_dblock_nested_table_rewrite_all_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (let ((org-dynamic-block-alist nil)
+        (calls nil))
+    (defun org-dblock-write:oracle-matrix (params)
+      (push (list (plist-get params :name)
+                  (plist-get params :label)
+                  (plist-get params :rows)
+                  (plist-get params :content)
+                  (plist-get params :indentation-column))
+            calls)
+      (let ((label (plist-get params :label))
+            (rows (plist-get params :rows)))
+        (insert (format "- label :: %s\n" label))
+        (insert "| idx | value | double |\n")
+        (insert "|-----+-------+--------|\n")
+        (cl-loop for row in rows
+                 for idx from 1
+                 do (insert (format "| %d | %s | stale |\n" idx row)))
+        (insert "#+TBLFM: $3=$2*2\n")))
+    (org-dynamic-block-define
+     "oracle-matrix"
+     (lambda ()
+       (interactive)
+       (org-create-dblock
+        '(:name "oracle-matrix" :label "inserted" :rows (4 5)))))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Blocks\n")
+      (insert "  #+BEGIN: oracle-matrix :label \"alpha\" :rows (1 2 3)\n")
+      (insert "  old alpha\n")
+      (insert "  #+END:\n\n")
+      (insert "** Child\n")
+      (insert "#+BEGIN: oracle-matrix :label \"beta\" :rows (7 8)\n")
+      (insert "| stale | table |\n")
+      (insert "#+END:\n\n")
+      (goto-char (point-max))
+      (org-dynamic-block-insert-dblock "oracle-matrix")
+      (let ((types-before (org-dynamic-block-types))
+            prepared-alpha after-alpha after-all ast table-summaries)
+        (goto-char (point-min))
+        (search-forward "alpha")
+        (org-beginning-of-dblock)
+        (setq prepared-alpha (org-prepare-dblock))
+        (org-dblock-write:oracle-matrix prepared-alpha)
+        (search-backward "#+BEGIN: oracle-matrix")
+        (org-update-dblock)
+        (setq after-alpha
+              (buffer-substring-no-properties
+               (point-min) (point-max)))
+        (org-update-all-dblocks)
+        (setq after-all
+              (buffer-substring-no-properties
+               (point-min) (point-max)))
+        (setq table-summaries
+              (let (out)
+                (goto-char (point-min))
+                (while (search-forward "| idx |" nil t)
+                  (org-table-align)
+                  (org-table-recalculate 'all)
+                  (push (org-table-to-lisp) out))
+                (nreverse out)))
+        (setq ast
+              (org-element-map (org-element-parse-buffer)
+                  '(dynamic-block plain-list table table-row headline)
+                (lambda (e)
+                  (list (org-element-type e)
+                        (org-element-property :name e)
+                        (org-element-property :begin e)
+                        (org-element-property :end e)))))
+        (list types-before
+              (functionp (org-dynamic-block-function "oracle-matrix"))
+              prepared-alpha
+              (nreverse calls)
+              after-alpha
+              after-all
+              table-summaries
+              ast
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
