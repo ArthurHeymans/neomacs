@@ -250,3 +250,118 @@ fn org_publish_components_index_file_combo() {
       (delete-directory pub t))))"##,
     );
 }
+
+#[test]
+fn org_publish_custom_hooks_cache_sitemap_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((root (make-temp-file "org-publish-custom" t))
+         (pub (make-temp-file "org-publish-custom-out" t))
+         (org-publish-use-timestamps-flag nil)
+         (org-publish-timestamp-directory
+          (expand-file-name "timestamps" root))
+         (calls nil)
+         (publisher
+          (lambda (plist filename pub-dir)
+            (push (list 'publish
+                        (file-relative-name filename root)
+                        (file-relative-name pub-dir root)
+                        (plist-get plist :custom))
+                  calls)
+            (let ((out (expand-file-name
+                        (concat (file-name-base filename) ".txt")
+                        pub-dir)))
+              (with-temp-file out
+                (insert "PUBLISHED:" (file-name-nondirectory filename)
+                        ":" (plist-get plist :custom)))
+              out)))
+         (formatter
+          (lambda (entry style project)
+            (format "ENTRY[%s:%s:%s:%s]"
+                    entry
+                    style
+                    (org-publish-find-title entry project)
+                    (org-publish-find-date entry project))))
+         (sitemap-fn
+          (lambda (title list)
+            (push (list 'sitemap title list) calls)
+            (concat "#+TITLE: " title "\n"
+                    (org-list-to-org list))))
+         (org-publish-project-alist
+          `(("custom"
+             :base-directory ,root
+             :base-extension "org"
+             :publishing-directory ,pub
+             :recursive nil
+             :custom "value"
+             :auto-sitemap t
+             :sitemap-title "Custom Map"
+             :sitemap-filename "map.org"
+             :sitemap-style list
+             :sitemap-sort-files alphabetically
+             :sitemap-format-entry ,formatter
+             :sitemap-function ,sitemap-fn
+             :preparation-function
+             ,(lambda (plist)
+                (push (list 'prepare
+                            (file-name-nondirectory
+                             (plist-get plist :base-directory)))
+                      calls))
+             :completion-function
+             ,(lambda (plist)
+                (push (list 'complete
+                            (file-name-nondirectory
+                             (plist-get plist :publishing-directory)))
+                      calls))
+             :publishing-function ,publisher))))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "b.org" root)
+            (insert "#+TITLE: Bee\n#+DATE: <2026-05-28 Thu>\n* B\n"))
+          (with-temp-file (expand-file-name "a.org" root)
+            (insert "#+TITLE: Aye\n#+DATE: <2026-05-27 Wed>\n* A\n"))
+          (let* ((project (assoc "custom" org-publish-project-alist))
+                 (base-files-before
+                  (sort (mapcar (lambda (file)
+                                  (file-relative-name file root))
+                                (org-publish-get-base-files project))
+                        #'string<))
+                 (expanded (org-publish-expand-projects
+                            org-publish-project-alist)))
+            (org-publish-cache-set-file-property
+             (expand-file-name "a.org" root) :probe "cached")
+            (org-publish-project "custom" t)
+            (let ((map-file (expand-file-name "map.org" root))
+                  (a-out (expand-file-name "a.txt" pub))
+                  (b-out (expand-file-name "b.txt" pub)))
+              (list base-files-before
+                    (mapcar #'car expanded)
+                    (org-publish-property :custom project)
+                    (org-publish-cache-get-file-property
+                     (expand-file-name "a.org" root) :probe)
+                    (file-exists-p
+                     (org-publish-timestamp-filename
+                      (expand-file-name "a.org" root)
+                      pub publisher))
+                    (nreverse calls)
+                    (with-temp-buffer
+                      (insert-file-contents map-file)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))
+                    (mapcar
+                     (lambda (file)
+                       (list (file-name-nondirectory file)
+                             (file-exists-p file)
+                             (and (file-exists-p file)
+                                  (with-temp-buffer
+                                    (insert-file-contents file)
+                                    (buffer-substring-no-properties
+                                     (point-min) (point-max))))))
+                     (list a-out b-out))))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}
