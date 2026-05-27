@@ -94,6 +94,7 @@ mod ultra_strict;
 mod xenna_strict;
 mod yank_dnd;
 mod yotta_strict;
+mod zeta_export;
 mod zetta_strict;
 
 #[test]
