@@ -115,3 +115,54 @@ fn org_datetree_month_and_day_find_existing_combo() {
        (org-outline-level)))))"#,
     );
 }
+
+#[test]
+fn org_datetree_dual_tree_cleanup_level_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (let ((org-datetree-add-timestamp 'active))
+      (org-mode)
+      (insert "* Daily\n:PROPERTIES:\n:DATE_TREE: t\n:END:\n")
+      (insert "* Weekly\n:PROPERTIES:\n:WEEK_TREE: t\n:END:\n")
+      (insert "* Loose\n")
+      (goto-char (point-min))
+      (search-forward "Daily")
+      (beginning-of-line)
+      (org-datetree-file-entry-under "* Day A\nBody A\n" '(5 27 2026))
+      (goto-char (point-min))
+      (search-forward "Daily")
+      (beginning-of-line)
+      (org-datetree-file-entry-under "* Day B\n<2026-05-29 Fri>\n" '(5 29 2026))
+      (goto-char (point-min))
+      (search-forward "Weekly")
+      (beginning-of-line)
+      (org-datetree-find-iso-week-create '(5 27 2026) 'subtree-at-point)
+      (insert "\n**** Week entry\n")
+      (goto-char (point-min))
+      (search-forward "Day A")
+      (insert "\nMove marker <2026-05-28 Thu>\n")
+      (org-datetree-cleanup)
+      (let (heads)
+        (org-element-map (org-element-parse-buffer) 'headline
+          (lambda (headline)
+            (push (list (org-element-property :level headline)
+                        (org-element-property :raw-value headline))
+                  heads)))
+        (list (nreverse heads)
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle (org-outline-level))))
+                      '("Daily" "2026" "2026-05 May"
+                        "2026-05-28 Thursday" "Day A"
+                        "Weekly" "2026-W22" "Week entry" "Loose"))
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"#,
+    );
+}
