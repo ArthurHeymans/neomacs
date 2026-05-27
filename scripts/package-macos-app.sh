@@ -16,12 +16,12 @@ Environment:
 
 Output:
   dist/neomacs-{version}-aarch64-apple-darwin.dmg
+  dist/neomacs.app
 USAGE
 }
 
 skip_build=0
 smoke=1
-no_dmg=0
 
 while (($#)); do
   case "$1" in
@@ -57,8 +57,9 @@ cd "$repo_root"
 
 dist_dir="$repo_root/dist"
 version="$(get_version)"
-app_name="NEO Emacs"
-app_bundle="$dist_dir/$app_name.app"
+product_name="NEO Emacs"
+app_bundle_name="neomacs"
+app_bundle="$dist_dir/$app_bundle_name.app"
 dmg_name="neomacs-${version}-aarch64-apple-darwin"
 dmg="$dist_dir/$dmg_name.dmg"
 
@@ -89,7 +90,17 @@ for binary in neomacs neomacs-temacs bootstrap-neomacs mock-display; do
 done
 
 install -m 0644 "$release_dir/neomacs.pdump" \
-  "$app_bundle/Contents/Resources/neomacs/neomacs.pdump"
+  "$app_bundle/Contents/MacOS/neomacs.pdump"
+
+fingerprint="$("$release_dir/neomacs" --fingerprint | tr -d '[:space:]')"
+if [[ ! "$fingerprint" =~ ^[[:xdigit:]]{64}$ ]]; then
+  echo "invalid neomacs fingerprint from $release_dir/neomacs --fingerprint: $fingerprint" >&2
+  exit 1
+fi
+ln -f "$app_bundle/Contents/MacOS/neomacs.pdump" \
+  "$app_bundle/Contents/MacOS/neomacs-${fingerprint}.pdump" \
+  || install -m 0644 "$release_dir/neomacs.pdump" \
+    "$app_bundle/Contents/MacOS/neomacs-${fingerprint}.pdump"
 
 cp -a lisp "$app_bundle/Contents/Resources/neomacs/"
 cp -a etc "$app_bundle/Contents/Resources/neomacs/"
@@ -103,9 +114,9 @@ cat >"$app_bundle/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>NEO Emacs</string>
+  <string>neomacs</string>
   <key>CFBundleDisplayName</key>
-  <string>NEO Emacs</string>
+  <string>${product_name}</string>
   <key>CFBundleExecutable</key>
   <string>neomacs</string>
   <key>CFBundleIdentifier</key>
@@ -123,7 +134,7 @@ cat >"$app_bundle/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>CFBundleIconFile</key>
-  <string>NEO Emacs</string>
+  <string>neomacs</string>
 </dict>
 </plist>
 PLIST
@@ -131,7 +142,7 @@ PLIST
 if [[ -f assets/logo-128.png ]]; then
   mkdir -p "$app_bundle/Contents/Resources"
   sips -s format icns assets/logo-128.png \
-    --out "$app_bundle/Contents/Resources/NEO Emacs.icns" \
+    --out "$app_bundle/Contents/Resources/neomacs.icns" \
     2>/dev/null || true
 fi
 
@@ -162,7 +173,7 @@ cp -a "$app_bundle" "$dmg_staging/"
 ln -sf /Applications "$dmg_staging/Applications"
 
 hdiutil create \
-  -volname "$app_name" \
+  -volname "$app_bundle_name" \
   -srcfolder "$dmg_staging" \
   -ov \
   -format UDZO \
