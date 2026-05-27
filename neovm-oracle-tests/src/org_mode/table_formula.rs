@@ -1241,6 +1241,63 @@ fn org_table_field_edit_recalc_range_dump_deep_state_combo() {
               after-edit
               banana-after
               total-after
-              stored)))))"##,
+               stored)))))"##,
+    );
+}
+
+#[test]
+fn org_table_sort_region_hline_formula_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | Score |\n")
+    (insert "|------+-------|\n")
+    (insert "| Charlie | 70 |\n")
+    (insert "| Alice | 95 |\n")
+    (insert "| Bob | 85 |\n")
+    (insert "|------+-------|\n")
+    (insert "| Avg | |\n")
+    (insert "#+TBLFM: @>$2=vmean(@2..@-1)\n")
+    ;; Initial state
+    (let ((initial (buffer-substring-no-properties
+                    (point-min) (point-max)))
+          (initial-lisp (org-table-to-lisp)))
+      ;; Sort by name alphabetically
+      (goto-char (point-min))
+      (search-forward "Charlie")
+      (beginning-of-line)
+      (org-table-sort-lines nil ?a)
+      (let ((after-sort-name (buffer-substring-no-properties
+                              (point-min) (point-max)))
+            (sort-name-lisp (org-table-to-lisp)))
+        ;; Sort by score numerically descending
+        (goto-char (point-min))
+        (search-forward "Alice")
+        (beginning-of-line)
+        (org-table-sort-lines t ?n)
+        (let ((after-sort-score (buffer-substring-no-properties
+                                 (point-min) (point-max)))
+              (sort-score-lisp (org-table-to-lisp)))
+          ;; Recalculate
+          (goto-char (point-min))
+          (org-table-recalculate-buffer-tables)
+          (let ((after-recalc (buffer-substring-no-properties
+                               (point-min) (point-max)))
+                (recalc-lisp (org-table-to-lisp))
+                (avg-val (progn
+                           (goto-char (point-min))
+                           (search-forward "Avg")
+                           (org-table-goto-column 2)
+                           (org-table-get-field))))
+            (list initial-lisp
+                  sort-name-lisp
+                  sort-score-lisp
+                  recalc-lisp
+                  avg-val
+                  after-recalc)))))))"##,
     );
 }
