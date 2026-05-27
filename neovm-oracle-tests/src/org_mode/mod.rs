@@ -35,6 +35,7 @@ mod link_runtime;
 mod list_checkbox;
 mod macro_include;
 mod mobile_workflow;
+mod navigation_edit;
 mod num_workflow;
 mod ox_org_native;
 mod persist_workflow;
