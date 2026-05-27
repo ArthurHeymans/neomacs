@@ -729,3 +729,74 @@ fn org_babel_dir_default_dir_header_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_babel_execute_buffer_inline_call_remove_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: double\n")
+      (insert "#+begin_src emacs-lisp :var n=3 :results value replace\n")
+      (insert "(* n 2)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+CALL: double(n=7) :results value replace\n\n")
+      (insert "Inline call_double[:results raw](n=5) here.\n\n")
+      (insert "#+begin_src emacs-lisp :results output replace\n")
+      (insert "(princ \"output-block\")\n")
+      (insert "#+end_src\n\n")
+      ;; Execute buffer
+      (org-babel-execute-buffer)
+      (let ((after-execute (buffer-substring-no-properties
+                            (point-min) (point-max)))
+            (call-result
+             (progn
+               (goto-char (point-min))
+               (search-forward "CALL: double")
+               (when (org-babel-where-is-src-block-result)
+                 (goto-char (org-babel-where-is-src-block-result))
+                 (forward-line 1)
+                 (buffer-substring-no-properties
+                  (line-beginning-position) (line-end-position)))))
+            (inline-result
+             (progn
+               (goto-char (point-min))
+               (search-forward "Inline call_double")
+               (end-of-line)
+               (search-backward "call_double")
+               (search-forward "=>")
+               (buffer-substring-no-properties
+                (point) (line-end-position))))
+            (elements
+             (org-element-map (org-element-parse-buffer)
+                 '(babel-call inline-babel-call src-block)
+               (lambda (el)
+                 (list (org-element-type el)
+                       (org-element-property :call el)
+                       (org-element-property :value el))))))
+        ;; Remove inline result
+        (goto-char (point-min))
+        (search-forward "call_double")
+        (org-babel-remove-inline-result)
+        (let ((after-remove (buffer-substring-no-properties
+                             (point-min) (point-max))))
+          ;; Remove block result
+          (goto-char (point-min))
+          (search-forward "output-block")
+          (org-babel-remove-result)
+          (let ((after-remove-block (buffer-substring-no-properties
+                                     (point-min) (point-max))))
+            (list after-execute
+                  call-result
+                  inline-result
+                  elements
+                  after-remove
+                  after-remove-block)))))))))"##,
+    );
+}
