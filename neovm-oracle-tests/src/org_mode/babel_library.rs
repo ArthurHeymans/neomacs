@@ -1080,6 +1080,47 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_multiple_named_results_order_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: first\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'first-val\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: second\n")
+      (insert "#+begin_src emacs-lisp :var prev=first :results value replace\n")
+      (insert "(list prev 'second-val)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: third\n")
+      (insert "#+begin_src emacs-lisp :var prev=second :results output replace\n")
+      (insert "(princ (format \"chain=%S\" prev))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dolist (name '("first" "second" "third"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read all results in order
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_noweb_var_chain_output_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
