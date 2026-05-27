@@ -104,6 +104,120 @@ fn org_ctags_point_append_narrow_decline_combo() {
 }
 
 #[test]
+fn org_ctags_enable_create_visit_interactive_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-ctags)
+  (let* ((root (make-temp-file "org-ctags-flow" t))
+         (main (expand-file-name "main.org" root))
+         (existing (expand-file-name "Existing.org" root))
+         (tags (expand-file-name "TAGS" root))
+         (default-directory root)
+         (tags-file-name tags)
+         (org-ctags-new-topic-template
+          "* <<%t>>\nCreated body for %t.\n\n")
+         (org-ctags-open-link-functions
+          '(org-ctags-find-tag
+            org-ctags-visit-buffer-or-file
+            org-ctags-append-topic
+            org-ctags-fail-silently))
+         (org-open-link-functions nil)
+         (org-ctags-find-tag-history nil)
+         (commands nil)
+         (xref-calls nil))
+    (unwind-protect
+        (progn
+          (with-temp-file main
+            (insert "Alpha\n* Main\nSee [[Alpha]] and [[Fresh Topic]].\n"))
+          (with-temp-file existing
+            (insert "* Existing root\n"))
+          (with-temp-file tags
+            (insert "\f\n" main ",40\n"
+                    "Alpha\177Alpha\0011,1\n"
+                    "Beta Tag\177Beta Tag\0012,12\n"))
+          (cl-letf (((symbol-function 'shell-command)
+                     (lambda (cmd)
+                       (push cmd commands)
+                       (with-temp-file tags
+                         (insert "\f\n" main ",80\n"
+                                 "Alpha\177Alpha\0011,1\n"
+                                 "Beta Tag\177Beta Tag\0012,12\n"
+                                 "Fresh Topic\177Fresh Topic\0013,33\n"))
+                       0))
+                    ((symbol-function 'xref-find-definitions)
+                     (lambda (tag)
+                       (push tag xref-calls)
+                       (when (string= tag "missing")
+                         (error "missing"))
+                       t))
+                    ((symbol-function 'completing-read)
+                     (let ((answers '("Alpha" "New Topic")))
+                       (lambda (&rest _)
+                         (pop answers)))))
+            (with-current-buffer (find-file-noselect main)
+              (org-mode)
+              (let ((before-hooks org-open-link-functions))
+                (org-ctags-enable)
+                (let ((enabled-hooks org-open-link-functions)
+                      (find-default
+                       (get 'org-mode 'find-tag-default-function)))
+                  (org-ctags-create-tags root)
+                  (visit-tags-table tags t)
+                  (org--ctags-load-tag-list)
+                  (org-ctags-find-tag-interactive)
+                  (org-ctags-find-tag-interactive)
+                  (let ((interactive-text
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))
+                        (history org-ctags-find-tag-history)
+                        (tag-list org-ctags-tag-list)
+                        (found (org-ctags-get-filename-for-tag
+                                "Fresh Topic")))
+                    (let ((opened-buffer
+                           (progn
+                             (org-ctags-visit-buffer-or-file "Existing")
+                             (buffer-name)))
+                          (created-buffer
+                           (progn
+                             (org-ctags-visit-buffer-or-file
+                              "Created" t)
+                             (list (buffer-name)
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max))))))
+                      (with-current-buffer (find-file-noselect main)
+                        (org-ctags-unload-function)
+                        (list before-hooks
+                              (mapcar #'symbol-name enabled-hooks)
+                              find-default
+                              (sort tag-list #'string<)
+                              (list (file-name-nondirectory (nth 0 found))
+                                    (nth 1 found)
+                                    (nth 2 found))
+                              (reverse xref-calls)
+                              history
+                              (replace-regexp-in-string
+                               (regexp-quote root)
+                               "<root>"
+                               (car commands))
+                              (string-match-p "New Topic"
+                                              interactive-text)
+                              opened-buffer
+                              created-buffer
+                              (get 'org-mode
+                                   'find-tag-default-function)
+                              (mapcar #'symbol-name
+                                      org-open-link-functions))))))))))
+      (dolist (file (list main existing
+                          (expand-file-name "Created.org" root)))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_crypt_detect_encrypted_entry_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
