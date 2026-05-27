@@ -259,3 +259,165 @@ fn org_crypt_decrypt_nested_headings_autosave_combo() {
                          (reverse calls)))))))))))"##,
     );
 }
+
+#[test]
+fn org_crypt_matcher_key_error_autosave_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-crypt)
+  (with-temp-buffer
+    (let ((org-crypt-key "global@example.org")
+          (org-crypt-tag-matcher "crypt+LEVEL=1")
+          (cipher-table nil)
+          (calls nil)
+          (ask-answers '(t nil)))
+      (cl-labels
+          ((compact-call
+            (call)
+            (pcase (car-safe call)
+              ('encrypt
+               (list 'encrypt
+                     (nth 1 call)
+                     (string-match-p "top secret\\|nested secret\\|broken secret"
+                                     (nth 2 call))
+                     (string-match-p "SHOULD-FAIL" (nth 2 call))))
+              ('decrypt
+               (list 'decrypt
+                     (string-match-p "BEGIN PGP MESSAGE" (nth 1 call))))
+              (_ call)))
+           (at-heading
+            (title fn)
+            (save-excursion
+              (goto-char (point-min))
+              (search-forward title)
+              (beginning-of-line)
+              (funcall fn)))
+           (policy
+            (setting answer)
+            (let ((org-crypt-disable-auto-save setting)
+                  (ask-answers (list answer)))
+              (with-temp-buffer
+                (org-mode)
+                (setq buffer-file-name
+                      (expand-file-name "crypt-policy.org" temporary-file-directory))
+                (auto-save-mode 1)
+                (let ((before (list buffer-auto-save-file-name
+                                    (local-variable-p 'auto-save-hook))))
+                  (org-crypt-check-auto-save)
+                  (list setting
+                        answer
+                        before
+                        buffer-auto-save-file-name
+                        (mapcar (lambda (fn)
+                                  (cond ((eq fn 'org-encrypt-entries)
+                                         'org-encrypt-entries)
+                                        ((functionp fn) 'function)
+                                        (t fn)))
+                                auto-save-hook)))))))
+        (cl-letf (((symbol-function 'epg-make-context)
+                   (lambda (&rest args)
+                     (push (cons 'context args) calls)
+                     'mock-context))
+                  ((symbol-function 'epg-list-keys)
+                   (lambda (_context name &optional mode)
+                     (push (list 'keys name mode) calls)
+                     (cond ((or (null name) (string= name "")
+                                (string= name "missing@example.org"))
+                            nil)
+                           (t (list (concat "KEY:" name))))))
+                  ((symbol-function 'epg-encrypt-string)
+                   (lambda (_context plain recipients &optional sign trust)
+                     (when (string-match-p "SHOULD-FAIL" plain)
+                       (error "mock encrypt refused payload"))
+                     (let ((cipher
+                            (format "-----BEGIN PGP MESSAGE-----\nrecipients=%S sign=%S trust=%S sha=%s\n-----END PGP MESSAGE-----\n"
+                                    recipients sign trust (sha1 plain))))
+                       (push (list 'encrypt recipients plain) calls)
+                       (push (cons (org-crypt--encrypted-text
+                                    1 (with-temp-buffer
+                                        (insert cipher)
+                                        (point-max)))
+                                   plain)
+                             cipher-table)
+                       cipher)))
+                  ((symbol-function 'epg-decrypt-string)
+                   (lambda (_context cipher)
+                     (push (list 'decrypt cipher) calls)
+                     (or (cdr (assoc cipher cipher-table))
+                         (error "mock missing cipher"))))
+                  ((symbol-function 'y-or-n-p)
+                   (lambda (prompt)
+                     (push (list 'ask prompt) calls)
+                     (pop ask-answers))))
+          (org-mode)
+          (insert "* Top Crypt :crypt:\n")
+          (insert ":PROPERTIES:\n:CRYPTKEY: alice@example.org\n:END:\n")
+          (insert "top secret\n")
+          (insert "** Nested Crypt :crypt:\n")
+          (insert ":PROPERTIES:\n:CRYPTKEY: bob@example.org\n:END:\n")
+          (insert "nested secret\n")
+          (insert "* Symmetric Top :crypt:\n")
+          (insert ":PROPERTIES:\n:CRYPTKEY: nil\n:END:\n")
+          (insert "symmetric secret\n")
+          (insert "* Missing Key Top :crypt:\n")
+          (insert ":PROPERTIES:\n:CRYPTKEY: missing@example.org\n:END:\n")
+          (insert "missing secret\n")
+          (insert "* Plain Tagged Child\n")
+          (insert "** Child Crypt :crypt:\n")
+          (insert "child secret\n")
+          (insert "* Broken Top :crypt:\n")
+          (insert "SHOULD-FAIL broken secret\n")
+          (let* ((keys-before
+                  (list
+                   (at-heading "Top Crypt" #'org-crypt-key-for-heading)
+                   (at-heading "Nested Crypt" #'org-crypt-key-for-heading)
+                   (at-heading "Symmetric Top" #'org-crypt-key-for-heading)
+                   (at-heading "Missing Key Top" #'org-crypt-key-for-heading)
+                   (at-heading "Child Crypt" #'org-crypt-key-for-heading)))
+                 (bulk-error
+                  (condition-case err
+                      (progn (goto-char (point-min))
+                             (org-encrypt-entries)
+                             nil)
+                    (error (error-message-string err))))
+                 (encrypted-flags
+                  (mapcar (lambda (title)
+                            (at-heading title
+                              (lambda ()
+                                (not (null (org-at-encrypted-entry-p))))))
+                          '("Top Crypt" "Nested Crypt" "Symmetric Top"
+                            "Missing Key Top" "Child Crypt" "Broken Top")))
+                 (after-bulk
+                  (buffer-substring-no-properties (point-min) (point-max)))
+                 (decrypt-error
+                  (progn
+                    (goto-char (point-max))
+                    (insert "* Corrupt :crypt:\n")
+                    (insert "-----BEGIN PGP MESSAGE-----\nunknown\n-----END PGP MESSAGE-----\n")
+                    (beginning-of-line 0)
+                    (condition-case err
+                        (org-decrypt-entry)
+                      (error (error-message-string err)))))
+                 (corrupt-still-encrypted
+                  (at-heading "Corrupt"
+                    (lambda () (not (null (org-at-encrypted-entry-p))))))
+                 (policy-results
+                  (list (policy t t)
+                        (policy nil nil)
+                        (policy 'ask t)
+                        (policy 'ask nil)
+                        (policy 'encrypt nil)
+                        (policy 'unknown nil))))
+            (list keys-before
+                  bulk-error
+                  encrypted-flags
+                  (string-match-p "SHOULD-FAIL broken secret" after-bulk)
+                  decrypt-error
+                  corrupt-still-encrypted
+                  policy-results
+                  (mapcar #'compact-call (reverse calls))))))))"##,
+    );
+}
