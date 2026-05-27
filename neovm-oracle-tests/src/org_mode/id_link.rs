@@ -592,12 +592,79 @@ fn org_id_link_move_reload_visibility_navigation_combo() {
                     search-open
                     link-summary
                     final-nav
-                    (replace-regexp-in-string
-                     (regexp-quote root)
-                     "<root>"
-                     (buffer-substring-no-properties
-                      (point-min) (point-max)))))))
+                     (replace-regexp-in-string
+                      (regexp-quote root)
+                      "<root>"
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_id_create_find_open_cross_file_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (let* ((root (make-temp-file "org-id-cross-deep" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root))
+         (org-id-locations-file (expand-file-name ".ids" root))
+         (org-id-track-globally t))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Alpha\n")
+            (insert ":PROPERTIES:\n:ID: alpha-fixed-id\n:END:\n")
+            (insert "Alpha body.\n")
+            (insert "** Child\n")
+            (insert ":PROPERTIES:\n:ID: child-fixed-id\n:END:\n")
+            (insert "Child body.\n"))
+          (with-temp-file file-b
+            (insert "* Beta\n")
+            (insert "Link to [[id:alpha-fixed-id][Alpha]].\n")
+            (insert "Link to [[id:child-fixed-id][Child]].\n"))
+          (org-id-update-id-locations (list file-a file-b) t)
+          (let ((alpha-marker (org-id-find "alpha-fixed-id" t))
+                (child-marker (org-id-find "child-fixed-id" t))
+                (alpha-file (org-id-find-id-file "alpha-fixed-id"))
+                (child-file (org-id-find-id-file "child-fixed-id"))
+                (loc-count (hash-table-count org-id-locations)))
+            (with-current-buffer (find-file-noselect file-b)
+              (org-mode)
+              (goto-char (point-min))
+              (search-forward "Alpha")
+              (beginning-of-line)
+              (let ((link-ctx (org-element-context)))
+                (list (list 'alpha-marker
+                            (markerp alpha-marker)
+                            (and alpha-marker (marker-position alpha-marker))
+                            (and alpha-marker
+                                 (replace-regexp-in-string
+                                  (regexp-quote root) "<root>"
+                                  (buffer-file-name
+                                   (marker-buffer alpha-marker)))))
+                      (list 'child-marker
+                            (markerp child-marker)
+                            (and child-marker (marker-position child-marker)))
+                      (list 'alpha-file
+                            (and alpha-file
+                                 (replace-regexp-in-string
+                                  (regexp-quote root) "<root>" alpha-file)))
+                      (list 'child-file
+                            (and child-file
+                                 (replace-regexp-in-string
+                                  (regexp-quote root) "<root>" child-file)))
+                      loc-count
+                      (list 'link-ctx
+                            (org-element-property :type link-ctx)
+                            (org-element-property :path link-ctx))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))
       (delete-directory root t))))"##,
     );
 }
