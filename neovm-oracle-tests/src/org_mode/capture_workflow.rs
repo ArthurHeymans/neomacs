@@ -517,3 +517,125 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (require 'org-refile)
+  (let* ((inbox (make-temp-file "org-capture-refile-inbox" nil ".org"
+                                "#+TITLE: Inbox\n* Inbox\n"))
+         (projects (make-temp-file "org-capture-refile-projects" nil ".org"
+                                   "#+TITLE: Projects\n* Projects\n** Alpha\n** Beta\n"))
+         (events nil)
+         (org-refile-targets `((,projects . (:maxlevel . 2))))
+         (org-refile-use-outline-path 'title)
+         (org-refile-use-cache t)
+         (org-capture-templates
+          `(("t" "Task refile" entry
+             (file+headline ,inbox "Inbox")
+             "* TODO %i\n:PROPERTIES:\n:Source: %a\n:END:\nBody: %?\n"
+             :empty-lines 0
+             :after-finalize
+             ,(lambda ()
+                (push (list 'after
+                            (marker-position
+                             org-capture-last-stored-marker)
+                            (buffer-name
+                             (marker-buffer
+                              org-capture-last-stored-marker)))
+                      events))))))
+    (unwind-protect
+        (progn
+          (org-refile-cache-clear)
+          (with-current-buffer (find-file-noselect projects)
+            (org-mode))
+          (with-temp-buffer
+            (let ((buffer-file-name "/tmp/source-note.org"))
+              (org-mode)
+              (insert "* Source Head\ncontext\n")
+              (goto-char (point-min))
+              (search-forward "Source Head")
+              (let ((org-capture-link-is-already-stored nil))
+                (org-store-link nil))))
+          (let (capture-before marker-after-finalize refile-targets
+                inbox-after-finalize inbox-after-refile projects-after-refile
+                goto-line last-bookmark cache-present)
+            (org-capture-string "captured task" "t")
+            (setq capture-before
+                  (list (buffer-name)
+                        (marker-position org-capture-last-stored-marker)
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))
+            (org-capture-finalize)
+            (setq marker-after-finalize
+                  (list (marker-position org-capture-last-stored-marker)
+                        (buffer-name
+                         (marker-buffer org-capture-last-stored-marker))))
+            (setq inbox-after-finalize
+                  (with-current-buffer (find-file-noselect inbox)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+            (with-current-buffer (find-file-noselect inbox)
+              (org-mode)
+              (goto-char (point-min))
+              (search-forward "captured task")
+              (beginning-of-line)
+              (setq refile-targets
+                    (mapcar (lambda (target)
+                              (list (car target)
+                                    (and (nth 1 target)
+                                         (file-name-nondirectory
+                                          (nth 1 target)))
+                                    (not (null (nth 3 target)))))
+                            (org-refile-get-targets)))
+              (let ((target
+                     (seq-find
+                      (lambda (entry)
+                        (string-match-p "/Projects/Beta\\'" (car entry)))
+                      (org-refile-get-targets))))
+                (org-refile nil nil target))
+              (setq last-bookmark
+                    (plist-get org-bookmark-names-plist :last-refile))
+              (save-buffer)
+              (setq inbox-after-refile
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+            (with-current-buffer (find-file-noselect projects)
+              (org-mode)
+              (save-buffer)
+              (setq projects-after-refile
+                    (replace-regexp-in-string
+                     "\\[\\[file:/tmp/source-note.org[^]\n]+\\]"
+                     "[source-link]"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))
+            (org-capture-goto-last-stored)
+            (setq goto-line
+                  (buffer-substring-no-properties
+                   (line-beginning-position)
+                   (line-end-position)))
+            (setq cache-present
+                  (not (null
+                        (org-refile-cache-get
+                         (expand-file-name projects)
+                         "^\\*\\{1,2\\}[ \t]"))))
+            (list capture-before
+                  marker-after-finalize
+                  inbox-after-finalize
+                  refile-targets
+                  inbox-after-refile
+                  projects-after-refile
+                  goto-line
+                  last-bookmark
+                  cache-present
+                  (nreverse events))))
+      (dolist (file (list inbox projects))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+        (when (file-exists-p file) (delete-file file))))))"##,
+    );
+}
