@@ -29,6 +29,7 @@ mod export_backends;
 mod export_mix;
 mod fold_font;
 mod footnote_edit;
+mod goto_workflow;
 mod habit_workflow;
 mod id_link;
 mod inlinetask_workflow;
