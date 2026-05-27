@@ -44,6 +44,98 @@ fn org_custom_link_follow_export_store_combo() {
 }
 
 #[test]
+fn org_custom_link_activation_completion_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let ((follow-calls nil)
+        (store-calls nil)
+        (complete-calls nil)
+        (activate-calls nil)
+        (org-stored-links nil)
+        (org-store-link-plist nil))
+    (org-link-set-parameters
+     "combo"
+     :follow (lambda (path arg)
+               (push (list path arg) follow-calls))
+     :export (lambda (path desc backend info)
+               (format "{%s|%s|%s|toc=%S}"
+                       backend path (or desc "")
+                       (plist-get info :with-toc)))
+     :store (lambda ()
+              (push 'store store-calls)
+              (org-link-store-props
+               :type "combo"
+               :link "combo:stored/value"
+               :description "Stored combo")
+              t)
+     :complete (lambda (&optional arg)
+                 (push arg complete-calls)
+                 "combo:completed/path")
+     :face (lambda (path) (if (string-match-p "warn" path)
+                              'org-warning
+                            'org-link))
+     :display "COMBO"
+     :activate-func (lambda (start end path bracketp)
+                      (push (list (- start (point-min))
+                                  (- end (point-min))
+                                  path bracketp)
+                            activate-calls)
+                      (put-text-property start end 'combo-path path)))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+OPTIONS: toc:nil\n")
+      (insert "[[combo:ok/path][Okay]] [[combo:warn/path]]\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((props
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (list needle
+                        (get-text-property (match-beginning 0) 'face)
+                        (get-text-property (match-beginning 0) 'display)
+                        (get-text-property (match-beginning 0) 'combo-path)
+                        (get-text-property (match-beginning 0)
+                                           'mouse-face)
+                        (keymapp (get-text-property
+                                  (match-beginning 0) 'keymap)))))
+              '("Okay" "combo:warn"))))
+        (goto-char (point-min))
+        (search-forward "Okay")
+        (org-open-at-point '(4))
+        (let ((completion (org-link-complete-file '(4)))
+              (html (org-export-string-as
+                     "[[combo:ok/path][Okay]]" 'html t
+                     '(:with-toc nil)))
+              (ascii (org-export-string-as
+                      "[[combo:warn/path]]" 'ascii t
+                      '(:with-toc nil)))
+              (org-out (org-export-string-as
+                        "[[combo:ok/path][Okay]]" 'org t
+                        '(:with-toc nil))))
+          (org-store-link nil nil)
+          (list props
+                (nreverse activate-calls)
+                (nreverse follow-calls)
+                completion
+                (nreverse complete-calls)
+                html
+                ascii
+                org-out
+                (nreverse store-calls)
+                org-store-link-plist
+                org-stored-links
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_link_escape_decode_make_string_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
