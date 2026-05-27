@@ -1448,6 +1448,7 @@ fn org_element_planning_property_timestamp_combo() {
     );
 }
 mod strong_advanced_combos;
+mod strong_advanced_edge;
 mod strong_complex_combos;
 mod strong_deep_state;
 mod strong_edge_combos;
