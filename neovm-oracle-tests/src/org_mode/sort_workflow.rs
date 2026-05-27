@@ -309,11 +309,70 @@ fn org_sort_entries_priority_clock_region_combo() {
                             (buffer-substring-no-properties
                              (point-min) (point-max))
                             (nreverse events)
-                            (org-element-map
-                                (org-element-parse-buffer) 'headline
-                              (lambda (h)
-                                (list (org-element-property :todo-keyword h)
-                                      (org-element-property :priority h)
-                                      (org-element-property :raw-value h))))))))))))))))"##,
+                             (org-element-map
+                                 (org-element-parse-buffer) 'headline
+                               (lambda (h)
+                                 (list (org-element-property :todo-keyword h)
+                                       (org-element-property :priority h)
+                                       (org-element-property :raw-value h))))))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_sort_entries_time_tag_property_alpha_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Charlie :work:\n")
+    (insert "SCHEDULED: <2026-05-29 Thu>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+    (insert "* WAIT Alpha :home:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+    (insert "* DONE Bravo :work:urgent:\n")
+    (insert "SCHEDULED: <2026-05-28 Thu>\n")
+    (insert ":PROPERTIES:\n:Effort: 1:00\n:END:\n")
+    (insert "* TODO Delta :home:\n")
+    (insert "SCHEDULED: <2026-05-26 Tue>\n")
+    (insert ":PROPERTIES:\n:Effort: 1:30\n:END:\n")
+    (let ((headlines (lambda ()
+                       (org-element-map (org-element-parse-buffer) 'headline
+                         (lambda (h)
+                           (list (org-element-property :raw-value h)
+                                 (substring-no-properties
+                                  (or (org-element-property :todo-keyword h) ""))
+                                 (org-element-property :tags h)))))))
+      ;; Sort by time
+      (goto-char (point-min))
+      (org-sort-entries nil ?t)
+      (let ((by-time (buffer-substring-no-properties (point-min) (point-max)))
+            (by-time-headlines (funcall headlines)))
+        ;; Sort by tag
+        (goto-char (point-min))
+        (org-sort-entries nil ?T)
+        (let ((by-tag (buffer-substring-no-properties (point-min) (point-max)))
+              (by-tag-headlines (funcall headlines)))
+          ;; Sort by property
+          (goto-char (point-min))
+          (org-sort-entries nil ?r)
+          (let ((by-prop (buffer-substring-no-properties (point-min) (point-max)))
+                (by-prop-headlines (funcall headlines)))
+            ;; Sort alphabetically
+            (goto-char (point-min))
+            (org-sort-entries nil ?a)
+            (let ((by-alpha (buffer-substring-no-properties (point-min) (point-max)))
+                  (by-alpha-headlines (funcall headlines)))
+              (list by-time
+                    by-time-headlines
+                    by-tag
+                    by-tag-headlines
+                    by-prop
+                    by-prop-headlines
+                    by-alpha
+                    by-alpha-headlines)))))))))"##,
     );
 }
