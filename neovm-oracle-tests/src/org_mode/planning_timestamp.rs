@@ -254,3 +254,139 @@ fn org_todo_auto_repeat_planning_logbook_combo() {
                            (org-element-property :value el))))))))))"##,
     );
 }
+
+#[test]
+fn org_planning_agenda_repeat_logbook_cookie_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-clock)
+  (let* ((file (make-temp-file
+                "org-plan-agenda" nil ".org"
+                "#+CATEGORY: Plan
+* TODO Project [0/2] :work:
+:PROPERTIES:
+:Owner: Ada
+:END:
+** TODO Repeat
+SCHEDULED: <2026-05-20 Wed .+2d> DEADLINE: <2026-05-22 Fri +1w -2d>
+:LOGBOOK:
+CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30
+:END:
+Body <2026-05-27 Wed 11:00-12:15>
+** TODO Checklist [0/2]
+- [ ] first
+- [X] second
+"))
+         (org-agenda-files (list file))
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-span 3)
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-log-repeat 'time)
+         (org-log-done nil)
+         (org-log-reschedule 'time)
+         (org-log-redeadline 'time)
+         (org-log-into-drawer "LOGBOOK")
+         (org-todo-keywords '((sequence "TODO" "NEXT" "|" "DONE"))))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect file)
+          (org-mode)
+          (let (repeat-state checklist-state agenda-summary parsed)
+            (cl-letf (((symbol-function 'org-current-time)
+                       (lambda (&rest _)
+                         (encode-time 0 45 13 27 5 2026))))
+              (goto-char (point-min))
+              (search-forward "Repeat")
+              (beginning-of-line)
+              (org-schedule nil "2026-05-28 08:30")
+              (org-deadline nil "2026-05-30 +1w -1d")
+              (org-todo "DONE")
+              (setq repeat-state
+                    (list (org-get-todo-state)
+                          (org-entry-get nil "SCHEDULED")
+                          (org-entry-get nil "DEADLINE")
+                          (org-entry-get nil "LAST_REPEAT")
+                          (org-entry-get nil "Owner" t)
+                          (org-get-repeat)))
+              (goto-char (point-min))
+              (search-forward "first")
+              (org-ctrl-c-ctrl-c)
+              (goto-char (point-min))
+              (search-forward "Checklist")
+              (beginning-of-line)
+              (org-update-statistics-cookies t)
+              (org-todo "DONE")
+              (setq checklist-state
+                    (list (org-get-todo-state)
+                          (org-get-heading t t t t)
+                          (org-entry-get nil "CLOSED"))))
+            (save-buffer)
+            (org-agenda-list nil "2026-05-27" 3)
+            (with-current-buffer org-agenda-buffer-name
+              (setq agenda-summary
+                    (let ((text (buffer-substring-no-properties
+                                 (point-min) (point-max))))
+                      (list (mapcar (lambda (needle)
+                                      (not (null
+                                            (string-match-p needle text))))
+                                    '("Repeat" "Checklist" "Project"
+                                      "Plan"))
+                            text))))
+            (setq parsed
+                  (org-element-map (org-element-parse-buffer)
+                      '(headline planning timestamp node-property item)
+                    (lambda (el)
+                      (pcase (org-element-type el)
+                        ('headline
+                         (list 'headline
+                               (org-element-property :level el)
+                               (org-element-property :todo-keyword el)
+                               (org-element-property :raw-value el)))
+                        ('planning
+                         (list 'planning
+                               (and (org-element-property :scheduled el)
+                                    (org-element-property
+                                     :raw-value
+                                     (org-element-property :scheduled el)))
+                               (and (org-element-property :deadline el)
+                                    (org-element-property
+                                     :raw-value
+                                     (org-element-property :deadline el)))
+                               (and (org-element-property :closed el)
+                                    (org-element-property
+                                     :raw-value
+                                     (org-element-property :closed el)))))
+                        ('timestamp
+                         (list 'timestamp
+                               (org-element-property :raw-value el)
+                               (org-element-property :repeater-type el)
+                               (org-element-property :repeater-value el)
+                               (org-element-property :warning-type el)
+                               (org-element-property :warning-value el)))
+                        ('node-property
+                         (list 'property
+                               (org-element-property :key el)
+                               (org-element-property :value el)))
+                        ('item
+                         (list 'item
+                               (org-element-property :checkbox el)))))))
+            (list repeat-state
+                  checklist-state
+                  agenda-summary
+                  parsed
+                  (replace-regexp-in-string
+                   "org-plan-agenda[^ \n|]+\\.org"
+                   "org-plan-agenda<tmp>.org"
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
