@@ -1471,6 +1471,7 @@ mod strong_state_final;
 mod strong_state_max;
 mod strong_state_ultimate;
 mod strong_state_x;
+mod strong_state_xx;
 mod strong_tera_combos;
 mod strong_ultimate_edge;
 mod strong_workflow_combos;
