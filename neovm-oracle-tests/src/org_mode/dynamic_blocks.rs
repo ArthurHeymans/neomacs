@@ -111,3 +111,69 @@ fn org_clocktable_dblock_shift_steps_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_columnview_dblock_filters_tblfm_links_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+COLUMNS: %25ITEM(Task) %TODO(State) %Effort{:} %Owner %Score{+}\n")
+    (insert "#+PROPERTY: Owner_ALL Ada Bea Cal\n")
+    (insert "* Project :root:\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:Score: 0\n:Effort: 0:00\n:END:\n")
+    (insert "** TODO Alpha :keep:\n")
+    (insert ":PROPERTIES:\n:Effort: 1:15\n:Owner: Bea\n:Score: 2\n:END:\n")
+    (insert "** DONE Beta :skip:keep:\n")
+    (insert ":PROPERTIES:\n:Effort: 0:45\n:Owner: Cal\n:Score: 3\n:END:\n")
+    (insert "** TODO Gamma :keep:\n")
+    (insert ":PROPERTIES:\n:Effort: 0:30\n:Score: 4\n:END:\n\n")
+    (insert "#+BEGIN: columnview :id local :match \"+keep\" ")
+    (insert ":exclude-tags (\"skip\") :maxlevel 3 :skip-empty-rows t ")
+    (insert ":indent t :hlines 2 :vlines t :link t ")
+    (insert ":format \"%25ITEM(Task) %TODO(State) %Effort{:} %Owner %Score{+}\"\n")
+    (insert "#+CAPTION: kept caption\n")
+    (insert "| stale | data |\n")
+    (insert "#+TBLFM: @>$6=vsum(@3..@-1)\n")
+    (insert "#+END:\n")
+    (goto-char (point-min))
+    (search-forward "#+BEGIN: columnview")
+    (beginning-of-line)
+    (let ((start (point))
+          before-table after-table ast)
+      (org-update-dblock)
+      (goto-char start)
+      (setq before-table
+            (progn
+              (search-forward "|")
+              (org-table-to-lisp)))
+      (goto-char start)
+      (setq ast
+            (org-element-map (org-element-parse-buffer)
+                '(dynamic-block table keyword)
+              (lambda (e)
+                (list (org-element-type e)
+                      (org-element-property :key e)
+                      (org-element-property :value e)
+                      (org-element-property :name e)
+                      (org-element-property :begin e)
+                      (org-element-property :end e)))))
+      (search-forward "#+TBLFM:")
+      (end-of-line)
+      (insert "::@4$6=@3$6+10")
+      (goto-char start)
+      (search-forward "|")
+      (org-table-recalculate 'all t)
+      (setq after-table (org-table-to-lisp))
+      (list before-table
+            after-table
+            ast
+            org-columns-current-fmt-compiled
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
