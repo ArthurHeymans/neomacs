@@ -216,3 +216,134 @@ fn org_table_convert_transpose_move_copy_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_structure_edit_special_export_context_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-src)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (let ((transient-mark-mode t)
+          (org-src-window-setup 'current-window)
+          (org-edit-src-content-indentation 2)
+          (org-src-preserve-indentation nil)
+          (org-edit-fixed-width-region-mode 'fundamental-mode))
+      (org-mode)
+      (insert "#+TITLE: Structure Combo\n")
+      (insert "* Blocks\n")
+      (insert "(message \"one\")\n(message \"two\")\n")
+      (push-mark (save-excursion
+                   (goto-char (point-min))
+                   (search-forward "(message \"one\")")
+                   (match-beginning 0))
+                 nil t)
+      (goto-char (point-min))
+      (search-forward "(message \"two\")")
+      (org-insert-structure-template "src emacs-lisp :results value")
+      (let ((after-src-wrap
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (goto-char (point-max))
+        (insert "\nRaw <b>html</b>\n")
+        (push-mark (line-beginning-position) nil t)
+        (goto-char (point-max))
+        (org-insert-structure-template "EXPORT html")
+        (goto-char (point-max))
+        (insert "\nExample one\nExample two\n")
+        (push-mark (save-excursion
+                     (search-backward "Example one")
+                     (point))
+                   nil t)
+        (goto-char (point-max))
+        (org-insert-structure-template "example")
+        (let ((after-all-wrap
+               (buffer-substring-no-properties (point-min) (point-max)))
+              block-moves edit-src-mode edit-src-before edit-export-mode
+              edit-export-before contexts html ascii)
+          (goto-char (point-min))
+          (org-next-block 1)
+          (push (list 'next1 (line-number-at-pos)
+                      (org-element-type (org-element-at-point))
+                      (org-in-src-block-p t))
+                block-moves)
+          (org-next-block 1)
+          (push (list 'next2 (line-number-at-pos)
+                      (org-element-type (org-element-at-point))
+                      (org-in-block-p '("export" "src" "example")))
+                block-moves)
+          (org-next-block 1)
+          (push (list 'next3 (line-number-at-pos)
+                      (org-element-type (org-element-at-point)))
+                block-moves)
+          (org-previous-block 2)
+          (push (list 'prev2 (line-number-at-pos)
+                      (org-element-type (org-element-at-point)))
+                block-moves)
+          (goto-char (point-min))
+          (search-forward "(message \"one\")")
+          (org-edit-special)
+          (setq edit-src-mode major-mode
+                edit-src-before
+                (buffer-substring-no-properties (point-min) (point-max)))
+          (goto-char (point-max))
+          (insert "\n(message \"three\")")
+          (org-edit-src-exit)
+          (goto-char (point-min))
+          (search-forward "Raw <b>html</b>")
+          (org-edit-special)
+          (setq edit-export-mode major-mode
+                edit-export-before
+                (buffer-substring-no-properties (point-min) (point-max)))
+          (goto-char (point-max))
+          (insert "\n<i>added</i>")
+          (org-edit-src-exit)
+          (setq contexts
+                (mapcar
+                 (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward needle)
+                     (list needle
+                           (mapcar #'car (org-context))
+                           (org-element-type (org-element-context))
+                           (org-in-src-block-p t)
+                           (org-in-block-p '("src" "export" "example")))))
+                 '("(message \"three\")" "Raw <b>html</b>"
+                   "<i>added</i>" "Example two")))
+          (setq html (org-export-as 'html nil nil t '(:with-toc nil))
+                ascii (org-export-as 'ascii nil nil t '(:with-toc nil)))
+          (let ((tree (org-element-parse-buffer)))
+            (list after-src-wrap
+                  after-all-wrap
+                  (nreverse block-moves)
+                  edit-src-mode
+                  edit-src-before
+                  edit-export-mode
+                  edit-export-before
+                  contexts
+                  (org-element-map tree
+                      '(src-block export-block example-block)
+                    (lambda (el)
+                      (list (org-element-type el)
+                            (org-element-property :language el)
+                            (org-element-property :parameters el)
+                            (org-element-property :begin el)
+                            (org-element-property :end el)))))
+                  (mapcar (lambda (needle)
+                            (not (null
+                                  (string-match-p needle html))))
+                          '("<b>html</b>" "<i>added</i>"
+                            "(message &quot;three&quot;)"))
+                  (mapcar (lambda (needle)
+                            (not (null
+                                  (string-match-p needle ascii))))
+                          '("Example one" "Example two"
+                            "(message \"three\")"))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
