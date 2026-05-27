@@ -336,3 +336,97 @@ fn org_columns_property_inheritance_compute_mutation_combo() {
                      (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_columns_dblock_property_summary_refresh_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (require 'org-duration)
+  (with-temp-buffer
+    (let ((org-duration-format '(("h" . t) ("min" . t)))
+          (org-use-property-inheritance '("Owner")))
+      (org-duration-set-regexps)
+      (org-mode)
+      (insert "#+COLUMNS: %22ITEM(Task) %TODO(State) %Owner %Effort{:} %Score{+;%.1f} %Done{X%}\n")
+      (insert "* Project\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Effort: 0:00\n:Score: 0\n:Done: [ ]\n:END:\n")
+      (insert "** TODO Alpha :work:\n")
+      (insert ":PROPERTIES:\n:Effort: 1:10\n:Score: 2.5\n:Done: [X]\n:END:\n")
+      (insert "** WAIT Beta :work:\n")
+      (insert ":PROPERTIES:\n:Owner: Bea\n:Effort: 0:50\n:Score: 1.5\n:Done: [ ]\n:END:\n")
+      (insert "** TODO Skip :skip:\n")
+      (insert ":PROPERTIES:\n:Effort: 9:00\n:Score: 99\n:Done: [X]\n:END:\n")
+      (insert "#+BEGIN: columnview :hlines 1 :id local :match \"+work\" :skip-empty-rows nil :exclude-tags \"skip\"\n")
+      (insert "#+END:\n")
+      (goto-char (point-min))
+      (search-forward "#+BEGIN:")
+      (org-update-dblock)
+      (let ((first-dblock
+             (buffer-substring-no-properties
+              (save-excursion
+                (goto-char (point-min))
+                (search-forward "#+BEGIN:")
+                (line-beginning-position))
+              (save-excursion
+                (goto-char (point-min))
+                (search-forward "#+END:")
+                (line-end-position)))))
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (beginning-of-line)
+        (org-entry-put nil "Effort" "1:20")
+        (org-entry-put nil "Score" "3.5")
+        (org-entry-put nil "Done" "[X]")
+        (goto-char (point-min))
+        (search-forward "Project")
+        (beginning-of-line)
+        (org-columns nil)
+        (let ((project-after-compute
+               (progn
+                 (org-columns-compute-all)
+                 (list (org-entry-get nil "Effort")
+                       (org-entry-get nil "Score")
+                       (org-entry-get nil "Done"))))
+              (column-line
+               (buffer-substring-no-properties
+                (line-beginning-position) (line-end-position)))
+              (overlays
+               (mapcar (lambda (ov)
+                         (list (overlay-start ov)
+                               (overlay-end ov)
+                               (overlay-get ov 'org-columns-key)
+                               (overlay-get ov 'org-columns-value)
+                               (overlay-get ov 'before-string)))
+                       (overlays-in (line-beginning-position)
+                                    (line-end-position)))))
+          (org-columns-quit)
+          (goto-char (point-min))
+          (search-forward "#+BEGIN:")
+          (org-update-dblock)
+          (let ((second-dblock
+                 (buffer-substring-no-properties
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward "#+BEGIN:")
+                    (line-beginning-position))
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward "#+END:")
+                    (line-end-position)))))
+            (list first-dblock
+                  project-after-compute
+                  column-line
+                  overlays
+                  second-dblock
+                  (org-columns--capture-view
+                   3 "+work" nil '("skip")
+                   "%22ITEM(Task) %TODO(State) %Owner %Effort{:} %Score{+;%.1f} %Done{X%}"
+                   nil)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
