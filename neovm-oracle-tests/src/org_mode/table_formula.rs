@@ -870,3 +870,103 @@ fn org_table_shrink_coordinates_formula_lifecycle_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_table_rectangle_transpose_sort_shape_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| ! | Item | A | B | Sum | Note |\n")
+    (insert "|---+------+---+---+-----+------|\n")
+    (insert "| # | zeta | 3 | 4 | | tail-z |\n")
+    (insert "| # | alpha | 1 | 9 | | tail-a |\n")
+    (insert "| # | beta | 2 | 5 | | tail-b |\n")
+    (insert "|---+------+---+---+-----+------|\n")
+    (insert "| _ | Total | | | | |\n")
+    (insert "#+TBLFM: $Sum=$A+$B::@>$Sum=vsum(@I$Sum..@II$Sum)\n")
+    (org-table-recalculate 'all)
+    (org-table-align)
+    (let ((initial (buffer-substring-no-properties
+                    (point-min) (point-max)))
+          (initial-lisp (org-table-to-lisp))
+          rect-copy after-cut after-paste after-insert after-sort
+          after-transpose stored formulas range-summary)
+      (goto-char (point-min))
+      (search-forward "zeta")
+      (let ((beg (point)))
+        (search-forward "tail-a")
+        (setq rect-copy
+              (org-table-copy-region beg (point)))
+        (org-table-cut-region beg (point)))
+      (setq after-cut
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "beta")
+      (org-table-goto-column 6)
+      (org-table-paste-rectangle)
+      (setq after-paste
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "Item")
+      (org-table-insert-column)
+      (org-table-get-field nil "Group")
+      (goto-char (point-min))
+      (search-forward "alpha")
+      (org-table-goto-column 2)
+      (org-table-get-field nil "A")
+      (search-forward "beta")
+      (org-table-goto-column 2)
+      (org-table-get-field nil "B")
+      (goto-char (point-min))
+      (search-forward "zeta")
+      (org-table-goto-column 2)
+      (org-table-get-field nil "Z")
+      (goto-char (point-min))
+      (search-forward "tail-z")
+      (org-table-delete-column)
+      (org-table-recalculate 'all)
+      (setq after-insert
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "zeta")
+      (beginning-of-line)
+      (org-table-sort-lines nil ?a)
+      (org-table-recalculate 'all)
+      (setq after-sort
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (setq stored (org-table-get-stored-formulas)
+            formulas
+            (mapcar (lambda (needle)
+                      (save-excursion
+                        (goto-char (point-min))
+                        (search-forward needle)
+                        (org-table-goto-column 5)
+                        (org-table-current-field-formula 'key 'noerror)))
+                    '("alpha" "beta" "zeta"))
+            range-summary
+            (list (org-table-get-range "@I$A..@II$Sum")
+                  (org-table-get-range "@I$A..@II$Sum" nil nil nil t)
+                  (org-table-formula-substitute-names "$Sum=$A+$B")
+                  (org-table-formula-to-user "$5=$3+$4")))
+      (org-table-transpose-table-at-point)
+      (setq after-transpose
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (list initial
+            initial-lisp
+            rect-copy
+            after-cut
+            after-paste
+            after-insert
+            after-sort
+            stored
+            formulas
+            range-summary
+            after-transpose
+            (org-table-to-lisp)))))"##,
+    );
+}
