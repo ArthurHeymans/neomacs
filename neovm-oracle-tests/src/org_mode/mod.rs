@@ -24,6 +24,7 @@ mod dynamic_blocks;
 mod edit_layout;
 mod editing_export;
 mod element_ast;
+mod element_upstream;
 mod entities_markup;
 mod export_backends;
 mod export_mix;
