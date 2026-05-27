@@ -854,3 +854,68 @@ fn org_clock_report_custom_columns_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_clock_agenda_filter_tag_effort_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-clock-filter" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'day)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-log t)
+         (org-agenda-clockreport-mode t)
+         (org-agenda-clock-reporting-file file))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert ":END:\n")
+            (insert "* TODO Beta :home:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+            (insert "* TODO Gamma :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 1:00\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\n")
+            (insert ":END:\n"))
+          (org-agenda-list nil "2026-05-27" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((initial (replace-regexp-in-string
+                            (regexp-quote root) "<root>"
+                            (buffer-substring-no-properties
+                             (point-min) (point-max)))))
+              (org-agenda-filter-apply '("+work") 'tag)
+              (let ((work-filter (replace-regexp-in-string
+                                  (regexp-quote root) "<root>"
+                                  (buffer-substring-no-properties
+                                   (point-min) (point-max)))))
+                (org-agenda-filter-remove-all)
+                (org-agenda-filter-apply '("1:00") 'effort)
+                (let ((effort-filter (replace-regexp-in-string
+                                      (regexp-quote root) "<root>"
+                                      (buffer-substring-no-properties
+                                       (point-min) (point-max)))))
+                  (org-agenda-filter-remove-all)
+                  (let ((clock-count
+                         (let ((c 0) (s 0))
+                           (while (string-match "Clocked" initial s)
+                             (setq s (match-end 0) c (1+ c)))
+                           c)))
+                    (list initial work-filter effort-filter clock-count))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
