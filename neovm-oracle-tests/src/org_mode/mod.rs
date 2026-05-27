@@ -87,6 +87,7 @@ mod source_block;
 mod sparse_tree;
 mod strong_advanced;
 mod strong_comprehensive;
+mod strong_comprehensive_2;
 mod strong_deep;
 mod strong_edge_cases;
 mod strong_multi_step;
