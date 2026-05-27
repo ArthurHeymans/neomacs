@@ -685,6 +685,70 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_sublevels_show_context_cycle_font_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (require 'org-cycle)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fold-show-context-detail '((default . lineage)
+                                          (isearch . lineage))))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "** DONE Alpha\n")
+      (insert "*** TODO Beta\n")
+      (insert "**** WAIT Gamma\n")
+      (insert "***** DONE Delta\n")
+      (insert "****** TODO Epsilon\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide to level 1
+      (org-fold-hide-sublevels 1)
+      ;; Reveal Delta with isearch
+      (goto-char (point-min))
+      (search-forward "Delta body")
+      (org-fold-show-context 'isearch)
+      ;; Now cycle Gamma
+      (goto-char (point-min))
+      (search-forward "Gamma")
+      (beginning-of-line)
+      (org-cycle)
+      (org-cycle)
+      ;; Capture state
+      (let ((state
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (line-number-at-pos)
+                            (invisible-p (point))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face))
+                      (list needle 'not-found nil nil nil))))
+              '("Root" "Alpha" "Beta" "Gamma" "Delta" "Epsilon" "Sibling")))
+            (merged nil))
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (list state
+              (nreverse merged)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_sublevels_reveal_context_font_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
