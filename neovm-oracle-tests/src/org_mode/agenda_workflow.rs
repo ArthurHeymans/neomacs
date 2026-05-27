@@ -56,6 +56,117 @@ SCHEDULED: <2026-05-27 Wed 12:00>
 }
 
 #[test]
+fn org_agenda_modes_filter_mutate_source_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-clock)
+  (let* ((file (make-temp-file
+                "org-agenda-modes" nil ".org"
+                "#+CATEGORY: Modes
+* TODO Alpha :work:billable:
+SCHEDULED: <2026-05-27 Wed 09:00>
+:PROPERTIES:
+:Effort: 0:45
+:END:
+Body alpha line one.
+Body alpha line two.
+CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30
+* WAIT Beta :work:internal:
+DEADLINE: <2026-05-27 Wed>
+:PROPERTIES:
+:Effort: 2:00
+:END:
+Body beta.
+CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:15] =>  1:15
+* DONE Gamma :home:
+CLOSED: [2026-05-27 Wed 17:00]
+"))
+         (org-agenda-files (list file))
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-span 1)
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-entry-text-maxlines 2)
+         (org-agenda-clockreport-parameter-plist
+          '(:link nil :maxlevel 2 :fileskip0 t))
+         (org-agenda-prefix-format "%?-12t%-8:c%5e %s"))
+    (unwind-protect
+        (progn
+          (org-agenda-list nil "2026-05-27" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((initial (buffer-substring-no-properties
+                            (point-min) (point-max))))
+              (org-agenda-entry-text-mode)
+              (let ((entry-text (buffer-substring-no-properties
+                                 (point-min) (point-max)))
+                    (entry-mode org-agenda-entry-text-mode))
+                (org-agenda-clockreport-mode)
+                (let ((clockreport (buffer-substring-no-properties
+                                    (point-min) (point-max)))
+                      (clock-mode org-agenda-clockreport-mode))
+                  (org-agenda-filter-apply '("+work" "-internal") 'tag t)
+                  (let ((filtered (buffer-substring-no-properties
+                                   (point-min) (point-max)))
+                        (tag-filter org-agenda-tag-filter))
+                    (org-agenda-filter-remove-all)
+                    (goto-char (point-min))
+                    (search-forward "Alpha")
+                    (beginning-of-line)
+                    (let ((org-log-reschedule nil)
+                          (org-log-redeadline nil)
+                          (org-log-done nil))
+                      (org-agenda-priority ?A)
+                      (org-agenda-schedule nil "2026-05-28 10:15")
+                      (org-agenda-deadline nil "2026-05-29")
+                      (org-agenda-set-tags "review" 'on)
+                      (org-agenda-todo "DONE"))
+                    (let ((after-mutate
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))))
+                      (list (mapcar (lambda (needle)
+                                      (not (null
+                                            (string-match-p needle initial))))
+                                    '("Alpha" "Beta" "Gamma"))
+                            entry-mode
+                            (mapcar (lambda (needle)
+                                      (not (null
+                                            (string-match-p needle entry-text))))
+                                    '("Body alpha line one"
+                                      "Body alpha line two"
+                                      "Body beta"))
+                            clock-mode
+                            (mapcar (lambda (needle)
+                                      (not (null
+                                            (string-match-p needle
+                                                            clockreport))))
+                                    '("Clock summary" "Alpha" "Beta"
+                                      "0:30" "1:15"))
+                            tag-filter
+                            (mapcar (lambda (needle)
+                                      (not (null
+                                            (string-match-p needle
+                                                            filtered))))
+                                    '("Alpha" "Beta" "Gamma"))
+                            (replace-regexp-in-string
+                             "org-agenda-modes[^ \n|]+\\.org"
+                             "org-agenda-modes<tmp>.org"
+                             after-mutate)
+                            (with-current-buffer (find-file-noselect file)
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
+
+#[test]
 fn org_agenda_skip_done_tags_represented_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
