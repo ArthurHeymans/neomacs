@@ -47,3 +47,117 @@ fn org_man_export_sections_markup_links_combo() {
             man))))"##,
     );
 }
+
+#[test]
+fn org_link_abbrev_radio_custom_reveal_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (require 'org-fold)
+  (let ((followed nil))
+    (org-link-set-parameters
+     "neomacs-ticket"
+     :follow (lambda (path arg) (push (list path arg) followed))
+     :export (lambda (path desc backend _info)
+               (pcase backend
+                 ('html (format "<span class=\"ticket\">%s:%s</span>"
+                                (or desc "ticket") path))
+                 ('ascii (format "%s<%s>" (or desc "ticket") path))
+                 (_ (format "%s:%s" (or desc "ticket") path)))))
+    (with-temp-buffer
+      (let ((org-link-abbrev-alist
+             '(("gh" . "https://github.com/%s")
+               ("rfc" . "https://www.rfc-editor.org/rfc/rfc%s.txt")))
+            (org-link-descriptive t)
+            (org-export-with-broken-links t)
+            (org-hide-emphasis-markers t))
+        (org-mode)
+        (insert "#+TITLE: Link Matrix\n")
+        (insert "* Intro\n")
+        (insert "Radio target <<<Release Plan>>> appears here.\n")
+        (insert "Links: [[neomacs-ticket:ABC-42][Ticket *ABC*]] ")
+        (insert "[[gh:eval-exec/neomacs][repo]] [[rfc:9110][RFC 9110]] ")
+        (insert "[[*Target Heading][jump target]] and Release Plan reference.\n")
+        (insert "* Target Heading\n")
+        (insert ":PROPERTIES:\n:CUSTOM_ID: target-heading\n:END:\n")
+        (insert "Hidden body with [[neomacs-ticket:XYZ-7]] and /markup/.\n")
+        (font-lock-ensure (point-min) (point-max))
+        (let ((snapshot
+               (lambda (label)
+                 (list label
+                       (point)
+                       (org-element-map (org-element-parse-buffer) 'link
+                         (lambda (link)
+                           (list (org-element-property :type link)
+                                 (org-element-property :path link)
+                                 (and (org-element-property :contents-begin link)
+                                      (buffer-substring-no-properties
+                                       (org-element-property :contents-begin link)
+                                       (org-element-property :contents-end link)))
+                                 (org-element-property :begin link)
+                                 (org-element-property :end link))))
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle
+                                  (line-number-at-pos)
+                                  (invisible-p (point))
+                                  (get-text-property
+                                   (match-beginning 0) 'face)
+                                  (get-text-property
+                                   (match-beginning 0) 'mouse-face)
+                                  (get-text-property
+                                   (match-beginning 0) 'help-echo)
+                                  (keymapp
+                                   (get-text-property
+                                    (match-beginning 0) 'keymap)))))
+                        '("Ticket" "repo" "RFC 9110" "jump target"
+                          "Release Plan" "Hidden body" "XYZ-7"))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))
+          (let (states)
+            (push (funcall snapshot 'initial) states)
+            (goto-char (point-min))
+            (search-forward "Target Heading")
+            (beginning-of-line)
+            (org-fold-hide-subtree)
+            (push (funcall snapshot 'hidden-target) states)
+            (goto-char (point-min))
+            (search-forward "Ticket")
+            (org-open-at-point)
+            (push (funcall snapshot 'after-custom-open) states)
+            (goto-char (point-min))
+            (search-forward "jump target")
+            (org-open-at-point)
+            (push (funcall snapshot 'after-heading-open) states)
+            (let* ((html (org-export-as 'html nil nil t '(:with-toc nil)))
+                   (ascii (let ((org-ascii-charset 'utf-8))
+                            (org-export-as 'ascii nil nil t
+                                           '(:with-toc nil)))))
+              (list (nreverse states)
+                    (nreverse followed)
+                    (org-link-expand-abbrev "gh:eval-exec/neomacs")
+                    (org-link-expand-abbrev "rfc:9110")
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle html))))
+                            '("class=\"ticket\"" "ABC-42"
+                              "https://github.com/eval-exec/neomacs"
+                              "rfc9110.txt" "id=\"target-heading\""
+                              "Release Plan"))
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle ascii))))
+                            '("Ticket \\*ABC\\*<ABC-42>"
+                              "https://github.com/eval-exec/neomacs"
+                              "RFC 9110" "Release Plan"))
+                    (org-get-heading t t t t)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))"##,
+    );
+}
