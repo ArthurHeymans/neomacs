@@ -743,3 +743,71 @@ fn org_capture_template_escape_clipboard_elisp_matrix_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_capture_template_expand_body_placeholders_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (let* ((root (make-temp-file "org-cap-deep" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-capture-templates
+          `(("t" "Todo" entry (file+headline ,file "Inbox")
+             "** TODO %?\n:PROPERTIES:\n:Source: %a\n:Created: %U\n:END:\n%i\n"
+             :empty-lines 0)
+            ("n" "Note" plain (file+olp ,file "Notes" "Quick")
+             "- %U %a\n  %?\n"
+             :empty-lines 0))))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: Tasks\n")
+            (insert "* Inbox\n")
+            (insert "* Notes\n")
+            (insert "** Quick\n"))
+          ;; Capture with template t
+          (org-capture-string "First task" "t")
+          (let ((after-t (with-current-buffer (org-capture-get :buffer)
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+            (org-capture-finalize)
+            ;; Capture with template n
+            (org-capture-string "Quick note" "n")
+            (let ((after-n (with-current-buffer (org-capture-get :buffer)
+                            (buffer-substring-no-properties
+                             (point-min) (point-max)))))
+              (org-capture-finalize)
+              ;; Read final file
+              (let ((final-content
+                     (with-temp-buffer
+                       (insert-file-contents file)
+                       (buffer-string)))
+                    ;; Check element structure
+                    (elements
+                     (with-current-buffer (find-file-noselect file)
+                       (prog1
+                           (org-element-map (org-element-parse-buffer)
+                               '(headline item property-drawer)
+                             (lambda (el)
+                               (list (org-element-type el)
+                                     (org-element-property :level el)
+                                     (org-element-property :raw-value el)
+                                     (org-element-property :key el)
+                                     (org-element-property :value el))))
+                         (kill-buffer)))))
+                (list after-t
+                      after-n
+                      (replace-regexp-in-string
+                       "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
+                       (replace-regexp-in-string
+                        ":Created: \\[.*\\]" ":Created: [stamp]"
+                        (replace-regexp-in-string
+                         ":Source: .*" ":Source: [src]"
+                         final-content)))
+                      elements)))))
+      (delete-directory root t))))"##,
+    );
+}
