@@ -685,6 +685,71 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_sublevels_reveal_context_font_state_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fold-show-context-detail '((default . lineage)
+                                          (isearch . lineage))))
+      (org-mode)
+      (insert "* Root\nRoot body.\n")
+      (insert "** Alpha\nAlpha body.\n")
+      (insert "*** Beta\nBeta body.\n")
+      (insert "**** Gamma\nGamma body.\n")
+      (insert "***** Delta\nDelta body.\n")
+      (insert "****** Epsilon\nEpsilon body.\n")
+      (insert "** Sibling\nSibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide to level 1
+      (org-fold-hide-sublevels 1)
+      (let ((after-hide
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (list needle
+                        (invisible-p (point))
+                        (org-outline-level)
+                        (get-text-property (line-beginning-position) 'face))))
+              '("Root" "Alpha" "Beta" "Gamma" "Delta" "Epsilon" "Sibling"))))
+        ;; Reveal Epsilon with isearch context
+        (goto-char (point-min))
+        (search-forward "Epsilon body")
+        (org-fold-show-context 'isearch)
+        (let ((after-reveal
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward needle)
+                    (list needle
+                          (invisible-p (point))
+                          (org-outline-level))))
+                '("Root" "Alpha" "Beta" "Gamma" "Delta" "Epsilon" "Sibling"))))
+          ;; Merged check
+          (let ((merged nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (list after-hide
+                  after-reveal
+                  (nreverse merged)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_subtree_hide_edit_show_all_font_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
