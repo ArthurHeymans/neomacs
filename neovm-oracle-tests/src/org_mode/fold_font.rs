@@ -561,6 +561,99 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_repeated_deep_cycle_edit_fontify_no_merge_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t)
+          (org-cycle-separator-lines 1))
+      (org-mode)
+      (insert "* Root\n")
+      (insert "** Project A\nBody A\n")
+      (insert "*** Area A1\nBody A1\n")
+      (insert "**** TODO Level 4 target :deep:\nBody L4\n")
+      (insert "***** NEXT Level 5 child\nBody L5\n")
+      (insert "****** WAIT Level 6 child\nBody L6\n")
+      (insert "******* DONE Level 7 child\nBody L7\n")
+      (insert "******** TODO Level 8 child\nBody L8\n")
+      (insert "** Project B\nBody B\n")
+      (insert "*** Area B1\nBody B1\n")
+      (insert "**** TODO B Level 4 :other:\nBody B4\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (let ((pos (save-excursion
+                                     (goto-char (point-min))
+                                     (search-forward needle)
+                                     (point))))
+                          (list needle
+                                (not (null (org-invisible-p pos)))
+                                (line-number-at-pos pos))))
+                      '("Level 4 target" "Body L4" "Level 5 child" "Body L5"
+                        "Level 6 child" "Body L6" "Level 7 child" "Body L7"
+                        "Level 8 child" "Body L8" "Project B" "Body B4"))
+                     (split-string
+                      (buffer-substring-no-properties (point-min) (point-max))
+                      "\n" t)))))
+        (let (states faces)
+          (goto-char (point-min))
+          (search-forward "Level 4 target")
+          (beginning-of-line)
+          (dotimes (_ 7)
+            (org-cycle)
+            (push (funcall snapshot 'local-l4) states))
+          (goto-char (point-min))
+          (search-forward "Level 6 child")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (push (funcall snapshot 'hide-l6) states)
+          (end-of-line)
+          (insert "\nInserted while L6 subtree hidden")
+          (push (funcall snapshot 'hidden-edit) states)
+          (org-fold-show-subtree)
+          (push (funcall snapshot 'show-l6) states)
+          (dotimes (_ 4)
+            (org-cycle-global)
+            (push (funcall snapshot 'global) states))
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (goto-char (point-min))
+          (while (re-search-forward
+                  "^\\(\\*\\{4,8\\}\\) \\([A-Z]+\\)? ?\\([^:\n]+\\)\\(?: \\(:[[:alnum:]_@#%:]+:\\)\\)?"
+                  nil t)
+            (push (list (match-string 1)
+                        (match-string 2)
+                        (substring-no-properties (match-string 3))
+                        (match-string 4)
+                        (org-outline-level)
+                        (get-text-property (match-beginning 1) 'face)
+                        (and (match-beginning 2)
+                             (get-text-property (match-beginning 2) 'face))
+                        (get-text-property (match-beginning 3) 'face)
+                        (get-text-property (line-beginning-position)
+                                           'font-lock-fontified))
+                  faces))
+          (list (nreverse states)
+                (nreverse faces)
+                (count-matches "^\\*+ " (point-min) (point-max))
+                (count-matches "^Inserted while L6 subtree hidden$"
+                               (point-min) (point-max))
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_core_mixed_regions_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
