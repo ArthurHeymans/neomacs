@@ -165,3 +165,88 @@ fn org_publish_needed_timestamp_cache_combo() {
       (delete-directory pub t))))"##,
     );
 }
+
+#[test]
+fn org_publish_components_index_file_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((root (make-temp-file "org-publish-components" t))
+         (pub (make-temp-file "org-publish-components-out" t))
+         (static (expand-file-name "static" root))
+         (org-publish-use-timestamps-flag nil)
+         (org-publish-project-alist
+          `(("org"
+             :base-directory ,root
+             :base-extension "org"
+             :publishing-directory ,pub
+             :recursive nil
+             :publishing-function org-html-publish-to-html
+             :makeindex t
+             :with-toc nil)
+            ("static"
+             :base-directory ,static
+             :base-extension "txt"
+             :publishing-directory ,pub
+             :recursive nil
+             :publishing-function org-publish-attachment)
+            ("site" :components ("org" "static")))))
+    (unwind-protect
+        (progn
+          (make-directory static)
+          (with-temp-file (expand-file-name "page.org" root)
+            (insert "#+TITLE: Page\n")
+            (insert "* Heading\n")
+            (insert "\\index{Alpha} Body with index.\n"))
+          (with-temp-file (expand-file-name "second.org" root)
+            (insert "#+TITLE: Second\n")
+            (insert "* Other\n")
+            (insert "\\index{Beta} Other body.\n"))
+          (with-temp-file (expand-file-name "asset.txt" static)
+            (insert "asset body"))
+          (let* ((page (expand-file-name "page.org" root))
+                 (project (org-publish-get-project-from-filename page))
+                 (single (org-publish-file page project t)))
+            (org-publish-project "site" t)
+            (org-publish-all t)
+            (let* ((files (sort
+                           (mapcar (lambda (file)
+                                     (file-relative-name file pub))
+                                   (directory-files-recursively pub ".*" nil))
+                           #'string<))
+                   (page-html (expand-file-name "page.html" pub))
+                   (index-html (expand-file-name "theindex.html" pub)))
+              (list (car project)
+                    (file-relative-name single pub)
+                    files
+                    (mapcar (lambda (name)
+                              (let ((file (expand-file-name name pub)))
+                                (list name
+                                      (file-exists-p file)
+                                      (and (file-exists-p file)
+                                           (with-temp-buffer
+                                             (insert-file-contents file)
+                                             (not (null
+                                                   (string-match-p
+                                                    (if (equal name
+                                                               "asset.txt")
+                                                        "asset body"
+                                                      "<title>")
+                                                    (buffer-string)))))))))
+                            '("page.html" "second.html" "asset.txt"
+                              "theindex.html"))
+                    (and (file-exists-p page-html)
+                         (with-temp-buffer
+                           (insert-file-contents page-html)
+                           (not (null
+                                 (string-match-p "index" (buffer-string))))))
+                    (and (file-exists-p index-html)
+                         (with-temp-buffer
+                           (insert-file-contents index-html)
+                           (buffer-string)))))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}
