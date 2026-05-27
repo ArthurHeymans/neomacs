@@ -1206,3 +1206,66 @@ fn org_babel_insert_remove_file_example_result_matrix_combo() {
       (when (file-directory-p root) (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_babel_tangle_noweb_header_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-tangle-deep" t))
+         (src (expand-file-name "project.org" root))
+         (out (expand-file-name "out.el" root))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "#+PROPERTY: header-args:emacs-lisp :tangle " out " :noweb yes\n\n")
+            (insert "#+NAME: setup\n")
+            (insert "#+begin_src emacs-lisp\n")
+            (insert "(defvar *initialized* nil)\n")
+            (insert "#+end_src\n\n")
+            (insert "#+NAME: helpers\n")
+            (insert "#+begin_src emacs-lisp\n")
+            (insert "(defun helper-a () 1)\n")
+            (insert "(defun helper-b () 2)\n")
+            (insert "#+end_src\n\n")
+            (insert "#+begin_src emacs-lisp :noweb yes\n")
+            (insert "<<setup>>\n")
+            (insert "<<helpers>>\n")
+            (insert "(defun main () (+ (helper-a) (helper-b)))\n")
+            (insert "#+end_src\n"))
+          (with-current-buffer (find-file-noselect src)
+            (org-mode)
+            ;; Tangle
+            (let ((tangle-result (org-babel-tangle)))
+              ;; Read tangled file
+              (let ((tangled-content
+                     (when (file-exists-p out)
+                       (with-temp-buffer
+                         (insert-file-contents out)
+                         (buffer-string))))
+                    ;; Parse buffer
+                    (src-blocks
+                     (org-element-map (org-element-parse-buffer) 'src-block
+                       (lambda (sb)
+                         (list (org-element-property :name sb)
+                               (org-element-property :language sb)
+                               (org-element-property :parameters sb)
+                               (org-element-property :value sb))))))
+                (kill-buffer)
+                (list (mapcar (lambda (f)
+                                (replace-regexp-in-string
+                                 (regexp-quote root) "<root>" f))
+                              tangle-result)
+                      (mapcar #'file-name-nondirectory tangle-result)
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or tangled-content "no-file"))
+                      src-blocks)))))
+      (delete-directory root t))))"##,
+    );
+}
