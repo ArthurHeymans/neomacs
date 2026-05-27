@@ -272,3 +272,85 @@ fn org_id_encoding_paste_tracker_lookup_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_id_open_option_and_colon_id_fallback_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-id-open" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root))
+         (org-id-locations-file (expand-file-name "ids.el" root))
+         (org-id-track-globally t)
+         (org-id-link-use-context t)
+         (org-link-context-for-files t)
+         (org-link-frame-setup '((file . find-file))))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Parent\n:PROPERTIES:\n:ID: parent\n:END:\n")
+            (insert "** Child Alpha\nBody target alpha\n")
+            (insert "** Child Beta\n<<beta-target>>\nBody beta\n"))
+          (with-temp-file file-b
+            (insert "* Literal Colon ID\n:PROPERTIES:\n:ID: legacy::id\n:END:\n")
+            (insert "Literal body\n"))
+          (org-id-update-id-locations (list file-a file-b) t)
+          (with-current-buffer (find-file-noselect file-a)
+            (org-mode)
+            (goto-char (point-min))
+            (search-forward "Child Beta")
+            (beginning-of-line)
+            (let* ((stored (org-id-store-link))
+                   (stored-plist org-store-link-plist))
+              (with-current-buffer (find-file-noselect file-b)
+                (org-mode)
+                (goto-char (point-min))
+                (let (opened-option opened-target fallback-opened fallback-error)
+                  (org-id-open "parent::*Child Beta" nil)
+                  (setq opened-option
+                        (list (file-name-nondirectory (buffer-file-name))
+                              (org-get-heading t t t t)
+                              (line-number-at-pos)))
+                  (org-id-open "parent::beta-target" nil)
+                  (setq opened-target
+                        (list (file-name-nondirectory (buffer-file-name))
+                              (org-get-heading t t t t)
+                              (thing-at-point 'line t)))
+                  (condition-case err
+                      (progn
+                        (org-id-open "legacy::id" nil)
+                        (setq fallback-opened
+                              (list (file-name-nondirectory (buffer-file-name))
+                                    (org-get-heading t t t t)
+                                    (line-number-at-pos))))
+                    (error (setq fallback-error
+                                 (cons (car err) (cdr err)))))
+                  (list (replace-regexp-in-string
+                         "id:[0-9a-f-]+\\'" "id:<generated>" stored)
+                        (plist-put
+                         (copy-sequence stored-plist)
+                         :link
+                         (replace-regexp-in-string
+                          "id:[0-9a-f-]+\\'" "id:<generated>"
+                          (plist-get stored-plist :link)))
+                        opened-option
+                        opened-target
+                        fallback-opened
+                        fallback-error
+                        (mapcar (lambda (path)
+                                  (file-relative-name path root))
+                                (sort (mapcar
+                                       #'car
+                                       (org-id-hash-to-alist
+                                        org-id-locations))
+                                      #'string<))))))))
+      (when (get-file-buffer file-a) (kill-buffer (get-file-buffer file-a)))
+      (when (get-file-buffer file-b) (kill-buffer (get-file-buffer file-b)))
+      (delete-directory root t))))"##,
+    );
+}
