@@ -1466,5 +1466,6 @@ mod strong_peta_combos;
 mod strong_tera_combos;
 mod strong_ultimate_edge;
 mod strong_workflow_combos;
+mod strong_xenna_combos;
 mod strong_yotta_combos;
 mod strong_zetta_combos;
