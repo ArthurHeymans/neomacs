@@ -318,3 +318,141 @@ fn org_habit_repeat_done_mutation_graph_combo() {
                      (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_habit_agenda_past_delay_all_today_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-habit)
+  (let* ((file (make-temp-file "org-habit-past-delay" nil ".org"))
+         (org-agenda-files (list file))
+         (org-agenda-span 1)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-prefix-format "%-10:c%5e % s")
+         (org-agenda-sorting-strategy '((agenda habit-down priority-down category-keep)))
+         (org-scheduled-past-days 3)
+         (org-scheduled-delay-days 0)
+         (org-habit-preceding-days 4)
+         (org-habit-following-days 3)
+         (org-habit-graph-column 48)
+         (org-habit-today-glyph ?!)
+         (org-habit-completed-glyph ?*)
+         (org-habit-show-habits t)
+         (org-habit-show-habits-only-for-today t)
+         (org-habit-show-all-today nil)
+         (org-habit-scheduled-past-days nil)
+         (org-extend-today-until 0))
+    (cl-labels
+        ((snapshot
+          (label)
+          (with-current-buffer org-agenda-buffer-name
+            (let (rows)
+              (goto-char (point-min))
+              (while (re-search-forward
+                      "Old stretch\\|Recent stretch\\|Future stretch\\|Plain stale"
+                      nil t)
+                (beginning-of-line)
+                (let* ((bol (point))
+                       (eol (line-end-position))
+                       (plain (buffer-substring-no-properties bol eol))
+                       (habit (get-text-property bol 'org-habit-p))
+                       (graph-start
+                        (save-excursion
+                          (move-to-column org-habit-graph-column t)
+                          (point)))
+                       (graph
+                        (and (<= graph-start eol)
+                             (buffer-substring graph-start eol)))
+                       (graph-props
+                        (and graph
+                             (mapcar
+                              (lambda (i)
+                                (let ((help
+                                       (get-text-property
+                                        (+ graph-start i) 'help-echo)))
+                                  (list (aref graph i)
+                                        (get-text-property
+                                         (+ graph-start i) 'face)
+                                        (cond
+                                         ((null help) nil)
+                                         ((string-match-p "\\`<[^>]+>\\(?: DONE\\)?\\'" help)
+                                          'habit-date)
+                                         ((string-match-p "jump to Org file" help)
+                                          'agenda-jump)
+                                         (t help)))))
+                              (number-sequence 0 (1- (length graph)))))))
+                  (push
+                   (list plain
+                         (and habit
+                              (list (nth 0 habit)
+                                    (nth 1 habit)
+                                    (nth 2 habit)
+                                    (nth 3 habit)
+                                    (nth 4 habit)
+                                    (nth 5 habit)))
+                         (and graph (substring-no-properties graph))
+                         graph-props
+                         (get-text-property bol 'type)
+                         (get-text-property bol 'date)
+                         (get-text-property bol 'priority)
+                         (get-text-property bol 'effort-minutes))
+                   rows))
+                (forward-line 1))
+              (list label
+                    org-habit-scheduled-past-days
+                    org-habit-show-all-today
+                    org-habit-show-habits-only-for-today
+                    (nreverse rows))))))
+      (unwind-protect
+          (progn
+            (with-temp-file file
+              (insert "#+CATEGORY: HabitPast\n")
+              (insert "* TODO Old stretch :old:\n")
+              (insert "SCHEDULED: <2026-05-21 Thu .+1d/4d>\n")
+              (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 0:15\n:END:\n")
+              (insert ":LOGBOOK:\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-20 Wed]\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-23 Sat]\n")
+              (insert ":END:\n")
+              (insert "* TODO Recent stretch :recent:\n")
+              (insert "SCHEDULED: <2026-05-25 Mon .+2d/5d>\n")
+              (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 0:20\n:END:\n")
+              (insert ":LOGBOOK:\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-24 Sun]\n")
+              (insert ":END:\n")
+              (insert "* TODO Future stretch :future:\n")
+              (insert "SCHEDULED: <2026-05-29 Fri .+1d/3d>\n")
+              (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 0:05\n:END:\n")
+              (insert "* TODO Plain stale :plain:\n")
+              (insert "SCHEDULED: <2026-05-21 Thu>\n"))
+            (cl-letf (((symbol-function 'current-time)
+                       (lambda () (encode-time 0 0 9 27 5 2026))))
+              (org-agenda-list nil "2026-05-27" 1)
+              (let ((default (snapshot 'default)))
+                (setq org-habit-scheduled-past-days 10)
+                (org-agenda-redo)
+                (let ((habit-past-window (snapshot 'habit-past-window)))
+                  (setq org-habit-scheduled-past-days nil)
+                  (with-current-buffer org-agenda-buffer-name
+                    (org-habit-toggle-display-in-agenda '(4)))
+                  (let ((all-today (snapshot 'all-today)))
+                    (setq org-habit-show-habits-only-for-today nil)
+                    (setq org-habit-show-all-today nil)
+                    (org-agenda-list nil "2026-05-29" 1)
+                    (list default
+                          habit-past-window
+                          all-today
+                          (snapshot 'future-with-habits)))))))
+        (when (get-buffer org-agenda-buffer-name)
+          (kill-buffer org-agenda-buffer-name))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+        (delete-file file)))))"##,
+    );
+}
