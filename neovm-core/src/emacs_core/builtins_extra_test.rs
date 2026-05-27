@@ -293,6 +293,24 @@ fn assoc_string_and_car_less_than_car_semantics() {
         .unwrap()
         .is_nil()
     );
+    let left_marker = crate::emacs_core::marker::make_marker_value(
+        Some(crate::buffer::BufferId(1)),
+        Some(3),
+        false,
+    );
+    let right_marker = crate::emacs_core::marker::make_marker_value(
+        Some(crate::buffer::BufferId(1)),
+        Some(8),
+        false,
+    );
+    assert!(
+        builtin_car_less_than_car(vec![
+            Value::cons(left_marker, Value::symbol("a")),
+            Value::cons(right_marker, Value::symbol("b")),
+        ])
+        .unwrap()
+        .is_truthy()
+    );
 
     let list_err = builtin_car_less_than_car(vec![
         Value::fixnum(1),

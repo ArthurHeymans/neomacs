@@ -4709,6 +4709,35 @@ fn save_restriction_restores_labeled_restrictions_and_widen_semantics() {
 }
 
 #[test]
+fn indirect_replace_while_widened_restores_original_restriction_once() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let ((base (get-buffer-create "indirect-replace-base"))
+                     child)
+                 (set-buffer base)
+                 (erase-buffer)
+                 (insert "abc")
+                 (setq child (make-indirect-buffer
+                              base "indirect-replace-child" t))
+                 (set-buffer child)
+                 (narrow-to-region 2 3)
+                 (save-excursion
+                   (save-restriction
+                     (widen)
+                     (goto-char 2)
+                     (search-forward "b")
+                     (replace-match "XX" t t)))
+                 (list (point-min)
+                       (point-max)
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))"#
+        ),
+        "OK (2 4 \"XX\")"
+    );
+}
+
+#[test]
 fn redisplay_restores_current_innermost_labeled_restriction_after_callback_mutation() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

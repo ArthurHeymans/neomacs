@@ -626,7 +626,7 @@ pub(crate) fn finish_read_event_interactive_in_runtime(
     runtime: &mut impl super::reader::KeyboardInputRuntime,
     args: &[Value],
 ) -> EvalResult {
-    if runtime.has_input_receiver() {
+    if runtime.has_input_receiver() || runtime.has_pending_low_level_events() {
         let timeout = super::reader::parse_optional_read_seconds_arg(args.get(2))?;
         let Some(event) = runtime.read_char_with_timeout(timeout)? else {
             return Ok(Value::NIL);
@@ -671,7 +671,7 @@ pub(crate) fn finish_read_char_exclusive_interactive_in_runtime(
     runtime: &mut impl super::reader::KeyboardInputRuntime,
     args: &[Value],
 ) -> EvalResult {
-    if runtime.has_input_receiver() {
+    if runtime.has_input_receiver() || runtime.has_pending_low_level_events() {
         let timeout = super::reader::parse_optional_read_seconds_arg(args.get(2))?;
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
         loop {
@@ -719,7 +719,7 @@ pub(crate) fn builtin_read_event_in_runtime(
         return Ok(Some(event));
     }
 
-    if runtime.has_input_receiver() {
+    if runtime.has_input_receiver() || runtime.has_pending_low_level_events() {
         Ok(None)
     } else {
         Ok(Some(Value::NIL))

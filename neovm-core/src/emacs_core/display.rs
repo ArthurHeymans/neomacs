@@ -1059,7 +1059,7 @@ pub(crate) fn builtin_x_send_client_message(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_x_popup_dialog(args: Vec<Value>) -> EvalResult {
     expect_range_args("x-popup-dialog", &args, 2, 3)?;
 
-    if !args[0].is_frame() {
+    if !args[0].is_frame() && !args[0].is_t() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("windowp"), Value::NIL],

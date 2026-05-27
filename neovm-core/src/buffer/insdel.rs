@@ -904,14 +904,6 @@ impl BufferManager {
             }
         }
 
-        buf.text.adjust_markers_for_replace(
-            start,
-            end,
-            start_char,
-            end_char,
-            new_byte_len,
-            new_char_len,
-        );
         buf.overlays
             .adjust_for_replace(start, old_byte_len, new_byte_len);
         buf.record_char_modification(old_char_len.max(new_char_len));

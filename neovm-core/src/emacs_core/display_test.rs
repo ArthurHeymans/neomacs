@@ -1801,6 +1801,17 @@ fn x_popup_dialog_and_menu_batch_semantics() {
     );
     assert!(
         builtin_x_popup_dialog(vec![
+            Value::T,
+            Value::list(vec![
+                Value::string("Title"),
+                Value::cons(Value::string("Yes"), Value::T),
+            ]),
+        ])
+        .unwrap()
+        .is_nil()
+    );
+    assert!(
+        builtin_x_popup_dialog(vec![
             Value::make_frame(1),
             Value::list(vec![Value::string("A"), Value::fixnum(1)]),
         ])

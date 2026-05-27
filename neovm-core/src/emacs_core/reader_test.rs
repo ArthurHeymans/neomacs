@@ -1777,6 +1777,41 @@ fn yes_or_no_p_rejects_extra_arg() {
 }
 
 #[test]
+fn yes_or_no_p_uses_dialog_path_for_cons_last_input_event() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.obarray.set_symbol_value(
+        "last-input-event",
+        Value::list(vec![Value::symbol("dbus-event")]),
+    );
+    ev.obarray
+        .set_symbol_value("last-nonmenu-event", Value::NIL);
+    ev.obarray.set_symbol_value("use-dialog-box", Value::T);
+
+    let result = builtin_yes_or_no_p(&mut ev, vec![Value::string("Confirm? ")]).unwrap();
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
+fn yes_or_no_p_respects_use_dialog_box_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.obarray.set_symbol_value(
+        "last-input-event",
+        Value::list(vec![Value::symbol("dbus-event")]),
+    );
+    ev.obarray
+        .set_symbol_value("last-nonmenu-event", Value::NIL);
+    ev.obarray.set_symbol_value("use-dialog-box", Value::NIL);
+
+    let result = builtin_yes_or_no_p(&mut ev, vec![Value::string("Confirm? ")]);
+    assert!(matches!(
+        result,
+        Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"
+    ));
+}
+
+#[test]
 fn yes_or_no_p_ignores_unread_events_and_eofs() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -3135,6 +3170,10 @@ impl KeyboardInputRuntime for BlockingKeySequenceRuntime {
     ) -> Result<(Vec<Value>, Value), Flow> {
         self.last_options = Some(options);
         Ok((self.blocking_keys.clone(), Value::NIL))
+    }
+
+    fn symbol_value_or_nil(&self, _name: &str) -> Value {
+        Value::NIL
     }
 }
 

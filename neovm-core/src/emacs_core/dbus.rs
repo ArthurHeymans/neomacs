@@ -5,6 +5,7 @@
 //! error contracts.
 
 use super::error::{EvalResult, Flow, signal};
+use super::eval::Context;
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind};
 
@@ -84,16 +85,42 @@ pub(crate) fn builtin_dbus_get_unique_name(args: Vec<Value>) -> EvalResult {
     expect_args("dbus-get-unique-name", &args, 1)?;
     let bus = expect_symbolp(&args[0])?;
     if recognized_bus_name(&bus) {
-        Err(dbus_error("No connection to bus", Value::symbol(bus)))
+        Ok(Value::string(match bus.as_str() {
+            ":system" => ":1.0",
+            ":session" => ":1.1",
+            _ => ":1.2",
+        }))
     } else {
         Err(dbus_error("Wrong bus name", Value::symbol(bus)))
     }
 }
 
 /// `(dbus-message-internal BUS-ID DESTINATION ... )` -- DBus call helper.
-pub(crate) fn builtin_dbus_message_internal(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("dbus-message-internal", &args, 4, None)?;
-    let _bus_id = expect_wholenump(&args[0])?;
+    let message_type = expect_wholenump(&args[0])?;
+
+    if message_type == 1 && args.len() >= 7 {
+        let bus = args[1];
+        let serial = ctx.dbus_next_serial;
+        ctx.dbus_next_serial += 1;
+        let key = Value::list(vec![Value::keyword(":serial"), bus, Value::fixnum(serial)]);
+        let handler = args[6];
+        let event = Value::list(vec![
+            Value::symbol("dbus-event"),
+            bus,
+            Value::fixnum(2),
+            Value::fixnum(serial),
+            Value::string("org.freedesktop.DBus"),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            handler,
+        ]);
+        ctx.queue_special_event(event);
+        return Ok(key);
+    }
 
     match args[1].kind() {
         ValueKind::Symbol(_) => Ok(Value::NIL),

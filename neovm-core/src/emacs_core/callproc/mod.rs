@@ -647,6 +647,7 @@ fn builtin_call_process_region_impl(
     expect_min_args("call-process-region", &args, 3)?;
     let program = super::builtins::expect_lisp_string(&args[2])?.clone();
     let program_os = resolve_call_process_program(eval, &program)?;
+    let subprocess_dir = subprocess_default_directory(eval);
     let buffers = &mut eval.buffers;
 
     let delete = args.len() > 3 && args[3].is_truthy();
@@ -731,6 +732,9 @@ fn builtin_call_process_region_impl(
 
     if destination_spec.no_wait {
         let mut command = Command::new(&program_os);
+        if let Some(dir) = &subprocess_dir {
+            command.current_dir(dir);
+        }
         command
             .args(cmd_args.iter().map(lisp_string_to_os_string))
             .stdin(Stdio::piped())
@@ -770,7 +774,11 @@ fn builtin_call_process_region_impl(
         return Ok(Value::NIL);
     }
 
-    let mut child = Command::new(&program_os)
+    let mut command = Command::new(&program_os);
+    if let Some(dir) = &subprocess_dir {
+        command.current_dir(dir);
+    }
+    let mut child = command
         .args(cmd_args.iter().map(lisp_string_to_os_string))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -1357,6 +1357,42 @@ fn call_process_region_destination_buffer_name_inserts_there() {
 }
 
 #[test]
+fn call_process_region_respects_default_directory() {
+    crate::test_utils::init_test_tracing();
+    let dir = tmp_dir("cpr-cwd");
+    let mut eval = Context::new();
+    let buf_id = eval.buffers.create_buffer("cpr-cwd");
+    assert!(eval.buffers.switch_current(buf_id));
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("default-directory", Value::string(format!("{dir}/")));
+
+    let shell = find_bin("sh");
+    let result = crate::emacs_core::callproc::builtin_call_process_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(shell),
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::string("-c"),
+            Value::string("pwd"),
+        ],
+    )
+    .expect("call-process-region should succeed");
+
+    assert_eq!(result.as_fixnum(), Some(0));
+    assert_eq!(
+        eval.buffers.get(buf_id).expect("buffer").buffer_string(),
+        format!("{dir}\n")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn call_process_region_file_destination_writes_file() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");

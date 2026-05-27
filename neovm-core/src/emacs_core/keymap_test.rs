@@ -816,6 +816,34 @@ fn composed_keymap_accumulates_prefix_maps_from_multiple_members() {
 }
 
 #[test]
+fn composed_keymap_child_prefix_shadows_parent_command() {
+    crate::test_utils::init_test_tracing();
+    let child_member = make_sparse_list_keymap();
+    let parent_member = make_sparse_list_keymap();
+    let prefix_events = [Value::fixnum(3), Value::fixnum(22)];
+    let child_events = [
+        Value::fixnum(3),
+        Value::fixnum(22),
+        Value::fixnum('n' as i64),
+    ];
+
+    list_keymap_define_seq(child_member, &child_events, Value::symbol("child-command")).unwrap();
+    list_keymap_define_seq(
+        parent_member,
+        &prefix_events,
+        Value::symbol("parent-command"),
+    )
+    .unwrap();
+
+    let composed = Value::list(vec![Value::symbol("keymap"), child_member, parent_member]);
+    let prefix = list_keymap_lookup_seq(&composed, &prefix_events);
+    assert!(is_list_keymap(&prefix));
+
+    let binding = list_keymap_lookup_seq(&composed, &child_events);
+    assert_eq!(binding.as_symbol_name(), Some("child-command"));
+}
+
+#[test]
 fn lookup_key_in_obarray_composes_child_prefix_with_multi_member_parent() {
     crate::test_utils::init_test_tracing();
     let obarray = crate::emacs_core::symbol::Obarray::new();

@@ -1848,12 +1848,16 @@ pub(crate) trait KeyboardInputRuntime {
     fn clear_read_command_keys(&mut self);
     fn read_command_keys(&self) -> &[Value];
     fn has_input_receiver(&self) -> bool;
+    fn has_pending_low_level_events(&self) -> bool {
+        false
+    }
     fn read_char_blocking(&mut self) -> Result<Value, Flow>;
     fn read_char_with_timeout(&mut self, timeout: Option<Duration>) -> Result<Option<Value>, Flow>;
     fn read_key_sequence_blocking(
         &mut self,
         options: crate::keyboard::ReadKeySequenceOptions,
     ) -> Result<(Vec<Value>, Value), Flow>;
+    fn symbol_value_or_nil(&self, name: &str) -> Value;
 }
 
 impl KeyboardInputRuntime for super::eval::Context {
@@ -1893,6 +1897,10 @@ impl KeyboardInputRuntime for super::eval::Context {
         super::eval::Context::has_input_receiver(self)
     }
 
+    fn has_pending_low_level_events(&self) -> bool {
+        super::eval::Context::has_pending_low_level_events(self)
+    }
+
     fn read_char_blocking(&mut self) -> Result<Value, Flow> {
         super::eval::Context::read_char(self)
     }
@@ -1906,6 +1914,13 @@ impl KeyboardInputRuntime for super::eval::Context {
         options: crate::keyboard::ReadKeySequenceOptions,
     ) -> Result<(Vec<Value>, Value), Flow> {
         super::eval::Context::read_key_sequence_with_options(self, options)
+    }
+
+    fn symbol_value_or_nil(&self, name: &str) -> Value {
+        self.obarray
+            .symbol_value(name)
+            .copied()
+            .unwrap_or(Value::NIL)
     }
 }
 
@@ -2334,7 +2349,9 @@ pub(crate) fn builtin_y_or_n_p(eval: &mut super::eval::Context, args: Vec<Value>
 /// In interactive mode, uses read-from-minibuffer.
 /// In batch mode, signals end-of-file.
 pub(crate) fn builtin_yes_or_no_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_yes_or_no_p_in_runtime(eval, &args)?;
+    if let Some(result) = builtin_yes_or_no_p_in_runtime(eval, &args)? {
+        return Ok(result);
+    }
     finish_yes_or_no_p_in_eval(eval, &args)
 }
 
@@ -2374,7 +2391,9 @@ pub(crate) fn finish_yes_or_no_p_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    builtin_yes_or_no_p_in_runtime(shared, args)?;
+    if let Some(result) = builtin_yes_or_no_p_in_runtime(shared, args)? {
+        return Ok(result);
+    }
     finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
         finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
     })
@@ -2383,7 +2402,7 @@ pub(crate) fn finish_yes_or_no_p_in_vm_runtime(
 pub(crate) fn builtin_yes_or_no_p_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
-) -> Result<(), Flow> {
+) -> Result<Option<Value>, Flow> {
     expect_args("yes-or-no-p", args, 1)?;
     if !args[0].is_string() {
         return Err(signal(
@@ -2392,11 +2411,35 @@ pub(crate) fn builtin_yes_or_no_p_in_runtime(
         ));
     }
 
+    if yes_or_no_p_should_use_dialog(runtime) {
+        let menu = Value::cons(
+            args[0],
+            Value::list(vec![
+                Value::cons(Value::string("Yes"), Value::T),
+                Value::cons(Value::string("No"), Value::NIL),
+            ]),
+        );
+        return super::display::builtin_x_popup_dialog(vec![Value::T, menu, Value::NIL]).map(Some);
+    }
+
     if runtime.has_input_receiver() {
-        Ok(())
+        Ok(None)
     } else {
         Err(stdin_end_of_file_error())
     }
+}
+
+fn yes_or_no_p_should_use_dialog(runtime: &impl KeyboardInputRuntime) -> bool {
+    let last_input_event = runtime.symbol_value_or_nil("last-input-event");
+    if last_input_event.is_nil() || !runtime.symbol_value_or_nil("use-dialog-box").is_truthy() {
+        return false;
+    }
+
+    let last_nonmenu_event = runtime.symbol_value_or_nil("last-nonmenu-event");
+    let from_tty_menu = runtime.symbol_value_or_nil("from--tty-menu-p");
+    last_nonmenu_event.is_cons()
+        || (last_nonmenu_event.is_nil() && last_input_event.is_cons())
+        || (from_tty_menu.is_truthy() && from_tty_menu.as_symbol_name() != Some("unbound"))
 }
 
 // ---------------------------------------------------------------------------

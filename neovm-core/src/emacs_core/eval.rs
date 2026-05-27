@@ -87,6 +87,10 @@ fn gnu_system_type() -> &'static str {
 
 fn initial_feature_names() -> Vec<&'static str> {
     let mut features = vec!["threads", "emacs"];
+    if cfg!(target_os = "linux") {
+        // GNU dbusbind.c provides `dbusbind' when Emacs is built with DBus.
+        features.insert(0, "dbusbind");
+    }
     if cfg!(target_os = "windows") {
         // GNU w32term.c calls Fprovide(Qw32) during C-level startup.
         features.insert(0, "w32");
@@ -1630,6 +1634,8 @@ pub struct Context {
     /// GNU dbusbind.c `xd_registered_inhibitor_locks`: an alist whose entries
     /// are `(LOCK WHAT WHY BLOCK)`.
     pub(crate) dbus_registered_inhibitor_locks: Value,
+    /// Monotonic serial for synthetic DBus compatibility events.
+    pub(crate) dbus_next_serial: i64,
     /// Match data from the last successful search/match operation.
     pub(crate) match_data: Option<MatchData>,
     /// Deferred after-change records, mirroring GNU Emacs's
@@ -2922,6 +2928,15 @@ impl Context {
             Value::symbol("focus-out"),
             Value::symbol("handle-focus-out"),
         );
+        if cfg!(target_os = "linux") {
+            // GNU keyboard.c installs DBus events in `special-event-map` when
+            // dbusbind.c is present.
+            list_keymap_define(
+                special_event_map,
+                Value::symbol("dbus-event"),
+                Value::symbol("dbus-handle-event"),
+            );
+        }
 
         let standard_syntax_table = super::syntax::builtin_standard_syntax_table(Vec::new())
             .expect("startup seeding requires standard syntax table");
@@ -3992,6 +4007,28 @@ impl Context {
         obarray.make_special("while-no-input-ignore-events");
         obarray.set_symbol_value("input-pending-p-filter-events", Value::T);
         obarray.make_special("input-pending-p-filter-events");
+        if cfg!(target_os = "linux") {
+            // GNU dbusbind.c DEFVARs.  The compatibility transport currently
+            // models successful local method replies and inhibitor-lock state.
+            for (name, value) in [
+                ("dbus-message-type-invalid", Value::fixnum(0)),
+                ("dbus-message-type-method-call", Value::fixnum(1)),
+                ("dbus-message-type-method-return", Value::fixnum(2)),
+                ("dbus-message-type-error", Value::fixnum(3)),
+                ("dbus-message-type-signal", Value::fixnum(4)),
+                ("dbus-debug", Value::NIL),
+                ("dbus-compiled-version", Value::string("compat")),
+                ("dbus-runtime-version", Value::string("compat")),
+            ] {
+                obarray.set_symbol_value(name, value);
+                obarray.make_special(name);
+            }
+            obarray.set_symbol_value(
+                "dbus-registered-objects-table",
+                Value::hash_table(HashTableTest::Equal),
+            );
+            obarray.make_special("dbus-registered-objects-table");
+        }
         obarray.set_symbol_value("deactivate-mark", Value::NIL);
         obarray.make_special("deactivate-mark");
         obarray.make_buffer_local("deactivate-mark", true);
@@ -4515,6 +4552,7 @@ impl Context {
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
             dbus_registered_inhibitor_locks: Value::NIL,
+            dbus_next_serial: 1,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -4688,6 +4726,7 @@ impl Context {
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
             dbus_registered_inhibitor_locks: Value::NIL,
+            dbus_next_serial: 1,
             match_data: None,
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
@@ -6872,6 +6911,25 @@ impl Context {
         };
         let new_list = Value::cons(event, current);
         self.assign("unread-command-events", new_list);
+    }
+
+    /// Queue a low-level special event on the keyboard event path.
+    ///
+    /// GNU's `kbd_buffer_store_event` feeds DBus, file-notify, and similar
+    /// events through `special-event-map` even when no terminal input is
+    /// available.
+    pub(crate) fn queue_special_event(&mut self, event: Value) {
+        self.command_loop.keyboard.unread_event(event);
+    }
+
+    pub(crate) fn has_pending_low_level_events(&self) -> bool {
+        !self.command_loop.keyboard.kboard.unread_events.is_empty()
+            || self
+                .command_loop
+                .keyboard
+                .kboard
+                .unread_selection_event
+                .is_some()
     }
 
     pub(crate) fn replace_unread_command_event_with_singleton(&mut self, event: Value) {

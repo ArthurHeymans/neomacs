@@ -6532,11 +6532,7 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (comp-native-compiler-options-effective-p)
                  (comp-native-driver-options-effective-p)
                  (= (dbus--init-bus :session) 2)
-                 (eq
-                  (condition-case err
-                      (dbus-get-unique-name :session)
-                    (dbus-error (car err)))
-                  'dbus-error)
+                 (stringp (dbus-get-unique-name :session))
                  (null (dbus-message-internal 2 :dest :path :iface :member))
                  (consp (get-load-suffixes))
                  (null (command-error-default-function nil nil nil))

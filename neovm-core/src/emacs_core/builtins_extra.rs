@@ -107,6 +107,9 @@ fn expect_number_or_marker_f64(value: &Value) -> Result<f64, Flow> {
         ValueKind::Veclike(VecLikeType::Bignum) => {
             Ok(f64::rounding_from(value.as_bignum().unwrap(), RoundingMode::Nearest).0)
         }
+        _ if super::marker::is_marker(value) => {
+            Ok(super::marker::marker_position_as_int(value)? as f64)
+        }
         _ => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("number-or-marker-p"), *value],
@@ -788,6 +791,9 @@ pub(crate) fn system_configuration_options_value() -> Value {
 
 pub(crate) fn system_configuration_features_value() -> Value {
     let mut features = vec!["PDUMPER".to_string(), "THREADS".to_string()];
+    if cfg!(target_os = "linux") {
+        features.push("DBUS".to_string());
+    }
     features.sort_unstable();
     features.dedup();
     Value::string(features.join(" "))

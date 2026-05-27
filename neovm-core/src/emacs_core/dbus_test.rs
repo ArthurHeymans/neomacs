@@ -15,24 +15,27 @@ fn dbus_init_bus_contract() {
 }
 
 #[test]
-fn dbus_get_unique_name_errors_without_connection() {
+fn dbus_get_unique_name_returns_compat_unique_name() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_dbus_get_unique_name(vec![Value::keyword(":system")]).unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "dbus-error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+    assert_eq!(
+        builtin_dbus_get_unique_name(vec![Value::keyword(":system")]).unwrap(),
+        Value::string(":1.0")
+    );
 }
 
 #[test]
 fn dbus_message_internal_validates_first_arg() {
     crate::test_utils::init_test_tracing();
-    let err = builtin_dbus_message_internal(vec![
-        Value::keyword(":session"),
-        Value::string("/"),
-        Value::string("org.example"),
-        Value::string("Ping"),
-    ])
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let err = builtin_dbus_message_internal(
+        &mut ev,
+        vec![
+            Value::keyword(":session"),
+            Value::string("/"),
+            Value::string("org.example"),
+            Value::string("Ping"),
+        ],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),

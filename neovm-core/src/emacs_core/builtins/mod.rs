@@ -9193,12 +9193,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "dbus-get-unique-name",
         |_ctx, args| super::dbus::builtin_dbus_get_unique_name(args),
-        0,
-        None,
+        1,
+        Some(1),
     );
     ctx.defsubr(
         "dbus-message-internal",
-        |_ctx, args| super::dbus::builtin_dbus_message_internal(args),
+        |ctx, args| super::dbus::builtin_dbus_message_internal(ctx, args),
         0,
         None,
     );

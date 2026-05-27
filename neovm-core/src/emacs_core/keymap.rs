@@ -782,6 +782,8 @@ fn lookup_in_keymap_level_impl(
                             } else if is_list_keymap(&val) {
                                 prefix_binding =
                                     Some(accumulate_prefix_keymap(prefix_binding, val));
+                            } else if prefix_binding.is_some() {
+                                break;
                             } else {
                                 return Some(val);
                             }
@@ -808,6 +810,8 @@ fn lookup_in_keymap_level_impl(
                             nil_binding_found = true;
                         } else if is_list_keymap(&val) {
                             prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, val));
+                        } else if prefix_binding.is_some() {
+                            break;
                         } else {
                             return Some(val);
                         }
@@ -831,6 +835,8 @@ fn lookup_in_keymap_level_impl(
                     nil_binding_found = true;
                 } else if is_list_keymap(&found) {
                     prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, found));
+                } else if prefix_binding.is_some() {
+                    break;
                 } else {
                     return Some(found);
                 }
@@ -849,6 +855,8 @@ fn lookup_in_keymap_level_impl(
                     nil_binding_found = true;
                 } else if is_list_keymap(&val) {
                     prefix_binding = Some(accumulate_prefix_keymap(prefix_binding, val));
+                } else if prefix_binding.is_some() {
+                    break;
                 } else {
                     return Some(val);
                 }
