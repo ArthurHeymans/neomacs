@@ -88,6 +88,7 @@ mod planning_timestamp;
 mod plot_workflow;
 mod property_log;
 mod protocol_feed;
+mod psi_operations;
 mod publish_workflow;
 mod rho_combos;
 mod sigma_combos;
