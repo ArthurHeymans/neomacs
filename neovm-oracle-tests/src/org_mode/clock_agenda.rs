@@ -740,3 +740,65 @@ fn org_clock_get_table_data_multi_file_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_clock_log_agenda_timestamp_filter_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-filter" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'day)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-log t)
+         (org-agenda-log-mode-items '(clock)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-27 Wed 14:00]--[2026-05-27 Wed 15:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "* TODO Beta\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30\n")
+            (insert ":END:\n"))
+          ;; Clock report mode
+          (let ((org-agenda-clockreport-mode t)
+                (org-agenda-clock-reporting-file file))
+            (org-agenda-list nil "2026-05-27" 1)
+            (with-current-buffer org-agenda-buffer-name
+              (let ((agenda-text (replace-regexp-in-string
+                                  (regexp-quote root) "<root>"
+                                  (buffer-substring-no-properties
+                                   (point-min) (point-max))))
+                    ;; Count clock entries
+                    (clock-count
+                     (let ((c 0) (s 0))
+                       (while (string-match "Clocked" agenda-text s)
+                         (setq s (match-end 0) c (1+ c)))
+                       c))
+                    ;; Extract time entries
+                    (times nil)
+                    (_ (let ((s 0))
+                         (while (string-match
+                                 "\\([0-9]+:[0-9]+\\)\\s-+.*Clocked" agenda-text s)
+                           (push (match-string 1 agenda-text) times)
+                           (setq s (match-end 0))))))
+                (list clock-count
+                      (nreverse times)
+                      agenda-text))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
