@@ -2505,7 +2505,1047 @@ fn upstream_org_element_deferred_create() {
    (org-element-deferred-force-p (org-element-deferred-create t (lambda (_) 1)))
    (org-element-deferred-force-p (org-element-deferred-create nil (lambda (_) 1)))
    ;; Function
-   (functionp (org-element-deferred-get-function
+    (functionp (org-element-deferred-get-function
                (org-element-deferred-create nil (lambda (_) 1))))))"##,
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Remaining parser tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn upstream_org_element_citation_reference_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (require 'oc)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Bare key.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[cite:@key]")
+       (goto-char (point-min))
+       (org-element-type
+        (car (org-element-map (org-element-parse-buffer) 'citation-reference #'identity))))
+     ;; Key with special chars.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[cite:@a:.#$%&-+?<>~/1]")
+       (goto-char (point-min))
+       (org-element-property
+        :key
+        (car (org-element-map (org-element-parse-buffer) 'citation-reference #'identity))))
+     ;; Prefix and suffix.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[cite:pre @key post]")
+       (goto-char (point-min))
+       (let ((ref (car (org-element-map (org-element-parse-buffer) 'citation-reference #'identity))))
+         (list (org-element-property :prefix ref)
+               (org-element-property :suffix ref)))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_code_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard code.
+     (with-temp-buffer
+       (org-mode)
+       (insert "~code~")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'code #'identity nil t)))
+     ;; Multi-line.
+     (with-temp-buffer
+       (org-mode)
+       (insert "~first line\nsecond line~")
+       (goto-char (point-min))
+       (org-element-property
+        :value
+        (org-element-map (org-element-parse-buffer) 'code #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_drawer_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard drawer.
+     (with-temp-buffer
+       (org-mode)
+       (insert ":TEST:\nText\n:END:")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'drawer 'identity))
+     ;; Ignore incomplete.
+     (with-temp-buffer
+       (org-mode)
+       (insert ":TEST:")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'drawer 'identity nil t)))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_dynamic_block_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard dynamic block.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+BEGIN: myblock :param1 val1\nText\n#+END:")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'dynamic-block 'identity))
+     ;; Ignore case.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+begin: myblock\nText\n#+end:")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'dynamic-block 'identity)))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_export_snippet_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     (with-temp-buffer
+       (org-mode)
+       (insert "@@html:<b>@@")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'export-snippet #'identity nil t)))
+     (with-temp-buffer
+       (org-mode)
+       (insert "@@html:<b>@@")
+       (goto-char (point-min))
+       (org-element-property
+        :back-end
+        (org-element-map (org-element-parse-buffer) 'export-snippet #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_footnote_definition_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard footnote definition.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[fn:1] Definition.")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'footnote-definition #'identity nil t)))
+     ;; Label.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[fn:1] Definition.")
+       (goto-char (point-min))
+       (org-element-property
+        :label
+        (org-element-map (org-element-parse-buffer) 'footnote-definition #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_headline_todo_keyword() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* TODO Task\n* DONE Done\n* Normal\n* WAITING Wait")
+      (goto-char (point-min))
+      (mapcar (lambda (h) (org-element-property :todo-keyword h))
+              (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_headline_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H\n:PROPERTIES:\n:Custom: val\n:END:")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (hl (car (org-element-map tree 'headline #'identity))))
+        (org-element-property :CUSTOM_ID hl)))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_inline_babel_call_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     (with-temp-buffer
+       (org-mode)
+       (insert "call_test()")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'inline-babel-call #'identity nil t)))
+     (with-temp-buffer
+       (org-mode)
+       (insert "call_test(x=2)")
+       (goto-char (point-min))
+       (org-element-property
+        :arguments
+        (org-element-map (org-element-parse-buffer) 'inline-babel-call #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_italic_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     (with-temp-buffer
+       (org-mode)
+       (insert "/italic/")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'italic #'identity nil t)))
+     ;; Multi-line.
+     (with-temp-buffer
+       (org-mode)
+       (insert "/first line\nsecond line/")
+       (goto-char (point-min))
+       (org-element-contents
+        (org-element-map (org-element-parse-buffer) 'italic #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_macro_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     (with-temp-buffer
+       (org-mode)
+       (insert "{{{test}}}")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'macro #'identity nil t)))
+     (with-temp-buffer
+       (org-mode)
+       (insert "{{{test(arg1,arg2)}}}")
+       (goto-char (point-min))
+       (org-element-property
+        :value
+        (org-element-map (org-element-parse-buffer) 'macro #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_plain_list_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard list.
+     (with-temp-buffer
+       (org-mode)
+       (insert "- item1\n- item2")
+       (goto-char (point-min))
+       (org-element-type (org-element-at-point)))
+     ;; Ordered list.
+     (with-temp-buffer
+       (org-mode)
+       (insert "1. item1\n2. item2")
+       (goto-char (point-min))
+       (org-element-property
+        :type (org-element-at-point)))
+     ;; Description list.
+     (with-temp-buffer
+       (org-mode)
+       (insert "- tag :: desc")
+       (goto-char (point-min))
+       (org-element-type
+        (org-element-map (org-element-parse-buffer) 'item #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_radio_target_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Standard radio target.
+     (with-temp-buffer
+       (org-mode)
+       (insert "<<<radio>>>")
+       (goto-char (point-min))
+       (org-element-type (org-element-context)))
+     ;; With objects.
+     (with-temp-buffer
+       (org-mode)
+       (insert "<<<radio \\alpha>>>")
+       (goto-char (point-min))
+       (org-element-type (org-element-context)))
+     ;; Cannot begin with whitespace.
+     (with-temp-buffer
+       (org-mode)
+       (insert "<<< radio>>>")
+       (goto-char (point-min))
+       (org-element-type (org-element-context)))
+     ;; Cannot end with whitespace.
+     (with-temp-buffer
+       (org-mode)
+       (insert "<<<radio >>>")
+       (goto-char (point-min))
+       (org-element-type (org-element-context))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_statistics_cookie_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; With numbers.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[1/2]")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'statistics-cookie 'identity))
+     ;; With percents.
+     (with-temp-buffer
+       (org-mode)
+       (insert "[33%]")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'statistics-cookie 'identity)))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_strike_through_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     (with-temp-buffer
+       (org-mode)
+       (insert "+strike-through+")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'strike-through #'identity))
+     ;; Multi-line.
+     (with-temp-buffer
+       (org-mode)
+       (insert "+first line\nsecond line+")
+       (goto-char (point-min))
+       (org-element-contents
+        (org-element-map (org-element-parse-buffer) 'strike-through #'identity nil t))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_subscript_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Without braces.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a_b")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'subscript 'identity))
+     ;; With braces.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a_{b}")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'subscript 'identity))
+     ;; Multiple.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a_b and c_d")
+       (goto-char (point-min))
+       (length (org-element-map (org-element-parse-buffer) 'subscript 'identity))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_superscript_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Without braces.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a^b")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'superscript 'identity))
+     ;; With braces.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a^{b}")
+       (goto-char (point-min))
+       (org-element-map (org-element-parse-buffer) 'superscript 'identity))
+     ;; Multiple.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a^b and c^d")
+       (goto-char (point-min))
+       (length (org-element-map (org-element-parse-buffer) 'superscript 'identity))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_target_parser() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "<<target>>")
+      (goto-char (point-min))
+      (org-element-type
+       (org-element-map (org-element-parse-buffer) 'target #'identity nil t)))))"##,
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Interpreter round-trip tests
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn upstream_org_element_interpret_data_roundtrip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Bold
+     (funcall org-test-parse-and-interpret "*text*")
+     ;; Italic
+     (funcall org-test-parse-and-interpret "/text/")
+     ;; Code
+     (funcall org-test-parse-and-interpret "~text~")
+     ;; Verbatim
+     (funcall org-test-parse-and-interpret "=text=")
+     ;; Underline
+     (funcall org-test-parse-and-interpret "_text_")
+     ;; Strike-through
+     (funcall org-test-parse-and-interpret "+target+"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_markup_objects() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Subscript
+     (funcall org-test-parse-and-interpret "a_b")
+     (funcall org-test-parse-and-interpret "a_{b}")
+     ;; Superscript
+     (funcall org-test-parse-and-interpret "a^b")
+     (funcall org-test-parse-and-interpret "a^{b}")
+     ;; Entity
+     (funcall org-test-parse-and-interpret "\\alpha text")
+     (funcall org-test-parse-and-interpret "\\alpha{}text"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_links() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Link without description.
+     (funcall org-test-parse-and-interpret "[[https://orgmode.org]]")
+     ;; Link with description.
+     (funcall org-test-parse-and-interpret "[[https://orgmode.org][Org mode]]")
+     ;; File link.
+     (funcall org-test-parse-and-interpret "[[file:todo.org::*task]]")
+     ;; Id link.
+     (funcall org-test-parse-and-interpret "[[id:aaaa]]")
+     ;; Custom-id link.
+     (funcall org-test-parse-and-interpret "[[#id]]")
+     ;; Plain link.
+     (funcall org-test-parse-and-interpret "https://orgmode.org")
+     ;; Angular link.
+     (funcall org-test-parse-and-interpret "<https://orgmode.org>"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_footnotes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Regular reference.
+     (funcall org-test-parse-and-interpret "Text[fn:1]")
+     ;; Named reference.
+     (funcall org-test-parse-and-interpret "Text[fn:label]")
+     ;; Inline reference.
+     (funcall org-test-parse-and-interpret "Text[fn:label:def]")
+     ;; Anonymous reference.
+     (funcall org-test-parse-and-interpret "Text[fn::def]"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_blocks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-src-preserve-indentation t)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Center block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_CENTER\nText\n#+END_CENTER")
+     ;; Quote block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_QUOTE\nText\n#+END_QUOTE")
+     ;; Example block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_EXAMPLE\nTest\n#+END_EXAMPLE")
+     ;; Export block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_EXPORT HTML\n<p>Text</p>\n#+END_EXPORT")
+     ;; Verse block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_VERSE\nTest\n#+END_VERSE"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_src_block() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-edit-src-content-indentation 2)
+        (org-src-preserve-indentation nil))
+    (let ((org-test-parse-and-interpret
+           (lambda (text)
+             (with-temp-buffer
+               (org-mode)
+               (insert text)
+               (org-element-interpret-data (org-element-parse-buffer))))))
+      (list
+       ;; With arguments.
+       (funcall org-test-parse-and-interpret
+                "#+BEGIN_SRC emacs-lisp :results silent\n(+ 1 1)\n#+END_SRC")
+       ;; With switches.
+       (funcall org-test-parse-and-interpret
+                "#+BEGIN_SRC emacs-lisp -n -k\n(+ 1 1)\n#+END_SRC")))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_inline_objects() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Inline babel call.
+     (funcall org-test-parse-and-interpret "call_test()")
+     (funcall org-test-parse-and-interpret "call_test(x=2)")
+     ;; Inline src block.
+     (funcall org-test-parse-and-interpret "src_emacs-lisp{(+ 1 1)}")
+     ;; Export snippet.
+     (funcall org-test-parse-and-interpret "@@backend:contents@@")
+     ;; LaTeX fragment.
+     (funcall org-test-parse-and-interpret "\\command{}")
+     (funcall org-test-parse-and-interpret "$x$")
+     (funcall org-test-parse-and-interpret "$$x+y$$")
+     (funcall org-test-parse-and-interpret "\\(x+y\\)")
+     (funcall org-test-parse-and-interpret "\\[x+y\\]")
+     ;; Statistics cookie.
+     (funcall org-test-parse-and-interpret "[0/1]")
+     (funcall org-test-parse-and-interpret "[66%]")
+     ;; Line break.
+     (funcall org-test-parse-and-interpret "First line \\\\ \nSecond line")
+     ;; Target.
+     (funcall org-test-parse-and-interpret "<<target>>")
+     ;; Radio target.
+     (funcall org-test-parse-and-interpret "<<<some text>>>")
+     ;; Macro.
+     (funcall org-test-parse-and-interpret "{{{test}}}")
+     (funcall org-test-parse-and-interpret "{{{test(arg1,arg2)}}}"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Simple table.
+     (funcall org-test-parse-and-interpret "| a | b |\n| c | d |")
+     ;; With horizontal rules.
+     (funcall org-test-parse-and-interpret "| a | b |\n|---+---|\n| c | d |")
+     ;; With formula.
+     (funcall org-test-parse-and-interpret
+              "| 2 |\n| 4 |\n| 3 |\n#+TBLFM: @3=vmean(@1..@2)"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_timestamp() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Active.
+     (string-match "<2012-03-29 .* 16:40>"
+                   (funcall org-test-parse-and-interpret "<2012-03-29 thu. 16:40>"))
+     ;; Inactive.
+     (string-match "\\[2012-03-29 .* 16:40\\]"
+                   (funcall org-test-parse-and-interpret "[2012-03-29 thu. 16:40]"))
+     ;; Active daterange.
+     (string-match "<2012-03-29 .* 16:40>--<2012-03-29 .* 16:41>"
+                   (funcall org-test-parse-and-interpret
+                            "<2012-03-29 thu. 16:40>--<2012-03-29 thu. 16:41>"))
+     ;; Active timerange.
+     (string-match "<2012-03-29 .* 16:40-16:41>"
+                   (funcall org-test-parse-and-interpret
+                            "<2012-03-29 thu. 16:40-16:41>"))
+     ;; With repeater.
+     (string-match "<2012-03-29 .* \\+1y>"
+                   (funcall org-test-parse-and-interpret "<2012-03-29 thu. +1y>"))
+     ;; Diary.
+     (equal "<%%(diary-float t 4 2)>\n"
+            (funcall org-test-parse-and-interpret "<%%(diary-float t 4 2)>")))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_keyword_and_comment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     ;; Keyword.
+     (funcall org-test-parse-and-interpret "#+KEYWORD: value")
+     ;; Comment.
+     (funcall org-test-parse-and-interpret "# Comment")
+     ;; Comment block.
+     (funcall org-test-parse-and-interpret "#+BEGIN_COMMENT\nTest\n#+END_COMMENT")
+     ;; Fixed width.
+     (funcall org-test-parse-and-interpret ": Test")
+     ;; Horizontal rule.
+     (funcall org-test-parse-and-interpret "-------")
+     ;; Diary sexp.
+     (funcall org-test-parse-and-interpret
+              "%%(org-anniversary 1956  5 14)(2) Arthur Dent is %d years old")
+     ;; LaTeX environment.
+     (funcall org-test-parse-and-interpret
+              "\\begin{equation}\n1+1=2\n\\end{equation}"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_interpret_citation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (require 'oc)
+  (let ((org-mode-hook nil)
+        (org-test-parse-and-interpret
+         (lambda (text)
+           (with-temp-buffer
+             (org-mode)
+             (insert text)
+             (org-element-interpret-data (org-element-parse-buffer))))))
+    (list
+     (funcall org-test-parse-and-interpret "[cite:@key]")
+     (funcall org-test-parse-and-interpret "[cite/style:@key]")
+     (funcall org-test-parse-and-interpret "[cite:pre @key]")
+     (funcall org-test-parse-and-interpret "[cite:@key post]")
+     (funcall org-test-parse-and-interpret "[cite:@a;@b;@c]"))))"##,
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Granularity, parent, normalize-contents, at-point extended
+// ═══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn upstream_org_element_granularity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Head 1\n** Head 2\n#+BEGIN_CENTER\nCentered paragraph.\n#+END_CENTER\nParagraph \\alpha.")
+      (goto-char (point-min))
+      (list
+       ;; headline granularity
+       (let ((tree (org-element-parse-buffer 'headline)))
+         (list (length (org-element-map tree 'headline 'identity))
+               (org-element-map tree 'paragraph 'identity)))
+       ;; greater-element granularity
+       (let ((tree (org-element-parse-buffer 'greater-element)))
+         (list (length (org-element-map tree 'center-block 'identity))
+               (length (org-element-map tree 'paragraph 'identity))
+               (org-element-map tree 'entity 'identity)))
+       ;; element granularity
+       (let ((tree (org-element-parse-buffer 'element)))
+         (list (length (org-element-map tree 'paragraph 'identity))
+               (org-element-map tree 'entity 'identity)))
+       ;; object granularity
+       (let ((tree (org-element-parse-buffer 'object)))
+         (length (org-element-map tree 'entity 'identity)))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_parent_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Elements.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+BEGIN_CENTER\nText\n#+END_CENTER")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (parent (org-element-property
+                       :parent
+                       (org-element-map tree 'paragraph 'identity nil t))))
+         (and parent
+              (eq (org-element-map tree 'center-block 'identity nil t) parent))))
+     ;; Objects.
+     (with-temp-buffer
+       (org-mode)
+       (insert "a_{/b/}")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (parent (org-element-property
+                       :parent
+                       (org-element-map tree 'italic 'identity nil t))))
+         (and parent
+              (eq parent (org-element-map tree 'subscript 'identity nil t)))))
+     ;; Secondary strings.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* /italic/")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (parent (org-element-property
+                       :parent (org-element-map tree 'italic 'identity nil t))))
+         (and parent
+              (equal parent (org-element-map tree 'headline 'identity nil t))))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_normalize_contents() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (list
+   ;; Remove common indentation.
+   (org-element-normalize-contents
+    '(paragraph nil "  Two spaces\n   Three spaces"))
+   ;; No common indentation when first line has none.
+   (org-element-normalize-contents
+    '(paragraph nil "  Two spaces\nNo space"))
+   ;; Ignore blank lines.
+   (org-element-normalize-contents
+    '(paragraph nil "  Two spaces\n\n \n  Two spaces"))
+   ;; With argument: ignore first line indentation.
+   (org-element-normalize-contents
+    '(paragraph nil "No space\n  Two spaces\n   Three spaces") t)
+   ;; Line break corner case.
+   (org-element-normalize-contents
+    '(paragraph nil " 1 space" (line-break) "  2 spaces"))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_at_point_extended() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; At blank line below headline, return that headline.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* H1\n  \n* H2\n")
+       (goto-char (point-min))
+       (forward-line)
+       (org-element-property :title (org-element-at-point)))
+     ;; At beginning of table, return table.
+     (with-temp-buffer
+       (org-mode)
+       (insert "| a | b |")
+       (goto-char (point-min))
+       (org-element-type (org-element-at-point)))
+     ;; At beginning of list, return plain-list.
+     (with-temp-buffer
+       (org-mode)
+       (insert "- item")
+       (goto-char (point-min))
+       (org-element-type (org-element-at-point)))
+     ;; At closing line of greater element.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+BEGIN_CENTER\nParagraph\n#+END_CENTER")
+       (goto-char (point-min))
+       (forward-line 2)
+       (org-element-type (org-element-at-point)))
+     ;; At blank line between items.
+     (with-temp-buffer
+       (org-mode)
+       (insert "- Para1\n\n- Para2")
+       (goto-char (point-min))
+       (forward-line)
+       (org-element-type (org-element-at-point))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_lineage() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\nParagraph with *bold* text.")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (bold (car (org-element-map tree 'bold #'identity))))
+        (list
+         ;; Full lineage.
+         (mapcar #'org-element-type (org-element-lineage bold))
+         ;; With self.
+         (mapcar #'org-element-type (org-element-lineage bold nil t))
+         ;; Filtered.
+         (mapcar #'org-element-type (org-element-lineage bold 'headline)))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_secondary_string_parsing() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (list
+     ;; With headline granularity, title is a string.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* Headline")
+       (goto-char (point-min))
+       (stringp
+        (org-element-property
+         :title
+         (org-element-map (org-element-parse-buffer 'headline) 'headline
+                          #'identity nil t))))
+     ;; With default granularity, title is a list.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* Headline")
+       (goto-char (point-min))
+       (listp
+        (org-element-property
+         :title
+         (org-element-map (org-element-parse-buffer) 'headline
+                          #'identity nil t))))
+     ;; org-element-at-point never parses secondary strings.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* Headline")
+       (goto-char (point-min))
+       (listp (org-element-property :title (org-element-at-point)))))))"##,
+    );
+}
+
+#[test]
+fn upstream_org_element_swap_a_b_extended() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (require 'org)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* A\nBody A\n* B\nBody B\n* C\nBody C\n")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (headlines (org-element-map tree 'headline #'identity)))
+        (org-element-swap-A-B (nth 0 headlines) (nth 1 headlines))
+        (mapcar (lambda (h) (org-element-property :raw-value h))
+                (org-element-map tree 'headline #'identity))))))"##,
     );
 }
