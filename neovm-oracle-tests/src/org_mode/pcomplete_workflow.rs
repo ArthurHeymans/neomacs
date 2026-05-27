@@ -350,6 +350,56 @@ fn org_pcomplete_repeated_options_babel_searchhead_combo() {
               (complete-at ":Eff")
               (complete-at "[[*Alpha He")
               (complete-at "[[bu")
-              (complete-at "\\bet"))))))"##,
+               (complete-at "\\bet"))))))"##,
+    );
+}
+
+#[test]
+fn org_pcomplete_keyword_tag_link_option_at_point_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'pcomplete)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Test\n")
+    (insert "#+TAGS: work(w) home(h) urgent(u)\n")
+    (insert "#+TODO: TODO WAIT | DONE CANCELED\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "** Beta :home:\n")
+    (let* ((complete-at
+            (lambda (needle)
+              (goto-char (point-min))
+              (search-forward needle nil t)
+              (let* ((pos (point))
+                     (thing (org-thing-at-point))
+                     (command (org-command-at-point))
+                     (args (org-parse-arguments))
+                     (capf (run-hook-with-args-until-success
+                            'completion-at-point-functions))
+                     (beg (nth 0 capf))
+                     (end (nth 1 capf))
+                     (table (nth 2 capf))
+                     (stub (and beg end
+                                (buffer-substring-no-properties beg end))))
+                (list needle
+                      thing
+                      command
+                      args
+                      stub
+                      (and stub
+                           (sort (all-completions stub table) #'string<))
+                      (and beg (- beg (point-min)))
+                      (and end (- end (point-min))))))))
+      (list (funcall complete-at "#+")
+            (funcall complete-at "#+T")
+            (funcall complete-at "#+TAGS: ")
+            (funcall complete-at "#+TODO: ")
+            (funcall complete-at "* TODO ")
+            (funcall complete-at ":wor")
+            (funcall complete-at "[[")
+            (funcall complete-at "[[b")))))"##,
     );
 }
