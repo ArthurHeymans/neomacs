@@ -162,3 +162,98 @@ fn org_babel_header_result_lifecycle_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_babel_tangle_noweb_comments_collect_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((dir (make-temp-file "org-babel-tangle" t))
+         (org-file (expand-file-name "input.org" dir))
+         (out-file (expand-file-name "out/generated.el" dir))
+         (org-confirm-babel-evaluate nil)
+         (org-babel-tangle-use-relative-file-links t)
+         (org-babel-tangle-comment-format-beg
+          ";; [[file:%link][%source-name:%line]]")
+         (org-babel-tangle-comment-format-end ";; %source-name ends here")
+         tangled collect before-clean after-clean out-text)
+    (unwind-protect
+        (progn
+          (with-temp-file org-file
+            (insert "#+TITLE: Tangle Combo\n")
+            (insert "#+PROPERTY: header-args:emacs-lisp :comments link :mkdirp yes\n")
+            (insert "* Library\n")
+            (insert "#+NAME: helper\n")
+            (insert "#+begin_src emacs-lisp :tangle no\n")
+            (insert "(defun org-oracle-helper (x)\n  (+ x 10))\n")
+            (insert "#+end_src\n\n")
+            (insert "** Main\n")
+            (insert "#+NAME: main\n")
+            (insert "#+begin_src emacs-lisp :tangle out/generated.el :noweb yes :comments both\n")
+            (insert "<<helper>>\n")
+            (insert "(defun org-oracle-main ()\n  (org-oracle-helper 5))\n")
+            (insert "#+end_src\n\n")
+            (insert "** Extra\n")
+            (insert "#+begin_src emacs-lisp :tangle out/generated.el :comments link\n")
+            (insert "(defconst org-oracle-constant 'ok)\n")
+            (insert "#+end_src\n"))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (setq collect
+                  (mapcar
+                   (lambda (entry)
+                     (let ((file (car entry))
+                           (blocks (cdr entry)))
+                       (list (file-name-nondirectory file)
+                             (length blocks)
+                             (mapcar
+                              (lambda (block)
+                                (list (nth 0 block)
+                                      (cdr (assq :noweb (nth 4 block)))
+                                      (cdr (assq :comments (nth 4 block)))
+                                      (substring-no-properties
+                                       (nth 1 block))))
+                              blocks))))
+                   (org-babel-tangle-collect-blocks "emacs-lisp")))
+            (setq tangled (mapcar #'file-name-nondirectory
+                                  (org-babel-tangle nil nil "emacs-lisp")))
+            (setq out-text
+                  (with-temp-buffer
+                    (insert-file-contents out-file)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+            (setq before-clean
+                  (list (file-exists-p out-file)
+                        (file-exists-p (concat out-file "~"))))
+            (org-babel-tangle-clean)
+            (setq after-clean
+                  (list (file-exists-p out-file)
+                        (file-exists-p (concat out-file "~"))))
+            (list collect
+                  tangled
+                  (mapcar (lambda (needle)
+                            (not (null (string-match-p needle out-text))))
+                          '("org-oracle-helper"
+                            "org-oracle-main"
+                            "org-oracle-constant"
+                            "input.org"
+                            "helper ends here"))
+                  (replace-regexp-in-string
+                   (regexp-quote dir)
+                   "<tmp>"
+                   out-text)
+                  before-clean
+                  after-clean
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
+      (when (file-exists-p out-file) (delete-file out-file))
+      (when (file-exists-p (concat out-file "~")) (delete-file (concat out-file "~")))
+      (when (file-directory-p dir) (delete-directory dir t)))))"##,
+    );
+}
