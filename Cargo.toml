@@ -156,15 +156,17 @@ tempfile = "3.27.0"
 colored = "3"
 
 [profile.release]
-lto = true
-codegen-units = 1
-debug = true
-split-debuginfo = "unpacked"
+# GNU Emacs keeps link-time optimization opt-in via
+# --enable-link-time-optimization.  Keep the ordinary release profile suitable
+# for CI and packaging; use the production profile for deliberate full-LTO
+# artifact builds.
+debug = false
 strip = "debuginfo"
 
 [profile.production]
 inherits = "release"
-split-debuginfo = "packed"
+lto = true
+codegen-units = 1
 
 [patch.crates-io]
 cosmic-text = { git = "https://github.com/eval-exec/cosmic-text", rev = "5dd3fec8572e771794e3f203ab6780d828e9ce09" }
