@@ -32,6 +32,7 @@ mod macro_include;
 mod mobile_workflow;
 mod num_workflow;
 mod planning_timestamp;
+mod plot_workflow;
 mod property_log;
 mod publish_workflow;
 mod source_block;
