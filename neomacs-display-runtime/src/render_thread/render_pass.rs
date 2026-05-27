@@ -582,52 +582,22 @@ impl RenderApp {
         child_frame_shadow_opacity: f32,
         scroll_indicators_enabled: bool,
     ) {
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            for &child_id in render.child_frames.sorted_for_rendering() {
-                if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
-                    renderer.render_child_frame(
-                        surface_view,
-                        &child_entry.frame,
-                        child_entry.abs_x,
-                        child_entry.abs_y,
-                        &mut render.glyph_atlas,
-                        faces,
-                        native.width,
-                        native.height,
-                        cursor_visible,
-                        animated_cursor.filter(|ac| ac.frame_id == child_id),
-                        child_frame_corner_radius,
-                        child_frame_shadow_enabled,
-                        child_frame_shadow_layers,
-                        child_frame_shadow_offset,
-                        child_frame_shadow_opacity,
-                    );
-                }
-            }
-        });
-        if render.renderer_effects.needs_redraw() {
-            render.frame_dirty = true;
-        }
-
-        #[cfg(feature = "wpe-webkit")]
-        if !render.floating_webkits.is_empty() {
-            renderer.render_floating_webkits(surface_view, &render.floating_webkits);
-        }
-
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            Self::render_frame_common_overlays(
-                renderer,
-                surface_view,
-                frame,
-                &mut render.glyph_atlas,
-                native.width,
-                native.height,
-                scroll_indicators_enabled,
-            );
-        });
-        if render.renderer_effects.needs_redraw() {
-            render.frame_dirty = true;
-        }
+        Self::render_frame_content_overlays(
+            renderer,
+            faces,
+            native,
+            render,
+            surface_view,
+            frame,
+            cursor_visible,
+            animated_cursor,
+            child_frame_corner_radius,
+            child_frame_shadow_enabled,
+            child_frame_shadow_layers,
+            child_frame_shadow_offset,
+            child_frame_shadow_opacity,
+            scroll_indicators_enabled,
+        );
 
         let empty_icon_textures = HashMap::new();
         let menu_bar_height = render
@@ -744,6 +714,71 @@ impl RenderApp {
                 &mut render.typing_speed,
                 &mut render.frame_dirty,
             );
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame_content_overlays(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
+    ) {
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            for &child_id in render.child_frames.sorted_for_rendering() {
+                if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
+                    renderer.render_child_frame(
+                        surface_view,
+                        &child_entry.frame,
+                        child_entry.abs_x,
+                        child_entry.abs_y,
+                        &mut render.glyph_atlas,
+                        faces,
+                        native.width,
+                        native.height,
+                        cursor_visible,
+                        animated_cursor.filter(|ac| ac.frame_id == child_id),
+                        child_frame_corner_radius,
+                        child_frame_shadow_enabled,
+                        child_frame_shadow_layers,
+                        child_frame_shadow_offset,
+                        child_frame_shadow_opacity,
+                    );
+                }
+            }
+        });
+        if render.renderer_effects.needs_redraw() {
+            render.frame_dirty = true;
+        }
+
+        #[cfg(feature = "wpe-webkit")]
+        if !render.floating_webkits.is_empty() {
+            renderer.render_floating_webkits(surface_view, &render.floating_webkits);
+        }
+
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            Self::render_frame_common_overlays(
+                renderer,
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
+                scroll_indicators_enabled,
+            );
+        });
+        if render.renderer_effects.needs_redraw() {
+            render.frame_dirty = true;
         }
     }
 
@@ -1028,78 +1063,29 @@ impl RenderApp {
             primary_frame.frame_dirty = true;
         }
 
-        // Render child frames as floating overlays on top of the parent frame
-        if let (Some(renderer), Some(primary_frame)) =
-            (&mut self.renderer, self.primary_window_state.as_mut())
-            && !primary_frame.render.child_frames.is_empty()
-        {
-            let primary_frame = &mut primary_frame.render;
-            let child_ids = primary_frame.child_frames.sorted_for_rendering().to_vec();
-            for child_id in child_ids {
-                if let Some(child_entry) = primary_frame.child_frames.frames.get(&child_id) {
-                    // Pass animated cursor only if it belongs to this child frame.
-                    let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
-                    let cursor_blink_on = primary_frame.cursor.blink_on;
-                    renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
-                        renderer.render_child_frame(
-                            &surface_view,
-                            &child_entry.frame,
-                            child_entry.abs_x,
-                            child_entry.abs_y,
-                            &mut primary_frame.glyph_atlas,
-                            &self.faces,
-                            primary_width,
-                            primary_height,
-                            cursor_blink_on,
-                            child_anim,
-                            self.child_frame_corner_radius,
-                            self.child_frame_shadow_enabled,
-                            self.child_frame_shadow_layers,
-                            self.child_frame_shadow_offset,
-                            self.child_frame_shadow_opacity,
-                        );
-                    });
-                }
-            }
-        }
-        if let Some(primary_frame) = self.primary_render_state_mut()
-            && primary_frame.renderer_effects.needs_redraw()
-        {
-            primary_frame.frame_dirty = true;
-        }
-
-        // Render floating WebKit overlays above frame contents but below GUI chrome.
-        #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.primary_render_state()
-            && !primary_frame.floating_webkits.is_empty()
-        {
-            if let Some(ref renderer) = self.renderer {
-                renderer.render_floating_webkits(&surface_view, &primary_frame.floating_webkits);
-            }
-        }
-
         if let (Some(renderer), Some(primary_frame)) =
             (&mut self.renderer, self.primary_window_state.as_mut())
         {
-            let primary_frame = &mut primary_frame.render;
-            if let Some(frame) = primary_frame.current_frame.as_ref() {
-                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
-                    Self::render_frame_common_overlays(
-                        renderer,
-                        &surface_view,
-                        frame,
-                        &mut primary_frame.glyph_atlas,
-                        primary_width,
-                        primary_height,
-                        self.scroll_indicators_enabled,
-                    );
-                });
+            let GuiFrameWindowState { native, render } = primary_frame;
+            if let Some(frame) = render.current_frame.clone() {
+                let cursor_visible = render.cursor.blink_on;
+                Self::render_frame_content_overlays(
+                    renderer,
+                    &self.faces,
+                    native,
+                    render,
+                    &surface_view,
+                    &frame,
+                    cursor_visible,
+                    animated_cursor,
+                    self.child_frame_corner_radius,
+                    self.child_frame_shadow_enabled,
+                    self.child_frame_shadow_layers,
+                    self.child_frame_shadow_offset,
+                    self.child_frame_shadow_opacity,
+                    self.scroll_indicators_enabled,
+                );
             }
-        }
-        if let Some(primary_frame) = self.primary_render_state_mut()
-            && primary_frame.renderer_effects.needs_redraw()
-        {
-            primary_frame.frame_dirty = true;
         }
 
         tracing::trace!(
