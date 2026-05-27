@@ -238,3 +238,73 @@ fn org_macs_plist_string_visibility_time_combo() {
                       (org-2ft "not a time"))))))))"##,
     );
 }
+
+#[test]
+fn org_mks_nested_special_navigation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (let ((table '(("a" "Alpha prefix")
+                 ("aa" "Alpha one" alpha-one :payload 1)
+                 ("ab" "Alpha two" alpha-two)
+                 ("b" "Beta direct" beta)
+                 ("c" "Nested prefix")
+                 ("cx" "Nested x" nested-x)
+                 ("c " "Nested space" nested-space)))
+        (specials '(("?" "Help")
+                    ("!" "Bang")))
+        (keys nil)
+        (scrolls nil)
+        (buffers nil)
+        (fits nil)
+        (messages nil))
+    (cl-labels
+        ((run (input)
+           (setq keys input)
+           (condition-case err
+               (cl-letf (((symbol-function 'read-char-exclusive)
+                          (lambda (&rest _)
+                            (if keys
+                                (pop keys)
+                              (error "no more keys"))))
+                         ((symbol-function 'org-scroll)
+                          (lambda (key &optional _)
+                            (push key scrolls)))
+                         ((symbol-function 'switch-to-buffer-other-window)
+                          (lambda (buffer)
+                            (push buffer buffers)
+                            (get-buffer-create buffer)))
+                         ((symbol-function 'org-fit-window-to-buffer)
+                          (lambda (&rest args)
+                            (push args fits)))
+                         ((symbol-function 'message)
+                          (lambda (fmt &rest args)
+                            (push (apply #'format fmt args) messages))))
+                 (org-mks table "Title" "Prompt: " specials))
+             (error (cons (car err) (cdr err))))))
+      (let ((direct (run '(?b)))
+            (nested (run '(?a ?b)))
+            (space-nested (run '(?c ?\s)))
+            (special (run '(?!)))
+            (invalid-then-ok (run '(?z ?a ?a)))
+            (nav-then-ok (run '(14 ?b)))
+            (abort (run '(?\C-g)))
+            (empty-leftover nil))
+        (setq empty-leftover keys)
+        (list direct
+              nested
+              space-nested
+              special
+              invalid-then-ok
+              nav-then-ok
+              abort
+              (nreverse scrolls)
+              (nreverse buffers)
+              (length fits)
+              (nreverse messages)
+              empty-leftover
+              (get-buffer "*Org Select*"))))))"##,
+    );
+}
