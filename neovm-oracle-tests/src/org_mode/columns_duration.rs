@@ -249,3 +249,90 @@ fn org_duration_parse_format_summary_matrix_combo() {
              '("1:00" "2h" "3pt" "0:30") nil)))))"##,
     );
 }
+
+#[test]
+fn org_columns_property_inheritance_compute_mutation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (require 'org-duration)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance '("Owner" "Milestone"))
+          (org-duration-format '(("h" . t) ("min" . t)))
+          (changes nil))
+      (add-hook 'org-property-changed-functions
+                (lambda (key value) (push (list key value) changes))
+                nil t)
+      (org-duration-set-regexps)
+      (org-mode)
+      (insert "#+COLUMNS: %22ITEM %Owner %Milestone %Status %Effort{:} %Score{+;%.1f} %Done{X/}\n")
+      (insert "#+PROPERTY: Status_ALL Todo Doing Review Done\n")
+      (insert "* Project\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Milestone: M1\n:Effort: 0:00\n:Score: 0\n:Done: [ ]\n:END:\n")
+      (insert "** TODO Alpha\n")
+      (insert ":PROPERTIES:\n:Status: Todo\n:Effort: 1:15\n:Score: 2.5\n:Done: [X]\n:END:\n")
+      (insert "** TODO Beta\n")
+      (insert ":PROPERTIES:\n:Owner: Bea\n:Status: Doing\n:Effort: 0:45\n:Score: 3.0\n:Done: [ ]\n:END:\n")
+      (insert "*** TODO Beta child\n")
+      (insert ":PROPERTIES:\n:Status: Review\n:Effort: 0:30\n:Score: 1.5\n:Done: [X]\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "Beta child")
+      (beginning-of-line)
+      (let ((inherited-before
+             (list (org-entry-get nil "Owner" 'inherit)
+                   (org-entry-get nil "Milestone" 'inherit)
+                   (org-entry-get-with-inheritance "Status")))
+            (allowed-status
+             (org-property-get-allowed-values nil "Status" 'table)))
+        (org-entry-put-multivalued-property nil "Tags" "alpha beta" "gamma")
+        (org-entry-add-to-multivalued-property nil "Tags" "delta value")
+        (org-entry-remove-from-multivalued-property nil "Tags" "gamma")
+        (search-forward ":Status:")
+        (org-property-next-allowed-value)
+        (goto-char (point-min))
+        (search-forward "Project")
+        (beginning-of-line)
+        (org-columns nil)
+        (let ((overlay-summary
+               (mapcar
+                (lambda (ov)
+                  (list (overlay-get ov 'before-string)
+                        (overlay-get ov 'after-string)
+                        (overlay-get ov 'face)
+                        (overlay-get ov 'org-columns-key)
+                        (overlay-get ov 'org-columns-value)))
+                (overlays-in (line-beginning-position)
+                             (line-end-position))))
+              (compiled org-columns-current-fmt-compiled)
+              (content (org-columns-content)))
+          (org-columns-compute-all)
+          (let ((after-compute
+                 (list (org-entry-get nil "Effort")
+                       (org-entry-get nil "Score")
+                       (org-entry-get nil "Done")))
+                (line-after-compute
+                 (buffer-substring-no-properties
+                  (line-beginning-position) (line-end-position))))
+            (org-columns-quit)
+            (let ((tree (org-element-parse-buffer)))
+              (list inherited-before
+                    allowed-status
+                    (org-entry-get-with-inheritance "Tags")
+                    (org-entry-get-multivalued-property nil "Tags")
+                    (nreverse changes)
+                    compiled
+                    overlay-summary
+                    content
+                    after-compute
+                    line-after-compute
+                    (org-element-map tree 'node-property
+                      (lambda (node)
+                        (list (org-element-property :key node)
+                              (org-element-property :value node))))
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))"##,
+    );
+}
