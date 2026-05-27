@@ -455,6 +455,48 @@ fn org_export_derived_backend_transcoder_combo() {
 }
 
 #[test]
+fn org_export_latex_math_table_footnote_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-latex)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Math Table\n\n")
+    (insert "* Section\n")
+    (insert "Formula $x^2 + y^2 = z^2$ inline.\n\n")
+    (insert "Display equation:\n")
+    (insert "\\[E = mc^2\\]\n\n")
+    (insert "| A | B | Sum |\n")
+    (insert "|---+---+-----|\n")
+    (insert "| 1 | 2 | 3 |\n")
+    (insert "| 4 | 5 | 9 |\n\n")
+    (insert "Footnote[fn:1] reference.\n\n")
+    (insert "[fn:1] Definition with $\\alpha$ math.\n")
+    (let* ((org-export-with-toc nil)
+           (latex (org-export-as 'latex nil nil t nil)))
+      ;; Count LaTeX patterns
+      (let ((count-re (lambda (re)
+                        (let ((c 0) (s 0))
+                          (while (string-match re latex s)
+                            (setq s (match-end 0) c (1+ c)))
+                          c))))
+        (list (funcall count-re "\\\\section")
+              (funcall count-re "\\\\begin{tabular}")
+              (funcall count-re "\\\\footnote")
+              (funcall count-re "\\$")
+              (funcall count-re "\\\\alpha")
+              (not (null (string-match-p "Math Table" latex)))
+              (not (null (string-match-p "z\\^2" latex)))
+              (not (null (string-match-p "E = mc" latex)))
+              (replace-regexp-in-string
+               "sec:org[[:alnum:]-]+" "sec:org-id" latex)))))))"##,
+    );
+}
+
+#[test]
 fn org_export_options_tags_toc_num_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
