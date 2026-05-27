@@ -16,6 +16,7 @@ mod capture_workflow;
 mod citation;
 mod clock_agenda;
 mod columns_duration;
+mod context_blocks;
 mod datetree_workflow;
 mod display_state;
 mod dynamic_blocks;
