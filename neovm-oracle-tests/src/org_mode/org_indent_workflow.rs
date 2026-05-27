@@ -151,3 +151,132 @@ fn org_indent_fold_edit_level_refresh_no_merge_combo() {
                    (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_indent_incremental_refresh_property_cleanup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-indent)
+  (require 'org-list)
+  (with-temp-buffer
+    (let ((org-indent-indentation-per-level 4)
+          (org-indent-boundary-char ?.)
+          (org-adapt-indentation 'headline-data)
+          (org-indent-mode-turns-off-org-adapt-indentation nil)
+          (org-indent-mode-turns-on-hiding-stars t)
+          (org-hide-leading-stars t)
+          (org-inlinetask-min-level 7))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "Paragraph one\n")
+      (insert "- [ ] item\n  continuation\n")
+      (insert "** NEXT Child\nChild body\n")
+      (insert "*** TODO Grandchild\nGrandchild body\n")
+      (org-indent-mode 1)
+      (org-indent-indent-buffer)
+      (font-lock-ensure (point-min) (point-max))
+      (let (states)
+        (cl-labels
+            ((prefix-state
+              (pos)
+              (let ((lp (get-text-property pos 'line-prefix))
+                    (wp (get-text-property pos 'wrap-prefix))
+                    (face (get-text-property pos 'face))
+                    (inv (get-text-property pos 'invisible)))
+                (list
+                 (and (stringp lp)
+                      (list (length lp)
+                            (substring-no-properties lp)
+                            (get-text-property 0 'face lp)))
+                 (and (stringp wp)
+                      (list (length wp)
+                            (substring-no-properties wp)
+                            (get-text-property 0 'face wp)))
+                 face
+                 inv)))
+             (find-line
+              (needle)
+              (save-excursion
+                (goto-char (point-min))
+                (search-forward needle)
+                (line-beginning-position)))
+             (snapshot
+              (label)
+              (font-lock-ensure (point-min) (point-max))
+              (list
+               label
+               org-indent-mode
+               org-indent-modified-headline-flag
+               org-adapt-indentation
+               org-hide-leading-stars
+               (mapcar
+                (lambda (needle)
+                  (let ((pos (find-line needle)))
+                    (list needle
+                          (line-number-at-pos pos)
+                          (save-excursion
+                            (goto-char pos)
+                            (org-current-level))
+                          (org-at-heading-p)
+                          (prefix-state pos))))
+                '("Root" "SCHEDULED:" ":Owner:" "Paragraph one"
+                  "item" "continuation" "Child" "Child body"
+                  "Grandchild" "Grandchild body"))
+               (mapcar
+                (lambda (line)
+                  (let ((pos (line-beginning-position line)))
+                    (list (buffer-substring-no-properties
+                           pos (line-end-position line))
+                          (prefix-state pos))))
+                (number-sequence 1 (count-lines (point-min) (point-max)))))))
+          (push (snapshot 'initial) states)
+          (goto-char (find-line "Paragraph one"))
+          (end-of-line)
+          (insert "\n  paragraph continuation\n    deeper continuation")
+          (push (snapshot 'after-body-insert) states)
+          (goto-char (find-line "Child"))
+          (forward-char 1)
+          (insert "*")
+          (push (snapshot 'after-demote-star-insert) states)
+          (goto-char (find-line "Grandchild body"))
+          (end-of-line)
+          (insert "\n    - [X] nested item\n      nested continuation")
+          (push (snapshot 'after-list-insert) states)
+          (goto-char (find-line ":Owner:"))
+          (end-of-line)
+          (insert "\n:Effort: 0:45")
+          (push (snapshot 'after-property-insert) states)
+          (let* ((before-disable
+                  (list (text-property-any (point-min) (point-max)
+                                           'line-prefix nil)
+                        (text-property-any (point-min) (point-max)
+                                           'wrap-prefix nil)))
+                 (copied-before
+                  (filter-buffer-substring (point-min) (point-max) nil))
+                 (copy-before-props
+                  (list (text-property-any 0 (length copied-before)
+                                           'line-prefix nil copied-before)
+                        (text-property-any 0 (length copied-before)
+                                           'wrap-prefix nil copied-before))))
+            (org-indent-mode -1)
+            (let ((after-disable
+                   (list (text-property-any (point-min) (point-max)
+                                            'line-prefix nil)
+                         (text-property-any (point-min) (point-max)
+                                            'wrap-prefix nil))))
+              (org-indent-mode 1)
+              (org-indent-indent-buffer)
+              (push (snapshot 'after-reenable) states)
+              (list (nreverse states)
+                    before-disable
+                    copy-before-props
+                    after-disable
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
