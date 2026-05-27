@@ -315,7 +315,67 @@ fn org_emphasize_region_replace_remove_export_combo() {
                       (mapcar (lambda (needle)
                                 (not (null (string-match-p needle ascii))))
                               '("Alpha beta gamma" "=code=" "α"))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
+fn org_entity_latex_utf8_html_parse_element_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-entities)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Markup Section\n")
+    (insert "Text with *bold*, /italic/, _underline_, =code=, ~verbatim~, and +strike+.\n\n")
+    (insert "Entities: \\alpha \\beta \\gamma \\rightarrow \\nbsp \\copy \\infty\n\n")
+    (insert "Sub/super: H_2O and E=mc^2 and x_{n+1} and a^{b+c}\n\n")
+    (insert "Nested: */bold italic/* and *_bold underline_* and ~=code verbatim=~\n\n")
+    (font-lock-ensure (point-min) (point-max))
+    ;; Parse element types and content
+    (let* ((tree (org-element-parse-buffer))
+           (objects
+            (org-element-map tree '(bold italic underline code verbatim strike-through entity subscript superscript)
+              (lambda (obj)
+                (list (org-element-type obj)
                       (buffer-substring-no-properties
-                       (point-min) (point-max))))))))))"##,
+                       (org-element-property :begin obj)
+                       (org-element-property :end obj))
+                      (get-text-property (org-element-property :begin obj) 'face)))))
+           ;; Entity lookup
+           (entity-vals
+            (mapcar (lambda (name)
+                      (let ((entry (assoc name org-entities)))
+                        (list name
+                              (nth 1 entry)  ; latex
+                              (nth 3 entry)  ; html
+                              (nth 6 entry)))) ; utf-8
+                    '("alpha" "beta" "gamma" "rightarrow" "nbsp" "copy" "infty")))
+           ;; Export
+           (html (org-export-as 'html nil nil t '(:with-toc nil)))
+           (latex (org-export-as 'latex nil nil t '(:with-toc nil)))
+           ;; Check HTML patterns
+           (html-patterns
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle html))))
+                    '("<b>bold</b>" "<i>italic</i>" "<code>code</code>"
+                      "&alpha;" "&beta;" "&infty;" "<sub>" "<sup>")))
+           ;; Check LaTeX patterns
+           (latex-patterns
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle latex))))
+                    '("\\\\textbf" "\\\\textit" "\\\\texttt"
+                      "\\\\alpha" "\\\\beta" "\\\\infty"
+                      "\\\\textsubscript" "\\\\textsuperscript"))))
+      (list objects
+            entity-vals
+            html-patterns
+            latex-patterns
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
     );
 }
