@@ -56,6 +56,54 @@ fn org_ctags_lookup_replace_tag_table_combo() {
 }
 
 #[test]
+fn org_ctags_point_append_narrow_decline_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-ctags)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Source\n")
+    (insert "Plain AlphaBeta text before [[WikiTopic]] and Mixed_Word_99.\n")
+    (let ((probe
+           (lambda (needle offset)
+             (goto-char (point-min))
+             (search-forward needle)
+             (forward-char offset)
+             (org-ctags-find-tag-at-point))))
+          (org-ctags-new-topic-template "* <<%t>>\nBody for %t.\n\n"))
+      (let ((point-tags (list (funcall probe "AlphaBeta" -3)
+                              (funcall probe "WikiTopic" -5)
+                              (funcall probe "Mixed_Word_99" -4))))
+        (goto-char (point-max))
+        (let ((appended (org-ctags-append-topic "fresh topic" t))
+              (narrowed (buffer-narrowed-p))
+              (narrow-text (buffer-substring-no-properties
+                            (point-min) (point-max)))
+              (narrow-point (list (line-number-at-pos)
+                                  (- (point) (point-min)))))
+          (widen)
+          (let ((declined
+                 (cl-letf (((symbol-function 'y-or-n-p)
+                            (lambda (&rest _) nil)))
+                   (org-ctags-ask-append-topic "declined topic")))
+                (full-text (buffer-substring-no-properties
+                            (point-min) (point-max))))
+            (list point-tags
+                  appended
+                  narrowed
+                  narrow-point
+                  narrow-text
+                  declined
+                  (string-match-p "declined topic" full-text)
+                  (org-ctags-fail-silently "anything")
+                  full-text))))))"#,
+    );
+}
+
+#[test]
 fn org_crypt_detect_encrypted_entry_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
