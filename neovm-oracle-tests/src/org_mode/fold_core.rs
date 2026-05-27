@@ -253,8 +253,54 @@ fn org_fold_context_narrow_subtree_drawer_block_recovery_combo() {
             (org-fold-hide-sublevels 2)
             (funcall snapshot 'narrowed-sublevels-2))
           (funcall snapshot 'after-widen)
-          (list (nreverse states)
-                (buffer-substring-no-properties
-                 (point-min) (point-max))))))))"##,
+           (list (nreverse states)
+                 (buffer-substring-no-properties
+                  (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_core_region_spec_visibility_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+    (insert "Alpha body.\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+    (insert "** Beta\n")
+    (insert ":LOGBOOK:\nclock line\n:END:\n")
+    (insert "Beta body.\n")
+    (insert "*** Gamma\n")
+    (insert "Gamma body.\n")
+    (insert "* Delta\n")
+    (insert "Delta body.\n")
+    (let ((probe (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward needle)
+                     (list needle
+                           (invisible-p (point))
+                           (get-text-property (point) 'invisible))))))
+      (org-fold-hide-drawer-all)
+      (org-fold-hide-block-all)
+      (let ((after-db (mapcar probe '("Owner" "(+ 1 2)" "clock line" "Alpha body" "Beta body" "Gamma body"))))
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (let ((after-hide (mapcar probe '("Beta body" "Gamma body" "Delta body"))))
+          (org-fold-show-subtree)
+          (let ((after-show (mapcar probe '("Beta body" "Gamma body" "Delta body"))))
+            (org-fold-show-all '(drawers blocks))
+            (let ((after-db-show (mapcar probe '("Owner" "(+ 1 2)" "clock line"))))
+              (list after-db after-hide after-show after-db-show
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
     );
 }
