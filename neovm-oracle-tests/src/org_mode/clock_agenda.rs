@@ -802,3 +802,55 @@ fn org_clock_log_agenda_timestamp_filter_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_clock_report_custom_columns_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-col" t))
+         (file (expand-file-name "tasks.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Project\n")
+            (insert "** Task A\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-27 Wed 14:00]--[2026-05-27 Wed 15:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "** Task B\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30\n")
+            (insert ":END:\n"))
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            ;; Get table data
+            (let* ((table (org-clock-get-table-data
+                           nil '(:maxlevel 2 :scope buffer)))
+                 (total (nth 1 table))
+                 (rows (mapcar (lambda (row)
+                                 (list (nth 0 row)
+                                       (substring-no-properties (nth 1 row))
+                                       (nth 4 row)))
+                               (nth 2 table))))
+            ;; Generate clocktable
+            (with-temp-buffer
+              (org-mode)
+              (insert "#+BEGIN: clocktable :maxlevel 2\n#+END:\n")
+              (goto-char (point-min))
+              (org-dblock-update)
+              (let ((clocktable (replace-regexp-in-string
+                                 (regexp-quote root) "<root>"
+                                 (buffer-substring-no-properties
+                                  (point-min) (point-max)))))
+                (kill-buffer)
+                (list total
+                      rows
+                      clocktable))))))
+      (delete-directory root t))))"##,
+    );
+}
