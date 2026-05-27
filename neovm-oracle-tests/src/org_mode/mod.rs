@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 mod advanced_scenarios;
 mod agenda_workflow;
+mod alpha2_deep;
 mod alpha_strict;
 mod archive_refile;
 mod attach_git;
