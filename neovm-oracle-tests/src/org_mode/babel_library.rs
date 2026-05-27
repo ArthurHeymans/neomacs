@@ -613,3 +613,72 @@ fn org_babel_cache_file_var_result_lifecycle_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_babel_execute_result_value_insertion_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: adder\n")
+      (insert "#+begin_src emacs-lisp :var a=1 b=2 :results value replace\n")
+      (insert "(list :sum (+ a b) :product (* a b) :diff (- a b))\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: lister\n")
+      (insert "#+begin_src emacs-lisp :results output replace\n")
+      (insert "(princ (format \"item1=%s item2=%s\" 42 99))\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: tabler\n")
+      (insert "#+begin_src emacs-lisp :results value table replace\n")
+      (insert "'((\"X\" \"Y\") hline (1 2) (3 4) (5 6))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute adder
+      (goto-char (point-min))
+      (search-forward "adder")
+      (org-babel-execute-src-block)
+      (let ((adder-result (org-babel-read-result))
+            (adder-buf (buffer-substring-no-properties
+                        (point-min) (point-max))))
+        ;; Execute lister
+        (goto-char (point-min))
+        (search-forward "lister")
+        (org-babel-execute-src-block)
+        (let ((lister-result (org-babel-read-result))
+              (lister-buf (buffer-substring-no-properties
+                           (point-min) (point-max))))
+          ;; Execute tabler
+          (goto-char (point-min))
+          (search-forward "tabler")
+          (org-babel-execute-src-block)
+          (let ((tabler-result (org-babel-read-result))
+                (tabler-buf (buffer-substring-no-properties
+                             (point-min) (point-max))))
+            ;; Extract all RESULTS blocks
+            (let ((results-blocks nil))
+              (goto-char (point-min))
+              (while (re-search-forward "^#\\+RESULTS:" nil t)
+                (forward-line 1)
+                (let ((beg (point)))
+                  (if (re-search-forward "^$" nil t)
+                      (push (buffer-substring-no-properties beg (point))
+                            results-blocks)
+                    (push (buffer-substring-no-properties beg (point-max))
+                          results-blocks))))
+              (list adder-result
+                    lister-result
+                    tabler-result
+                    (nreverse results-blocks)
+                    (org-element-map (org-element-parse-buffer) 'src-block
+                      (lambda (sb)
+                        (list (org-element-property :name sb)
+                              (org-element-property :language sb)
+                              (org-element-property :parameters sb))))
+                    tabler-buf))))))))))"##,
+    );
+}
