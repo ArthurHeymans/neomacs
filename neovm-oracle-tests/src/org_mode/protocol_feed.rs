@@ -611,3 +611,120 @@ fn org_feed_rss_incremental_status_element_visibility_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_feed_raw_inbox_headers_error_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let* ((root (make-temp-file "org-feed-raw" t))
+         (file (expand-file-name "feeds.org" root))
+         (calls nil)
+         (messages nil)
+         (raw-buffer (get-buffer-create " *raw-feed*"))
+         (org-feed-save-after-adding nil)
+         (org-feed-retrieve-method
+          (lambda (url)
+            (push (list 'retrieve url) calls)
+            (when (string-match-p "missing" url)
+              (error "mock missing feed"))
+            (with-current-buffer raw-buffer
+              (erase-buffer)
+              (insert "HTTP/1.1 200 OK\nContent-Type: application/rss+xml\n\n")
+              (insert "<?xml version=\"1.0\"?><rss><channel>")
+              (insert "<item><guid>raw-1</guid><title>Raw One</title>")
+              (insert "<link>https://example.org/raw-1</link>")
+              (insert "<description>Raw body one</description></item>")
+              (insert "<item><guid>raw-2</guid><title>Raw Two</title>")
+              (insert "<link>https://example.org/raw-2</link>")
+              (insert "<description>Raw body two</description></item>")
+              (insert "</channel></rss>"))
+            (org-feed-skip-http-headers raw-buffer)))
+         (good (list "Raw" "mock://raw" file "Incoming"
+                     :drawer "RAWSTATUS"
+                     :template "\n** TODO %h\n:PROPERTIES:\n:GUID: %guid\n:END:\n%u\n%description\n%a\n"))
+         (bad (list "Missing" "mock://missing" file "Incoming"))
+         (org-feed-alist (list good bad)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: Raw Feeds\n")
+            (insert "* Existing\nBody\n"))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args)
+                       (push (apply #'format fmt args) messages))))
+            (let* ((inbox-created
+                    (progn
+                      (org-feed-goto-inbox "Raw")
+                      (list (file-relative-name (buffer-file-name) root)
+                            (org-get-heading t t t t)
+                            (line-number-at-pos))))
+                   (raw-update (org-feed-update good 'retrieve-only))
+                   (raw-summary
+                    (with-current-buffer raw-update
+                      (list (buffer-name)
+                            (point-min)
+                            (buffer-substring-no-properties
+                             (point-min)
+                             (min (point-max) (+ (point-min) 55)))
+                            (not (null
+                                  (string-match-p
+                                   "HTTP/1.1"
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max)))))
+                            (length (org-feed-parse-rss-feed raw-update)))))
+                   (shown
+                    (progn
+                      (org-feed-show-raw-feed "Raw")
+                      (list (buffer-name)
+                            (point)
+                            (looking-at "<\\?xml")
+                            (length (org-feed-parse-rss-feed
+                                     (current-buffer))))))
+                   (missing-error
+                    (condition-case err
+                        (progn (org-feed-show-raw-feed "Missing") nil)
+                      (error (cons (car err) (cdr err)))))
+                   (missing-name-error
+                    (condition-case err
+                        (progn (org-feed-goto-inbox "Nope") nil)
+                      (error (cons (car err) (cdr err)))))
+                   (update-count (org-feed-update "Raw"))
+                   (after-update
+                    (with-current-buffer (find-file-noselect file)
+                      (let ((pos (progn
+                                   (goto-char (point-min))
+                                   (search-forward "Incoming")
+                                   (beginning-of-line)
+                                   (point))))
+                        (list (org-feed-read-previous-status
+                               pos "RAWSTATUS")
+                              (org-element-map
+                                  (org-element-parse-buffer)
+                                  '(headline drawer node-property link)
+                                (lambda (el)
+                                  (list (org-element-type el)
+                                        (org-element-property :raw-value el)
+                                        (org-element-property :key el)
+                                        (org-element-property :value el)
+                                        (org-element-property :begin el)
+                                        (org-element-property :end el))))
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))))
+              (list inbox-created
+                    raw-summary
+                    shown
+                    missing-error
+                    missing-name-error
+                    update-count
+                    after-update
+                    (nreverse calls)
+                    (nreverse messages)))))
+      (when (get-buffer raw-buffer) (kill-buffer raw-buffer))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
