@@ -188,7 +188,7 @@ impl RenderApp {
             queue: queue.clone(),
         });
         self.renderer = Some(renderer);
-        self.primary_window_state = Some(GuiFrameWindowState {
+        self.frame_windows.set_primary_window(GuiFrameWindowState {
             native: GuiFrameNativeWindowState {
                 window,
                 surface,
@@ -272,9 +272,10 @@ impl RenderApp {
 
         // Trigger resize padding transition
         if self.effects.resize_padding.enabled {
-            if let (Some(renderer), Some(primary_state)) =
-                (self.renderer.as_ref(), self.primary_window_state.as_mut())
-            {
+            if let (Some(renderer), Some(primary_state)) = (
+                self.renderer.as_ref(),
+                self.frame_windows.primary_window_mut(),
+            ) {
                 renderer.trigger_transient_resize_padding(
                     &mut primary_state.render.renderer_effects,
                     std::time::Instant::now(),

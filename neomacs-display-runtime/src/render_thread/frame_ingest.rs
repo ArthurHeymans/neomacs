@@ -237,7 +237,10 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
-            if frame_id != 0 && parent_id == 0 {
+            if frame_id != 0
+                && parent_id == 0
+                && self.frame_windows.primary_frame_id() != Some(frame_id)
+            {
                 if let Some(window_state) = self.frame_windows.get_mut(frame_id) {
                     Self::ingest_frame_window_root_frame(
                         window_state,
@@ -253,7 +256,7 @@ impl RenderApp {
                     continue;
                 }
             }
-            if parent_id != 0 {
+            if parent_id != 0 && self.frame_windows.primary_frame_id() != Some(parent_id) {
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
                     window_state.render.child_frames.update_frame(frame);
                     Self::sync_frame_window_cursor(window_state, &self.cursor_defaults);
@@ -314,6 +317,7 @@ impl RenderApp {
             self.mark_primary_dirty();
         }
 
+        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
         let mut active_cursor: Option<CursorTarget> =
             self.primary_current_frame().and_then(|frame| {
                 frame.phys_cursor.as_ref().map(|cursor| CursorTarget {
@@ -324,7 +328,7 @@ impl RenderApp {
                     height: cursor.height,
                     style: cursor.style,
                     color: cursor.color,
-                    frame_id: 0,
+                    frame_id: primary_frame_id,
                 })
             });
 
@@ -362,9 +366,10 @@ impl RenderApp {
                 };
 
             if target_moved && had_target && self.effects.typing_ripple.enabled {
-                if let (Some(renderer), Some(primary_state)) =
-                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
-                {
+                if let (Some(renderer), Some(primary_state)) = (
+                    self.renderer.as_ref(),
+                    self.frame_windows.primary_window_mut(),
+                ) {
                     let cx = new_target.x + new_target.width / 2.0;
                     let cy = new_target.y + new_target.height / 2.0;
                     renderer.spawn_transient_ripple(
@@ -376,9 +381,10 @@ impl RenderApp {
             }
 
             if target_moved && had_target && self.effects.cursor_trail_fade.enabled {
-                if let (Some(renderer), Some(primary_state)) =
-                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
-                {
+                if let (Some(renderer), Some(primary_state)) = (
+                    self.renderer.as_ref(),
+                    self.frame_windows.primary_window_mut(),
+                ) {
                     renderer.record_transient_cursor_trail(
                         &mut primary_state.render.renderer_effects,
                         old_cursor_rect.0,
@@ -420,7 +426,7 @@ impl RenderApp {
                 height: cursor.height,
                 style: cursor.style,
                 color: cursor.color,
-                frame_id: 0,
+                frame_id: primary_frame_id,
             };
             let cursor_defaults = (
                 self.cursor_defaults.anim_enabled,

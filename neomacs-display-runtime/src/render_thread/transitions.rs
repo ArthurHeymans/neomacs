@@ -460,8 +460,8 @@ impl RenderApp {
             None => return,
         };
         let Some(primary_frame) = self
-            .primary_window_state
-            .as_mut()
+            .frame_windows
+            .primary_window_mut()
             .map(|state| &mut state.render)
         else {
             return;
@@ -506,8 +506,8 @@ impl RenderApp {
 
         let (width, height) = self.primary_native_size();
         let Some(primary_frame) = self
-            .primary_window_state
-            .as_mut()
+            .frame_windows
+            .primary_window_mut()
             .map(|state| &mut state.render)
         else {
             return;

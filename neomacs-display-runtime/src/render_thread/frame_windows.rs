@@ -309,11 +309,13 @@ impl GuiFrameWindowState {
 
 /// Manages top-level GUI frame windows in the render thread.
 ///
-/// Secondary windows live directly in `windows`. The adopted primary window is
-/// still stored on `RenderApp` while this manager records its real Emacs frame
-/// ID and native `WindowId`, so input can use GNU frame identity instead of the
-/// historical render-thread sentinel `0`.
+/// Secondary windows live directly in `windows`. The adopted primary process
+/// window is stored separately because it has bootstrap/shutdown semantics, but
+/// it uses the same `GuiFrameWindowState` representation as every other
+/// top-level GUI frame.
 pub(crate) struct GuiFrameWindowManager {
+    /// Adopted process-primary top-level GUI frame window.
+    pub primary_window: Option<GuiFrameWindowState>,
     /// Emacs frame_id → native window-backed state for secondary top-level frames.
     pub windows: HashMap<u64, GuiFrameWindowState>,
     /// Winit WindowId → Emacs frame_id (reverse mapping for event dispatch)
@@ -344,6 +346,7 @@ pub(crate) struct PendingWindow {
 impl GuiFrameWindowManager {
     pub fn new() -> Self {
         Self {
+            primary_window: None,
             windows: HashMap::new(),
             winit_to_emacs: HashMap::new(),
             primary_emacs_frame_id: None,
@@ -387,6 +390,28 @@ impl GuiFrameWindowManager {
 
     pub fn primary_event_frame_id(&self) -> u64 {
         self.primary_emacs_frame_id.unwrap_or(0)
+    }
+
+    pub(super) fn primary_window(&self) -> Option<&GuiFrameWindowState> {
+        self.primary_window.as_ref()
+    }
+
+    pub(super) fn primary_window_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
+        self.primary_window.as_mut()
+    }
+
+    pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
+        self.primary_winit_id = Some(window_state.native.window.id());
+        self.primary_window = Some(window_state);
+        self.sync_primary_mapping();
+    }
+
+    pub(super) fn take_primary_window(&mut self) -> Option<GuiFrameWindowState> {
+        let state = self.primary_window.take();
+        if let Some(winit_id) = self.primary_winit_id.take() {
+            self.winit_to_emacs.remove(&winit_id);
+        }
+        state
     }
 
     pub fn is_primary_winit(&self, winit_id: WindowId) -> bool {
@@ -577,6 +602,8 @@ impl GuiFrameWindowManager {
         self.pending_destroys.clear();
         self.winit_to_emacs.clear();
         self.primary_winit_id = None;
+        self.primary_emacs_frame_id = None;
+        self.primary_window = None;
         // Drop all window states (surfaces, etc.)
         self.windows.clear();
     }
@@ -588,16 +615,27 @@ impl GuiFrameWindowManager {
 
     /// Get a window state by Emacs frame_id.
     pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
-        self.windows.get(&emacs_frame_id)
+        if self.primary_emacs_frame_id == Some(emacs_frame_id) {
+            self.primary_window.as_ref()
+        } else {
+            self.windows.get(&emacs_frame_id)
+        }
     }
 
     /// Get a mutable window state by Emacs frame_id.
     pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut GuiFrameWindowState> {
-        self.windows.get_mut(&emacs_frame_id)
+        if self.primary_emacs_frame_id == Some(emacs_frame_id) {
+            self.primary_window.as_mut()
+        } else {
+            self.windows.get_mut(&emacs_frame_id)
+        }
     }
 
     /// Get a window state by winit WindowId.
     pub fn get_by_winit(&self, winit_id: WindowId) -> Option<&GuiFrameWindowState> {
+        if self.primary_winit_id == Some(winit_id) {
+            return self.primary_window.as_ref();
+        }
         self.winit_to_emacs
             .get(&winit_id)
             .and_then(|id| self.windows.get(id))
@@ -605,6 +643,9 @@ impl GuiFrameWindowManager {
 
     /// Get a mutable window state by winit WindowId.
     pub fn get_by_winit_mut(&mut self, winit_id: WindowId) -> Option<&mut GuiFrameWindowState> {
+        if self.primary_winit_id == Some(winit_id) {
+            return self.primary_window.as_mut();
+        }
         self.winit_to_emacs
             .get(&winit_id)
             .copied()

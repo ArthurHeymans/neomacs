@@ -923,7 +923,9 @@ impl RenderApp {
 
         // Build animated cursor override if applicable
         let animated_cursor = self.primary_cursor().animated_cursor();
-        let root_animated_cursor = animated_cursor.filter(|cursor| cursor.frame_id == 0);
+        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
+        let root_animated_cursor =
+            animated_cursor.filter(|cursor| cursor.frame_id == primary_frame_id);
 
         // Build background gradient option
         let bg_gradient = if self.effects.bg_gradient.enabled {
@@ -955,8 +957,8 @@ impl RenderApp {
                 .map(|(v, bg)| (v as *const wgpu::TextureView, bg))
             {
                 let primary_frame = &mut self
-                    .primary_window_state
-                    .as_mut()
+                    .frame_windows
+                    .primary_window_mut()
                     .expect("checked in render")
                     .render;
                 let frame = primary_frame
@@ -985,9 +987,10 @@ impl RenderApp {
             }
 
             // Detect transitions (compare window_infos)
-            if let (Some(renderer), Some(primary_frame)) =
-                (self.renderer.as_mut(), self.primary_window_state.as_mut())
-            {
+            if let (Some(renderer), Some(primary_frame)) = (
+                self.renderer.as_mut(),
+                self.frame_windows.primary_window_mut(),
+            ) {
                 let primary_frame = &mut primary_frame.render;
                 renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
                     detect_frame_transitions(
@@ -1029,8 +1032,8 @@ impl RenderApp {
         } else {
             // Simple path: render directly to surface
             let primary_frame = &mut self
-                .primary_window_state
-                .as_mut()
+                .frame_windows
+                .primary_window_mut()
                 .expect("checked in render")
                 .render;
             let frame = primary_frame
@@ -1064,7 +1067,7 @@ impl RenderApp {
         }
 
         if let (Some(renderer), Some(primary_frame)) =
-            (&mut self.renderer, self.primary_window_state.as_mut())
+            (&mut self.renderer, self.frame_windows.primary_window_mut())
         {
             let GuiFrameWindowState { native, render } = primary_frame;
             if let Some(frame) = render.current_frame.clone() {
@@ -1111,7 +1114,7 @@ impl RenderApp {
             .map(|f| (f.background.r, f.background.g, f.background.b));
         let primary_chrome = self.primary_chrome().clone();
         if let (Some(renderer), Some(primary_frame)) =
-            (&self.renderer, self.primary_window_state.as_mut())
+            (&self.renderer, self.frame_windows.primary_window_mut())
         {
             let primary_frame = &mut primary_frame.render;
             Self::render_frame_chrome_overlays(
@@ -1166,7 +1169,7 @@ impl RenderApp {
         }
 
         if let Some(ref renderer) = self.renderer {
-            if let Some(primary_state) = self.primary_window_state.as_mut() {
+            if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                 let primary_frame = &mut primary_state.render;
                 Self::render_frame_visual_bell_overlay(
                     renderer,
@@ -1184,7 +1187,7 @@ impl RenderApp {
             .primary_current_frame()
             .map_or(0, |f| f.window_infos.len());
         if let (Some(renderer), Some(primary_frame)) =
-            (&self.renderer, self.primary_window_state.as_mut())
+            (&self.renderer, self.frame_windows.primary_window_mut())
         {
             let primary_frame = &mut primary_frame.render;
             Self::render_frame_fps_overlay(
@@ -1203,7 +1206,7 @@ impl RenderApp {
 
         if self.effects.typing_speed.enabled {
             if let (Some(renderer), Some(primary_frame)) =
-                (&self.renderer, self.primary_window_state.as_mut())
+                (&self.renderer, self.frame_windows.primary_window_mut())
             {
                 let primary_frame = &mut primary_frame.render;
                 if let Some(frame) = primary_frame.current_frame.as_ref() {

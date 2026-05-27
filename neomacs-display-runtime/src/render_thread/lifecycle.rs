@@ -375,7 +375,7 @@ impl RenderApp {
         // Drop renderer (holds device/queue references, textures, pipelines)
         drop(self.renderer.take());
         // Drop adopted primary state (surface holds wl_surface proxy if on Wayland)
-        drop(self.primary_window_state.take());
+        drop(self.frame_windows.take_primary_window());
         #[cfg(test)]
         drop(self.primary_render_state_for_tests.take());
         // Drop multi-window state (secondary surfaces)

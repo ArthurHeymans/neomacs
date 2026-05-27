@@ -86,7 +86,7 @@ impl RenderApp {
             }
             RenderCommand::SetWindowSize { width, height } => {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
-                if let Some(primary_state) = self.primary_window_state.as_ref() {
+                if let Some(primary_state) = self.primary_window_state() {
                     primary_state.request_inner_size(width, height);
                 }
                 Ok(())
@@ -105,7 +105,7 @@ impl RenderApp {
                 );
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(primary_state) = self.primary_window_state.as_ref() {
+                    if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
                         primary_state.request_inner_size(width, height);
                     }
@@ -134,7 +134,7 @@ impl RenderApp {
                 );
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(primary_state) = self.primary_window_state.as_ref() {
+                    if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
@@ -194,9 +194,11 @@ impl RenderApp {
             }
             RenderCommand::DestroyWindow { emacs_frame_id } => {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
-                if emacs_frame_id == 0 {
+                if emacs_frame_id == 0
+                    || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
+                {
+                    self.frame_windows.take_primary_window();
                     self.frame_windows.clear_primary_mapping();
-                    self.primary_window_state = None;
                     #[cfg(test)]
                     {
                         self.primary_render_state_for_tests = None;

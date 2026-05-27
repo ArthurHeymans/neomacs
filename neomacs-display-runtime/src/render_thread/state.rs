@@ -266,8 +266,6 @@ pub(super) struct RenderGpuContext {
 
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
-    /// Window state for the adopted primary GUI frame.
-    pub(super) primary_window_state: Option<GuiFrameWindowState>,
     pub(super) primary_window_destroyed: bool,
     pub(super) width: u32,
     pub(super) height: u32,
@@ -385,7 +383,6 @@ impl RenderApp {
 
         Self {
             comms,
-            primary_window_state: None,
             primary_window_destroyed: false,
             width,
             height,
@@ -465,16 +462,15 @@ impl RenderApp {
     }
 
     pub(super) fn primary_window_state(&self) -> Option<&GuiFrameWindowState> {
-        self.primary_window_state.as_ref()
+        self.frame_windows.primary_window()
     }
 
     pub(super) fn primary_window_state_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
-        self.primary_window_state.as_mut()
+        self.frame_windows.primary_window_mut()
     }
 
     pub(super) fn primary_render_state(&self) -> Option<&GuiFrameRenderState> {
-        self.primary_window_state
-            .as_ref()
+        self.primary_window_state()
             .map(|window_state| &window_state.render)
             .or_else(|| {
                 #[cfg(test)]
@@ -489,7 +485,7 @@ impl RenderApp {
     }
 
     pub(super) fn primary_render_state_mut(&mut self) -> Option<&mut GuiFrameRenderState> {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             Some(&mut window_state.render)
         } else {
             #[cfg(test)]
@@ -505,7 +501,7 @@ impl RenderApp {
 
     #[cfg(test)]
     pub(super) fn set_primary_render_state_for_tests(&mut self, render: GuiFrameRenderState) {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.render = render;
         } else {
             self.primary_render_state_for_tests = Some(render);
@@ -612,7 +608,7 @@ impl RenderApp {
     }
 
     pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             &mut window_state.render.child_frames
         } else if cfg!(test) {
             #[cfg(test)]
@@ -680,7 +676,9 @@ impl RenderApp {
     }
 
     pub(super) fn configure_primary_surface(&mut self, width: u32, height: u32) {
-        if let (Some(window_state), Some(gpu)) = (self.primary_window_state.as_mut(), &self.gpu) {
+        if let (Some(window_state), Some(gpu)) =
+            (self.frame_windows.primary_window_mut(), &self.gpu)
+        {
             let native = &mut window_state.native;
             native.width = width;
             native.height = height;
@@ -718,11 +716,11 @@ impl RenderApp {
     }
 
     pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
-        self.primary_window_state
-            .as_mut()
-            .map_or(&mut self.chrome, |window_state| {
-                &mut window_state.native.chrome
-            })
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+            &mut window_state.native.chrome
+        } else {
+            &mut self.chrome
+        }
     }
 
     pub(super) fn primary_mouse_hidden_for_typing(&self) -> bool {
@@ -741,7 +739,7 @@ impl RenderApp {
     }
 
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.ime_enabled = enabled;
         } else {
             self.ime_enabled = enabled;
@@ -749,7 +747,7 @@ impl RenderApp {
     }
 
     pub(super) fn reset_primary_ime_cursor_area(&mut self) {
-        if let Some(window_state) = self.primary_window_state.as_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.last_ime_cursor_area = None;
         } else {
             self.last_ime_cursor_area = None;

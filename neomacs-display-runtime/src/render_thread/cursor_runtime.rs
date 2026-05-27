@@ -107,7 +107,7 @@ impl RenderApp {
     pub(super) fn tick_cursor_blink(&mut self) -> bool {
         let cursor_wake_enabled = self.effects.cursor_wake.enabled;
         let renderer = self.renderer.as_ref();
-        let primary_frame = if let Some(window_state) = self.primary_window_state.as_mut() {
+        let primary_frame = if let Some(window_state) = self.frame_windows.primary_window_mut() {
             &mut window_state.render
         } else {
             #[cfg(test)]

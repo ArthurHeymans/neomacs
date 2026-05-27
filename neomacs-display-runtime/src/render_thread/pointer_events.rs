@@ -837,7 +837,7 @@ impl RenderApp {
             && button == MouseButton::Left
             && self.primary_chrome().resize_edge.is_some()
         {
-            if let Some(primary_state) = self.primary_window_state.as_ref() {
+            if let Some(primary_state) = self.primary_window_state() {
                 primary_state.drag_resize_for_current_edge();
             }
             return;
@@ -867,7 +867,7 @@ impl RenderApp {
             && !self.primary_chrome().decorations_enabled
             && (self.modifiers & NEOMACS_SUPER_MASK) != 0
         {
-            if let Some(primary_state) = self.primary_window_state.as_ref() {
+            if let Some(primary_state) = self.primary_window_state() {
                 primary_state.drag_window();
             }
             return;
@@ -1094,9 +1094,10 @@ impl RenderApp {
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
-            if let (Some(renderer), Some(primary_state)) =
-                (self.renderer.as_ref(), self.primary_window_state.as_mut())
-            {
+            if let (Some(renderer), Some(primary_state)) = (
+                self.renderer.as_ref(),
+                self.frame_windows.primary_window_mut(),
+            ) {
                 renderer.trigger_transient_click_halo(
                     &mut primary_state.render.renderer_effects,
                     mouse_pos.0,

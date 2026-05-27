@@ -352,9 +352,10 @@ impl RenderApp {
                 {
                     self.set_primary_visual_bell_start(Some(now));
                     if self.effects.cursor_error_pulse.enabled {
-                        if let (Some(renderer), Some(primary_state)) =
-                            (self.renderer.as_ref(), self.primary_window_state.as_mut())
-                        {
+                        if let (Some(renderer), Some(primary_state)) = (
+                            self.renderer.as_ref(),
+                            self.frame_windows.primary_window_mut(),
+                        ) {
                             renderer.trigger_transient_cursor_error_pulse(
                                 &mut primary_state.render.renderer_effects,
                                 now,
@@ -373,9 +374,10 @@ impl RenderApp {
                             let at_top = info.window_start <= 1;
                             let at_bottom = info.window_end >= info.buffer_size;
                             if at_top || at_bottom {
-                                if let (Some(renderer), Some(primary_state)) =
-                                    (self.renderer.as_ref(), self.primary_window_state.as_mut())
-                                {
+                                if let (Some(renderer), Some(primary_state)) = (
+                                    self.renderer.as_ref(),
+                                    self.frame_windows.primary_window_mut(),
+                                ) {
                                     renderer.trigger_transient_edge_snap(
                                         &mut primary_state.render.renderer_effects,
                                         info.bounds,
