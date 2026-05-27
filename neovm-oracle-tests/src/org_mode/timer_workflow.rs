@@ -190,3 +190,128 @@ fn org_timer_restart_offset_parse_item_error_combo() {
                     org-timer-pause-time)))))))"##,
     );
 }
+
+#[test]
+fn org_timer_list_region_countdown_element_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-timer)
+  (require 'org-element)
+  (with-temp-buffer
+    (let ((org-timer-format "[%s] ")
+          (org-timer-display nil)
+          (org-timer-default-timer "0:03")
+          (events nil)
+          (global-mode-string nil))
+      (add-hook 'org-timer-start-hook
+                (lambda () (push (list 'start org-timer-start-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-set-hook
+                (lambda () (push (list 'set
+                                       org-timer-countdown-timer-title)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-pause-hook
+                (lambda () (push (list 'pause org-timer-pause-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-continue-hook
+                (lambda () (push (list 'continue org-timer-start-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-stop-hook
+                (lambda () (push 'stop events))
+                nil t)
+      (org-mode)
+      (insert "* Meeting\n")
+      (insert ":PROPERTIES:\n:Effort: 0:03\n:END:\n")
+      (insert "- kickoff\n")
+      (insert "- 0:00:30:: existing timer item\n")
+      (insert "Notes at 0:01:05 and 0:02:10.\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     org-timer-start-time
+                     org-timer-pause-time
+                     (timerp org-timer-countdown-timer)
+                     org-timer-countdown-timer-title
+                     org-timer-mode-line-string
+                     (org-timer-value-string)
+                     (org-element-map (org-element-parse-buffer)
+                         '(headline item plain-list node-property)
+                       (lambda (el)
+                         (list (org-element-type el)
+                               (org-element-property :raw-value el)
+                               (org-element-property :checkbox el)
+                               (org-element-property :tag el)
+                               (org-element-property :begin el)
+                               (org-element-property :end el))))
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+        (let (states no-insert inserted-value)
+          (push (funcall snapshot 'initial) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1000))))
+            (org-timer-start "0:00:05"))
+          (push (funcall snapshot 'started) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1035))))
+            (goto-char (point-min))
+            (search-forward "kickoff")
+            (beginning-of-line)
+            (org-timer-item nil)
+            (setq no-insert (org-timer nil t)))
+          (push (funcall snapshot 'after-item) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1040))))
+            (goto-char (point-max))
+            (insert "Inserted timer: ")
+            (org-timer nil nil)
+            (setq inserted-value
+                  (buffer-substring-no-properties
+                   (line-beginning-position)
+                   (line-end-position))))
+          (push (funcall snapshot 'after-inline-insert) states)
+          (org-timer-change-times-in-region (point-min) (point-max)
+                                            "0:00:10")
+          (push (funcall snapshot 'after-region-shift) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1050))))
+            (org-timer-pause-or-continue nil))
+          (push (funcall snapshot 'paused) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1070))))
+            (org-timer-pause-or-continue nil))
+          (push (funcall snapshot 'continued) states)
+          (cl-letf (((symbol-function 'current-time)
+                     (lambda () (seconds-to-time 1080))))
+            (org-timer-set-timer nil))
+          (push (funcall snapshot 'countdown-set) states)
+          (org-timer-stop)
+          (push (funcall snapshot 'stopped) states)
+          (list (nreverse states)
+                no-insert
+                inserted-value
+                (mapcar (lambda (s)
+                          (condition-case err
+                              (list s
+                                    (org-timer-fix-incomplete s)
+                                    (org-timer-hms-to-secs
+                                     (org-timer-fix-incomplete s)))
+                            (error (list s (cons (car err) (cdr err))))))
+                        '("3" "4:05" "2:03:04" "-0:00:15"))
+                (mapcar #'org-timer-secs-to-hms
+                        '(-65 -1 0 125 7322))
+                (nreverse events)
+                org-timer-start-time
+                org-timer-pause-time
+                org-timer-countdown-timer
+                global-mode-string
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
