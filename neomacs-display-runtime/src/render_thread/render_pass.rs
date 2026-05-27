@@ -855,7 +855,9 @@ impl RenderApp {
         }
 
         self.prepare_frame_state_for_render();
-        Self::update_fps_counter(&mut self.fps);
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            Self::update_fps_counter(&mut primary_frame.fps);
+        }
 
         // Get surface texture
         let Some(surface) = self.surface.as_ref() else {
@@ -921,7 +923,7 @@ impl RenderApp {
                 let glyph_atlas = &mut primary_frame.glyph_atlas;
 
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
-                    renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
+                    renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
                     renderer.render_frame_glyphs(
                         unsafe { &*current_view },
                         frame,
@@ -987,7 +989,7 @@ impl RenderApp {
             let glyph_atlas = &mut primary_frame.glyph_atlas;
 
             renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
-                renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
+                renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
                 renderer.render_frame_glyphs(
                     &surface_view,
                     frame,
@@ -1166,17 +1168,13 @@ impl RenderApp {
         let fps_window_count = self
             .primary_current_frame()
             .map_or(0, |f| f.window_infos.len());
-        if let (Some(renderer), Some(glyph_atlas)) = (
-            &self.renderer,
-            self.primary_frame
-                .as_mut()
-                .map(|primary_frame| &mut primary_frame.glyph_atlas),
-        ) {
+        if let (Some(renderer), Some(primary_frame)) = (&self.renderer, self.primary_frame.as_mut())
+        {
             Self::render_frame_fps_overlay(
                 renderer,
                 &surface_view,
-                glyph_atlas,
-                &mut self.fps,
+                &mut primary_frame.glyph_atlas,
+                &mut primary_frame.fps,
                 fps_glyph_count,
                 fps_window_count,
                 self.transitions.crossfades.len() + self.transitions.scroll_slides.len(),
@@ -1195,7 +1193,7 @@ impl RenderApp {
                         &surface_view,
                         frame,
                         &mut primary_frame.glyph_atlas,
-                        &mut self.typing_speed,
+                        &mut primary_frame.typing_speed,
                         &mut primary_frame.frame_dirty,
                     );
                 }

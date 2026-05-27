@@ -229,8 +229,10 @@ impl RenderApp {
         }
 
         if self.effects.idle_dim.enabled {
-            if Self::tick_idle_dim_state(&mut self.idle_dim, &self.effects.idle_dim) {
-                self.mark_primary_dirty();
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                if Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &self.effects.idle_dim) {
+                    primary_frame.frame_dirty = true;
+                }
             }
             for window_state in self.frame_windows.windows.values_mut() {
                 if Self::tick_idle_dim_state(
@@ -241,8 +243,10 @@ impl RenderApp {
                 }
             }
         } else {
-            self.idle_dim.active = false;
-            self.idle_dim.current_alpha = 0.0;
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                primary_frame.idle_dim.active = false;
+                primary_frame.idle_dim.current_alpha = 0.0;
+            }
             for window_state in self.frame_windows.windows.values_mut() {
                 window_state.render.idle_dim.active = false;
                 window_state.render.idle_dim.current_alpha = 0.0;
@@ -296,7 +300,10 @@ impl RenderApp {
                 renderer_effects_need_redraw = self.renderer_effects.needs_redraw(),
                 cursor_animating = self.cursor.animating,
                 cursor_size_animating = self.cursor.size_animating,
-                idle_dim_active = self.idle_dim.active,
+                idle_dim_active = self
+                    .primary_frame
+                    .as_ref()
+                    .is_some_and(|frame| frame.idle_dim.active),
                 transitions_active = self.transitions.has_active(),
                 "requesting redraw"
             );

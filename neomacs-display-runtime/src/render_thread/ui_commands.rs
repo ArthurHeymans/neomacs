@@ -447,13 +447,16 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetShowFps { enabled } => {
-                self.fps.enabled = enabled;
+                self.primary_fps_enabled = enabled;
+                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    primary_frame.fps.enabled = enabled;
+                    primary_frame.frame_dirty = true;
+                }
                 self.frame_windows.fps_enabled = enabled;
                 for window_state in self.frame_windows.windows.values_mut() {
                     window_state.render.fps.enabled = enabled;
                     window_state.render.frame_dirty = true;
                 }
-                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetCornerRadius { radius } => {

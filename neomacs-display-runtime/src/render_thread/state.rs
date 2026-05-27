@@ -374,17 +374,14 @@ pub(super) struct RenderApp {
 
     // UI overlay state
     pub(super) scroll_indicators_enabled: bool,
+    pub(super) primary_fps_enabled: bool,
 
     // Window chrome (borderless title bar, resize, decorations)
     pub(super) chrome: WindowChrome,
-    // FPS counter state
-    pub(super) fps: FpsCounter,
     /// Extra line spacing in pixels (added between rows)
     pub(super) extra_line_spacing: f32,
     /// Extra letter spacing in pixels (added between characters)
     pub(super) extra_letter_spacing: f32,
-    pub(super) idle_dim: IdleDimState,
-    pub(super) typing_speed: TypingSpeedState,
 
     /// Shared monitor info (populated in resumed(), read from FFI thread)
     pub(super) shared_monitors: Option<SharedMonitorInfo>,
@@ -470,12 +467,10 @@ impl RenderApp {
             ime_preedit_text: String::new(),
             last_ime_cursor_area: None,
             scroll_indicators_enabled: false,
+            primary_fps_enabled: false,
             chrome: WindowChrome::default(),
-            fps: FpsCounter::default(),
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
-            typing_speed: TypingSpeedState::default(),
-            idle_dim: IdleDimState::default(),
             shared_monitors: Some(shared_monitors),
             monitors_populated: false,
             last_monitor_snapshot: Vec::new(),
@@ -534,5 +529,11 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_frame.as_mut() {
             primary_frame.frame_dirty = dirty;
         }
+    }
+
+    pub(super) fn primary_fps_enabled(&self) -> bool {
+        self.primary_frame
+            .as_ref()
+            .map_or(self.primary_fps_enabled, |frame| frame.fps.enabled)
     }
 }

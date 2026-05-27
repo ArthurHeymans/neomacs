@@ -161,7 +161,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
         0,
         &device,
         app.scale_factor,
-        app.fps.enabled,
+        app.primary_fps_enabled(),
     ));
 
     app.handle_window_command(RenderCommand::AdoptPrimaryFrame {

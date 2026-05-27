@@ -28,7 +28,9 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
-            self.typing_speed.key_press_times.push(now);
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                primary_frame.typing_speed.key_press_times.push(now);
+            }
             self.mark_primary_dirty();
         } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.typing_speed.key_press_times.push(now);
@@ -42,7 +44,9 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
-            self.idle_dim.last_activity_time = now;
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                primary_frame.idle_dim.last_activity_time = now;
+            }
             self.mark_primary_dirty();
         } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.idle_dim.last_activity_time = now;

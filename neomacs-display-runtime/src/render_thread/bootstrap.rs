@@ -137,7 +137,7 @@ impl RenderApp {
             primary_frame_id,
             &device,
             self.scale_factor,
-            self.fps.enabled,
+            self.primary_fps_enabled(),
         );
 
         tracing::info!(
