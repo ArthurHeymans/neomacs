@@ -85,6 +85,101 @@ fn org_tempo_custom_blocks_keywords_include_combo() {
 }
 
 #[test]
+fn org_tempo_duplicate_update_include_abort_ast_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-tempo)
+  (let* ((root (make-temp-file "org-tempo-update" t))
+         (include-file (expand-file-name "inc.org" root))
+         (default-directory root)
+         (org-structure-template-alist
+          '(("x" . "src emacs-lisp")
+            ("q" . "quote")
+            ("Q" . "QUOTE")))
+         (org-tempo-keywords-alist
+          '(("k" . "keywords")
+            ("m" . "macro"))))
+    (unwind-protect
+        (progn
+          (with-temp-file include-file (insert "* Included\n"))
+          (with-temp-buffer
+            (org-mode)
+            (org-tempo-setup)
+            (insert "<x")
+            (org-tempo-complete-tag)
+            (insert "(+ 1 2)")
+            (goto-char (point-max))
+            (insert "\n<q")
+            (org-tempo-complete-tag)
+            (insert "lower quote")
+            (goto-char (point-max))
+            (insert "\n<Q")
+            (org-tempo-complete-tag)
+            (insert "upper quote")
+            (let ((initial-tags
+                   (mapcar (lambda (tag)
+                             (list (car tag) (nth 2 tag)))
+                           org-tempo-tags)))
+              (setq org-structure-template-alist
+                    '(("x" . "src shell")
+                      ("e" . "example")))
+              (setq org-tempo-keywords-alist
+                    '(("k" . "caption")
+                      ("z" . "latex")))
+              (goto-char (point-max))
+              (insert "\n<x")
+              (org-tempo-complete-tag)
+              (insert "echo updated")
+              (goto-char (point-max))
+              (insert "\n<e")
+              (org-tempo-complete-tag)
+              (insert "example body")
+              (goto-char (point-max))
+              (insert "\n<k")
+              (org-tempo-complete-tag)
+              (insert "Caption text")
+              (goto-char (point-max))
+              (insert "\n<I")
+              (cl-letf (((symbol-function 'read-file-name)
+                         (lambda (&rest _) (keyboard-quit))))
+                (condition-case nil
+                    (org-tempo-complete-tag)
+                  (quit 'quit)))
+              (let ((after-abort
+                     (buffer-substring-no-properties
+                      (line-beginning-position) (point))))
+                (delete-region (line-beginning-position) (point))
+                (insert "<I")
+                (cl-letf (((symbol-function 'read-file-name)
+                           (lambda (&rest _) include-file)))
+                  (org-tempo-complete-tag))
+                (insert ":minlevel 2")
+                (list (sort (org-tempo--keys) #'string<)
+                      initial-tags
+                      (mapcar (lambda (tag)
+                                (list (car tag) (nth 2 tag)))
+                              org-tempo-tags)
+                      after-abort
+                      (org-element-map
+                          (org-element-parse-buffer)
+                          '(src-block quote-block example-block keyword)
+                        (lambda (e)
+                          (list (org-element-type e)
+                                (org-element-property :language e)
+                                (org-element-property :key e)
+                                (org-element-property :value e)
+                                (org-element-property :begin e)
+                                (org-element-property :end e))))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_table_convert_transpose_move_copy_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
