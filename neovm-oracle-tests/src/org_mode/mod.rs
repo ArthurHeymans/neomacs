@@ -1467,6 +1467,7 @@ mod strong_state_advanced;
 mod strong_state_capture;
 mod strong_state_complex;
 mod strong_state_deep;
+mod strong_state_max;
 mod strong_state_ultimate;
 mod strong_tera_combos;
 mod strong_ultimate_edge;
