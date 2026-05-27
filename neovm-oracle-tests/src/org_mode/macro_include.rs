@@ -335,3 +335,84 @@ fn org_macro_builtin_property_date_env_include_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_include_export_environment_reference_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (require 'org-macro)
+  (let* ((root (make-temp-file "org-include-env-ref" t))
+         (inc (expand-file-name "chapter.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file inc
+            (insert "#+PROPERTY: Project_ALL Alpha Beta\n")
+            (insert "#+MACRO: chapter Chapter-$1\n")
+            (insert "* Included :inc:\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: included\n:Project: Alpha\n:END:\n")
+            (insert "#+NAME: inc-table\n")
+            (insert "#+CAPTION: Included table {{{chapter(table)}}}\n")
+            (insert "| Key | Value |\n|-----+-------|\n| A   | 1     |\n")
+            (insert "See <<inc-target>> and [[#main][main]].\n")
+            (insert "<<inc-target>>\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+TITLE: Main\n")
+            (insert "#+AUTHOR: Ada\n")
+            (insert "#+OPTIONS: toc:nil tags:t\n")
+            (insert "#+PROPERTY: Project_ALL Alpha Beta Gamma\n")
+            (insert "#+MACRO: local Local-$1\n")
+            (insert "* Main :root:\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: main\n:Project: Gamma\n:END:\n")
+            (insert "#+NAME: main-table\n")
+            (insert "#+CAPTION: Main table {{{local(table)}}}\n")
+            (insert "| Key | Value |\n|-----+-------|\n| M   | 9     |\n")
+            (insert "#+INCLUDE: \"" inc "\" :minlevel 2\n")
+            (goto-char (point-min))
+            (org-export-expand-include-keyword nil root nil nil nil)
+            (let* ((expanded (buffer-substring-no-properties
+                              (point-min) (point-max)))
+                   (templates (org-macro--collect-macros))
+                   (_ (org-macro-replace-all templates))
+                   (tree (org-element-parse-buffer))
+                   (info (org-export-get-environment 'html nil nil))
+                   (headlines
+                    (org-element-map tree 'headline
+                      (lambda (h)
+                        (list (org-element-property :level h)
+                              (org-element-property :raw-value h)
+                              (org-export-get-reference h info)
+                              (org-export-get-tags h info)
+                              (org-export-get-node-property
+                               "Project" h t)
+                              (org-export-get-category h info)))))
+                   (tables
+                    (org-element-map tree 'table
+                      (lambda (table)
+                        (list (org-element-property :name table)
+                              (org-export-get-reference table info)
+                              (org-export-get-caption table)
+                              (org-export-get-ordinal table info)))))
+                   (targets
+                    (org-element-map tree 'target
+                      (lambda (target)
+                        (list (org-element-property :value target)
+                              (org-export-get-reference target info))))))
+              (list expanded
+                    (mapcar #'car templates)
+                    headlines
+                    tables
+                    targets
+                    (plist-get info :title)
+                    (plist-get info :author)
+                    (plist-get info :with-toc)
+                    (replace-regexp-in-string
+                     "org[[:alnum:]]+"
+                     "org-id"
+                     (org-export-as 'html nil nil t nil)))))))
+      (delete-directory root t))))"##,
+    );
+}
