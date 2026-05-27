@@ -685,6 +685,89 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_overview_content_all_local_cycle_font_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "** DONE Alpha\n")
+      (insert "*** TODO Beta\n")
+      (insert "**** WAIT Gamma\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Global overview
+      (org-cycle-overview)
+      (let ((overview-state
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (invisible-p (point))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face))
+                      (list needle 'not-found nil nil))))
+              '("Root" "Alpha" "Beta" "Gamma" "Sibling"))))
+        ;; Local cycle on Alpha
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-cycle)
+        (org-cycle)
+        (let ((alpha-cycled
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (search-forward needle nil t)
+                        (list needle
+                              (invisible-p (point))
+                              (org-outline-level))
+                        (list needle 'not-found nil nil))))
+                '("Root" "Alpha" "Beta" "Gamma" "Sibling"))))
+          ;; Global contents
+          (org-cycle-contents)
+          (let ((contents-state
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle
+                                (invisible-p (point))
+                                (org-outline-level))
+                          (list needle 'not-found nil nil))))
+                  '("Root" "Alpha" "Beta" "Gamma" "Sibling"))))
+            ;; Show all
+            (org-fold-show-all)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((merged nil))
+              (dolist (line (split-string
+                             (buffer-substring-no-properties
+                              (point-min) (point-max))
+                             "\n" t))
+                (when (string-match-p "^\\*+ .*\\*+ " line)
+                  (push line merged)))
+              (list overview-state
+                    alpha-cycled
+                    contents-state
+                    (nreverse merged)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_cut_paste_subtree_reexpand_font_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
