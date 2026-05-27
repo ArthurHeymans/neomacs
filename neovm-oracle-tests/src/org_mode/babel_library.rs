@@ -1117,10 +1117,65 @@ fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
           (let ((after-reexec (buffer-substring-no-properties
                                (point-min) (point-max)))
                 (reexec-val (org-babel-read-result)))
-            (list after-exec
-                  result-val
-                  after-remove
-                  after-reexec
-                  reexec-val))))))))"##,
+             (list after-exec
+                   result-val
+                   after-remove
+                   after-reexec
+                   reexec-val))))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_execute_output_var_list_table_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Output mode
+      (insert "#+NAME: out\n")
+      (insert "#+begin_src emacs-lisp :results output replace\n")
+      (insert "(dotimes (i 3)\n  (princ (format \"line-%d\\n\" i)))\n")
+      (insert "#+end_src\n\n")
+      ;; Value list mode
+      (insert "#+NAME: lst\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((x 1) (y 2) (z 3))\n")
+      (insert "#+end_src\n\n")
+      ;; Value table mode
+      (insert "#+NAME: tbl\n")
+      (insert "#+begin_src emacs-lisp :var data=lst :results value table replace\n")
+      (insert "(cons '(\"Key\" \"Val\")\n")
+      (insert "      (cons 'hline\n")
+      (insert "            (mapcar (lambda (r) (list (car r) (* 10 (cadr r)))) data)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dolist (name '("out" "lst" "tbl"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        ;; Parse elements
+        (let ((elements
+               (org-element-map (org-element-parse-buffer)
+                   '(src-block fixed-width)
+                 (lambda (el)
+                   (list (org-element-type el)
+                         (org-element-property :name el)
+                         (org-element-property :value el))))))
+          (list (nreverse results)
+                elements
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
     );
 }
