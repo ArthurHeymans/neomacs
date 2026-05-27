@@ -922,3 +922,141 @@ fn org_babel_hash_hide_mutate_reexecute_combo() {
                        (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_babel_insert_remove_file_example_result_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-babel-result" t))
+         (result-file (expand-file-name "out data.txt" root)))
+    (unwind-protect
+        (with-temp-buffer
+          (setq default-directory root)
+          (org-mode)
+          (insert "* Results\n")
+          (insert "#+NAME: output-block\n")
+          (insert "#+begin_src emacs-lisp :results output replace\n")
+          (insert "(princ \"old\")\n")
+          (insert "#+end_src\n\n")
+          (insert "#+NAME: drawer-block\n")
+          (insert "#+begin_src emacs-lisp :results value drawer replace\n")
+          (insert "(list 1 2)\n")
+          (insert "#+end_src\n\n")
+          (insert "#+NAME: file-block\n")
+          (insert "#+begin_src emacs-lisp :results file link replace :file \"out data.txt\"\n")
+          (insert "result-file\n")
+          (insert "#+end_src\n\n")
+          (let ((snapshot
+                 (lambda (label)
+                   (list label
+                         (org-element-map (org-element-parse-buffer)
+                             '(src-block example-block fixed-width drawer
+                               keyword link)
+                           (lambda (el)
+                             (list (org-element-type el)
+                                   (org-element-property :name el)
+                                   (org-element-property :key el)
+                                   (org-element-property :value el)
+                                   (org-element-property :type el)
+                                   (org-element-property :path el)
+                                   (org-element-property :begin el)
+                                   (org-element-property :end el))))
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+                states output-read drawer-read file-link remove-keep
+                remove-full example-lower example-upper file-result)
+            (push (funcall snapshot 'initial) states)
+            (goto-char (point-min))
+            (search-forward "output-block")
+            (search-forward "begin_src")
+            (let ((info (org-babel-get-src-block-info)))
+              (org-babel-insert-result "alpha\nbeta"
+                                       '("output" "replace")
+                                       info nil "emacs-lisp")
+              (setq output-read
+                    (save-excursion
+                      (goto-char (org-babel-where-is-src-block-result
+                                  nil info))
+                      (forward-line 1)
+                      (org-babel-read-result))))
+            (push (funcall snapshot 'after-output) states)
+            (goto-char (point-min))
+            (search-forward "drawer-block")
+            (search-forward "begin_src")
+            (let ((info (org-babel-get-src-block-info)))
+              (org-babel-insert-result '((1 2) (3 4))
+                                       '("value" "drawer" "replace")
+                                       info nil "emacs-lisp")
+              (setq drawer-read
+                    (save-excursion
+                      (goto-char (org-babel-where-is-src-block-result
+                                  nil info))
+                      (forward-line 2)
+                      (org-babel-read-result))))
+            (push (funcall snapshot 'after-drawer) states)
+            (goto-char (point-min))
+            (search-forward "file-block")
+            (search-forward "begin_src")
+            (let ((info (org-babel-get-src-block-info)))
+              (with-temp-file result-file
+                (insert "file body\n"))
+              (setq file-result
+                    (org-babel-result-to-file result-file "File Desc"))
+              (org-babel-insert-result result-file
+                                       '("file" "link" "replace")
+                                       info nil "emacs-lisp")
+              (setq file-link
+                    (org-element-map (org-element-parse-buffer) 'link
+                      (lambda (link)
+                        (list (org-element-property :type link)
+                              (org-element-property :path link)
+                              (and (org-element-contents-begin link)
+                                   (buffer-substring-no-properties
+                                    (org-element-contents-begin link)
+                                    (org-element-contents-end link))))))))
+            (push (funcall snapshot 'after-file) states)
+            (goto-char (point-min))
+            (search-forward "drawer-block")
+            (search-forward "begin_src")
+            (org-babel-remove-result nil t)
+            (setq remove-keep
+                  (buffer-substring-no-properties (point-min) (point-max)))
+            (goto-char (point-min))
+            (search-forward "output-block")
+            (search-forward "begin_src")
+            (org-babel-remove-result)
+            (setq remove-full
+                  (buffer-substring-no-properties (point-min) (point-max)))
+            (with-temp-buffer
+              (insert "one\n")
+              (org-babel-examplify-region (point-min) (point-max)
+                                          '("replace") nil)
+              (setq example-lower (buffer-string)))
+            (let ((org-babel-uppercase-example-markers t))
+              (with-temp-buffer
+                (insert "one\ntwo\nthree\n")
+                (org-babel-examplify-region (point-min) (point-max)
+                                            '("replace") nil)
+                (setq example-upper (buffer-string))))
+            (list (nreverse states)
+                  output-read
+                  drawer-read
+                  file-result
+                  file-link
+                  remove-keep
+                  remove-full
+                  example-lower
+                  example-upper
+                  (replace-regexp-in-string
+                   (regexp-quote root)
+                   "<root>"
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))
+      (when (file-directory-p root) (delete-directory root t))))"##,
+    );
+}
