@@ -460,3 +460,28 @@ fn org_macro_expand_nested_arg_export_combo() {
                   (list has-greet has-italic))))))))"##,
     );
 }
+
+#[test]
+fn org_macro_chained_nested_expansion_divergence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-macro)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+MACRO: greet Hello, $1!\n")
+    (insert "#+MACRO: wrap /$1/\n")
+    (insert "#+MACRO: twice $1 and $1\n\n")
+    (insert "* Section\n")
+    (insert "Chained: {{{twice({{{greet(A)}}})}}}\n")
+    (let ((before (buffer-substring-no-properties
+                   (point-min) (point-max))))
+      (let ((macros (org-macro--collect-macros)))
+        (org-macro-replace-all macros)
+        (let ((after (buffer-substring-no-properties
+                      (point-min) (point-max))))
+          (list before after))))))"##,
+    );
+}
