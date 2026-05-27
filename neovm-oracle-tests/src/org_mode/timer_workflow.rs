@@ -119,3 +119,74 @@ fn org_timer_countdown_effort_title_mode_line_combo() {
                   global-mode-string))))))"##,
     );
 }
+
+#[test]
+fn org_timer_restart_offset_parse_item_error_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-timer)
+  (with-temp-buffer
+    (let ((org-timer-format "<%s>")
+          (org-timer-display nil)
+          (events nil))
+      (add-hook 'org-timer-start-hook
+                (lambda () (push (list 'start org-timer-start-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-stop-hook
+                (lambda () (push 'stop events)) nil t)
+      (org-mode)
+      (insert "* Timer\n")
+      (insert "Existing stamp 0:02:03 here.\n")
+      (insert "- plain item\n")
+      (goto-char (point-min))
+      (search-forward "0:02:03")
+      (cl-letf (((symbol-function 'current-time)
+                 (lambda () (seconds-to-time 5000)))
+                ((symbol-function 'read-string)
+                 (lambda (&rest _) "")))
+        (org-timer-start '(4)))
+      (let ((after-start (list org-timer-start-time
+                               org-timer-pause-time
+                               (org-timer-value-string))))
+        (cl-letf (((symbol-function 'current-time)
+                   (lambda () (seconds-to-time 5010))))
+          (let ((no-insert (org-timer nil t)))
+            (goto-char (point-max))
+            (insert "\nInserted: ")
+            (org-timer nil nil)
+            (let ((after-insert
+                   (buffer-substring-no-properties
+                    (point-min) (point-max)))
+                  (plain-item-error
+                   (progn
+                     (goto-char (point-min))
+                     (search-forward "- plain item")
+                     (condition-case err
+                         (progn (org-timer-item nil) 'no-error)
+                       (error (cons (car err) (cdr err)))))))
+              (org-timer-stop)
+              (list after-start
+                    no-insert
+                    after-insert
+                    plain-item-error
+                    (mapcar (lambda (s)
+                              (condition-case err
+                                  (list s
+                                        (org-timer-fix-incomplete s)
+                                        (org-timer-hms-to-secs
+                                         (org-timer-fix-incomplete s)))
+                                (error (list s (cons (car err) (cdr err))))))
+                            '("7" "2:03" "1:02:03" "bad"))
+                    (mapcar #'org-timer-secs-to-hms
+                            '(-3723 -1 0 61 3661))
+                    (mapcar (lambda (event)
+                              (if (consp event) (car event) event))
+                            (nreverse events))
+                    org-timer-start-time
+                    org-timer-pause-time)))))))"##,
+    );
+}
