@@ -685,6 +685,70 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_narrow_widen_cycle_font_level_integrity_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* Root\nRoot body.\n")
+      (insert "** Alpha\nAlpha body.\n")
+      (insert "*** Beta\nBeta body.\n")
+      (insert "**** Gamma\nGamma body.\n")
+      (insert "** Sibling\nSibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Narrow to Alpha
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (save-restriction
+        (org-narrow-to-subtree)
+        ;; Cycle within narrow
+        (org-cycle)
+        (org-cycle)
+        (let ((narrowed-state
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (search-forward needle nil t)
+                        (list needle
+                              (invisible-p (point))
+                              (org-outline-level)
+                              (get-text-property (line-beginning-position) 'face))
+                        (list needle 'not-found nil nil nil))))
+                '("Alpha" "Alpha body" "Beta" "Beta body" "Gamma" "Gamma body" "Root" "Sibling"))))
+        ;; Edit within narrow
+        (goto-char (point-max))
+        (insert "\n*** Inserted in narrow\nInserted body.\n")
+        ;; Show all within narrow
+        (org-fold-show-all)
+        (let ((narrowed-show
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (search-forward needle nil t)
+                        (list needle
+                              (invisible-p (point))
+                              (org-outline-level))
+                        (list needle 'not-found nil nil))))
+                '("Alpha" "Beta" "Gamma" "Inserted" "Root" "Sibling"))))
+          ;; Widen and check
+          (list narrowed-state
+                narrowed-show
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_overview_content_all_local_cycle_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
