@@ -651,3 +651,38 @@ fn org_cite_basic_disambiguation_multibackend_export_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_citation_parse_reference_style_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+cite_export: basic author-year\n")
+    (insert "#+bibliography: refs.bib\n\n")
+    (insert "* Section\n")
+    (insert "Text [cite:@doe2020] and [cite/t:@roe2021; see @smith2022 p. 10].\n")
+    (insert "Plain [cite:@solo].\n\n")
+    (let* ((tree (org-element-parse-buffer))
+           (citations
+            (org-element-map tree 'citation
+              (lambda (c)
+                (list (org-element-property :style c)
+                      (org-element-property :prefix c)
+                      (org-cite-get-references c t)))))
+           (refs
+            (org-element-map tree 'citation-reference
+              (lambda (cr)
+                (list (org-element-property :key cr)))))
+           (all-types
+            (mapcar #'org-element-type
+                    (org-element-map tree t #'identity))))
+      (list citations refs all-types
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
