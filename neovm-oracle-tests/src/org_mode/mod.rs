@@ -17,6 +17,7 @@ mod columns_duration;
 mod datetree_workflow;
 mod display_state;
 mod editing_export;
+mod element_ast;
 mod export_backends;
 mod export_mix;
 mod fold_font;
