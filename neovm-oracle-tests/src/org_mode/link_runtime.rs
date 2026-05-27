@@ -359,6 +359,127 @@ fn org_link_precise_target_region_named_heading_combo() {
 }
 
 #[test]
+fn org_insert_link_stored_region_completion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-insert-link" t))
+         (target (expand-file-name "target.org" root))
+         (other (expand-file-name "sub/other.org" root))
+         (answers '("Stored Desc" "custom:" "Edited Desc"))
+         (completions nil)
+         (org-link-keep-stored-after-insertion nil)
+         (org-link-file-path-type 'relative)
+         (org-stored-links
+          `(("https://example.org/stored" "Stored Desc")
+            (,(concat "file:" target "::*Target Heading") "Target Heading")))
+         (org-link-make-description-function
+          (lambda (link desc)
+            (format "AUTO:%s:%s" link (or desc "")))))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory other) t)
+          (with-temp-file target
+            (insert "* Target Heading\nBody\n"))
+          (with-temp-file other (insert "other\n"))
+          (org-link-set-parameters
+           "custom"
+           :complete (lambda (&optional arg)
+                       (push arg completions)
+                       "custom:path/value")
+           :insert-description
+           (lambda (link desc)
+             (format "DESC:%s:%s" link (or desc ""))))
+          (with-temp-buffer
+            (setq default-directory root
+                  buffer-file-name (expand-file-name "source.org" root))
+            (org-mode)
+            (insert "* Source\n")
+            (insert "Replace this region\n")
+            (insert "Edit [[https://old.example/path][Old]].\n")
+            (cl-letf (((symbol-function 'org-completing-read)
+                       (lambda (prompt collection &rest _)
+                         (push (list prompt
+                                     (sort
+                                      (mapcar (lambda (entry)
+                                                (if (consp entry)
+                                                    (car entry)
+                                                  entry))
+                                              collection)
+                                      #'string<))
+                               completions)
+                         (pop answers)))
+                      ((symbol-function 'read-string)
+                       (lambda (prompt &optional initial &rest _)
+                         (push (list prompt initial) completions)
+                         (or (pop answers) initial ""))))
+              ;; Empty explicit description lets stored-link description win.
+              (goto-char (point-min))
+              (search-forward "Source")
+              (end-of-line)
+              (insert "\n")
+              (org-insert-link nil "https://example.org/stored" "")
+              ;; Region text becomes default description for a file link.
+              (goto-char (point-min))
+              (search-forward "Replace this region")
+              (push-mark (match-beginning 0) t t)
+              (goto-char (match-end 0))
+              (activate-mark)
+              (org-insert-link nil (concat "file:" other) nil)
+              ;; Complete custom link type and use :insert-description.
+              (goto-char (point-max))
+              (insert "\n")
+              (org-insert-link nil nil nil)
+              ;; Edit an existing bracket link in place.
+              (goto-char (point-min))
+              (search-forward "Old")
+              (org-insert-link nil "https://new.example/path" nil)
+              ;; Insert remaining stored links with and without retention.
+              (goto-char (point-max))
+              (insert "\n")
+              (org-insert-all-links '(4) "- " "\n")
+              (org-insert-last-stored-link 1)
+              (font-lock-ensure (point-min) (point-max))
+              (let* ((tree (org-element-parse-buffer))
+                     (links
+                      (org-element-map tree 'link
+                        (lambda (link)
+                          (list (org-element-property :type link)
+                                (org-element-property :path link)
+                                (org-element-property :raw-link link)
+                                (and (org-element-contents-begin link)
+                                     (buffer-substring-no-properties
+                                      (org-element-contents-begin link)
+                                      (org-element-contents-end link)))))))
+                     (props
+                      (mapcar
+                       (lambda (needle)
+                         (save-excursion
+                           (goto-char (point-min))
+                           (search-forward needle)
+                           (list needle
+                                 (get-text-property (match-beginning 0)
+                                                    'face)
+                                 (get-text-property (match-beginning 0)
+                                                    'invisible)
+                                 (get-text-property (match-beginning 0)
+                                                    'font-lock-fontified))))
+                       '("Stored Desc" "Replace this region" "custom:path"
+                         "Edited Desc"))))
+                (list links
+                      props
+                      org-stored-links
+                      (nreverse completions)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_link_search_targets_names_coderef_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
