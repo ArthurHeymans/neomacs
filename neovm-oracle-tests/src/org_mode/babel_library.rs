@@ -446,3 +446,86 @@ fn org_babel_execute_buffer_call_inline_remove_combo() {
               after-remove)))))"##,
     );
 }
+
+#[test]
+fn org_babel_session_dir_noweb_file_tangle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (require 'ob-tangle)
+  (let* ((root (make-temp-file "org-babel-sess" t))
+         (src-file (expand-file-name "work.org" root))
+         (tangle-out (expand-file-name "out.el" root))
+         (dir-file (expand-file-name "dirprobe.txt" root))
+         (org-confirm-babel-evaluate nil)
+         (org-babel-default-header-args
+          '((:results . "output replace")
+            (:exports . "results"))))
+    (unwind-protect
+        (progn
+          (with-temp-file src-file
+            (insert "#+PROPERTY: header-args:emacs-lisp :results value replace\n\n")
+            (insert "#+NAME: helper\n")
+            (insert "#+begin_src emacs-lisp :var n=1\n")
+            (insert "(list :n n :square (* n n))\n")
+            (insert "#+end_src\n\n")
+            (insert "#+NAME: use-noweb\n")
+            (insert "#+begin_src emacs-lisp :noweb yes :results value replace\n")
+            (insert "(let ((base (<<helper(n=3)>>)))\n")
+            (insert "  (list :base base :doubled (* 2 (plist-get base :n))))\n")
+            (insert "#+end_src\n\n")
+            (insert "#+begin_src emacs-lisp :tangle " tangle-out " :noweb yes\n")
+            (insert ";; tangled helper\n")
+            (insert "<<helper(n=5)>>\n")
+            (insert "#+end_src\n\n")
+            (insert "#+begin_src emacs-lisp :dir " root " :results value replace\n")
+            (insert "(expand-file-name \"probe.txt\")\n")
+            (insert "#+end_src\n\n"))
+          (with-current-buffer (find-file-noselect src-file)
+            (org-mode)
+            (let ((noweb-result nil)
+                  (dir-result nil)
+                  (tangle-files nil)
+                  (tangle-content nil)
+                  (all-results nil))
+              (goto-char (point-min))
+              (search-forward "use-noweb")
+              (org-babel-execute-src-block)
+              (setq noweb-result
+                    (org-babel-read-result))
+              (goto-char (point-min))
+              (search-forward "expand-file-name")
+              (org-babel-execute-src-block)
+              (setq dir-result
+                    (org-babel-read-result))
+              (setq tangle-files (org-babel-tangle))
+              (when (file-exists-p tangle-out)
+                (with-temp-buffer
+                  (insert-file-contents tangle-out)
+                  (setq tangle-content (buffer-string))))
+              (goto-char (point-min))
+              (while (re-search-forward "#\\+RESULTS:" nil t)
+                (forward-line 1)
+                (let ((beg (point)))
+                  (if (re-search-forward "^$" nil t)
+                      (push (buffer-substring-no-properties beg (point))
+                            all-results)
+                    (push (buffer-substring-no-properties beg (point-max))
+                          all-results))))
+              (list noweb-result
+                    dir-result
+                    (mapcar #'file-name-nondirectory tangle-files)
+                    tangle-content
+                    (nreverse all-results)
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+            (kill-buffer)))
+      (delete-directory root t))))"##,
+    );
+}
