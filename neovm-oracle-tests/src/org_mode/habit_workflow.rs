@@ -122,3 +122,112 @@ fn org_habit_invalid_repeater_errors_combo() {
       (nreverse out))))"#,
     );
 }
+
+#[test]
+fn org_habit_agenda_graph_toggle_redo_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-habit)
+  (let* ((file (make-temp-file "org-habit-agenda" nil ".org"))
+         (org-agenda-files (list file))
+         (org-agenda-span 1)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-all-dates nil)
+         (org-agenda-use-time-grid nil)
+         (org-agenda-prefix-format "%-8:c%5e % s")
+         (org-agenda-sorting-strategy '((agenda habit-down priority-down category-keep)))
+         (org-habit-preceding-days 3)
+         (org-habit-following-days 3)
+         (org-habit-graph-column 44)
+         (org-habit-today-glyph ?!)
+         (org-habit-completed-glyph ?*)
+         (org-habit-show-habits t)
+         (org-habit-show-habits-only-for-today t)
+         (org-habit-show-all-today nil)
+         (org-habit-show-done-always-green nil)
+         (org-extend-today-until 0))
+    (cl-labels
+        ((agenda-snapshot
+          ()
+          (with-current-buffer org-agenda-buffer-name
+            (let (rows)
+              (goto-char (point-min))
+              (while (re-search-forward
+                      "Morning check\\|Weekly review\\|Normal scheduled" nil t)
+                (beginning-of-line)
+                (let* ((bol (point))
+                       (eol (line-end-position))
+                       (line (buffer-substring bol eol))
+                       (habit (get-text-property bol 'org-habit-p))
+                       (graph-start
+                        (save-excursion
+                          (move-to-column org-habit-graph-column)
+                          (point)))
+                       (graph (and (<= graph-start eol)
+                                   (buffer-substring graph-start eol)))
+                       (graph-props
+                        (and graph
+                             (mapcar
+                              (lambda (i)
+                                (list (aref graph i)
+                                      (get-text-property
+                                       (+ graph-start i) 'face)))
+                              (number-sequence 0 (1- (length graph)))))))
+                  (push (list (buffer-substring-no-properties bol eol)
+                              (and habit
+                                   (list (nth 1 habit)
+                                         (nth 2 habit)
+                                         (nth 3 habit)
+                                         (nth 5 habit)))
+                              (and graph
+                                   (substring-no-properties graph))
+                              graph-props
+                              (get-text-property bol 'type)
+                              (get-text-property bol 'urgency))
+                        rows))
+                (forward-line 1))
+              (nreverse rows)))))
+      (unwind-protect
+          (progn
+            (with-temp-file file
+              (insert "#+CATEGORY: Habits\n")
+              (insert "* TODO Morning check :health:\n")
+              (insert "SCHEDULED: <2026-05-25 Mon .+1d/3d>\n")
+              (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 0:10\n:END:\n")
+              (insert ":LOGBOOK:\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-23 Sat]\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-26 Tue]\n")
+              (insert ":END:\n")
+              (insert "* TODO Weekly review :work:\n")
+              (insert "SCHEDULED: <2026-05-27 Wed ++1w/2w>\n")
+              (insert ":PROPERTIES:\n:STYLE: habit\n:Effort: 1:00\n:END:\n")
+              (insert ":LOGBOOK:\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-13 Wed]\n")
+              (insert "- State \"DONE\" from \"TODO\" [2026-05-20 Wed]\n")
+              (insert ":END:\n")
+              (insert "* TODO Normal scheduled :plain:\n")
+              (insert "SCHEDULED: <2026-05-27 Wed>\n"))
+            (org-agenda-list nil "2026-05-27" 1)
+            (let ((initial (agenda-snapshot)))
+              (with-current-buffer org-agenda-buffer-name
+                (org-habit-toggle-display-in-agenda nil))
+              (let ((hidden (agenda-snapshot))
+                    (hidden-flag org-habit-show-habits))
+                (with-current-buffer org-agenda-buffer-name
+                  (org-habit-toggle-display-in-agenda nil))
+                (list initial
+                      hidden
+                      hidden-flag
+                      org-habit-show-habits
+                      (agenda-snapshot)))))
+        (when (get-buffer org-agenda-buffer-name)
+          (kill-buffer org-agenda-buffer-name))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+        (delete-file file)))))"##,
+    );
+}
