@@ -201,3 +201,103 @@ fn org_sparse_todo_occur_navigation_highlight_lifecycle_combo() {
                        (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_sparse_date_type_range_visibility_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-highlight-sparse-tree-matches t)
+          (org-remove-highlights-with-change nil)
+          (org-occur-hook nil)
+          (org-sparse-tree-open-archived-trees nil)
+          (org-fold-show-context-detail '((occur-tree . ancestors))))
+      (org-mode)
+      (insert "* TODO Alpha :work:\n")
+      (insert "SCHEDULED: <2026-05-25 Mon> DEADLINE: <2026-05-29 Fri>\n")
+      (insert "body alpha <2026-05-28 Thu>\n")
+      (insert "** DONE Alpha child\n")
+      (insert "CLOSED: [2026-05-26 Tue] SCHEDULED: <2026-05-30 Sat>\n")
+      (insert "child body [2026-05-24 Sun]\n")
+      (insert "* TODO Beta :home:\n")
+      (insert "DEADLINE: <2026-05-26 Tue>\n")
+      (insert "body beta\n")
+      (insert "* DONE Gamma :work:ARCHIVE:\n")
+      (insert "CLOSED: [2026-05-27 Wed] SCHEDULED: <2026-05-27 Wed>\n")
+      (insert "archived body\n")
+      (insert "* TODO Delta\n")
+      (insert "SCHEDULED: <2026-06-02 Tue> DEADLINE: <2026-06-03 Wed>\n")
+      (insert "delta body\n")
+      (let (states)
+        (cl-labels
+            ((snapshot
+              (label result)
+              (list
+               label
+               org-ts-type
+               result
+               org-occur-parameters
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward needle)
+                    (list needle
+                          (line-number-at-pos)
+                          (not (null (org-invisible-p (point))))
+                          (org-element-type (org-element-at-point)))))
+                '("Alpha" "2026-05-25" "2026-05-29"
+                  "body alpha" "Alpha child" "2026-05-26"
+                  "2026-05-30" "Beta" "Gamma" "2026-05-27"
+                  "Delta" "2026-06-02" "2026-06-03"))
+               (mapcar
+                (lambda (ov)
+                  (list (overlay-start ov)
+                        (overlay-end ov)
+                        (buffer-substring-no-properties
+                         (overlay-start ov) (overlay-end ov))
+                        (overlay-get ov 'face)
+                        (overlay-get ov 'org-type)
+                        (overlay-buffer ov)))
+                org-occur-highlights))))
+          (dolist (spec
+                   '((nil range org-check-dates-range
+                          ("2026-05-24" "2026-05-31"))
+                     (scheduled before org-check-before-date
+                                ("2026-05-29"))
+                     (deadline after org-check-after-date
+                               ("2026-05-27"))
+                     (closed range org-check-dates-range
+                             ("2026-05-26" "2026-05-28"))
+                     (all range org-check-dates-range
+                          ("2026-05-24" "2026-05-30"))))
+            (org-fold-show-all)
+            (org-remove-occur-highlights nil nil t)
+            (setq org-ts-type (nth 0 spec))
+            (let* ((label (nth 1 spec))
+                   (fn (nth 2 spec))
+                   (args (nth 3 spec))
+                   (result (apply fn args)))
+              (push (snapshot label result) states)))
+          (let ((highlight-count-before-edit
+                 (length org-occur-highlights))
+                (params-before-edit org-occur-parameters))
+            (goto-char (point-max))
+            (insert "\n* TODO Epsilon\nSCHEDULED: <2026-05-28 Thu>\n")
+            (let ((after-edit-highlights
+                   (mapcar #'overlay-buffer org-occur-highlights)))
+              (org-remove-occur-highlights)
+              (list (nreverse states)
+                    highlight-count-before-edit
+                    params-before-edit
+                    after-edit-highlights
+                    org-occur-highlights
+                    org-occur-parameters
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))"##,
+    );
+}
