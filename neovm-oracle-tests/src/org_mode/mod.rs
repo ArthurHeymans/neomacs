@@ -87,6 +87,7 @@ mod property_log;
 mod protocol_feed;
 mod publish_workflow;
 mod rho_combos;
+mod sigma_combos;
 mod sort_workflow;
 mod source_block;
 mod sparse_tree;
