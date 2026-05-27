@@ -446,7 +446,76 @@ fn org_structure_edit_special_export_context_combo() {
                                   (string-match-p needle ascii))))
                           '("Example one" "Example two"
                             "(message \"three\")"))
-                  (buffer-substring-no-properties
-                   (point-min) (point-max))))))))"##,
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_tempo_block_expand_edit_src_exit_writeback_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-tempo)
+  (require 'org-src)
+  (with-temp-buffer
+    (org-mode)
+    (insert "<s")
+    (org-tempo-complete-tag)
+    (let ((after-src (buffer-substring-no-properties
+                      (point-min) (point-max))))
+      ;; Edit src block content
+      (goto-char (point-min))
+      (search-forward "#+begin_src")
+      (forward-line 1)
+      (insert "(+ 1 2)\n(message \"hello\")\n")
+      (let ((after-edit (buffer-substring-no-properties
+                         (point-min) (point-max))))
+        ;; Enter edit mode
+        (goto-char (point-min))
+        (search-forward "(+ 1 2)")
+        (org-edit-src-code)
+        (let ((edit-mode major-mode)
+              (edit-buf (buffer-substring-no-properties
+                         (point-min) (point-max))))
+          ;; Modify and exit
+          (erase-buffer)
+          (insert "(+ 10 20)\n(message \"modified\")\n")
+          (org-edit-src-exit)
+          (let ((after-exit (buffer-substring-no-properties
+                             (point-min) (point-max))))
+            ;; Now expand quote block
+            (goto-char (point-max))
+            (insert "\n<q")
+            (org-tempo-complete-tag)
+            (insert "Quoted text.\n")
+            (let ((after-quote (buffer-substring-no-properties
+                                (point-min) (point-max))))
+              ;; Expand example block
+              (goto-char (point-max))
+              (insert "\n<e")
+              (org-tempo-complete-tag)
+              (insert "Example text.\n")
+              (let ((after-example (buffer-substring-no-properties
+                                    (point-min) (point-max))))
+                ;; Parse all blocks
+                (let ((blocks
+                       (org-element-map (org-element-parse-buffer)
+                           '(src-block quote-block example-block)
+                         (lambda (el)
+                           (list (org-element-type el)
+                                 (org-element-property :language el)
+                                 (org-element-property :value el)
+                                 (org-element-property :begin el))))))
+                  (list after-src
+                        after-edit
+                        edit-mode
+                        edit-buf
+                        after-exit
+                        after-quote
+                        after-example
+                        blocks)))))))))))"##,
     );
 }
