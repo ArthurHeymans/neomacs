@@ -44,6 +44,7 @@ mod goto_workflow;
 mod habit_workflow;
 mod id_link;
 mod inlinetask_workflow;
+mod keys_workflow;
 mod link_backends;
 mod link_export;
 mod link_runtime;
