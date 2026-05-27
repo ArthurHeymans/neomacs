@@ -543,3 +543,111 @@ fn org_cite_basic_activation_follow_completion_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_cite_basic_disambiguation_multibackend_export_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (require 'oc-basic)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (require 'ox-latex)
+  (let* ((root (make-temp-file "org-cite-disambig" t))
+         (bib (expand-file-name "refs.bib" root))
+         (org-cite-global-bibliography nil)
+         (org-cite-export-processors
+          '((html basic) (ascii basic) (latex basic))))
+    (unwind-protect
+        (progn
+          (with-temp-file bib
+            (insert "@article{smith2020a,\n")
+            (insert "  author = {Smith, Ada and Roe, Bob},\n")
+            (insert "  title = {Alpha Study},\n")
+            (insert "  journal = {Journal},\n")
+            (insert "  year = {2020}}\n")
+            (insert "@article{smith2020b,\n")
+            (insert "  author = {Smith, Ada and Roe, Bob},\n")
+            (insert "  title = {Beta Study},\n")
+            (insert "  journal = {Journal},\n")
+            (insert "  year = {2020}}\n")
+            (insert "@book{doe2019,\n")
+            (insert "  editor = {Doe, Dana},\n")
+            (insert "  title = {Edited Volume},\n")
+            (insert "  publisher = {Press},\n")
+            (insert "  year = {2019}}\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+TITLE: Citation Matrix\n")
+            (insert "#+OPTIONS: toc:nil num:nil\n")
+            (insert "#+cite_export: basic author-year\n")
+            (insert "#+bibliography: " bib "\n")
+            (insert "* Main\n")
+            (insert "Author text [cite/author:@smith2020a; @smith2020b] and ")
+            (insert "narrative [cite/t:see @smith2020a p. 4; also @doe2019].\n")
+            (insert "Bare [cite:@smith2020b] plus note.[cite/note:@doe2019 chap. 2]\n")
+            (insert "#+print_bibliography: :style author-year\n")
+            (let* ((html-info (org-export-get-environment 'html nil))
+                   (citations
+                    (mapcar
+                     (lambda (citation)
+                       (list (org-element-property :style citation)
+                             (org-cite-get-references citation t)
+                             (org-cite-main-affixes citation)
+                             (org-cite-citation-style citation html-info)
+                             (org-cite-inside-footnote-p citation)
+                             (org-cite-boundaries citation)))
+                     (org-cite-list-citations html-info)))
+                   (keys (org-cite-list-keys html-info))
+                   (fields
+                    (mapcar
+                     (lambda (key)
+                       (list key
+                             (org-cite-basic--key-number key html-info)
+                             (org-cite-basic--get-author key html-info 'raw)
+                             (org-cite-basic--get-year key html-info nil)
+                             (org-cite-basic--get-year key html-info 'no-suffix)
+                             (org-cite-basic--get-field
+                              'title key html-info 'raw)
+                             (org-cite-basic--print-entry
+                              (org-cite-basic--get-entry key html-info)
+                              'author-year
+                              html-info)))
+                     (sort (copy-sequence keys) #'string<)))
+                   (html (replace-regexp-in-string
+                          "org[[:alnum:]]+"
+                          "org-id"
+                          (org-export-as 'html nil nil t
+                                         '(:with-toc nil))))
+                   (ascii (let ((org-ascii-charset 'utf-8))
+                            (org-export-as 'ascii nil nil t
+                                           '(:with-toc nil))))
+                   (latex (replace-regexp-in-string
+                           "sec:org[[:alnum:]]+"
+                           "sec:org-id"
+                           (org-export-as 'latex nil nil t
+                                          '(:with-toc nil)))))
+              (list citations
+                    keys
+                    fields
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle html))))
+                            '("Citation Matrix" "Smith" "2020a" "2020b"
+                              "Edited Volume" "Alpha Study" "Beta Study"))
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle ascii))))
+                            '("Smith" "2020a" "2020b" "Edited Volume"
+                              "Alpha Study" "Beta Study"))
+                    (mapcar (lambda (needle)
+                              (not (null (string-match-p needle latex))))
+                            '("Smith" "2020a" "2020b" "Edited Volume"
+                              "Alpha Study" "Beta Study"))
+                    html
+                    ascii
+                    latex)))))
+      (delete-directory root t))))"##,
+    );
+}
