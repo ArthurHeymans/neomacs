@@ -205,7 +205,65 @@ fn org_mouse_timestamp_options_visibility_mutation_combo() {
           (list (nreverse states)
                 (org-mouse-clip-text "short" 12)
                 (org-mouse-clip-text "0123456789abcdef" 10)
-                (buffer-substring-no-properties
-                 (point-min) (point-max)))))))"##,
+                 (buffer-substring-no-properties
+                  (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
+fn org_mouse_context_menu_move_drag_link_open_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-mouse)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha :work:\n")
+    (insert "Body with [[https://example.org][link]].\n")
+    (insert "** Child\nchild body\n")
+    (insert "* Beta :home:\n")
+    (insert "Beta body.\n")
+    (insert "* Gamma\n")
+    (insert "Gamma body.\n")
+    (let ((snap (lambda ()
+                  (list (buffer-substring-no-properties
+                         (point-min) (point-max))
+                        (org-element-map (org-element-parse-buffer) 'headline
+                          (lambda (h)
+                            (list (org-element-property :raw-value h)
+                                  (org-get-tags nil t))))))))
+      ;; Show context menu items
+      (let ((context-items
+             (condition-case nil
+                 (progn
+                   (goto-char (point-min))
+                   (search-forward "Alpha")
+                   (beginning-of-line)
+                   (org-mouse-popup-context-menu))
+               (error 'error))))
+        ;; Move subtree down
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-mouse-move-subtree-down)
+        (let ((after-move (funcall snap)))
+          ;; Move subtree up
+          (goto-char (point-min))
+          (search-forward "Gamma")
+          (beginning-of-line)
+          (org-mouse-move-subtree-up)
+          (let ((after-move-up (funcall snap)))
+            ;; Toggle tag
+            (goto-char (point-min))
+            (search-forward "Beta")
+            (beginning-of-line)
+            (org-mouse-toggle-tag "urgent")
+            (let ((after-tag (funcall snap)))
+              (list context-items
+                    after-move
+                    after-move-up
+                    after-tag)))))))))"##,
     );
 }
