@@ -206,3 +206,69 @@ fn org_store_link_custom_id_and_id_policy_combo() {
         (delete-file org-id-locations-file)))))"##,
     );
 }
+
+#[test]
+fn org_id_encoding_paste_tracker_lookup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (let* ((root (make-temp-file "org-id-low" t))
+         (file (expand-file-name "ids.org" root))
+         (missing (expand-file-name "missing.org" root))
+         (org-id-locations-file (expand-file-name "ids-locations.el" root))
+         (org-id-locations-file-relative t)
+         (org-id-track-globally t)
+         (org-id-locations (make-hash-table :test 'equal)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Alpha\n:PROPERTIES:\n:ID: alpha-id\n:END:\n")
+            (insert "** Beta\n:PROPERTIES:\n:ID: beta-id\n:END:\n"))
+          (org-id-paste-tracker
+           "  :ID: pasted-one\nText\n:ID: pasted-two\n"
+           file)
+          (org-id-update-id-locations (list file) t)
+          (org-id-add-location "manual-id" file)
+          (let* ((alist (sort (org-id-hash-to-alist org-id-locations)
+                              (lambda (a b) (string< (car a) (car b)))))
+                 (roundtrip (org-id-alist-to-hash alist)))
+            (org-id-locations-save)
+            (let ((raw (with-temp-buffer
+                         (insert-file-contents org-id-locations-file)
+                         (buffer-string)))
+                  (alpha-cons (org-id-find-id-in-file "alpha-id" file nil))
+                  (beta-marker (org-id-find-id-in-file "beta-id" file t))
+                  (missing-file (org-id-find-id-in-file "alpha-id" missing nil))
+                  (missing-id (org-id-find-id-in-file "no-such-id" file nil)))
+              (list (mapcar (lambda (n)
+                              (list n
+                                    (org-id-int-to-b36 n 4)
+                                    (org-id-b36-to-int
+                                     (org-id-int-to-b36 n 4))))
+                            '(0 1 35 36 1295 46655))
+                    (org-id-decode "Pre:000100020003")
+                    (mapcar #'car alist)
+                    (hash-table-count roundtrip)
+                    (gethash "pasted-one" roundtrip)
+                    (file-relative-name (gethash "manual-id" roundtrip) root)
+                    (replace-regexp-in-string
+                     (regexp-quote root)
+                     "<root>"
+                     raw)
+                    (and alpha-cons
+                         (list (file-relative-name (car alpha-cons) root)
+                               (cdr alpha-cons)))
+                    (and beta-marker
+                         (with-current-buffer (marker-buffer beta-marker)
+                           (list (file-relative-name (buffer-file-name) root)
+                                 (marker-position beta-marker)
+                                 (org-get-heading t t t t))))
+                    missing-file
+                    missing-id)))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
