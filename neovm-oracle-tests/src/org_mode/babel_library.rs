@@ -1080,6 +1080,55 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_nested_var_reference_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source data
+      (insert "#+NAME: numbers\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'(1 2 3 4 5)\n")
+      (insert "#+end_src\n\n")
+      ;; Compute with var ref
+      (insert "#+NAME: stats\n")
+      (insert "#+begin_src emacs-lisp :var nums=numbers :results value replace\n")
+      (insert "(list :count (length nums)\n")
+      (insert "      :sum (apply #'+ nums)\n")
+      (insert "      :avg (/ (apply #'+ nums) (length nums)))\n")
+      (insert "#+end_src\n\n")
+      ;; Format output
+      (insert "#+NAME: display\n")
+      (insert "#+begin_src emacs-lisp :var s=stats :results output replace\n")
+      (insert "(princ (format \"count=%d sum=%d avg=%d\"\n")
+      (insert "               (plist-get s :count)\n")
+      (insert "               (plist-get s :sum)\n")
+      (insert "               (plist-get s :avg)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("numbers" "stats" "display"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_output_format_string_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
