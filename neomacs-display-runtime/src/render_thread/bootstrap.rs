@@ -149,6 +149,7 @@ impl RenderApp {
             primary_frame.frame_dirty = true;
         }
         primary_frame.cursor.copy_config_from(&self.cursor_defaults);
+        primary_frame.transitions.policy = self.transition_policy;
         primary_frame.child_frames = std::mem::replace(
             &mut self.pending_primary_child_frames,
             crate::render_thread::child_frames::ChildFrameManager::new(),
@@ -225,12 +226,13 @@ impl RenderApp {
             renderer.resize(width, height);
         }
 
-        // Invalidate offscreen textures (they reference old size)
-        self.transitions.offscreen_a = None;
-        self.transitions.offscreen_b = None;
-        // Cancel active transitions (they reference old-sized textures)
-        self.transitions.crossfades.clear();
-        self.transitions.scroll_slides.clear();
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            // Invalidate offscreen textures and active transitions for the old size.
+            primary_frame.transitions.offscreen_a = None;
+            primary_frame.transitions.offscreen_b = None;
+            primary_frame.transitions.crossfades.clear();
+            primary_frame.transitions.scroll_slides.clear();
+        }
 
         // Trigger resize padding transition
         if self.effects.resize_padding.enabled {

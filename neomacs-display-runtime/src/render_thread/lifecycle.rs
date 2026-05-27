@@ -272,7 +272,7 @@ impl RenderApp {
         }
 
         // Keep dirty if transitions are active
-        if self.transitions.has_active() {
+        if self.primary_transitions_active() {
             self.mark_primary_dirty();
         }
 
@@ -312,7 +312,7 @@ impl RenderApp {
                     .primary_frame
                     .as_ref()
                     .is_some_and(|frame| frame.idle_dim.active),
-                transitions_active = self.transitions.has_active(),
+                transitions_active = self.primary_transitions_active(),
                 "requesting redraw"
             );
             if let Some(ref window) = self.window {
@@ -334,7 +334,7 @@ impl RenderApp {
                 .windows
                 .values()
                 .any(|ws| ws.render.cursor.is_animating())
-            || self.transitions.has_active()
+            || self.primary_transitions_active()
         {
             // Active rendering: cap at ~240fps to avoid spinning
             now + std::time::Duration::from_millis(4)

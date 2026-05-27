@@ -10,17 +10,16 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::frame_glyphs::FrameTabBarState;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
-use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
+use neomacs_display_protocol::{EffectsConfig, TransitionPolicy};
 use neomacs_renderer_wgpu::{PopupMenuState, RendererFrameEffects, TooltipState, WgpuRenderer};
 use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
 use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowManager};
-use super::transitions::TransitionState;
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::{WpeBackend, WpeWebView};
@@ -301,8 +300,8 @@ pub(super) struct RenderApp {
     // All visual effect configurations
     pub(super) effects: EffectsConfig,
 
-    // Window transition state (crossfade, scroll)
-    pub(super) transitions: TransitionState,
+    // Transition defaults applied to primary and secondary frame render state.
+    pub(super) transition_policy: TransitionPolicy,
     /// Renderer runtime effects owned by the primary GUI frame window.
     pub(super) renderer_effects: RendererFrameEffects,
 
@@ -416,7 +415,7 @@ impl RenderApp {
             image_dimensions,
             cursor_defaults: CursorState::default(),
             effects: EffectsConfig::default(),
-            transitions: TransitionState::default(),
+            transition_policy: TransitionPolicy::default(),
             renderer_effects: RendererFrameEffects::default(),
             #[cfg(feature = "wpe-webkit")]
             wpe_backend: None,
@@ -593,6 +592,18 @@ impl RenderApp {
             &mut primary_frame.child_frames
         } else {
             &mut self.pending_primary_child_frames
+        }
+    }
+
+    pub(super) fn primary_transitions_active(&self) -> bool {
+        self.primary_frame
+            .as_ref()
+            .is_some_and(|frame| frame.transitions.has_active())
+    }
+
+    pub(super) fn sync_primary_transition_policy_from_default(&mut self) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.transitions.policy = self.transition_policy;
         }
     }
 

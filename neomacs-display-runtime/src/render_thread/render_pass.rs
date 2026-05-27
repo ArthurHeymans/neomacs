@@ -828,7 +828,7 @@ impl RenderApp {
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
             return;
         };
-        window_state.render.transitions.policy = self.transitions.policy;
+        window_state.render.transitions.policy = self.transition_policy;
 
         Self::render_secondary_frame_window(
             renderer,
@@ -900,11 +900,16 @@ impl RenderApp {
         };
 
         // Check if we need offscreen rendering (for transitions)
-        let need_offscreen = self.transitions.policy.needs_offscreen();
+        let need_offscreen = self
+            .primary_frame
+            .as_ref()
+            .is_some_and(|frame| frame.transitions.policy.needs_offscreen());
 
         if need_offscreen {
             // Swap: previous ← current
-            self.transitions.current_is_a = !self.transitions.current_is_a;
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                primary_frame.transitions.current_is_a = !primary_frame.transitions.current_is_a;
+            }
 
             // Ensure offscreen textures exist
             self.ensure_offscreen_textures();
@@ -947,7 +952,7 @@ impl RenderApp {
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                     detect_frame_transitions(
                         renderer,
-                        &mut self.transitions,
+                        &mut primary_frame.transitions,
                         &self.effects.clone(),
                         primary_frame
                             .current_frame
@@ -1179,7 +1184,8 @@ impl RenderApp {
                 &mut primary_frame.fps,
                 fps_glyph_count,
                 fps_window_count,
-                self.transitions.crossfades.len() + self.transitions.scroll_slides.len(),
+                primary_frame.transitions.crossfades.len()
+                    + primary_frame.transitions.scroll_slides.len(),
                 self.width,
                 self.height,
             );

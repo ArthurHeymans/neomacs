@@ -454,7 +454,12 @@ pub(super) fn render_frame_transitions(
 impl RenderApp {
     /// Ensure offscreen textures exist (lazily created)
     pub(super) fn ensure_offscreen_textures(&mut self) {
-        if self.transitions.offscreen_a.is_some() && self.transitions.offscreen_b.is_some() {
+        let Some(primary_frame) = self.primary_frame.as_mut() else {
+            return;
+        };
+        if primary_frame.transitions.offscreen_a.is_some()
+            && primary_frame.transitions.offscreen_b.is_some()
+        {
             return;
         }
         let renderer = match self.renderer.as_ref() {
@@ -464,15 +469,15 @@ impl RenderApp {
         let w = self.width;
         let h = self.height;
 
-        if self.transitions.offscreen_a.is_none() {
+        if primary_frame.transitions.offscreen_a.is_none() {
             let (tex, view) = renderer.create_offscreen_texture(w, h);
             let bg = renderer.create_texture_bind_group(&view);
-            self.transitions.offscreen_a = Some((tex, view, bg));
+            primary_frame.transitions.offscreen_a = Some((tex, view, bg));
         }
-        if self.transitions.offscreen_b.is_none() {
+        if primary_frame.transitions.offscreen_b.is_none() {
             let (tex, view) = renderer.create_offscreen_texture(w, h);
             let bg = renderer.create_texture_bind_group(&view);
-            self.transitions.offscreen_b = Some((tex, view, bg));
+            primary_frame.transitions.offscreen_b = Some((tex, view, bg));
         }
     }
 
@@ -480,10 +485,11 @@ impl RenderApp {
     pub(super) fn current_offscreen_view_and_bg(
         &self,
     ) -> Option<(&wgpu::TextureView, &wgpu::BindGroup)> {
-        let (_, view, bg) = if self.transitions.current_is_a {
-            self.transitions.offscreen_a.as_ref()?
+        let transitions = &self.primary_frame.as_ref()?.transitions;
+        let (_, view, bg) = if transitions.current_is_a {
+            transitions.offscreen_a.as_ref()?
         } else {
-            self.transitions.offscreen_b.as_ref()?
+            transitions.offscreen_b.as_ref()?
         };
         Some((view, bg))
     }
@@ -496,15 +502,22 @@ impl RenderApp {
             None => return,
         };
 
+        let width = self.width;
+        let height = self.height;
+        let Some(primary_frame) = self.primary_frame.as_mut() else {
+            return;
+        };
+        let transitions = &mut primary_frame.transitions;
+
         // Get current offscreen bind group for "new" texture
-        let current_bg = match self.current_offscreen_view_and_bg() {
+        let current_bg = match current_offscreen_view_and_bg(transitions) {
             Some((_, bg)) => bg as *const wgpu::BindGroup,
             None => return,
         };
 
         // Render crossfades (using per-transition effect/easing)
         let mut completed_crossfades = Vec::new();
-        for (&wid, transition) in &self.transitions.crossfades {
+        for (&wid, transition) in &transitions.crossfades {
             let elapsed = now.duration_since(transition.started);
             let raw_t = (elapsed.as_secs_f32() / transition.duration.as_secs_f32()).min(1.0);
             let elapsed_secs = elapsed.as_secs_f32();
@@ -521,8 +534,8 @@ impl RenderApp {
                 transition.bounds.height, // crossfade uses full bounds as slide distance
                 transition.effect,
                 transition.easing,
-                self.width,
-                self.height,
+                width,
+                height,
             );
 
             if raw_t >= 1.0 {
@@ -530,12 +543,12 @@ impl RenderApp {
             }
         }
         for wid in completed_crossfades {
-            self.transitions.crossfades.remove(&wid);
+            transitions.crossfades.remove(&wid);
         }
 
         // Render scroll slides
         let mut completed_scrolls = Vec::new();
-        for (&wid, transition) in &self.transitions.scroll_slides {
+        for (&wid, transition) in &transitions.scroll_slides {
             let elapsed = now.duration_since(transition.started);
             let raw_t = (elapsed.as_secs_f32() / transition.duration.as_secs_f32()).min(1.0);
             let elapsed_secs = elapsed.as_secs_f32();
@@ -551,8 +564,8 @@ impl RenderApp {
                 transition.scroll_distance,
                 transition.effect,
                 transition.easing,
-                self.width,
-                self.height,
+                width,
+                height,
             );
 
             if raw_t >= 1.0 {
@@ -560,7 +573,7 @@ impl RenderApp {
             }
         }
         for wid in completed_scrolls {
-            self.transitions.scroll_slides.remove(&wid);
+            transitions.scroll_slides.remove(&wid);
         }
     }
 }
