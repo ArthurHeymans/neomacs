@@ -43,6 +43,7 @@ mod support;
 mod table_agenda;
 mod table_formula;
 mod tag_match;
+mod timer_workflow;
 
 #[test]
 fn org_element_headline_properties() {
