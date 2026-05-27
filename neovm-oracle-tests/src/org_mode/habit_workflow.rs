@@ -231,3 +231,90 @@ fn org_habit_agenda_graph_toggle_redo_combo() {
         (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_habit_repeat_done_mutation_graph_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-habit)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)")))
+          (org-log-done 'time)
+          (org-log-repeat 'time)
+          (org-log-into-drawer "LOGBOOK")
+          (org-habit-preceding-days 6)
+          (org-habit-following-days 5)
+          (org-habit-today-glyph ?!)
+          (org-habit-completed-glyph ?*)
+          (org-habit-show-done-always-green nil))
+      (org-mode)
+      (insert "#+TODO: TODO(t) WAIT(w) | DONE(d)\n")
+      (insert "* TODO Fixed cadence :fixed:\n")
+      (insert "SCHEDULED: <2026-05-25 Mon ++2d/5d>\n")
+      (insert ":PROPERTIES:\n:STYLE: habit\n:END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\" from \"TODO\" [2026-05-21 Thu]\n")
+      (insert "- State \"DONE\" from \"TODO\" [2026-05-23 Sat]\n")
+      (insert ":END:\n")
+      (insert "* TODO Completion cadence :complete:\n")
+      (insert "SCHEDULED: <2026-05-24 Sun .+3d/7d>\n")
+      (insert ":PROPERTIES:\n:STYLE: habit\n:END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "- State \"DONE\" from \"TODO\" [2026-05-18 Mon]\n")
+      (insert "- State \"DONE\" from \"TODO\" [2026-05-24 Sun]\n")
+      (insert ":END:\n")
+      (cl-labels
+          ((graph-props
+            (graph)
+            (mapcar (lambda (i)
+                      (list (aref graph i)
+                            (get-text-property i 'face graph)
+                            (get-text-property i 'help-echo graph)))
+                    (number-sequence 0 (1- (length graph)))))
+           (habit-snapshot
+            ()
+            (let (out)
+              (goto-char (point-min))
+              (while (re-search-forward "^\\* TODO" nil t)
+                (beginning-of-line)
+                (let* ((heading (org-get-heading t t t t))
+                       (scheduled (org-entry-get (point) "SCHEDULED"))
+                       (habit (org-habit-parse-todo))
+                       (graph (org-habit-build-graph
+                               habit
+                               (encode-time 0 0 12 21 5 2026)
+                               (encode-time 0 0 12 27 5 2026)
+                               (encode-time 0 0 12 1 6 2026))))
+                  (push (list heading
+                              scheduled
+                              habit
+                              (org-habit-get-urgency
+                               habit
+                               (encode-time 0 0 12 27 5 2026))
+                              graph
+                              (graph-props graph))
+                        out))
+                (forward-line 1))
+              (nreverse out))))
+        (cl-letf (((symbol-function 'current-time)
+                   (lambda () (encode-time 0 45 9 27 5 2026))))
+          (let ((before (habit-snapshot)))
+            (goto-char (point-min))
+            (re-search-forward "^\\* TODO Fixed cadence")
+            (beginning-of-line)
+            (org-todo "DONE")
+            (let ((after-fixed (habit-snapshot)))
+              (goto-char (point-min))
+              (re-search-forward "^\\* TODO Completion cadence")
+              (beginning-of-line)
+              (org-todo "DONE")
+              (list before
+                    after-fixed
+                    (habit-snapshot)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
