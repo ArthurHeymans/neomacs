@@ -144,3 +144,151 @@ fn org_element_buffer_context_swap_refresh_combo() {
                  (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_element_visible_only_lineage_inherited_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Parser visibility mix\n")
+    (insert "#+NAME: intro-table\n")
+    (insert "| Key | Value |\n| a | 1 |\n\n")
+    (insert "* Visible :keep:\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: visible\n:END:\n")
+    (insert "Paragraph with *bold [[https://example.org][Example]]* and {{{macro(arg)}}}.\n")
+    (insert "#+begin_quote\nquoted /italic/ text\n#+end_quote\n")
+    (insert "** Hidden :skip:\n")
+    (insert "SCHEDULED: <2026-06-01 Mon +1w>\n")
+    (insert ":LOGBOOK:\n- State \"TODO\" from \"\" [2026-05-27 Wed]\n:END:\n")
+    (insert "Hidden paragraph with [[#intro-table][table target]] and =code=.\n")
+    (insert "#+begin_src emacs-lisp :results value\n(+ 1 2)\n#+end_src\n")
+    (insert "** Visible Child\nChild paragraph with [fn:1] and _under_.\n")
+    (insert "* Tail\nTail paragraph.\n")
+    (insert "[fn:1] Footnote definition with [[https://gnu.org][GNU]].\n")
+    (let ((full-before nil)
+          (visible-after nil)
+          (lineage nil)
+          (inherited nil)
+          (context-summary nil)
+          (granularity nil)
+          (interpreted nil))
+      (setq full-before
+            (let ((tree (org-element-parse-buffer)))
+              (list
+               (mapcar
+                (lambda (h)
+                  (list (org-element-property :level h)
+                        (org-element-property :raw-value h)
+                        (org-element-property :tags h)
+                        (org-element-property :CUSTOM_ID h)))
+                (org-element-map tree 'headline #'identity))
+               (mapcar
+                (lambda (node)
+                  (list (org-element-type node)
+                        (org-element-property :begin node)
+                        (org-element-property :end node)))
+                (org-element-map
+                    tree '(table quote-block src-block planning
+                           drawer footnote-definition link macro code
+                           underline bold italic)
+                  #'identity)))))
+      (goto-char (point-min))
+      (search-forward "Hidden")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (setq visible-after
+            (let ((tree (org-element-parse-buffer nil t)))
+              (list
+               (mapcar (lambda (h)
+                         (list (org-element-property :level h)
+                               (org-element-property :raw-value h)))
+                       (org-element-map tree 'headline #'identity))
+               (mapcar #'org-element-type
+                       (org-element-map tree t #'identity nil nil
+                                        '(src-block drawer))))))
+      (org-fold-show-all)
+      (let* ((tree (org-element-parse-buffer))
+             (visible (car (org-element-map tree 'headline
+                             (lambda (h)
+                               (and (equal (org-element-property :raw-value h)
+                                           "Visible")
+                                    h))
+                             nil t)))
+             (child (car (org-element-map tree 'headline
+                           (lambda (h)
+                             (and (equal (org-element-property :raw-value h)
+                                         "Visible Child")
+                                  h))
+                           nil t)))
+             (bold (car (org-element-map tree 'bold #'identity)))
+             (link (car (org-element-map bold 'link #'identity)))
+             (footnote (car (org-element-map tree 'footnote-reference
+                              #'identity))))
+        (org-element-put-property tree :scope '(document))
+        (org-element-put-property visible :scope '(visible-root))
+        (org-element-put-property child :scope '(child-node))
+        (org-element-put-property bold :scope '(bold-object))
+        (setq lineage
+              (list
+               (mapcar #'org-element-type
+                       (org-element-lineage link nil t))
+               (org-element-type
+                (org-element-lineage link 'headline))
+               (org-element-lineage-map
+                   link
+                 (lambda (node)
+                   (and (memq (org-element-type node)
+                              '(bold paragraph section headline org-data))
+                        (list (org-element-type node)
+                              (org-element-property :raw-value node))))
+                 nil t)
+               (org-element-lineage-map
+                   link
+                 (lambda (node)
+                   (and (eq (org-element-type node) 'headline)
+                        (org-element-property :raw-value node)))
+                 '(headline) nil t)))
+        (setq inherited
+              (list
+               (org-element-property-inherited :scope link t t)
+               (org-element-property-inherited :scope link nil nil)
+               (org-element-property-inherited :scope link nil t nil t)
+               (org-element-property-inherited :scope footnote t t)))
+        (goto-char (org-element-property :begin link))
+        (setq context-summary
+              (list (org-element-type (org-element-context))
+                    (org-element-property :type (org-element-context))
+                    (org-element-property :path (org-element-context))
+                    (mapcar #'org-element-type
+                            (org-element-lineage (org-element-context)
+                                                 nil t))))
+        (setq granularity
+              (list
+               (mapcar #'org-element-type
+                       (org-element-map
+                           (org-element-parse-buffer 'greater-element)
+                           t #'identity))
+               (mapcar #'org-element-type
+                       (org-element-map
+                           (org-element-parse-buffer 'element)
+                           t #'identity))))
+        (setq interpreted
+              (substring-no-properties
+               (org-element-interpret-data tree))))
+      (list full-before
+            visible-after
+            lineage
+            inherited
+            context-summary
+            granularity
+            interpreted
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
