@@ -995,3 +995,80 @@ fn org_agenda_clockreport_mode_habit_consistency_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_log_mode_clock_state_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-log" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'day)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-show-log t)
+         (org-agenda-log-mode-items '(closed clock state))
+         (org-agenda-use-time-grid nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+CATEGORY: Work\n")
+            (insert "* TODO Write report\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n")
+            (insert ":END:\n")
+            (insert "* DONE Deploy\n")
+            (insert "CLOSED: [2026-05-27 Wed 12:00]\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 12:00]--[2026-05-27 Wed 12:30] =>  0:30\n")
+            (insert "- State \"DONE\"  from \"TODO\"  [2026-05-27 Wed 12:00]\n")
+            (insert ":END:\n")
+            (insert "* Review code\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 14:00]--[2026-05-27 Wed 15:00] =>  1:00\n")
+            (insert ":END:\n"))
+          (org-agenda-list nil "2026-05-27" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((agenda-text
+                   (buffer-substring-no-properties (point-min) (point-max)))
+                  ;; Count specific patterns in agenda
+                  (clocked-count
+                   (let ((c 0) (s 0))
+                     (while (string-match "Clocked" agenda-text s)
+                       (setq s (match-end 0) c (1+ c)))
+                     c))
+                  (closed-count
+                   (let ((c 0) (s 0))
+                     (while (string-match "Closed" agenda-text s)
+                       (setq s (match-end 0) c (1+ c)))
+                     c))
+                  (state-count
+                   (let ((c 0) (s 0))
+                     (while (string-match "State" agenda-text s)
+                       (setq s (match-end 0) c (1+ c)))
+                     c))
+                  ;; Extract time entries
+                  (time-entries
+                   (let ((entries nil) (s 0))
+                     (while (string-match
+                             "\\([0-9]+:[0-9]+\\)\\s-+.*Clocked" agenda-text s)
+                       (push (match-string 1 agenda-text) entries)
+                       (setq s (match-end 0)))
+                     (nreverse entries))))
+              (list clocked-count
+                    closed-count
+                    state-count
+                    time-entries
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>" agenda-text)))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
