@@ -482,3 +482,101 @@ fn org_export_resolve_links_reference_matrix_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_insert_link_region_file_stored_edit_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-link-insert" t))
+         (org-file (expand-file-name "notes.org" root))
+         (other-file (expand-file-name "docs/read me.txt" root)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory other-file) t)
+          (with-temp-file other-file
+            (insert "external\n"))
+          (with-temp-file org-file
+            (insert "* Source\n")
+            (insert "Selected Words\n")
+            (insert "* Target\nBody\n"))
+          (org-link-set-parameters
+           "descprobe"
+           :insert-description
+           (lambda (link desc)
+             (format "auto:%s:%s" link (or desc "none"))))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (let ((default-directory root)
+                  (org-link-file-path-type 'relative)
+                  (org-link-keep-stored-after-insertion nil)
+                  (org-stored-links
+                   '(("https://example.org/one" "One")
+                     ("https://example.org/two" "Two"))))
+              (goto-char (point-min))
+              (search-forward "Selected")
+              (push-mark (match-beginning 0) t t)
+              (search-forward "Words")
+              (org-insert-link nil "descprobe:path value" nil)
+              (let ((after-region
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))
+                    (stored-after-region org-stored-links))
+                (goto-char (point-min))
+                (search-forward "Body")
+                (end-of-line)
+                (insert "\n")
+                (org-insert-link nil (concat "file:" other-file "::7")
+                                 "External doc")
+                (insert "\n")
+                (org-insert-link nil (concat "file:" org-file "::*Target")
+                                 "Same file target")
+                (insert "\n")
+                (org-insert-link nil "descprobe:auto-only" nil)
+                (let ((after-file-auto
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))
+                  (goto-char (point-min))
+                  (search-forward "Selected Words")
+                  (cl-letf (((symbol-function 'read-string)
+                             (lambda (prompt &optional initial &rest _)
+                               (list prompt initial)
+                               "https://edited.example/a b")))
+                    (org-insert-link nil nil "Edited Desc"))
+                  (let ((after-edit
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))))
+                    (goto-char (point-max))
+                    (insert "\n")
+                    (org-insert-all-links nil "- " "\n")
+                    (let ((after-insert-all
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))
+                          (stored-after-delete org-stored-links))
+                      (setq org-stored-links
+                            '(("https://example.org/keep" "Keep")
+                              ("https://example.org/also" "Also")))
+                      (org-insert-all-links '(4) "+ " "\n")
+                      (list after-region
+                            stored-after-region
+                            after-file-auto
+                            after-edit
+                            after-insert-all
+                            stored-after-delete
+                            org-stored-links
+                            (mapcar #'org-link-display-format
+                                    '("[[x:y][Shown]]" "[[x:y]]" "plain"))
+                            (mapcar #'org-link-add-angle-brackets
+                                    '("a" "<b" "c>" "<d>"))
+                            (replace-regexp-in-string
+                             (regexp-quote root)
+                             "<root>"
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))))))))))
+      (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
