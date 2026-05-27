@@ -188,3 +188,63 @@ fn org_pcomplete_entities_searchhead_options_matrix_combo() {
               (complete-at "to"))))))"##,
     );
 }
+
+#[test]
+fn org_pcomplete_keyword_tag_drawer_property_omission_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-pcomplete)
+  (require 'ox)
+  (with-temp-buffer
+    (let ((buffer-file-name "/tmp/oracle-title.org")
+          (org-tag-alist '(("work" . ?w) ("urgent" . ?u)
+                           ("home" . ?h) ("blocked" . ?b)))
+          (org-file-tags '("filetag" "shared"))
+          (org-html-infojs-opts-table
+           '((path . "Path") (view . "View") (toc . "Toc")))
+          (sample-bound-variable 42))
+      (org-mode)
+      (insert "#+PROPERTY: Owner_ALL Ada Bea Cy\n")
+      (insert "#+TITLE: \n")
+      (insert "#+BIND: sample-bound\n")
+      (insert "#+INFOJS_OPT: pa\n")
+      (insert "* TODO Alpha :work:ur\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":Owner: Ada\n")
+      (insert ":Eff\n")
+      (insert ":END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert ":END:\n")
+      (insert ":LO\n")
+      (org-set-regexps-and-options)
+      (cl-labels
+          ((complete-at
+            (needle)
+            (goto-char (point-min))
+            (search-forward needle)
+            (let* ((thing (org-thing-at-point))
+                   (command (org-command-at-point))
+                   (args (org-parse-arguments))
+                   (capf (run-hook-with-args-until-success
+                          'completion-at-point-functions))
+                   (beg (nth 0 capf))
+                   (end (nth 1 capf))
+                   (table (nth 2 capf))
+                   (stub (buffer-substring-no-properties beg end)))
+              (list needle
+                    thing
+                    command
+                    stub
+                    (sort (all-completions stub table) #'string<)
+                    args)))))
+        (list (complete-at "#+TITLE: ")
+              (complete-at "sample-bound")
+              (complete-at "pa")
+              (complete-at ":work:ur")
+              (complete-at ":Eff")
+              (complete-at ":LO"))))))"##,
+    );
+}
