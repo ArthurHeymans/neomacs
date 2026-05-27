@@ -257,3 +257,60 @@ fn org_log_repeat_reschedule_redeadline_combo() {
               (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_property_space_multivalue_cleanup_parse_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance t)
+          (changes nil))
+      (add-hook 'org-property-changed-functions
+                (lambda (key value) (push (list key value) changes))
+                nil t)
+      (org-mode)
+      (insert "* Parent\n")
+      (insert ":PROPERTIES:\n:Owner: Ada Lovelace\n:Multi: old value\n:END:\n")
+      (insert "** Child\n")
+      (insert ":PROPERTIES:\n:Local: keep\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "Parent")
+      (beginning-of-line)
+      (org-entry-put-multivalued-property
+       nil "Multi" "alpha beta" "gamma" "delta value")
+      (let ((parent-before (org-entry-properties nil 'standard))
+            (protected (mapcar #'org-entry-protect-space
+                               '("alpha beta" "gamma" "delta value")))
+            (restored (mapcar #'org-entry-restore-space
+                              '("alpha_beta" "gamma" "delta_value"))))
+        (search-forward "Child")
+        (beginning-of-line)
+        (let ((inherited-before
+               (list (org-entry-get nil "Owner" 'inherit)
+                     (org-entry-get-multivalued-property nil "Multi")
+                     (org-entry-get-with-inheritance "Multi"))))
+          (goto-char (point-min))
+          (search-forward "Parent")
+          (beginning-of-line)
+          (org-entry-remove-from-multivalued-property
+           nil "Multi" "alpha beta")
+          (org-entry-delete nil "Owner")
+          (org-entry-delete nil "Multi")
+          (let ((tree (org-element-parse-buffer)))
+            (list parent-before
+                  protected
+                  restored
+                  inherited-before
+                  (nreverse changes)
+                  (org-entry-properties nil 'standard)
+                  (org-element-map tree 'node-property
+                    (lambda (node)
+                      (list (org-element-property :key node)
+                            (org-element-property :value node))))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
