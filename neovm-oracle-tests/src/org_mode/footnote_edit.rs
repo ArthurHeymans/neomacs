@@ -455,3 +455,117 @@ fn org_footnote_label_definition_section_adjust_combo() {
                     after-adjust)))))))"##,
     );
 }
+
+#[test]
+fn org_footnote_export_numbering_mutation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (require 'ox)
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Foot Export\n")
+    (insert "* First\n")
+    (insert "Alpha[fn:a] inline[fn::Inline *bold* note] repeat[fn:a].\n")
+    (insert "** Nested\n")
+    (insert "Nested ref[fn:n] and anonymous[fn::Nested anon].\n")
+    (insert "* Second\n")
+    (insert "Beta[fn:b] late[fn:late].\n")
+    (insert "* Footnotes\n")
+    (insert "[fn:b] Bee definition\n")
+    (insert "[fn:a] Aye definition\n")
+    (insert "[fn:n] Nested definition\n")
+    (insert "[fn:late] Late definition\n")
+    (let ((org-footnote-section "Footnotes")
+          (org-footnote-fill-after-inline-note-extraction nil)
+          (org-export-with-toc nil))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-export-get-environment 'html nil nil))
+             (refs
+              (org-element-map tree 'footnote-reference
+                (lambda (fn)
+                  (list (org-element-property :label fn)
+                        (org-element-property :type fn)
+                        (org-export-get-footnote-number fn info tree)
+                        (org-export-footnote-first-reference-p fn info tree)))))
+             (defs-body
+              (org-export-collect-footnote-definitions info tree t))
+             (defs-normal
+              (org-export-collect-footnote-definitions info tree nil))
+             (def-a
+              (org-export-get-footnote-definition
+               (car (org-element-map tree 'footnote-reference
+                      (lambda (fn)
+                        (and (equal (org-element-property :label fn) "a")
+                             fn))
+                      nil t))
+               info))
+             (html-before
+              (org-export-as 'html nil nil t '(:with-toc nil)))
+             (ascii-before
+              (org-export-as 'ascii nil nil t '(:with-toc nil))))
+        (org-footnote-normalize)
+        (goto-char (point-min))
+        (search-forward "[fn:late]")
+        (let ((late-delete (org-footnote-delete "late"))
+              after-delete)
+          (setq after-delete
+                (buffer-substring-no-properties (point-min) (point-max)))
+          (goto-char (point-min))
+          (search-forward "Second")
+          (search-forward "Beta")
+          (let ((org-footnote-auto-label 'plain)
+                (org-footnote-define-inline nil)
+                (org-footnote-auto-adjust 'sort))
+            (org-footnote-new)
+            (insert "Replacement beta definition")
+            (org-footnote-auto-adjust-maybe))
+          (org-footnote-renumber-fn:N)
+          (org-footnote-sort)
+          (let* ((tree-after (org-element-parse-buffer))
+                 (info-after
+                  (org-export-get-environment 'ascii nil nil))
+                 (refs-after
+                  (org-element-map tree-after 'footnote-reference
+                    (lambda (fn)
+                      (list (org-element-property :label fn)
+                            (org-element-property :type fn)
+                            (org-export-get-footnote-number
+                             fn info-after tree-after)
+                            (org-export-footnote-first-reference-p
+                             fn info-after tree-after)))))
+                 (ascii-after
+                  (org-export-as 'ascii nil nil t '(:with-toc nil))))
+            (list refs
+                  defs-body
+                  defs-normal
+                  (and def-a
+                       (mapcar (lambda (el)
+                                 (org-element-type el))
+                               def-a))
+                  (mapcar (lambda (needle)
+                            (not (null
+                                  (string-match-p needle html-before))))
+                          '("footnotes" "Aye definition"
+                            "Inline <b>bold</b> note"))
+                  (mapcar (lambda (needle)
+                            (not (null
+                                  (string-match-p needle ascii-before))))
+                          '("Aye definition" "Inline *bold* note"
+                            "Nested definition"))
+                  late-delete
+                  after-delete
+                  (org-footnote-all-labels)
+                  (org-footnote--collect-references 'anonymous)
+                  (org-footnote--collect-definitions)
+                  refs-after
+                  ascii-after
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
