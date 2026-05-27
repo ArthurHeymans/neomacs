@@ -119,3 +119,148 @@ fn org_export_data_entities_footnote_numbers_combo() {
       (list entities numbers rendered))))"##,
     );
 }
+
+#[test]
+fn org_export_filter_pipeline_order_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Filters\n")
+    (insert "* Alpha\n")
+    (insert "Plain [[https://example.org][link]] and /italic/ text.\n")
+    (insert "#+begin_quote\nquoted text\n#+end_quote\n")
+    (let (calls)
+      (let ((org-export-filter-plain-text-functions
+             (list (lambda (text backend info)
+                     (push (list 'plain backend text) calls)
+                     (replace-regexp-in-string "Plain" "PLAIN" text))))
+            (org-export-filter-link-functions
+             (list (lambda (text backend info)
+                     (push (list 'link backend text) calls)
+                     (concat text "<!--link-filter-->"))))
+            (org-export-filter-headline-functions
+             (list (lambda (text backend info)
+                     (push (list 'headline backend
+                                 (plist-get info :title)) calls)
+                     text)))
+            (org-export-filter-final-output-functions
+             (list (lambda (text backend info)
+                     (push (list 'final backend (length text)) calls)
+                     (concat text "\n<!--final-filter-->")))))
+        (let* ((org-export-with-toc nil)
+               (html (org-export-as 'html nil nil t nil)))
+          (list (mapcar (lambda (call)
+                          (pcase call
+                            (`(plain ,backend ,text)
+                             (list 'plain backend
+                                   (not (null (string-match-p "Plain" text)))))
+                            (`(link ,backend ,text)
+                             (list 'link backend
+                                   (not (null (string-match-p "<a href" text)))))
+                            (`(headline ,backend ,title)
+                             (list 'headline backend title))
+                            (`(final ,backend ,len)
+                             (list 'final backend (numberp len)))))
+                        (nreverse calls))
+                (not (null (string-match-p "PLAIN" html)))
+                (not (null (string-match-p "link-filter" html)))
+                (not (null (string-match-p "final-filter" html)))
+                (replace-regexp-in-string
+                 "org[[:alnum:]]+"
+                 "org-id"
+                 html))))))"##,
+    );
+}
+
+#[test]
+fn org_export_collect_options_references_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Collect\n")
+    (insert "#+OPTIONS: toc:nil num:2 tags:not-in-toc\n")
+    (insert "* One :tag:\n")
+    (insert "#+NAME: tbl\n")
+    (insert "| A | B |\n|---+---|\n| 1 | 2 |\n")
+    (insert "#+CAPTION: Table caption\n")
+    (insert "[[tbl][Table link]] and <<target>> target link [[target]].\n")
+    (insert "** Two\n")
+    (insert "#+begin_src emacs-lisp -n -r\n")
+    (insert "(message \"hi\") ;; (ref:msg)\n")
+    (insert "#+end_src\n")
+    (let* ((info (org-export-get-environment 'html nil '(:with-tags nil)))
+           (headlines
+            (mapcar (lambda (h)
+                      (list (org-element-property :raw-value h)
+                            (org-export-get-relative-level h info)
+                            (org-export-get-headline-number h info)
+                            (org-export-get-tags h info)))
+                    (org-export-collect-headlines info)))
+           (tables
+            (mapcar (lambda (tbl)
+                      (list (org-export-get-reference tbl info)
+                            (org-export-get-caption tbl)
+                            (org-export-get-ordinal tbl info)))
+                    (org-export-collect-tables info)))
+           (links
+            (org-element-map (org-element-parse-buffer) 'link
+              (lambda (link)
+                (list (org-element-property :raw-link link)
+                      (org-export-data link info))))))
+      (list (plist-get info :title)
+            (plist-get info :with-toc)
+            (plist-get info :section-numbers)
+            (plist-get info :with-tags)
+            headlines
+            tables
+            links))))"##,
+    );
+}
+
+#[test]
+fn org_export_derived_backend_transcoder_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (org-export-define-derived-backend
+      'oracle-html 'html
+    :translate-alist
+    '((bold . (lambda (bold contents info)
+                (format "<strong data-oracle=\"yes\">%s</strong>" contents)))
+      (paragraph . (lambda (paragraph contents info)
+                     (format "<p class=\"oracle-p\">%s</p>" contents)))))
+    :filters-alist
+    '((:filter-final-output
+       . (lambda (output backend info)
+           (concat output "\n<!--oracle-html-->")))))
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Derived\n")
+    (insert "* H\n")
+    (insert "Text *bold* and [[https://example.org][link]].\n")
+    (let* ((org-export-with-toc nil)
+           (out (org-export-as 'oracle-html nil nil t nil))
+           (backend (org-export-get-backend 'oracle-html)))
+      (list (not (null (memq 'oracle-html org-export-registered-backends)))
+            (not (null (assq 'bold (org-export-get-all-transcoders backend))))
+            (not (null (assq :filter-final-output
+                             (org-export-get-all-filters backend))))
+            (not (null (string-match-p "data-oracle" out)))
+            (not (null (string-match-p "oracle-p" out)))
+            (not (null (string-match-p "oracle-html" out)))
+            (replace-regexp-in-string
+             "org[[:alnum:]]+"
+             "org-id"
+             out)))))"##,
+    );
+}
