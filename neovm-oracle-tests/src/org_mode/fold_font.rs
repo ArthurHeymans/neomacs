@@ -778,3 +778,81 @@ fn org_indent_deep_cycle_prefix_properties_combo() {
               (buffer-substring-no-properties (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_cycle_plain_list_drawer_block_integrity_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-include-plain-lists 'integrate)
+          (org-cycle-hide-drawer-startup t)
+          (org-cycle-hide-block-startup t))
+      (org-mode)
+      (insert "* Project\n")
+      (insert ":PROPERTIES:\n:CATEGORY: fold\n:END:\n")
+      (insert "Intro paragraph\n")
+      (insert "- [ ] Item one\n")
+      (insert "  - [X] Child one\n")
+      (insert "    text child one\n")
+      (insert "  - [ ] Child two\n")
+      (insert "- [ ] Item two\n")
+      (insert "#+begin_src emacs-lisp\n(message \"hidden\")\n#+end_src\n")
+      (insert "** Deep\nDeep body\n*** Deeper\nDeeper body\n")
+      (insert "* Next\nNext body\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (list needle
+                              (invisible-p
+                               (save-excursion
+                                 (goto-char (point-min))
+                                 (search-forward needle)
+                                 (point)))))
+                      '("Project" ":CATEGORY:" "Intro paragraph" "Item one"
+                        "Child one" "text child one" "Child two" "Item two"
+                        "(message" "Deep" "Deep body" "Deeper"
+                        "Deeper body" "Next" "Next body"))
+                     (count-matches "^\\*+ " (point-min) (point-max))
+                     (split-string
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      "\n" t)))))
+            states)
+        (org-cycle-set-startup-visibility)
+        (push (funcall snapshot 'startup) states)
+        (goto-char (point-min))
+        (search-forward "Item one")
+        (beginning-of-line)
+        (dotimes (_ 3)
+          (org-cycle)
+          (push (funcall snapshot 'list-cycle) states))
+        (goto-char (point-min))
+        (search-forward "Project")
+        (beginning-of-line)
+        (dotimes (_ 3)
+          (org-cycle)
+          (push (funcall snapshot 'headline-cycle) states))
+        (org-fold-hide-drawer-all)
+        (org-fold-hide-block-all)
+        (push (funcall snapshot 'drawer-block-hidden) states)
+        (goto-char (point-min))
+        (search-forward "Deeper body")
+        (org-fold-show-context 'isearch)
+        (push (funcall snapshot 'context) states)
+        (dotimes (_ 4)
+          (org-cycle-global)
+          (push (funcall snapshot 'global) states))
+        (org-fold-show-all)
+        (push (funcall snapshot 'all) states)
+        (list (nreverse states)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
