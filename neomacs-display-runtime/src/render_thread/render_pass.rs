@@ -16,6 +16,7 @@ impl RenderApp {
         child_frame_shadow_layers: u32,
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
     ) {
         let GuiFrameWindowState { native, render } = window_state;
         let Some(frame_for_decision) = render.current_frame_clone() else {
@@ -119,6 +120,7 @@ impl RenderApp {
                     child_frame_shadow_layers,
                     child_frame_shadow_offset,
                     child_frame_shadow_opacity,
+                    scroll_indicators_enabled,
                 );
             }
 
@@ -183,6 +185,7 @@ impl RenderApp {
                 child_frame_shadow_layers,
                 child_frame_shadow_offset,
                 child_frame_shadow_opacity,
+                scroll_indicators_enabled,
             );
         } else {
             Self::render_secondary_frame_contents(
@@ -202,6 +205,7 @@ impl RenderApp {
                 child_frame_shadow_layers,
                 child_frame_shadow_offset,
                 child_frame_shadow_opacity,
+                scroll_indicators_enabled,
             );
             renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
                 detect_frame_transitions(
@@ -241,6 +245,7 @@ impl RenderApp {
         child_frame_shadow_layers: u32,
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
     ) {
         renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
             for &child_id in render.child_frames.sorted_for_rendering() {
@@ -272,6 +277,28 @@ impl RenderApp {
         #[cfg(feature = "wpe-webkit")]
         if !render.floating_webkits.is_empty() {
             renderer.render_floating_webkits(surface_view, &render.floating_webkits);
+        }
+
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            if renderer.effects.breadcrumb.enabled {
+                renderer.render_breadcrumbs(surface_view, frame, &mut render.glyph_atlas);
+            }
+        });
+        if render.renderer_effects.is_active() {
+            render.frame_dirty = true;
+        }
+
+        if scroll_indicators_enabled {
+            renderer.render_scroll_indicators(
+                surface_view,
+                &frame.window_infos,
+                native.width,
+                native.height,
+            );
+        }
+
+        if renderer.effects.window_watermark.enabled {
+            renderer.render_window_watermarks(surface_view, frame, &mut render.glyph_atlas);
         }
 
         if let Some(menu_bar) = render.menu_bar.as_ref() {
@@ -432,6 +459,7 @@ impl RenderApp {
         child_frame_shadow_layers: u32,
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
     ) {
         renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
             renderer.render_frame_glyphs(
@@ -468,6 +496,7 @@ impl RenderApp {
             child_frame_shadow_layers,
             child_frame_shadow_offset,
             child_frame_shadow_opacity,
+            scroll_indicators_enabled,
         );
         if renderer_effects_still_active {
             render.frame_dirty = true;
@@ -504,6 +533,7 @@ impl RenderApp {
             self.child_frame_shadow_layers,
             self.child_frame_shadow_offset,
             self.child_frame_shadow_opacity,
+            self.scroll_indicators_enabled,
         );
     }
 
