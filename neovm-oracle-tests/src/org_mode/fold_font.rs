@@ -685,6 +685,56 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_font_lock_deep_heading_face_after_demote_promote_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* L1\n** L2\n*** L3\n**** L4\n***** L5\n****** L6\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Demote L4 subtree
+      (goto-char (point-min))
+      (search-forward "L4")
+      (beginning-of-line)
+      (org-demote-subtree)
+      ;; Promote L5 subtree
+      (goto-char (point-min))
+      (search-forward "L5")
+      (beginning-of-line)
+      (org-promote-subtree)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Capture face state
+      (let (headings)
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) \\(L[0-9]+\\)" nil t)
+          (let ((beg (line-beginning-position)))
+            (push (list (match-string 2)
+                        (length (match-string 1))
+                        (org-outline-level)
+                        (get-text-property beg 'face)
+                        (get-text-property (match-beginning 2) 'face))
+                  headings)))
+        ;; Check merged
+        (let ((merged nil))
+          (dolist (line (split-string
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         "\n" t))
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line merged)))
+          (list (nreverse headings)
+                (nreverse merged)
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_subtree_show_all_font_level_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
