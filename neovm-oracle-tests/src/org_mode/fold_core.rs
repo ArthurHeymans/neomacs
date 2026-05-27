@@ -148,3 +148,113 @@ fn org_fold_core_region_copy_narrow_edit_recovery_combo() {
                  "\n" t))))))"##,
     );
 }
+
+#[test]
+fn org_fold_context_narrow_subtree_drawer_block_recovery_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fold-show-context-detail
+           '((default . lineage)
+             (isearch . lineage)
+             (occur . ancestors)
+             (bookmark-jump . ancestors)
+             (agenda . local)
+             (mark-goto . lineage)
+             (org-goto . ancestors))))
+      (org-mode)
+      (insert "* Root\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "Root paragraph.\n")
+      (insert "#+begin_quote\nroot quote\n#+end_quote\n")
+      (insert "** Alpha\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\n")
+      (insert "Alpha body.\n")
+      (insert "*** Alpha child\n")
+      (insert "Alpha child body.\n")
+      (insert "**** Alpha fourth\n")
+      (insert "Alpha fourth body.\n")
+      (insert "***** Alpha fifth\n")
+      (insert "Alpha fifth body.\n")
+      (insert "****** Alpha sixth\n")
+      (insert "Alpha sixth body.\n")
+      (insert "** Beta\n")
+      (insert "Beta body.\n")
+      (insert "*** Beta child\n")
+      (insert "Beta child body.\n")
+      (insert "**** Beta fourth\n")
+      (insert "Beta fourth body.\n")
+      (insert "* Sibling\n")
+      (insert "Sibling body.\n")
+        (let ((probe
+               (lambda (needle)
+                 (save-excursion
+                   (goto-char (point-min))
+                   (if (search-forward needle nil t)
+                       (list needle
+                             (invisible-p (point))
+                             (get-text-property (point) 'invisible))
+                     (list needle 'not-found nil)))))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (push (list label
+                             (mapcar probe
+                                     '("Root" "Root paragraph" "root quote"
+                                       "Owner" "Alpha" "Alpha body"
+                                       "Alpha child" "Alpha child body"
+                                       "Alpha fourth" "Alpha fourth body"
+                                       "Alpha fifth" "Alpha fifth body"
+                                       "Alpha sixth" "Alpha sixth body"
+                                       "Beta" "Beta body" "Beta child"
+                                       "Beta child body" "Beta fourth"
+                                       "Beta fourth body" "Sibling"
+                                       "Sibling body")))
+                       states))))
+          (org-fold-hide-sublevels 1)
+          (funcall snapshot 'overview)
+          (goto-char (point-min))
+          (search-forward "Alpha sixth body.")
+          (org-fold-show-context 'isearch)
+          (funcall snapshot 'isearch-sixth)
+          (org-fold-hide-sublevels 1)
+          (goto-char (point-min))
+          (search-forward "Beta fourth body.")
+          (org-fold-show-context 'default)
+          (funcall snapshot 'default-beta-fourth)
+          (org-fold-hide-sublevels 1)
+          (goto-char (point-min))
+          (search-forward "Alpha child body.")
+          (org-fold-show-context 'agenda)
+          (funcall snapshot 'agenda-alpha-child)
+          (org-fold-hide-sublevels 1)
+          (goto-char (point-min))
+          (search-forward "root quote")
+          (org-fold-show-context 'mark-goto)
+          (funcall snapshot 'mark-goto-quote)
+          (org-fold-show-all)
+          (org-fold-hide-drawer-all)
+          (org-fold-hide-block-all)
+          (funcall snapshot 'drawers-blocks-hidden)
+          (save-restriction
+            (org-narrow-to-subtree)
+            (goto-char (point-min))
+            (search-forward "Alpha")
+            (beginning-of-line)
+            (org-fold-hide-subtree)
+            (funcall snapshot 'narrowed-alpha-hidden)
+            (org-fold-show-subtree)
+            (funcall snapshot 'narrowed-alpha-shown)
+            (org-fold-hide-sublevels 2)
+            (funcall snapshot 'narrowed-sublevels-2))
+          (funcall snapshot 'after-widen)
+          (list (nreverse states)
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
