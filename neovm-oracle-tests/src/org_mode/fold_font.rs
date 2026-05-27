@@ -685,6 +685,89 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_font_face_level_visibility_deep_state_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Project :root:\n")
+      (insert "Project body.\n")
+      (insert "** DONE Alpha :work:\n")
+      (insert "Alpha body.\n")
+      (insert "*** TODO Beta\n")
+      (insert "Beta body.\n")
+      (insert "**** WAIT Gamma\n")
+      (insert "Gamma body.\n")
+      (insert "***** DONE Delta\n")
+      (insert "Delta body.\n")
+      (insert "****** TODO Epsilon\n")
+      (insert "Epsilon body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Deep state capture function
+      (let ((heading-state
+             (lambda ()
+               (font-lock-ensure (point-min) (point-max))
+               (let (out)
+                 (goto-char (point-min))
+                 (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                   (let ((beg (line-beginning-position)))
+                     (push (list (match-string 2)
+                                 (length (match-string 1))
+                                 (org-outline-level)
+                                 (invisible-p beg)
+                                 (get-text-property beg 'face)
+                                 (get-text-property (match-beginning 2) 'face))
+                           out)))
+                 (nreverse out)))))
+        ;; Hide to level 1
+        (org-fold-hide-sublevels 1)
+        (let ((after-hide-1 (funcall heading-state)))
+          ;; Show Beta subtree
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (beginning-of-line)
+          (org-fold-show-subtree)
+          (let ((after-show-beta (funcall heading-state)))
+            ;; Hide Gamma subtree
+            (goto-char (point-min))
+            (search-forward "Gamma")
+            (beginning-of-line)
+            (org-fold-hide-subtree)
+            (let ((after-hide-gamma (funcall heading-state)))
+              ;; Edit while hidden
+              (end-of-line)
+              (insert "\n**** Inserted under hidden Gamma\nInserted body.\n")
+              ;; Show all
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-show-all (funcall heading-state))
+                    (merged nil))
+                (dolist (line (split-string
+                               (buffer-substring-no-properties
+                                (point-min) (point-max))
+                               "\n" t))
+                  (when (string-match-p "^\\*+ .*\\*+ " line)
+                    (push line merged)))
+                (list after-hide-1
+                      after-show-beta
+                      after-hide-gamma
+                      after-show-all
+                      (nreverse merged)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_local_cycle_global_cycle_show_all_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
