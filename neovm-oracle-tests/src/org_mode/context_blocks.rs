@@ -146,3 +146,75 @@ fn org_between_regexps_nested_blocks_combo() {
      '("before" "inside quote" "after" "Next"))))"##,
     );
 }
+
+#[test]
+fn org_context_drawer_timestamp_comment_latex_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-agenda-include-inactive-timestamps t))
+      (org-mode)
+      (insert "#+TITLE: Context\n")
+      (insert "* TODO Node\n")
+      (insert "SCHEDULED: <2026-05-27 Wed 09:30 +1w> DEADLINE: <2026-05-30 Sat>\n")
+      (insert ":PROPERTIES:\n:Effort: 0:30\n:CUSTOM_ID: node\n:END:\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:25] =>  0:25\n")
+      (insert ":END:\n")
+      (insert "# Comment with [2026-05-27 Wed]\n")
+      (insert "#+begin_quote\n")
+      (insert "Quote has <2026-05-28 Thu> and $x_1+y$.\n")
+      (insert "#+end_quote\n")
+      (insert "Paragraph has src_emacs-lisp{(+ 1 2)}, [[#node][self]], and \\alpha.\n")
+      (font-lock-ensure (point-min) (point-max))
+      (mapcar
+       (lambda (probe)
+         (goto-char (point-min))
+         (search-forward (car probe))
+         (when (plist-get (cdr probe) :bol) (beginning-of-line))
+         (when (plist-get (cdr probe) :back) (backward-char))
+         (let ((ctx (org-context))
+               (ts-basic (org-at-timestamp-p))
+               (ts-inactive (org-at-timestamp-p 'inactive))
+               (ts-agenda (org-at-timestamp-p 'agenda))
+               (ts-lax (org-at-timestamp-p 'lax)))
+           (list (car probe)
+                 (point)
+                 (mapcar #'car ctx)
+                 (org-element-type (org-element-context))
+                 (org-at-keyword-p)
+                 (org-at-heading-p)
+                 (org-at-planning-p)
+                 (org-at-property-drawer-p)
+                 (org-at-property-p)
+                 (org-at-drawer-p)
+                 (org-at-clock-log-p)
+                 (org-at-comment-p)
+                 (org-at-block-p)
+                 (org-in-block-p '("quote" "src"))
+                 ts-basic
+                 ts-inactive
+                 ts-agenda
+                 ts-lax
+                 (org-inside-LaTeX-fragment-p))))
+       '(("TITLE" :bol t)
+         ("TODO Node" :bol t)
+         ("09:30" :back t)
+         ("DEADLINE" :bol t)
+         ("Effort" :bol t)
+         ("CUSTOM_ID" :bol t)
+         ("LOGBOOK" :bol t)
+         ("09:25" :back t)
+         ("Comment" :bol t)
+         ("Quote has" :bol t)
+         ("2026-05-28" :back t)
+         ("x_1+y")
+         ("src_emacs-lisp")
+         ("self")
+         ("alpha")))))"##,
+    );
+}
