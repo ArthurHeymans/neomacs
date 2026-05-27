@@ -172,6 +172,177 @@ fn org_fold_indirect_deep_edit_font_lock_regression_combo() {
                         (buffer-substring-no-properties
                          (point-min) (point-max)))))
             (when (buffer-live-p clone)
-              (kill-buffer clone))))))))"##,
+               (kill-buffer clone))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_startup_content_drawer_deep_cycle_hidden_edit_regression_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'org-fold-core)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-hide-emphasis-markers t)
+          (org-link-descriptive t)
+          (org-cycle-hide-drawer-startup t)
+          (org-cycle-hide-block-startup t)
+          (org-cycle-separator-lines 0)
+          (org-startup-folded 'showeverything))
+      (org-mode)
+      (insert "#+STARTUP: content\n")
+      (insert "* TODO Project :root:\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Effort: 5:00\n:END:\n")
+      (insert "Project intro with *bold* and /italic/.\n")
+      (insert "** NEXT Alpha :work:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\n")
+      (insert "Alpha body paragraph.\n")
+      (insert "*** WAIT Alpha child :deep:\n")
+      (insert "#+begin_src emacs-lisp\n(message \"hello\")\n(+ 1 2)\n#+end_src\n")
+      (insert "**** TODO Fourth level :level4:\n")
+      (insert "Fourth body.\n")
+      (insert "***** DONE Fifth level\n")
+      (insert "Fifth body.\n")
+      (insert "****** TODO Sixth level :level6:\n")
+      (insert "Sixth body.\n")
+      (insert "******* WAIT Seventh level\n")
+      (insert "Seventh body.\n")
+      (insert "** TODO Beta :work:\n")
+      (insert "Beta body.\n")
+      (insert "*** NEXT Beta child\n")
+      (insert "Beta child body.\n")
+      (insert "**** TODO Beta fourth\n")
+      (insert "Beta fourth body.\n")
+      (insert "***** TODO Beta fifth\n")
+      (insert "Beta fifth body.\n")
+      (insert "* DONE Tail :done:\n")
+      (insert "CLOSED: [2026-05-27 Wed]\n")
+      (insert "Tail body.\n")
+      (let ((needles
+             '("Project" ":Owner:" "Project intro" "Alpha"
+               "Alpha body" "Alpha child" "(message" "(+ 1 2)"
+               "Fourth level" "Fourth body" "Fifth level" "Fifth body"
+               "Sixth level" "Sixth body" "Seventh level" "Seventh body"
+               "Beta" "Beta body" "Beta child" "Beta child body"
+               "Beta fourth" "Beta fourth body" "Beta fifth"
+               "Beta fifth body" "Tail" "Tail body"))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (font-lock-ensure (point-min) (point-max))
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (let ((pos (match-beginning 0)))
+                              (list needle
+                                    (line-number-at-pos pos)
+                                    (invisible-p pos)
+                                    (get-text-property pos 'invisible)
+                                    (get-text-property
+                                     (line-beginning-position) 'face)
+                                    (get-text-property pos 'face)))))
+                        needles)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (let (out)
+                           (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                             (push (list (match-string 1)
+                                         (match-string 2)
+                                         (org-outline-level)
+                                         (get-text-property
+                                          (line-beginning-position) 'face)
+                                         (get-text-property
+                                          (match-beginning 2) 'face))
+                                   out))
+                           (nreverse out)))
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (split-string
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))
+                        "\n" t)))))
+          (org-cycle-set-startup-visibility)
+          (push (funcall snapshot 'startup-content) states)
+          (org-fold-hide-drawer-all)
+          (org-fold-hide-block-all)
+          (push (funcall snapshot 'drawers-blocks-hidden) states)
+          (goto-char (point-min))
+          (search-forward "Fourth level")
+          (beginning-of-line)
+          (dotimes (_ 5)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-fourth) states))
+          (goto-char (point-min))
+          (search-forward "Sixth level")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (push (funcall snapshot 'sixth-hidden) states)
+          (end-of-line)
+          (insert "\n****** TODO Inserted while sixth hidden\nInserted sixth body.\n")
+          (push (funcall snapshot 'after-hidden-insert) states)
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (beginning-of-line)
+          (dotimes (_ 4)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-beta) states))
+          (goto-char (point-min))
+          (search-forward "Inserted sixth body.")
+          (org-next-visible-heading 1)
+          (push (funcall snapshot 'next-visible-after-insert) states)
+          (goto-char (point-min))
+          (search-forward "Beta fifth body.")
+          (org-fold-show-context 'isearch)
+          (push (funcall snapshot 'context-beta-fifth) states)
+          (goto-char (point-min))
+          (dotimes (_ 6)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((merged nil)
+                (bad-levels nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+              (let ((stars (length (match-string 1)))
+                    (level (org-outline-level)))
+                (unless (= stars level)
+                  (push (list (match-string 0) stars level)
+                        bad-levels))))
+            (push (funcall snapshot 'final-show-all) states)
+            (list (nreverse states)
+                  (nreverse merged)
+                  (nreverse bad-levels)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward needle nil t)))
+                   '("****** TODO Inserted while sixth hidden"
+                     "Inserted sixth body."
+                     "******* WAIT Seventh level"
+                     "***** TODO Beta fifth"))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))))))"##,
     );
 }
