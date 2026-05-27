@@ -163,3 +163,60 @@ fn org_org_export_include_macro_custom_link_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_export_org_roundtrip_headline_link_property_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Roundtrip\n")
+    (insert "#+AUTHOR: Tester\n")
+    (insert "#+TODO: TODO WAIT | DONE\n\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:END:\n")
+    (insert "Alpha body with *bold* and /italic/.\n\n")
+    (insert "** DONE Beta\n")
+    (insert "CLOSED: [2026-05-26 Mon]\n")
+    (insert "Beta body with [[https://example.org][link]].\n\n")
+    (insert "** WAIT Gamma\n")
+    (insert "Gamma body.\n")
+    (let* ((org-export-with-toc nil)
+           (exported (org-export-as 'org nil nil t nil)))
+      ;; Re-parse exported
+      (with-temp-buffer
+        (org-mode)
+        (insert exported)
+        (let* ((tree (org-element-parse-buffer))
+               (headlines
+                (org-element-map tree 'headline
+                  (lambda (h)
+                    (list (org-element-property :level h)
+                          (org-element-property :todo-keyword h)
+                          (org-element-property :raw-value h)
+                          (org-element-property :tags h)))))
+               (links
+                (org-element-map tree 'link
+                  (lambda (l)
+                    (list (org-element-property :type l)
+                          (org-element-property :path l)))))
+               (planning
+                (org-element-map tree 'planning
+                  (lambda (p)
+                    (list (and (org-element-property :scheduled p)
+                               (org-element-property :raw-value
+                                (org-element-property :scheduled p)))
+                          (and (org-element-property :closed p)
+                               (org-element-property :raw-value
+                                (org-element-property :closed p))))))))
+          (list headlines
+                links
+                planning
+                exported))))))"##,
+    );
+}
