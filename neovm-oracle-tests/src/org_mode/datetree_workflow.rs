@@ -368,7 +368,67 @@ fn org_datetree_keep_restriction_subtree_property_matrix_combo() {
           (list (nreverse states)
                 not-heading-error
                 (count-matches "^\\*+ " (point-min) (point-max))
-                (buffer-substring-no-properties
-                 (point-min) (point-max))))))))"#,
+                 (buffer-substring-no-properties
+                  (point-min) (point-max))))))))"#,
+    );
+}
+
+#[test]
+fn org_datetree_insert_find_cleanup_structure_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (org-mode)
+    ;; Insert entries for multiple dates
+    (org-datetree-file-entry-under "* Meeting" '(5 27 2026))
+    (org-datetree-file-entry-under "* Standup" '(5 27 2026))
+    (org-datetree-file-entry-under "* Review" '(5 28 2026))
+    (org-datetree-file-entry-under "* Sprint start" '(5 1 2026))
+    (org-datetree-file-entry-under "* Retro" '(4 30 2026))
+    (let* ((after-insert (buffer-substring-no-properties
+                          (point-min) (point-max)))
+           ;; Parse datetree structure
+           (tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (h)
+                (list (org-element-property :level h)
+                      (org-element-property :raw-value h)))))
+           ;; Count year/month/day headings
+           (year-count (count-matches "^\\* [0-9]\\{4\\}" (point-min) (point-max)))
+           (month-count (count-matches "^\\*\\* [0-9]\\{4\\}-[0-9]\\{2\\}" (point-min) (point-max)))
+           (day-count (count-matches "^\\*\\*\\* [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}" (point-min) (point-max))))
+      ;; Find and navigate to a date
+      (goto-char (point-min))
+      (org-datetree-find-date-create '(5 27 2026))
+      (let ((pos-after-find (line-number-at-pos))
+            (heading-at-find (org-get-heading t t t t)))
+        ;; Insert under found date
+        (org-end-of-subtree)
+        (insert "\n*** Extra entry\nExtra body.\n")
+        (let ((after-extra (buffer-substring-no-properties
+                            (point-min) (point-max))))
+          ;; Find month
+          (goto-char (point-min))
+          (org-datetree-find-month-create '(5 2026))
+          (let ((month-pos (line-number-at-pos))
+                (month-heading (org-get-heading t t t t)))
+            (list after-insert
+                  headlines
+                  year-count
+                  month-count
+                  day-count
+                  pos-after-find
+                  heading-at-find
+                  after-extra
+                  month-pos
+                  month-heading
+                  (count-matches "^\\*+ " (point-min) (point-max))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))))))"##,
     );
 }
