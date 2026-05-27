@@ -970,3 +970,124 @@ fn org_table_rectangle_transpose_sort_shape_combo() {
             (org-table-to-lisp)))))"##,
     );
 }
+
+#[test]
+fn org_table_navigation_copydown_formula_edit_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-table-tab-jumps-over-hlines t)
+          (org-table-copy-increment t)
+          (org-table-formula-create-columns t))
+      (insert "| ! | Task | Day | Seq | Estimate | Done | Remain | Stamp |\n")
+      (insert "|---+------+-----+-----+----------+------+--------+-------|\n")
+      (insert "| # | Alpha | <2026-05-27 Wed> | item-001 | 2:30 | 1:00 | stale | stale |\n")
+      (insert "| # | Beta | <2026-05-28 Thu> | item-002 | 3:15 | 0:45 | stale | stale |\n")
+      (insert "|   | Gamma |  |  | 1:10 | 0:20 | stale | stale |\n")
+      (insert "|---+------+-----+-----+----------+------+--------+-------|\n")
+      (insert "| _ | Total |  |  | stale | stale | stale | stale |\n")
+      (insert "#+TBLFM: $Remain=$Estimate-$Done;U::$Stamp='(concat $Task \":\" $Seq \":\" $Remain)::@>$Estimate=vsum(@I$Estimate..@II$Estimate);U::@>$Done=vsum(@I$Done..@II$Done);U::@>$Remain=vsum(@I$Remain..@II$Remain);U\n")
+      (goto-char (point-min))
+      (org-table-recalculate 'all)
+      (org-table-align)
+      (let ((initial
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (stored-initial (org-table-get-stored-formulas))
+            nav-summary copy-summary blank-summary formula-summary
+            after-copy after-blank after-formula final-summary)
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (org-table-goto-column 8)
+        (org-table-next-field)
+        (setq nav-summary
+              (list (org-table-current-dline)
+                    (org-table-current-column)
+                    (org-table-get-field)
+                    (org-table-current-line)
+                    (thing-at-point 'line t)))
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (org-table-goto-column 3)
+        (org-table-copy-down 1)
+        (setq copy-summary
+              (list (org-table-current-dline)
+                    (org-table-current-column)
+                    (org-table-get-field)))
+        (org-table-goto-column 4)
+        (org-table-copy-down 1)
+        (setq copy-summary
+              (append copy-summary
+                      (list (org-table-current-column)
+                            (org-table-get-field))))
+        (setq after-copy
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (org-table-goto-column 6)
+        (let ((old (org-table-blank-field)))
+          (setq blank-summary
+                (list old
+                      (org-table-get-field)
+                      (org-table-current-dline)
+                      (org-table-current-column))))
+        (org-table-get-field nil "0:55")
+        (org-table-recalculate 'all)
+        (setq after-blank
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (org-table-goto-column 7)
+        (org-table-eval-formula '(4) "$5-$6;U")
+        (setq formula-summary
+              (list (org-table-get-field)
+                    (org-table-current-field-formula 'key 'noerror)
+                    (org-table-formula-substitute-names
+                     "$Remain=$Estimate-$Done")
+                    (org-table-formula-to-user "$7=$5-$6")
+                    (org-table-formula-from-user "$Remain=$Estimate-$Done")))
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (org-table-goto-column 8)
+        (org-table-get-field nil "manual")
+        (org-table-recalculate 'all)
+        (setq after-formula
+              (buffer-substring-no-properties (point-min) (point-max)))
+        (goto-char (point-min))
+        (search-forward "Total")
+        (org-table-goto-column 5)
+        (org-table-next-row)
+        (org-table-get-field nil "Delta")
+        (org-table-goto-column 5)
+        (org-table-get-field nil "4:00")
+        (org-table-goto-column 6)
+        (org-table-get-field nil "1:30")
+        (org-table-goto-column 7)
+        (org-table-eval-formula nil "$5-$6;U")
+        (org-table-recalculate 'all)
+        (setq final-summary
+              (list (org-table-current-dline)
+                    (org-table-current-column)
+                    (org-table-get-field)
+                    (org-table-get-range "@I$Estimate..@II$Remain")
+                    (org-table-get-range "@I$Estimate..@II$Remain" nil nil nil t)
+                    (org-table-get-stored-formulas)
+                    (org-table-to-lisp)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))
+        (list initial
+              stored-initial
+              nav-summary
+              copy-summary
+              after-copy
+              blank-summary
+              after-blank
+              formula-summary
+              after-formula
+              final-summary)))))"##,
+    );
+}
