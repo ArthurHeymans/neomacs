@@ -1072,9 +1072,55 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
                    (list (org-element-type el)
                          (org-element-property :name el)
                          (org-element-property :value el))))))
-          (list (nreverse results)
-                elements
-                (buffer-substring-no-properties
-                 (point-min) (point-max)))))))))"##,
+           (list (nreverse results)
+                 elements
+                 (buffer-substring-no-properties
+                  (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: calc\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list :a 1 :b 2 :c 3)\n")
+      (insert "#+end_src\n\n")
+      (insert "#+RESULTS: calc\n")
+      (insert ":placeholder\n\n")
+      ;; Execute - should replace placeholder
+      (goto-char (point-min))
+      (search-forward "calc")
+      (org-babel-execute-src-block)
+      (let ((after-exec (buffer-substring-no-properties
+                         (point-min) (point-max)))
+            (result-val (org-babel-read-result)))
+        ;; Remove result
+        (goto-char (point-min))
+        (search-forward "calc")
+        (org-babel-remove-result)
+        (let ((after-remove (buffer-substring-no-properties
+                             (point-min) (point-max))))
+          ;; Re-execute
+          (goto-char (point-min))
+          (search-forward "calc")
+          (org-babel-execute-src-block)
+          (let ((after-reexec (buffer-substring-no-properties
+                               (point-min) (point-max)))
+                (reexec-val (org-babel-read-result)))
+            (list after-exec
+                  result-val
+                  after-remove
+                  after-reexec
+                  reexec-val))))))))"##,
     );
 }
