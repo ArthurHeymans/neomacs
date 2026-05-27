@@ -225,3 +225,121 @@ fn org_link_store_region_file_context_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_link_precise_target_region_named_heading_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: tbl\n")
+    (insert "| a | b |\n| 1 | 2 |\n")
+    (insert "* TODO [#A] Target :tag:\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: custom-target\n:END:\n")
+    (insert "Body region words here.\n")
+    (let ((offset (lambda (row)
+                    (and row
+                         (list (nth 0 row)
+                               (nth 1 row)
+                               (- (nth 2 row) (point-min)))))))
+      (goto-char (point-min))
+      (search-forward "| a |")
+      (let ((named (funcall offset (org-link-precise-link-target))))
+        (search-forward "Target")
+        (let ((heading (funcall offset (org-link-precise-link-target))))
+          (search-forward "region words")
+          (push-mark (match-beginning 0) t t)
+          (goto-char (match-end 0))
+          (let ((region (funcall offset (org-link-precise-link-target))))
+            (list named
+                  heading
+                  region
+                  (org-link-heading-search-string)
+                  (org-link-heading-search-string
+                   "TODO [#B] Other [33%] :x:y:")
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_link_search_targets_names_coderef_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert "<<radio target>> text.\n")
+    (insert "#+NAME: named-table\n")
+    (insert "| a | b |\n")
+    (insert "* Code\n")
+    (insert "#+begin_src emacs-lisp -n -r\n")
+    (insert "(message \"hi\") ;; (call)\n")
+    (insert "#+end_src\n")
+    (insert "* Multi   Word\nbody\n")
+    (let ((probe
+           (lambda (search)
+             (goto-char (point-min))
+             (let ((kind (org-link-search search nil t)))
+               (list search
+                     kind
+                     (buffer-substring-no-properties
+                      (line-beginning-position)
+                      (line-end-position))
+                     (- (point) (point-min)))))))
+      (list (funcall probe "radio target")
+            (funcall probe "named-table")
+            (funcall probe "(call)")
+            (funcall probe "*Multi Word")
+            (funcall probe "body")
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_link_open_file_search_targets_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ol)
+  (let ((file (make-temp-file "org-link-open-file" nil ".org")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Alpha\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: alpha-id\n:END:\n")
+            (insert "Alpha body.\n")
+            (insert "* Beta\n")
+            (insert "<<radio-file-target>>\n")
+            (insert "#+NAME: named-block\n")
+            (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n"))
+          (let ((link-to (lambda (search)
+                           (concat "file:" file "::" search))))
+            (let (out)
+              (dolist (search '("#alpha-id" "*Beta" "radio-file-target"
+                                "named-block"))
+                (org-link-open-from-string
+                 (org-link-make-string (funcall link-to search)) '(16))
+                (push (list search
+                            "<file>"
+                            (buffer-substring-no-properties
+                             (line-beginning-position)
+                             (line-end-position))
+                            (- (point) (point-min)))
+                      out))
+              (nreverse out))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
