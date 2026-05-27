@@ -1456,6 +1456,7 @@ mod strong_deep_state;
 mod strong_divergence_hunt;
 mod strong_divergence_hunt_10;
 mod strong_divergence_hunt_11;
+mod strong_divergence_hunt_12;
 mod strong_divergence_hunt_2;
 mod strong_divergence_hunt_3;
 mod strong_divergence_hunt_4;
