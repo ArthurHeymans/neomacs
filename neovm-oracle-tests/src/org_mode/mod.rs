@@ -1460,6 +1460,7 @@ mod strong_final_edge;
 mod strong_giga_combos;
 mod strong_integration_combos;
 mod strong_mega_combos;
+mod strong_peta_combos;
 mod strong_tera_combos;
 mod strong_ultimate_edge;
 mod strong_workflow_combos;
