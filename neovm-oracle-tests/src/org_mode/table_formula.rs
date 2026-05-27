@@ -394,3 +394,59 @@ fn org_table_hline_formula_sort_recalc_lifecycle_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_table_sort_transpose_formula_metadata_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | Jan | Feb | Mar | Total |\n")
+    (insert "|------+-----+-----+-----+-------|\n")
+    (insert "| B | 2 | 3 | 4 | |\n")
+    (insert "| A | 5 | 6 | 7 | |\n")
+    (insert "|------+-----+-----+-----+-------|\n")
+    (insert "| Sum | | | | |\n")
+    (insert "#+TBLFM: @2$5=vsum($2..$4)::@3$5=vsum($2..$4)::@>$5=vsum(@2..@-1)\n")
+    (goto-char (point-min))
+    (org-table-recalculate 'all)
+    (let ((after-recalc
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (formulas-before (org-table-get-stored-formulas)))
+      (goto-char (point-min))
+      (search-forward "Name")
+      (org-table-sort-lines nil ?a)
+      (let ((after-sort
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (field-summary nil))
+        (goto-char (point-min))
+        (search-forward "6")
+        (org-table-analyze)
+        (setq field-summary
+              (list (org-table-current-dline)
+                    (org-table-current-column)
+                    (org-table-get-field)
+                    (org-table-current-field-formula 'key 'noerror)))
+        (goto-char (point-min))
+        (search-forward "Name")
+        (org-table-transpose-table-at-point)
+        (org-table-align)
+        (let ((after-transpose
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (formulas-after (org-table-get-stored-formulas)))
+          (list after-recalc
+                formulas-before
+                after-sort
+                field-summary
+                after-transpose
+                formulas-after
+                (org-table-to-lisp)
+                (org-table-formula-substitute-names "$Total=vsum($Jan..$Mar)")
+                (org-table-convert-refs-to-rc "B3..E4")
+                (org-table-convert-refs-to-an "@3$2..@4$5"))))))"##,
+    );
+}
