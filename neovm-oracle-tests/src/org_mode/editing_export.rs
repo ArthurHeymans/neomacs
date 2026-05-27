@@ -183,7 +183,52 @@ fn org_icalendar_export_todo_schedule_deadline_combo() {
             (not (null (string-match-p "SUMMARY:Event" ical)))
             (not (null (string-match-p "DTSTART:20260527T090000" ical)))
             (not (null (string-match-p "DTSTART;VALUE=DATE:20260528" ical)))
-            (not (null (string-match-p "STATUS:NEEDS-ACTION" ical)))
-            normalized))))"##,
+             (not (null (string-match-p "STATUS:NEEDS-ACTION" ical)))
+             normalized))))"##,
+    );
+}
+
+#[test]
+fn org_export_region_emphasis_link_footnote_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Export Region\n\n")
+    (insert "* Section\n")
+    (insert "Text with *bold*, /italic/, =code=, ~verbatim~, _underline_.\n\n")
+    (insert "Link: [[https://example.org/path?q=1][Example]].\n\n")
+    (insert "Footnote[fn:1] and inline[fn:2:inline note].\n\n")
+    (insert "| A | B |\n|---+---|\n| 1 | 2 |\n\n")
+    (insert "#+begin_quote\nQuoted *text*.\n#+end_quote\n\n")
+    (insert "[fn:1] Definition with =code=.\n")
+    (let* ((org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil)))
+      (list (mapcar (lambda (re)
+                      (not (null (string-match-p re html))))
+                    '("<b>bold</b>"
+                      "<i>italic</i>"
+                      "<code>code</code>"
+                      "<pre>verbatim</pre>"
+                      "<u>underline</u>"
+                      "href=\"https://example.org/path?q=1\""
+                      "Example"
+                      "tabular"
+                      "<blockquote>"
+                      "footnote"))
+            (mapcar (lambda (tag)
+                      (let ((c 0) (s 0))
+                        (while (string-match (concat "<" tag) html s)
+                          (setq s (match-end 0) c (1+ c)))
+                        c))
+                    '("b" "i" "code" "pre" "u" "td" "blockquote"))
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+" "sec:org-id"
+             (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+                                       html)))))))"##,
     );
 }
