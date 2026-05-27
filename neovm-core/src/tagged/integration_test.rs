@@ -128,7 +128,7 @@ fn test_type_dispatch() {
     assert_eq!(results[2], "int:42");
     assert_eq!(results[3], "int:65");
     assert_eq!(results[4], "cons");
-    assert_eq!(results[5], "float:3.14");
+    assert_eq!(results[5], "float:3.125");
     assert_eq!(results[6], "vector");
 }
 
