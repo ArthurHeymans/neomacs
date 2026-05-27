@@ -685,6 +685,62 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_font_lock_todo_keyword_face_level_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE" "CANCELED")))
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t)
+          (org-fontify-whole-heading-line t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* TODO Alpha\n")
+      (insert "** NEXT Beta\n")
+      (insert "*** WAIT Gamma\n")
+      (insert "**** DONE Delta\n")
+      (insert "***** CANCELED Epsilon\n")
+      (insert "****** TODO Zeta\n")
+      (insert "******* NEXT Eta\n")
+      (insert "******** DONE Theta\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Capture face state at each heading
+      (let (faces)
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) +\\([A-Z]+\\)? ?\\(.*\\)$" nil t)
+          (let ((beg (line-beginning-position))
+                (stars (length (match-string 1)))
+                (todo (match-string 2))
+                (text (substring-no-properties (match-string 3))))
+            (push (list text
+                        stars
+                        todo
+                        (org-outline-level)
+                        (get-text-property beg 'face)
+                        (get-text-property (match-beginning 1) 'face)
+                        (and (match-beginning 2)
+                             (get-text-property (match-beginning 2) 'face))
+                        (get-text-property (match-beginning 3) 'face))
+                  faces)))
+        ;; Check for merged heading lines
+        (let ((merged nil))
+          (dolist (line (split-string
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         "\n" t))
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line merged)))
+          (list (nreverse faces)
+                (nreverse merged)
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_font_face_level_visibility_deep_state_capture_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
