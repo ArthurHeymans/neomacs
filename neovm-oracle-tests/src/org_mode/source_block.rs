@@ -806,9 +806,119 @@ fn org_src_edit_buffer_coordinates_multi_block_combo() {
                         (list (org-element-property :name block)
                               (org-element-property :switches block)
                               (org-element-property :parameters block)
-                              (org-element-property :value block)))
+                          (org-element-property :value block)))
                       (org-element-map
                           (org-element-parse-buffer)
                           'src-block #'identity))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_hash_hide_mutate_reexecute_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (let ((org-confirm-babel-evaluate nil))
+      (org-mode)
+      (insert "#+PROPERTY: header-args:emacs-lisp :results value replace :cache yes\n")
+      (insert "#+NAME: cached\n")
+      (insert "#+begin_src emacs-lisp :var x=4\n")
+      (insert "(list \"value\" x (* x x))\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: output\n")
+      (insert "#+begin_src emacs-lisp :results output drawer replace\n")
+      (insert "(princ \"alpha\\nbeta\")\n")
+      (insert "#+end_src\n")
+      (goto-char (point-min))
+      (search-forward "cached")
+      (search-forward "begin_src")
+      (let* ((info-before (org-babel-get-src-block-info))
+             (hash-before (org-babel-sha1-hash info-before))
+             (result-before (org-babel-execute-src-block nil info-before))
+             (pos-before (org-babel-where-is-src-block-result
+                          nil info-before hash-before))
+             (current-hash-before (org-babel-current-result-hash info-before))
+             (read-before (save-excursion
+                            (goto-char pos-before)
+                            (forward-line 1)
+                            (org-babel-read-result))))
+        (goto-char (point-min))
+        (search-forward "output")
+        (search-forward "begin_src")
+        (let* ((output-info (org-babel-get-src-block-info))
+               (output-result (org-babel-execute-src-block nil output-info))
+               (output-pos (org-babel-where-is-src-block-result nil output-info))
+               (output-read (save-excursion
+                              (goto-char output-pos)
+                              (forward-line 1)
+                              (org-babel-read-result))))
+          (org-babel-result-hide-all)
+          (let ((hidden
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward needle)
+                      (list needle
+                            (invisible-p (point))
+                            (get-text-property (point) 'invisible))))
+                  '("value" "alpha" "beta"))))
+            (goto-char (point-min))
+            (search-forward "(* x x)")
+            (replace-match "(* x x x)" t t)
+            (goto-char (point-min))
+            (search-forward "cached")
+            (search-forward "begin_src")
+            (let* ((info-after-edit (org-babel-get-src-block-info))
+                   (hash-after-edit
+                    (org-babel-sha1-hash info-after-edit))
+                   (current-hash-after-edit
+                    (org-babel-current-result-hash info-after-edit))
+                   (result-after
+                    (org-babel-execute-src-block nil info-after-edit))
+                   (pos-after
+                    (org-babel-where-is-src-block-result
+                     nil info-after-edit hash-after-edit))
+                   (read-after
+                    (save-excursion
+                      (goto-char pos-after)
+                      (forward-line 1)
+                      (org-babel-read-result))))
+              (org-babel-show-result-all)
+              (let ((shown
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (invisible-p (point))
+                                (get-text-property (point) 'invisible))))
+                      '("value" "alpha" "beta"))))
+                (list (nth 0 info-before)
+                      (nth 1 info-before)
+                      (cdr (assq :cache (nth 2 info-before)))
+                      hash-before
+                      result-before
+                      (and pos-before (- pos-before (point-min)))
+                      current-hash-before
+                      read-before
+                      output-result
+                      (and output-pos (- output-pos (point-min)))
+                      output-read
+                      hidden
+                      hash-after-edit
+                      current-hash-after-edit
+                      result-after
+                      (and pos-after (- pos-after (point-min)))
+                      read-after
+                      shown
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))"##,
     );
 }
