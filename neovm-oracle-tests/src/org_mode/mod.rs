@@ -29,6 +29,7 @@ mod element_upstream;
 mod entities_markup;
 mod export_backends;
 mod export_mix;
+mod export_upstream;
 mod fold_font;
 mod footnote_edit;
 mod goto_workflow;

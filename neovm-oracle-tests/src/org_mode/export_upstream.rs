@@ -1,0 +1,535 @@
+//! Ported upstream ERT tests from org-mode's test-ox.el (9.7.11).
+
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+// ── Export: parse-option-keyword ─────────────────────────────────────
+
+#[test]
+fn upstream_ox_parse_option_keyword() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((options (org-export--parse-option-keyword
+                  "H:1 num:t \\n:t timestamp:t arch:t author:t creator:t d:t email:t \
+*:t e:t ::t f:t pri:t -:t ^:t toc:t |:t tags:t tasks:t <:t todo:t inline:nil \
+stat:t title:t")))
+    (list (plist-get options :headline-levels)
+          (plist-get options :section-numbers)
+          (plist-get options :preserve-breaks)
+          (plist-get options :time-stamp-file)
+          (plist-get options :with-archived-trees)
+          (plist-get options :with-author)
+          (plist-get options :with-drawers)
+          (plist-get options :with-email)
+          (plist-get options :with-emphasize)
+          (plist-get options :with-entities)
+          (plist-get options :with-fixed-width)
+          (plist-get options :with-footnotes)
+          (plist-get options :with-priority)
+          (plist-get options :with-special-strings)
+          (plist-get options :with-sub-superscript)
+          (plist-get options :with-toc)
+          (plist-get options :with-tables)
+          (plist-get options :with-tags)
+          (plist-get options :with-tasks)
+          (plist-get options :with-timestamps)
+          (plist-get options :with-todo-keywords)
+          (plist-get options :with-inlinetasks)
+          (plist-get options :with-statistics-cookies)
+          (plist-get options :with-title))))"##,
+    );
+}
+
+// ── Export: get-inbuffer-options ──────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_inbuffer_options() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+TITLE: Test Title\n#+AUTHOR: Test Author\n#+EMAIL: test@example.org\n#+DESCRIPTION: Test description\n#+KEYWORDS: test org\n#+LANGUAGE: en\n")
+      (goto-char (point-min))
+      (let ((info (org-export-get-environment)))
+        (list (plist-get info :title)
+              (plist-get info :author)
+              (plist-get info :email))))))"##,
+    );
+}
+
+// ── Export: get-subtree-options ───────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_subtree_options() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Heading\n:PROPERTIES:\n:EXPORT_TITLE: Sub Title\n:EXPORT_AUTHOR: Sub Author\n:END:")
+      (goto-char (point-min))
+      (org-export-get-subtree-options))))"##,
+    );
+}
+
+// ── Export: get-relative-level ───────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_relative_level() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\n** H2\n*** H3\n* H1b")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (mapcar (lambda (h)
+                  (org-export-get-relative-level h info))
+                (org-element-map tree 'headline #'identity))))))"##,
+    );
+}
+
+// ── Export: number-to-roman ──────────────────────────────────────────
+
+#[test]
+fn upstream_ox_number_to_roman() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (list
+   (org-export-number-to-roman 1)
+   (org-export-number-to-roman 4)
+   (org-export-number-to-roman 9)
+   (org-export-number-to-roman 14)
+   (org-export-number-to-roman 39)
+   (org-export-number-to-roman 40)
+   (org-export-number-to-roman 49)
+   (org-export-number-to-roman 50)
+   (org-export-number-to-roman 1984)))"##,
+    );
+}
+
+// ── Export: low-level-p ──────────────────────────────────────────────
+
+#[test]
+fn upstream_ox_low_level_p() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\n** H2\n*** H3")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (mapcar (lambda (h)
+                  (org-export-low-level-p h info))
+                (org-element-map tree 'headline #'identity))))))"##,
+    );
+}
+
+// ── Export: first-sibling-p / last-sibling-p ─────────────────────────
+
+#[test]
+fn upstream_ox_first_last_sibling_p() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\n* H2\n* H3")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (headlines (org-element-map tree 'headline #'identity)))
+        (list
+         (mapcar #'org-export-first-sibling-p headlines)
+         (mapcar #'org-export-last-sibling-p headlines))))))"##,
+    );
+}
+
+// ── Export: get-node-property ────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_node_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H\n:PROPERTIES:\n:CUSTOM_ID: myid\n:END:")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (headline (car (org-element-map tree 'headline #'identity))))
+        (org-export-get-node-property :CUSTOM_ID headline)))))"##,
+    );
+}
+
+// ── Export: get-category ─────────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_category() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (list
+     ;; From keyword.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+CATEGORY: Work\n* Heading")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (info (org-combine-plists
+                     (org-export--get-export-attributes)
+                     (org-export-get-environment)
+                     (org-export--collect-tree-properties
+                      tree (org-export-get-environment))))
+              (headline (car (org-element-map tree 'headline #'identity))))
+         (org-export-get-category headline info)))
+     ;; Default.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* Heading")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (info (org-combine-plists
+                     (org-export--get-export-attributes)
+                     (org-export-get-environment)
+                     (org-export--collect-tree-properties
+                      tree (org-export-get-environment))))
+              (headline (car (org-element-map tree 'headline #'identity))))
+         (org-export-get-category headline info))))))"##,
+    );
+}
+
+// ── Export: get-tags ─────────────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_tags() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Heading :tag1:tag2:")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (headline (car (org-element-map tree 'headline #'identity))))
+        (org-export-get-tags headline)))))"##,
+    );
+}
+
+// ── Export: get-date ─────────────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_date() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (list
+     ;; From keyword.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+DATE: 2023-10-13\n* Heading")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (info (org-combine-plists
+                     (org-export--get-export-attributes)
+                     (org-export-get-environment)
+                     (org-export--collect-tree-properties
+                      tree (org-export-get-environment)))))
+         (org-export-get-date info)))
+     ;; Default.
+     (with-temp-buffer
+       (org-mode)
+       (insert "* Heading")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (info (org-combine-plists
+                     (org-export--get-export-attributes)
+                     (org-export-get-environment)
+                     (org-export--collect-tree-properties
+                      tree (org-export-get-environment)))))
+         (org-export-get-date info))))))"##,
+    );
+}
+
+// ── Export: get-footnote-number ──────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_footnote_number() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "Text[fn:1] more[fn:2]\n\n[fn:1] Def 1\n\n[fn:2] Def 2")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (mapcar (lambda (fn)
+                  (org-export-get-footnote-number fn info))
+                (org-element-map tree 'footnote-reference #'identity))))))"##,
+    );
+}
+
+// ── Export: export-block filter ──────────────────────────────────────
+
+#[test]
+fn upstream_ox_export_block_filter() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+BEGIN_EXPORT html\n<p>Keep</p>\n#+END_EXPORT\n#+BEGIN_EXPORT latex\nRemove\n#+END_EXPORT")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (length (org-element-map tree 'export-block #'identity))))))"##,
+    );
+}
+
+// ── Export: export-snippet filter ─────────────────────────────────────
+
+#[test]
+fn upstream_ox_export_snippet_filter() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "Text @@html:<b>bold</b>@@ more @@latex:\\textbf{bold}@@")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (snippets (org-element-map tree 'export-snippet #'identity)))
+        (mapcar (lambda (s) (org-element-property :back-end s)) snippets)))))"##,
+    );
+}
+
+// ── Export: comments handling ────────────────────────────────────────
+
+#[test]
+fn upstream_ox_comments_handling() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "# This is a comment\n* Heading\n# Another comment\nBody")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (comments (org-element-map tree 'comment #'identity)))
+        (length comments)))))"##,
+    );
+}
+
+// ── Export: comment-tree handling ─────────────────────────────────────
+
+#[test]
+fn upstream_ox_comment_tree() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* COMMENT Hidden heading\nBody\n* Visible heading\nBody")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (org-export--delete-comment-trees)
+        (length (org-element-map tree 'headline #'identity))))))"##,
+    );
+}
+
+// ── Export: handle-options (title/author/email) ──────────────────────
+
+#[test]
+fn upstream_ox_handle_options() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Title.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+TITLE: My Title\nBody")
+       (goto-char (point-min))
+       (let ((info (org-export-get-environment)))
+         (org-export-data-with-backend
+          (plist-get info :title)
+          (org-export-create-backend :transcoders '((plain-text . identity)))
+          nil)))
+     ;; Author.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+AUTHOR: Me\nBody")
+       (goto-char (point-min))
+       (let ((info (org-export-get-environment)))
+         (plist-get info :author)))
+     ;; Email.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+EMAIL: me@example.org\nBody")
+       (goto-char (point-min))
+       (let ((info (org-export-get-environment)))
+         (plist-get info :email))))))"##,
+    );
+}
+
+// ── Export: get-optional-title ────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_optional_title() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+TITLE: My Title\n* Heading\nBody")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (org-export-get-optional-title (car (org-element-map tree 'headline #'identity)) info)))))"##,
+    );
+}
+
+// ── Export: numbered-headline-p ──────────────────────────────────────
+
+#[test]
+fn upstream_ox_numbered_headline_p() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\n** H2\n*** H3\n* H4")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (mapcar (lambda (h)
+                  (org-export-numbered-headline-p h info))
+                (org-element-map tree 'headline #'identity))))))"##,
+    );
+}
+
+// ── Export: get-headline-number ──────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_headline_number() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* H1\n** H2\n** H3\n* H4")
+      (goto-char (point-min))
+      (let* ((tree (org-element-parse-buffer))
+             (info (org-combine-plists
+                    (org-export--get-export-attributes)
+                    (org-export-get-environment)
+                    (org-export--collect-tree-properties
+                     tree (org-export-get-environment)))))
+        (mapcar (lambda (h)
+                  (org-export-get-headline-number h info))
+                (org-element-map tree 'headline #'identity))))))"##,
+    );
+}
+
+// ── Export: get-caption ──────────────────────────────────────────────
+
+#[test]
+fn upstream_ox_get_caption() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox)
+  (let ((org-mode-hook nil))
+    (list
+     ;; Short and long caption.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+CAPTION[short]: long caption\n| a | b |")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (table (car (org-element-map tree 'table #'identity))))
+         (org-export-get-caption table)))
+     ;; Short only.
+     (with-temp-buffer
+       (org-mode)
+       (insert "#+CAPTION: only long\n| a | b |")
+       (goto-char (point-min))
+       (let* ((tree (org-element-parse-buffer))
+              (table (car (org-element-map tree 'table #'identity))))
+         (org-export-get-caption table t))))))"##,
+    );
+}
