@@ -227,3 +227,92 @@ fn org_num_narrow_mutate_promote_refresh_combo() {
                (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_num_face_skip_cleanup_archive_footnotes_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-num)
+  (with-temp-buffer
+    (let ((org-num-max-level nil)
+          (org-num-face 'org-warning)
+          (org-num-skip-commented t)
+          (org-num-skip-footnotes t)
+          (org-num-skip-tags '("ARCHIVE"))
+          (org-num-skip-unnumbered t)
+          (org-num-format-function
+           (lambda (numbers)
+             (if (= 1 (length numbers))
+                 (format "{%s} " (mapconcat #'number-to-string numbers "."))
+               (propertize
+                (format "{%s} " (mapconcat #'number-to-string numbers "."))
+                'face 'org-done)))))
+      (org-mode)
+      (insert "* Alpha\n")
+      (insert "** Beta\n")
+      (insert "*** Gamma\n")
+      (insert "** COMMENT Hidden\n")
+      (insert "*** Hidden child\n")
+      (insert "** Archived :ARCHIVE:\n")
+      (insert "*** Archived child\n")
+      (insert "** Property\n")
+      (insert ":PROPERTIES:\n:UNNUMBERED: t\n:END:\n")
+      (insert "*** Property child\n")
+      (insert "* Footnotes\n")
+      (insert "[fn:1] note body\n")
+      (insert "* Tail\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     org-num--invalid-flag
+                     org-num--missing-overlay
+                     (mapcar
+                      (lambda (ov)
+                        (let ((text (or (overlay-get ov 'after-string) "")))
+                          (list (buffer-substring-no-properties
+                                 (overlay-start ov)
+                                 (line-end-position))
+                                (overlay-get ov 'level)
+                                (overlay-get ov 'skip)
+                                (substring-no-properties text)
+                                (get-text-property 0 'face text)
+                                (overlay-get ov 'numbering-face)
+                                (overlay-buffer ov))))
+                      (sort (copy-sequence org-num--overlays)
+                            (lambda (a b)
+                              (< (overlay-start a) (overlay-start b)))))))))
+            states)
+        (org-num-mode 1)
+        (push (funcall snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "Archived")
+        (org-toggle-tag "ARCHIVE" 'off)
+        (org-num--verify (line-beginning-position) (line-end-position) 0)
+        (push (funcall snapshot 'after-unarchive) states)
+        (goto-char (point-min))
+        (search-forward "Property")
+        (beginning-of-line)
+        (org-entry-delete nil "UNNUMBERED")
+        (org-num--verify (line-beginning-position) (line-end-position) 0)
+        (push (funcall snapshot 'after-property-delete) states)
+        (goto-char (point-min))
+        (search-forward "Tail")
+        (beginning-of-line)
+        (org-demote-subtree)
+        (org-num--verify (line-beginning-position) (line-end-position) 0)
+        (push (funcall snapshot 'after-tail-demote) states)
+        (org-num-mode -1)
+        (list (nreverse states)
+              org-num--overlays
+              (mapcar (lambda (ov)
+                        (list (overlay-start ov)
+                              (overlay-end ov)
+                              (overlay-get ov 'org-num)))
+                      (overlays-in (point-min) (point-max)))
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
