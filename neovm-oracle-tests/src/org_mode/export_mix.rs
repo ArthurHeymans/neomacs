@@ -264,3 +264,82 @@ fn org_export_derived_backend_transcoder_combo() {
              out)))))"##,
     );
 }
+
+#[test]
+fn org_org_export_native_planning_macro_footnote_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Native\n")
+    (insert "#+AUTHOR: Ada\n")
+    (insert "#+OPTIONS: toc:nil num:nil tags:t prop:t\n")
+    (insert "#+MACRO: badge Badge-$1\n")
+    (insert "* TODO Keep :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed 09:00> DEADLINE: <2026-05-28 Thu>\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:Score: 7\n:END:\n")
+    (insert ":LOGBOOK:\n")
+    (insert "- State \"TODO\" from \"\" [2026-05-26 Tue]\n")
+    (insert ":END:\n")
+    (insert "Paragraph {{{badge(ok)}}} with [[https://example.org][link]] ")
+    (insert "and footnote[fn:n].\n")
+    (insert "#+begin_quote\nQuoted *bold* text.\n#+end_quote\n")
+    (insert "[fn:n] Note body with /italic/.\n")
+    (insert "** Hidden :noexport:\n")
+    (insert "Should not appear.\n")
+    (insert "* COMMENT Commented\n")
+    (insert "Should not appear either.\n")
+    (let* ((org-export-exclude-tags '("noexport"))
+           (org-export-with-toc nil)
+           (org-export-with-properties t)
+           (org-export-with-drawers t)
+           (org-export-with-planning t)
+           (out (org-export-as 'org nil nil t nil))
+           (env (org-export-get-environment 'org nil nil))
+           (tree (org-element-parse-buffer)))
+      (list
+       (plist-get env :title)
+       (plist-get env :with-properties)
+       (plist-get env :with-drawers)
+       (plist-get env :with-planning)
+       (mapcar (lambda (h)
+                 (list (org-element-property :raw-value h)
+                       (org-export-get-relative-level h env)
+                       (org-export-get-tags h env)))
+               (org-export-collect-headlines env))
+       (org-element-map tree '(macro footnote-reference link planning drawer)
+         (lambda (el)
+           (pcase (org-element-type el)
+             ('macro (list 'macro
+                           (org-element-property :key el)
+                           (org-element-property :args el)))
+             ('footnote-reference
+              (list 'footnote
+                    (org-element-property :label el)))
+             ('link (list 'link
+                          (org-element-property :raw-link el)
+                          (org-element-property :type el)
+                          (org-element-property :path el)))
+             ('planning
+              (list 'planning
+                    (and (org-element-property :scheduled el)
+                         (org-element-property
+                          :raw-value
+                          (org-element-property :scheduled el)))
+                    (and (org-element-property :deadline el)
+                         (org-element-property
+                          :raw-value
+                          (org-element-property :deadline el)))))
+             ('drawer (list 'drawer
+                            (org-element-property :drawer-name el))))))
+       (not (null (string-match-p "Badge-ok" out)))
+       (not (null (string-match-p ":Owner:" out)))
+       (not (null (string-match-p "SCHEDULED:" out)))
+       (not (null (string-match-p "LOGBOOK" out)))
+       (null (string-match-p "Should not appear" out))
+       out))))"##,
+    );
+}
