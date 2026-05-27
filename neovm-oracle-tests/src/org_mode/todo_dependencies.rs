@@ -146,3 +146,173 @@ fn org_todo_state_tag_triggers_statistics_combo() {
                  (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_todo_planning_tags_fold_cookie_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cl-lib)
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|"
+                                         "DONE" "CANCELED")))
+          (org-todo-state-tags-triggers
+           '(("NEXT" ("active" . t) ("waiting"))
+             ("WAIT" ("waiting" . t) ("active"))
+             ("DONE" ("done" . t) ("active") ("waiting"))
+             ("CANCELED" ("canceled" . t) ("active") ("waiting"))))
+          (org-log-done 'time)
+          (org-log-into-drawer "LOGBOOK")
+          (org-log-reschedule 'time)
+          (org-log-redeadline 'time)
+          (org-use-tag-inheritance t)
+          (org-tags-exclude-from-inheritance '("private"))
+          (org-auto-align-tags t)
+          (org-tags-column 52)
+          (org-priority-highest ?A)
+          (org-priority-lowest ?D)
+          (org-priority-default ?C)
+          (org-enforce-todo-dependencies nil))
+      (org-mode)
+      (insert "#+CATEGORY: Combo\n")
+      (insert "* TODO Project [0/3] :project:private:\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "** TODO Alpha :active:\n")
+      (insert "SCHEDULED: <2026-05-20 Wed>\n")
+      (insert "Alpha body\n")
+      (insert "** WAIT Beta :waiting:\n")
+      (insert "DEADLINE: <2026-05-25 Mon -2d>\n")
+      (insert "Beta body\n")
+      (insert "** TODO Gamma [0/2] :active:\n")
+      (insert "- [ ] first\n- [X] second\n")
+      (insert "*** TODO Gamma child\n")
+      (insert "Child body\n")
+      (font-lock-ensure (point-min) (point-max))
+      (goto-char (point-min))
+      (org-fold-hide-subtree)
+      (let ((hidden-before
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (list needle (invisible-p (point)))))
+              '("Alpha body" "Beta body" "Gamma child"))))
+        (cl-letf (((symbol-function 'org-current-time)
+                   (lambda (&rest _)
+                     (encode-time 0 30 10 27 5 2026))))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-todo "NEXT")
+          (org-priority ?A)
+          (org-schedule nil "2026-05-28 09:15")
+          (org-deadline nil "2026-06-01 +1w")
+          (org-toggle-tag "review" 'on)
+          (let ((alpha-state
+                 (list (org-get-todo-state)
+                       (org-get-priority (thing-at-point 'line t))
+                       (org-get-tags nil t)
+                       (org-entry-get nil "SCHEDULED")
+                       (org-entry-get nil "DEADLINE")
+                       (org-entry-get nil "Owner" t))))
+            (goto-char (point-min))
+            (search-forward "Beta")
+            (beginning-of-line)
+            (org-todo "DONE")
+            (org-toggle-tag "review" 'toggle)
+            (let ((beta-state
+                   (list (org-get-todo-state)
+                         (org-get-tags nil t)
+                         (org-entry-get nil "CLOSED")
+                         (org-entry-get nil "DEADLINE"))))
+              (goto-char (point-min))
+              (search-forward "Gamma child")
+              (beginning-of-line)
+              (org-todo "CANCELED")
+              (org-toggle-tag "blocked" 'on)
+              (let ((child-state
+                     (list (org-get-todo-state)
+                           (org-get-tags nil t)
+                           (org-entry-get nil "CLOSED")
+                           (org-entry-get nil "Owner" t))))
+                (goto-char (point-min))
+                (search-forward "first")
+                (org-ctrl-c-ctrl-c)
+                (goto-char (point-min))
+                (org-update-statistics-cookies t)
+                (org-fold-show-all)
+                (font-lock-ensure (point-min) (point-max))
+                (let ((hidden-after
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle (invisible-p (point)))))
+                        '("Alpha body" "Beta body" "Gamma child")))
+                      (parsed
+                       (org-element-map (org-element-parse-buffer)
+                           '(headline planning node-property item)
+                         (lambda (el)
+                           (pcase (org-element-type el)
+                             ('headline
+                              (list 'headline
+                                    (org-element-property :level el)
+                                    (org-element-property :todo-keyword el)
+                                    (org-element-property :priority el)
+                                    (org-element-property :raw-value el)
+                                    (org-element-property :tags el)))
+                             ('planning
+                              (list 'planning
+                                    (and (org-element-property :scheduled el)
+                                         (org-element-property
+                                          :raw-value
+                                          (org-element-property
+                                           :scheduled el)))
+                                    (and (org-element-property :deadline el)
+                                         (org-element-property
+                                          :raw-value
+                                          (org-element-property
+                                           :deadline el)))
+                                    (and (org-element-property :closed el)
+                                         (org-element-property
+                                          :raw-value
+                                          (org-element-property
+                                           :closed el)))))
+                             ('node-property
+                              (list 'property
+                                    (org-element-property :key el)
+                                    (org-element-property :value el)))
+                             ('item
+                              (list 'item
+                                    (org-element-property :checkbox el)
+                                    (org-element-property :counter el)))))))
+                      (faces
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle
+                                  (get-text-property
+                                   (match-beginning 0) 'face)
+                                  (get-text-property
+                                   (match-beginning 0)
+                                   'font-lock-fontified))))
+                        '("NEXT" "DONE" "CANCELED" "[1/3]" "review"
+                          "blocked"))))
+                  (list hidden-before
+                        alpha-state
+                        beta-state
+                        child-state
+                        hidden-after
+                        parsed
+                        faces
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))"##,
+    );
+}
