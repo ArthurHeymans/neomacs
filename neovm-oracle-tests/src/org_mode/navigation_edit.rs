@@ -143,3 +143,61 @@ fn org_mark_narrow_unindent_navigation_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_copy_visible_clone_subtree_navigation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((kill-ring nil)
+          (kill-ring-yank-pointer nil)
+          (org-yank-folded-subtrees nil))
+      (org-mode)
+      (insert "* Project\n")
+      (insert "** TODO Task\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert "Body task\n")
+      (insert "*** Child\nChild body\n")
+      (insert "** Keep\nKeep body\n")
+      (insert "* Tail\nTail body\n")
+      (goto-char (point-min))
+      (org-fold-hide-sublevels 1)
+      (org-copy-visible (point-min) (point-max))
+      (let ((visible-copy (current-kill 0 t)))
+        (org-fold-show-all)
+        (goto-char (point-min))
+        (search-forward "Task")
+        (beginning-of-line)
+        (org-copy-subtree 1)
+        (goto-char (point-max))
+        (org-paste-subtree 2)
+        (let ((after-paste
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-min))
+          (search-forward "Task")
+          (beginning-of-line)
+          (org-clone-subtree-with-time-shift 2 "+1w")
+          (let ((nav nil))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\*+ " nil t)
+              (push (list (org-outline-level)
+                          (org-get-heading t t t t)
+                          (org-entry-get nil "SCHEDULED"))
+                    nav))
+            (goto-char (point-min))
+            (search-forward "Child")
+            (beginning-of-line)
+            (list visible-copy
+                  after-paste
+                  (nreverse nav)
+                  (org-up-heading-safe)
+                  (org-get-heading t t t t)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
