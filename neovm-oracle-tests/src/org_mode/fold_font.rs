@@ -685,6 +685,68 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_repeated_global_cycle_show_all_font_level_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO L1\n")
+      (insert "** DONE L2\n")
+      (insert "*** TODO L3\n")
+      (insert "**** WAIT L4\n")
+      (insert "***** DONE L5\n")
+      (insert "** NEXT L2b\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; 10 repeated global cycles
+      (dotimes (_ 10)
+        (org-cycle-global))
+      ;; Show all
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check state
+      (let ((headings
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (invisible-p (point))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face))
+                      (list needle 'not-found nil nil))))
+              '("L1" "L2" "L3" "L4" "L5" "L2b")))
+            (merged nil)
+            (level-ok t))
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) " nil t)
+          (let ((stars (length (match-string 1)))
+                (level (org-outline-level)))
+            (unless (= stars level)
+              (setq level-ok nil))))
+        (list headings
+              (nreverse merged)
+              level-ok
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_narrow_subtree_show_all_widen_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
