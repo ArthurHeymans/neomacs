@@ -584,3 +584,95 @@ Body.
       (delete-file file))))"##,
     );
 }
+
+#[test]
+fn org_agenda_day_entries_properties_timestamp_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((file (make-temp-file
+                "org-agenda-day-entries" nil ".org"
+                "#+CATEGORY: Day
+* TODO Scheduled [#A] :work:
+SCHEDULED: <2026-05-27 Wed 09:00>
+:PROPERTIES:
+:Effort: 0:45
+:END:
+* TODO Deadline [#C] :work:
+DEADLINE: <2026-05-27 Wed -1d>
+:PROPERTIES:
+:Effort: 1:30
+:END:
+* DONE Closed :done:
+CLOSED: [2026-05-27 Wed 17:00]
+* Event heading :event:
+<2026-05-27 Wed 14:00-15:30>
+* Repeating deadline :repeat:
+DEADLINE: <2026-05-20 Wed +1w>
+"))
+         (org-agenda-files (list file))
+         (org-agenda-prefix-format "%?-12t%-8:c%5e % s")
+         (org-agenda-show-inherited-tags t)
+         (org-agenda-use-tag-inheritance t)
+         (org-agenda-sorting-strategy-selected
+          '(time-up priority-down deadline-up scheduled-up)))
+    (unwind-protect
+        (let* ((date '(5 27 2026))
+               (summary
+                (lambda (items)
+                  (mapcar
+                   (lambda (item)
+                     (let* ((marker (or (get-text-property 0 'org-hd-marker item)
+                                        (get-text-property 0 'org-marker item)))
+                            (heading
+                             (and (markerp marker)
+                                  (marker-buffer marker)
+                                  (with-current-buffer (marker-buffer marker)
+                                    (save-excursion
+                                      (goto-char marker)
+                                      (org-get-heading t t t t))))))
+                       (list (substring-no-properties item)
+                             (get-text-property 0 'type item)
+                             (get-text-property 0 'todo-state item)
+                             (get-text-property 0 'priority item)
+                             (get-text-property 0 'effort item)
+                             (get-text-property 0 'effort-minutes item)
+                             (get-text-property 0 'org-category item)
+                             (get-text-property 0 'ts-date item)
+                             heading)))
+                   items)))
+               (all (org-agenda-get-day-entries
+                     file date
+                     :deadline :scheduled :timestamp :closed))
+               (deadline-only (org-agenda-get-day-entries
+                               file date :deadline*))
+               (scheduled-only (org-agenda-get-day-entries
+                                file date :scheduled*))
+               timestamp-sorts)
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (dolist (strategy '((deadline-up)
+                                (scheduled-up)
+                                (ts-up)
+                                (timestamp-up)))
+              (let ((org-agenda-sorting-strategy-selected strategy))
+                (goto-char (point-min))
+                (search-forward "Scheduled")
+                (beginning-of-line)
+                (push (list strategy
+                            (org-agenda-entry-get-agenda-timestamp
+                             (point)))
+                      timestamp-sorts))))
+          (list (funcall summary all)
+                (funcall summary deadline-only)
+                (funcall summary scheduled-only)
+                (nreverse timestamp-sorts)))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-file file))))"##,
+    );
+}
