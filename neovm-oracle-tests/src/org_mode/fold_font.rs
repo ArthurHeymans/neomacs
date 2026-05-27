@@ -685,6 +685,61 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_narrow_subtree_show_all_widen_font_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* Root\n")
+      (insert "** Alpha\n")
+      (insert "Alpha body.\n")
+      (insert "*** Beta\n")
+      (insert "Beta body.\n")
+      (insert "**** Gamma\n")
+      (insert "Gamma body.\n")
+      (insert "** Sibling\n")
+      (insert "Sibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Narrow to Alpha
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (save-restriction
+        (org-narrow-to-subtree)
+        ;; Hide subtree
+        (org-fold-hide-subtree)
+        ;; Edit while hidden
+        (end-of-line)
+        (insert "\n*** Inserted under Alpha\nInserted body.\n")
+        ;; Show all within narrow
+        (org-fold-show-all)
+        (font-lock-ensure (point-min) (point-max))
+        (let ((narrowed-state
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (search-forward needle nil t)
+                        (list needle
+                              (line-number-at-pos)
+                              (invisible-p (point))
+                              (org-outline-level))
+                        (list needle 'not-found nil nil))))
+                '("Alpha" "Beta" "Gamma" "Inserted" "Root" "Sibling"))))
+          ;; Widen
+          (list narrowed-state
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_cycle_global_local_mixed_font_level_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
