@@ -1038,3 +1038,134 @@ fn org_deep_visibility_property_cycle_recovery_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_repeated_deep_fold_expand_edit_no_heading_merge_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-hide-leading-stars nil)
+          (org-cycle-separator-lines 0))
+      (org-mode)
+      (insert "* Alpha\nalpha body one\n")
+      (insert "** Alpha child\nalpha child body\n")
+      (insert "*** Alpha grand\nalpha grand body\n")
+      (insert "**** Alpha fourth\nalpha fourth body\n")
+      (insert "***** Alpha fifth\nalpha fifth body\n")
+      (insert "****** Alpha sixth\nalpha sixth body\n")
+      (insert "******* Alpha seventh\nalpha seventh body\n")
+      (insert "******** Alpha eighth\nalpha eighth body\n")
+      (insert "** Alpha sibling\nalpha sibling body\n")
+      (insert "* Beta\nbeta body\n")
+      (insert "** Beta child\nbeta child body\n")
+      (insert "*** Beta grand\nbeta grand body\n")
+      (insert "**** Beta fourth\nbeta fourth body\n")
+      (insert "***** Beta fifth\nbeta fifth body\n")
+      (insert "* Gamma\ngamma body\n")
+      (let ((headings
+             '("Alpha" "Alpha child" "Alpha grand" "Alpha fourth"
+               "Alpha fifth" "Alpha sixth" "Alpha seventh"
+               "Alpha eighth" "Alpha sibling" "Beta" "Beta child"
+               "Beta grand" "Beta fourth" "Beta fifth" "Gamma"))
+            (bodies
+             '("alpha body one" "alpha fourth body" "alpha eighth body"
+               "alpha sibling body" "beta fourth body" "gamma body"))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (font-lock-ensure (point-min) (point-max))
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (beginning-of-line)
+                            (let ((pos (point)))
+                              (list needle
+                                    (line-number-at-pos pos)
+                                    (org-at-heading-p)
+                                    (and (org-at-heading-p)
+                                         (org-outline-level))
+                                    (invisible-p pos)
+                                    (org-fold-folded-p
+                                     (line-end-position) 'headline)
+                                    (get-text-property pos 'face)
+                                    (get-text-property
+                                     (match-beginning 0) 'face))))))
+                        headings)
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle
+                                  (line-number-at-pos)
+                                  (invisible-p (point))
+                                  (get-text-property (point) 'face))))
+                        bodies)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (let (out)
+                           (while (re-search-forward "^\\(\\*+\\) \\(.*\\)$" nil t)
+                             (push (list (match-string 1)
+                                         (match-string 2)
+                                         (line-number-at-pos))
+                                   out))
+                           (nreverse out)))
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))))))
+          (push (funcall snapshot 'initial) states)
+          (goto-char (point-min))
+          (search-forward "Alpha fourth")
+          (beginning-of-line)
+          (dotimes (_ 5)
+            (org-cycle)
+            (push (funcall snapshot 'local-fourth) states))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (push (funcall snapshot 'alpha-hidden) states)
+          (org-fold-show-subtree)
+          (push (funcall snapshot 'alpha-shown) states)
+          (goto-char (point-min))
+          (search-forward "Alpha eighth")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (push (funcall snapshot 'eighth-hidden) states)
+          (org-end-of-subtree t t)
+          (insert "******** Alpha eighth inserted sibling\ninserted body\n")
+          (push (funcall snapshot 'after-hidden-insert) states)
+          (org-fold-show-all)
+          (push (funcall snapshot 'after-show-all) states)
+          (goto-char (point-min))
+          (dotimes (_ 6)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          (goto-char (point-min))
+          (search-forward "Beta fifth")
+          (beginning-of-line)
+          (dotimes (_ 4)
+            (org-cycle)
+            (push (funcall snapshot 'local-beta-fifth) states))
+          (org-fold-show-all)
+          (push (funcall snapshot 'final-show-all) states)
+          (list (nreverse states)
+                (split-string
+                 (buffer-substring-no-properties (point-min) (point-max))
+                 "\n" t))))))"##,
+    );
+}
