@@ -1,5 +1,7 @@
 use super::*;
 use crate::thread_comm::ToolBarItem;
+use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
+use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
 
@@ -47,8 +49,18 @@ fn toolbar_item(index: u32) -> ToolBarItem {
 #[test]
 fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar_height = 33.0;
-    app.toolbar_height = 33.0;
+    app.menu_bar = Some(GuiMenuBarState {
+        items: Vec::new(),
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
+    app.tool_bar = Some(GuiToolBarState {
+        items: Vec::new(),
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
 
     assert_eq!(app.toolbar_y_origin(), 33.0);
 }
@@ -56,10 +68,23 @@ fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
 #[test]
 fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar_height = 33.0;
-    app.tab_bar_y = 33.0;
-    app.tab_bar_height = 33.0;
-    app.toolbar_height = 33.0;
+    app.menu_bar = Some(GuiMenuBarState {
+        items: Vec::new(),
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
+    app.tab_bar = Some(FrameTabBarState {
+        items: Vec::new(),
+        y: 33.0,
+        height: 33.0,
+    });
+    app.tool_bar = Some(GuiToolBarState {
+        items: Vec::new(),
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
 
     assert_eq!(app.toolbar_y_origin(), 66.0);
 }
@@ -67,9 +92,18 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
 #[test]
 fn toolbar_hit_test_uses_toolbar_local_y() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar_height = 33.0;
-    app.toolbar_height = 33.0;
-    app.toolbar_items = vec![toolbar_item(7)];
+    app.menu_bar = Some(GuiMenuBarState {
+        items: Vec::new(),
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
+    app.tool_bar = Some(GuiToolBarState {
+        items: vec![toolbar_item(7)],
+        height: 33.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
 
     assert_eq!(app.toolbar_hit_test(7.0, 16.0), Some(7));
     assert_eq!(

@@ -7,9 +7,13 @@ use winit::window::Window;
 
 use crate::core::face::Face;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::core::frame_glyphs::FrameTabBarState;
 pub use crate::thread_comm::MonitorInfo;
-use crate::thread_comm::{MenuBarItem, RenderComms, TabBarItem, ToolBarItem};
+use crate::thread_comm::RenderComms;
 use neomacs_display_protocol::EffectsConfig;
+use neomacs_display_protocol::glyph_matrix::{
+    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
+};
 use neomacs_renderer_wgpu::{
     PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
 };
@@ -348,34 +352,20 @@ pub(super) struct RenderApp {
     // Active tooltip overlay
     pub(super) tooltip: Option<TooltipState>,
 
-    // Menu bar state
-    pub(super) menu_bar_items: Vec<MenuBarItem>,
-    pub(super) menu_bar_height: f32,
-    pub(super) menu_bar_fg: (f32, f32, f32),
-    pub(super) menu_bar_bg: (f32, f32, f32),
+    // GUI menu bar snapshot for the primary frame, if visible.
+    pub(super) menu_bar: Option<GuiMenuBarState>,
 
-    // Tab bar state (items + height kept for click hit-testing)
-    pub(super) tab_bar_items: Vec<TabBarItem>,
-    pub(super) tab_bar_y: f32,
-    pub(super) tab_bar_height: f32,
+    // Frame tab bar metadata for the primary frame, if visible.
+    pub(super) tab_bar: Option<FrameTabBarState>,
 
-    // Toolbar state
-    pub(super) toolbar_items: Vec<ToolBarItem>,
-    pub(super) toolbar_height: f32,
-    pub(super) toolbar_fg: (f32, f32, f32),
-    pub(super) toolbar_bg: (f32, f32, f32),
+    // GUI toolbar snapshot for the primary frame, if visible.
+    pub(super) tool_bar: Option<GuiToolBarState>,
     pub(super) toolbar_icon_textures: HashMap<String, u32>,
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
 
-    // Compact bar state
-    pub(super) compact_bar_menu_items: Vec<MenuBarItem>,
-    pub(super) compact_bar_tool_items: Vec<ToolBarItem>,
-    pub(super) compact_bar_height: f32,
-    pub(super) compact_bar_menu_fg: (f32, f32, f32),
-    pub(super) compact_bar_menu_bg: (f32, f32, f32),
-    pub(super) compact_bar_tool_fg: (f32, f32, f32),
-    pub(super) compact_bar_tool_bg: (f32, f32, f32),
+    // Compact GUI chrome snapshot for the primary frame, if visible.
+    pub(super) compact_bar: Option<GuiCompactBarState>,
     pub(super) chrome_interaction: GuiChromeInteractionState,
 
     // Visual bell state (flash overlay)
@@ -473,27 +463,13 @@ impl RenderApp {
             child_frame_shadow_opacity: 0.3,
             popup_menu: None,
             tooltip: None,
-            menu_bar_items: Vec::new(),
-            menu_bar_height: 0.0,
-            menu_bar_fg: (0.8, 0.8, 0.8),
-            menu_bar_bg: (0.15, 0.15, 0.15),
-            tab_bar_items: Vec::new(),
-            tab_bar_y: 0.0,
-            tab_bar_height: 0.0,
-            toolbar_items: Vec::new(),
-            toolbar_height: 0.0,
-            toolbar_fg: (0.8, 0.8, 0.8),
-            toolbar_bg: (0.15, 0.15, 0.15),
+            menu_bar: None,
+            tab_bar: None,
+            tool_bar: None,
             toolbar_icon_textures: HashMap::new(),
             toolbar_icon_size: 24,
             toolbar_padding: 5,
-            compact_bar_menu_items: Vec::new(),
-            compact_bar_tool_items: Vec::new(),
-            compact_bar_height: 0.0,
-            compact_bar_menu_fg: (0.8, 0.8, 0.8),
-            compact_bar_menu_bg: (0.15, 0.15, 0.15),
-            compact_bar_tool_fg: (0.8, 0.8, 0.8),
-            compact_bar_tool_bg: (0.15, 0.15, 0.15),
+            compact_bar: None,
             chrome_interaction: GuiChromeInteractionState::default(),
             visual_bell_start: None,
             ime_enabled: false,

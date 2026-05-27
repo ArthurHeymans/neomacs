@@ -722,20 +722,26 @@ impl RenderApp {
             return;
         }
 
+        let menu_bar_height = self.menu_bar_height();
+        let compact_bar_height = self.compact_bar_height();
+        let tool_bar_height = self.tool_bar_height();
+        let tab_bar_y = self.tab_bar_y();
+        let tab_bar_height = self.tab_bar_height();
+
         if state == ElementState::Pressed {
             tracing::debug!(
                 "MouseInput: {:?} at ({:.1}, {:.1}), menu_bar_h={}, popup={}",
                 button,
                 self.mouse_pos.0,
                 self.mouse_pos.1,
-                self.menu_bar_height,
+                menu_bar_height,
                 self.popup_menu.is_some()
             );
         }
 
         if let Some(ref mut menu) = self.popup_menu {
             if state == ElementState::Pressed && button == MouseButton::Left {
-                if self.compact_bar_height > 0.0 && self.mouse_pos.1 < self.compact_bar_height {
+                if compact_bar_height > 0.0 && self.mouse_pos.1 < compact_bar_height {
                     if let Some(idx) =
                         self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1)
                     {
@@ -755,7 +761,7 @@ impl RenderApp {
                         self.chrome_interaction.compact_bar_menu_active = None;
                         self.frame_dirty = true;
                     }
-                } else if self.menu_bar_height > 0.0 && self.mouse_pos.1 < self.menu_bar_height {
+                } else if menu_bar_height > 0.0 && self.mouse_pos.1 < menu_bar_height {
                     if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -886,8 +892,8 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.compact_bar_height > 0.0
-            && self.mouse_pos.1 < self.compact_bar_height
+            && compact_bar_height > 0.0
+            && self.mouse_pos.1 < compact_bar_height
         {
             if let Some(idx) = self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                 if self.chrome_interaction.compact_bar_menu_active == Some(idx) {
@@ -915,14 +921,14 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.menu_bar_height > 0.0
-            && self.mouse_pos.1 < self.menu_bar_height
+            && menu_bar_height > 0.0
+            && self.mouse_pos.1 < menu_bar_height
         {
             tracing::debug!(
                 "Menu bar click at ({:.1}, {:.1}), menu_bar_height={}",
                 self.mouse_pos.0,
                 self.mouse_pos.1,
-                self.menu_bar_height
+                menu_bar_height
             );
             if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                 self.chrome_interaction.menu_bar_active = Some(idx);
@@ -938,9 +944,9 @@ impl RenderApp {
         // Tab bar click (between menu bar and toolbar)
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.tab_bar_height > 0.0
-            && self.mouse_pos.1 >= self.tab_bar_y
-            && self.mouse_pos.1 < self.tab_bar_y + self.tab_bar_height
+            && tab_bar_height > 0.0
+            && self.mouse_pos.1 >= tab_bar_y
+            && self.mouse_pos.1 < tab_bar_y + tab_bar_height
         {
             if let Some(idx) = self.tab_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                 self.chrome_interaction.tab_bar_pressed = Some(idx);
@@ -964,8 +970,8 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.toolbar_height > 0.0
-            && self.mouse_pos.1 < self.toolbar_y_origin() + self.toolbar_height
+            && tool_bar_height > 0.0
+            && self.mouse_pos.1 < self.toolbar_y_origin() + tool_bar_height
             && self.mouse_pos.1 >= self.toolbar_y_origin()
         {
             if let Some(idx) =
@@ -1004,8 +1010,8 @@ impl RenderApp {
                 "Left click at ({:.1}, {:.1}) NOT in menu bar (h={}) or toolbar (h={})",
                 self.mouse_pos.0,
                 self.mouse_pos.1,
-                self.menu_bar_height,
-                self.toolbar_height
+                menu_bar_height,
+                tool_bar_height
             );
         }
 
@@ -1327,9 +1333,9 @@ impl RenderApp {
             }
         }
 
-        if self.menu_bar_height > 0.0 {
+        if self.menu_bar_height() > 0.0 {
             let old_hover = self.chrome_interaction.menu_bar_hovered;
-            if ly < self.menu_bar_height {
+            if ly < self.menu_bar_height() {
                 let new_hover = self.menu_bar_hit_test(lx, ly);
                 self.chrome_interaction.menu_bar_hovered = new_hover;
                 if let (Some(active), Some(hov)) =
@@ -1351,10 +1357,10 @@ impl RenderApp {
             }
         }
 
-        if self.compact_bar_height > 0.0 {
+        if self.compact_bar_height() > 0.0 {
             let old_menu_hover = self.chrome_interaction.compact_bar_menu_hovered;
             let old_tool_hover = self.chrome_interaction.compact_bar_tool_hovered;
-            if ly < self.compact_bar_height {
+            if ly < self.compact_bar_height() {
                 let new_menu_hover = self.compact_bar_menu_hit_test(lx, ly);
                 self.chrome_interaction.compact_bar_menu_hovered = new_menu_hover;
                 self.chrome_interaction.compact_bar_tool_hovered = if new_menu_hover.is_none() {
@@ -1384,9 +1390,9 @@ impl RenderApp {
             }
         }
 
-        if self.tab_bar_height > 0.0 {
+        if self.tab_bar_height() > 0.0 {
             let old_hover = self.chrome_interaction.tab_bar_hovered;
-            if ly >= self.tab_bar_y && ly < self.tab_bar_y + self.tab_bar_height {
+            if ly >= self.tab_bar_y() && ly < self.tab_bar_y() + self.tab_bar_height() {
                 self.chrome_interaction.tab_bar_hovered = self.tab_bar_hit_test(lx, ly);
             } else {
                 self.chrome_interaction.tab_bar_hovered = None;
@@ -1396,10 +1402,10 @@ impl RenderApp {
             }
         }
 
-        if self.toolbar_height > 0.0 {
+        if self.tool_bar_height() > 0.0 {
             let old_hover = self.chrome_interaction.toolbar_hovered;
             let toolbar_y = self.toolbar_y_origin();
-            if ly < toolbar_y + self.toolbar_height && ly >= toolbar_y {
+            if ly < toolbar_y + self.tool_bar_height() && ly >= toolbar_y {
                 self.chrome_interaction.toolbar_hovered = self.toolbar_hit_test(lx, ly - toolbar_y);
             } else {
                 self.chrome_interaction.toolbar_hovered = None;

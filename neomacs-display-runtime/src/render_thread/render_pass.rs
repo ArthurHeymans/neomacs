@@ -1084,33 +1084,41 @@ impl RenderApp {
                         .as_ref()
                         .map(|f| (f.background.r, f.background.g, f.background.b)),
                     chrome_interaction: self.chrome_interaction,
-                    menu_bar: Some(GuiFrameMenuBarOverlay {
-                        items: &self.menu_bar_items,
-                        height: self.menu_bar_height,
-                        fg: self.menu_bar_fg,
-                        bg: self.menu_bar_bg,
-                    }),
-                    tool_bar: Some(GuiFrameToolBarOverlay {
-                        items: &self.toolbar_items,
-                        y_origin: toolbar_y_origin,
-                        height: self.toolbar_height,
-                        fg: self.toolbar_fg,
-                        bg: self.toolbar_bg,
-                        icon_textures: &self.toolbar_icon_textures,
-                        icon_size: self.toolbar_icon_size,
-                        padding: self.toolbar_padding,
-                    }),
-                    compact_bar: Some(GuiFrameCompactBarOverlay {
-                        menu_items: &self.compact_bar_menu_items,
-                        tool_items: &self.compact_bar_tool_items,
-                        height: self.compact_bar_height,
-                        menu_fg: self.compact_bar_menu_fg,
-                        menu_bg: self.compact_bar_menu_bg,
-                        tool_fg: self.compact_bar_tool_fg,
-                        tool_bg: self.compact_bar_tool_bg,
-                        icon_textures: &self.toolbar_icon_textures,
-                        icon_size: self.toolbar_icon_size,
-                        padding: self.toolbar_padding,
+                    menu_bar: self
+                        .menu_bar
+                        .as_ref()
+                        .map(|menu_bar| GuiFrameMenuBarOverlay {
+                            items: &menu_bar.items,
+                            height: menu_bar.height,
+                            fg: menu_bar.fg,
+                            bg: menu_bar.bg,
+                        }),
+                    tool_bar: self
+                        .tool_bar
+                        .as_ref()
+                        .map(|tool_bar| GuiFrameToolBarOverlay {
+                            items: &tool_bar.items,
+                            y_origin: toolbar_y_origin,
+                            height: tool_bar.height,
+                            fg: tool_bar.fg,
+                            bg: tool_bar.bg,
+                            icon_textures: &self.toolbar_icon_textures,
+                            icon_size: self.toolbar_icon_size,
+                            padding: self.toolbar_padding,
+                        }),
+                    compact_bar: self.compact_bar.as_ref().map(|compact_bar| {
+                        GuiFrameCompactBarOverlay {
+                            menu_items: &compact_bar.menu_items,
+                            tool_items: &compact_bar.tool_items,
+                            height: compact_bar.height,
+                            menu_fg: compact_bar.menu_fg,
+                            menu_bg: compact_bar.menu_bg,
+                            tool_fg: compact_bar.tool_fg,
+                            tool_bg: compact_bar.tool_bg,
+                            icon_textures: &self.toolbar_icon_textures,
+                            icon_size: self.toolbar_icon_size,
+                            padding: self.toolbar_padding,
+                        }
                     }),
                     popup_menu: self.popup_menu.as_ref(),
                     tooltip: self.tooltip.as_ref(),

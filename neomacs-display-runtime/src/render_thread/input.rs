@@ -111,7 +111,10 @@ impl RenderApp {
     /// Hit-test toolbar items. Returns the index of the item under (x, y), or None.
     /// The y coordinate is local to the toolbar row.
     pub(super) fn toolbar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        if self.toolbar_height <= 0.0 || y >= self.toolbar_height {
+        let Some(tool_bar) = self.tool_bar.as_ref() else {
+            return None;
+        };
+        if tool_bar.height <= 0.0 || y >= tool_bar.height {
             return None;
         }
         let padding = self.toolbar_padding as f32;
@@ -121,7 +124,7 @@ impl RenderApp {
         let item_spacing = 2.0_f32;
 
         let mut item_x = padding;
-        for item in &self.toolbar_items {
+        for item in &tool_bar.items {
             if item.is_separator {
                 item_x += separator_width;
                 continue;
@@ -136,11 +139,43 @@ impl RenderApp {
     }
 
     pub(super) fn toolbar_y_origin(&self) -> f32 {
-        if self.tab_bar_height > 0.0 {
-            self.tab_bar_y + self.tab_bar_height
+        if let Some(tab_bar) = self.tab_bar.as_ref().filter(|tab_bar| tab_bar.height > 0.0) {
+            tab_bar.y + tab_bar.height
         } else {
-            self.menu_bar_height + self.compact_bar_height
+            self.menu_bar
+                .as_ref()
+                .map_or(0.0, |menu_bar| menu_bar.height)
+                + self
+                    .compact_bar
+                    .as_ref()
+                    .map_or(0.0, |compact_bar| compact_bar.height)
         }
+    }
+
+    pub(super) fn menu_bar_height(&self) -> f32 {
+        self.menu_bar
+            .as_ref()
+            .map_or(0.0, |menu_bar| menu_bar.height)
+    }
+
+    pub(super) fn tool_bar_height(&self) -> f32 {
+        self.tool_bar
+            .as_ref()
+            .map_or(0.0, |tool_bar| tool_bar.height)
+    }
+
+    pub(super) fn compact_bar_height(&self) -> f32 {
+        self.compact_bar
+            .as_ref()
+            .map_or(0.0, |compact_bar| compact_bar.height)
+    }
+
+    pub(super) fn tab_bar_y(&self) -> f32 {
+        self.tab_bar.as_ref().map_or(0.0, |tab_bar| tab_bar.y)
+    }
+
+    pub(super) fn tab_bar_height(&self) -> f32 {
+        self.tab_bar.as_ref().map_or(0.0, |tab_bar| tab_bar.height)
     }
 
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
@@ -151,7 +186,11 @@ impl RenderApp {
             8.0
         };
         let menu_width = self
-            .compact_bar_menu_items
+            .compact_bar
+            .as_ref()
+            .map_or([].as_slice(), |compact_bar| {
+                compact_bar.menu_items.as_slice()
+            })
             .iter()
             .fold(padding_x, |x, item| {
                 x + item.label.len() as f32 * char_width + padding_x * 2.0
@@ -160,9 +199,10 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        if self.compact_bar_height <= 0.0
-            || y >= self.compact_bar_height
-            || self.compact_bar_menu_items.is_empty()
+        let Some(compact_bar) = self.compact_bar.as_ref() else {
+            return None;
+        };
+        if compact_bar.height <= 0.0 || y >= compact_bar.height || compact_bar.menu_items.is_empty()
         {
             return None;
         }
@@ -173,7 +213,7 @@ impl RenderApp {
             8.0
         };
         let mut item_x = padding_x;
-        for item in &self.compact_bar_menu_items {
+        for item in &compact_bar.menu_items {
             let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
             if x >= item_x && x < item_x + label_width {
                 return Some(item.index);
@@ -184,9 +224,10 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_tool_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        if self.compact_bar_height <= 0.0
-            || y >= self.compact_bar_height
-            || self.compact_bar_tool_items.is_empty()
+        let Some(compact_bar) = self.compact_bar.as_ref() else {
+            return None;
+        };
+        if compact_bar.height <= 0.0 || y >= compact_bar.height || compact_bar.tool_items.is_empty()
         {
             return None;
         }
@@ -200,7 +241,7 @@ impl RenderApp {
         let separator_width = 12.0_f32;
         let item_spacing = 2.0_f32;
         let mut item_x = padding;
-        for item in &self.compact_bar_tool_items {
+        for item in &compact_bar.tool_items {
             if item.is_separator {
                 item_x += separator_width;
                 continue;
@@ -216,11 +257,13 @@ impl RenderApp {
 
     /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        if self.tab_bar_height <= 0.0 || self.tab_bar_items.is_empty() {
+        let Some(tab_bar) = self.tab_bar.as_ref() else {
+            return None;
+        };
+        if tab_bar.height <= 0.0 || tab_bar.items.is_empty() {
             return None;
         }
-        let tab_bar_y = self.tab_bar_y;
-        if y < tab_bar_y || y >= tab_bar_y + self.tab_bar_height {
+        if y < tab_bar.y || y >= tab_bar.y + tab_bar.height {
             return None;
         }
         let padding_x = 8.0_f32;
@@ -232,7 +275,7 @@ impl RenderApp {
         };
 
         let mut tab_x = padding_x;
-        for item in &self.tab_bar_items {
+        for item in &tab_bar.items {
             if item.is_separator {
                 tab_x += 12.0;
                 continue;
@@ -248,7 +291,10 @@ impl RenderApp {
 
     /// Hit-test menu bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<u32> {
-        if self.menu_bar_height <= 0.0 || self.menu_bar_items.is_empty() {
+        let Some(menu_bar) = self.menu_bar.as_ref() else {
+            return None;
+        };
+        if menu_bar.height <= 0.0 || menu_bar.items.is_empty() {
             return None;
         }
         let padding_x = 8.0_f32;
@@ -259,7 +305,7 @@ impl RenderApp {
         };
 
         let mut item_x = padding_x;
-        for item in &self.menu_bar_items {
+        for item in &menu_bar.items {
             let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
             if x >= item_x && x < item_x + label_width {
                 return Some(item.index);

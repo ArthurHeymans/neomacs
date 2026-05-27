@@ -2,6 +2,7 @@
 
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{RenderCommand, ToolBarItem};
+use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
@@ -582,10 +583,12 @@ impl RenderApp {
             } => {
                 self.sync_toolbar_visual_config_from_height(height);
                 self.ensure_toolbar_icon_textures(&items);
-                self.toolbar_items = items;
-                self.toolbar_height = height;
-                self.toolbar_fg = (fg_r, fg_g, fg_b);
-                self.toolbar_bg = (bg_r, bg_g, bg_b);
+                self.tool_bar = Some(GuiToolBarState {
+                    items,
+                    height,
+                    fg: (fg_r, fg_g, fg_b),
+                    bg: (bg_r, bg_g, bg_b),
+                });
                 self.frame_dirty = true;
                 Ok(())
             }
@@ -615,10 +618,12 @@ impl RenderApp {
                     bg_g,
                     bg_b
                 );
-                self.menu_bar_items = items;
-                self.menu_bar_height = height;
-                self.menu_bar_fg = (fg_r, fg_g, fg_b);
-                self.menu_bar_bg = (bg_r, bg_g, bg_b);
+                self.menu_bar = Some(GuiMenuBarState {
+                    items,
+                    height,
+                    fg: (fg_r, fg_g, fg_b),
+                    bg: (bg_r, bg_g, bg_b),
+                });
                 self.frame_dirty = true;
                 Ok(())
             }

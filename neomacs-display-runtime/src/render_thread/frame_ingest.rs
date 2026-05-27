@@ -288,55 +288,32 @@ impl RenderApp {
             } else {
                 self.current_frame = Some(frame);
                 if let Some(menu_bar) = gui_menu_bar {
-                    self.menu_bar_items = menu_bar.items;
-                    self.menu_bar_height = menu_bar.height;
-                    self.menu_bar_fg = menu_bar.fg;
-                    self.menu_bar_bg = menu_bar.bg;
+                    self.menu_bar = Some(menu_bar);
                 } else {
-                    self.menu_bar_items.clear();
-                    self.menu_bar_height = 0.0;
+                    self.menu_bar = None;
                     self.chrome_interaction.clear_menu_bar();
                 }
                 if let Some(tool_bar) = gui_tool_bar {
                     self.sync_toolbar_visual_config_from_height(tool_bar.height);
                     self.ensure_toolbar_icon_textures(&tool_bar.items);
-                    self.toolbar_items = tool_bar.items;
-                    self.toolbar_height = tool_bar.height;
-                    self.toolbar_fg = tool_bar.fg;
-                    self.toolbar_bg = tool_bar.bg;
+                    self.tool_bar = Some(tool_bar);
                 } else {
-                    self.toolbar_items.clear();
-                    self.toolbar_height = 0.0;
+                    self.tool_bar = None;
                     self.chrome_interaction.clear_toolbar();
                 }
                 if let Some(compact_bar) = gui_compact_bar {
                     self.sync_toolbar_visual_config_from_height(compact_bar.height);
                     self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
-                    self.compact_bar_menu_items = compact_bar.menu_items;
-                    self.compact_bar_tool_items = compact_bar.tool_items;
-                    self.compact_bar_height = compact_bar.height;
-                    self.compact_bar_menu_fg = compact_bar.menu_fg;
-                    self.compact_bar_menu_bg = compact_bar.menu_bg;
-                    self.compact_bar_tool_fg = compact_bar.tool_fg;
-                    self.compact_bar_tool_bg = compact_bar.tool_bg;
+                    self.compact_bar = Some(compact_bar);
                 } else {
-                    self.compact_bar_menu_items.clear();
-                    self.compact_bar_tool_items.clear();
-                    self.compact_bar_height = 0.0;
+                    self.compact_bar = None;
                     self.chrome_interaction.clear_compact_bar();
                 }
-                if let Some(tab_bar) = self
+                self.tab_bar = self
                     .current_frame
                     .as_ref()
-                    .and_then(|frame| frame.tab_bar.as_ref())
-                {
-                    self.tab_bar_items = tab_bar.items.clone();
-                    self.tab_bar_y = tab_bar.y;
-                    self.tab_bar_height = tab_bar.height;
-                } else {
-                    self.tab_bar_items.clear();
-                    self.tab_bar_y = 0.0;
-                    self.tab_bar_height = 0.0;
+                    .and_then(|frame| frame.tab_bar.clone());
+                if self.tab_bar.is_none() {
                     self.chrome_interaction.clear_tab_bar();
                 }
                 self.cursor.reset_blink();
