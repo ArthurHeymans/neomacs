@@ -259,6 +259,130 @@ fn org_log_repeat_reschedule_redeadline_combo() {
 }
 
 #[test]
+fn org_property_clock_drawer_fold_element_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (require 'org-element)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance '("Client" "Sprint"))
+          (org-clock-into-drawer "LOGBOOK")
+          (org-log-into-drawer "LOGBOOK")
+          (org-clock-history-length 8)
+          (org-clock-persist nil)
+          (org-clock-out-remove-zero-time-clocks t))
+      (org-mode)
+      (insert "#+PROPERTY: Status_ALL Todo Doing Blocked Done\n")
+      (insert "* Project :work:\n")
+      (insert ":PROPERTIES:\n:Client: Acme\n:Sprint: S1\n:END:\n")
+      (insert "** TODO Alpha :billable:\n")
+      (insert ":PROPERTIES:\n:Status: Todo\n:Owner: Ada\n:END:\n")
+      (insert "Alpha body\n")
+      (insert "** TODO Beta :internal:\n")
+      (insert ":PROPERTIES:\n:Owner: Bea\n:END:\n")
+      (insert "Beta body\n")
+      (insert "*** WAIT Beta child :blocked:\n")
+      (insert ":PROPERTIES:\n:Status: Blocked\n:Owner: Cy\n:END:\n")
+      (insert "Child body\n")
+      (insert "* Tail\nTail body\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (line-number-at-pos)
+                                (invisible-p (point))
+                                (org-element-type
+                                 (org-element-at-point)))))
+                      '("Project" ":Client:" "Alpha" ":Status:" "Alpha body"
+                        "CLOCK:" "Beta" "Beta child" "Child body" "Tail"))
+                     (org-element-map (org-element-parse-buffer)
+                         '(headline drawer property-drawer clock planning)
+                       (lambda (el)
+                         (list (org-element-type el)
+                               (org-element-property :begin el)
+                               (org-element-property :end el)
+                               (org-element-property :raw-value el)
+                               (org-element-property :todo-keyword el)
+                               (org-element-property :tags el))))
+                     (save-excursion
+                       (goto-char (point-min))
+                       (let (out)
+                         (while (re-search-forward "^\\*+ " nil t)
+                           (push (list (org-get-heading t t t t)
+                                       (org-entry-get nil "Client" 'inherit)
+                                       (org-entry-get nil "Sprint" 'inherit)
+                                       (org-entry-get nil "Status")
+                                       (org-entry-get-multivalued-property
+                                        nil "Multi")
+                                       (get-text-property
+                                        (line-beginning-position)
+                                        :probe-minutes))
+                                 out))
+                         (nreverse out)))
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+        (let (states)
+          (push (funcall snapshot 'initial) states)
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-entry-put nil "Status" "Doing")
+          (org-entry-add-to-multivalued-property nil "Multi" "review")
+          (org-entry-add-to-multivalued-property nil "Multi" "api")
+          (org-clock-in nil (encode-time 0 0 9 27 5 2026))
+          (org-clock-out nil t (encode-time 0 45 10 27 5 2026))
+          (push (funcall snapshot 'after-alpha-clock) states)
+          (goto-char (point-min))
+          (search-forward "Beta child")
+          (beginning-of-line)
+          (org-entry-put nil "Sprint" "S2")
+          (org-entry-remove-from-multivalued-property nil "Multi" "api")
+          (org-clock-in nil (encode-time 0 15 11 27 5 2026))
+          (org-clock-out nil t (encode-time 0 0 12 27 5 2026))
+          (push (funcall snapshot 'after-child-clock) states)
+          (goto-char (point-min))
+          (org-clock-sum "2026-05-27" "2026-05-28" nil :probe-minutes)
+          (push (funcall snapshot 'after-clock-sum) states)
+          (org-fold-hide-drawer-all)
+          (push (funcall snapshot 'drawers-hidden) states)
+          (goto-char (point-min))
+          (search-forward "CLOCK:")
+          (org-fold-show-context 'default)
+          (push (funcall snapshot 'clock-context) states)
+          (org-fold-show-all)
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-entry-delete nil "Owner")
+          (org-property-next-allowed-value)
+          (push (funcall snapshot 'after-property-cycle) states)
+          (list (nreverse states)
+                (sort (copy-sequence (org-property-values "Owner"))
+                      #'string<)
+                (org-clock-sum-current-item "2026-05-27")
+                (mapcar (lambda (m)
+                          (and (markerp m)
+                               (marker-buffer m)
+                               (with-current-buffer (marker-buffer m)
+                                 (save-excursion
+                                   (goto-char m)
+                                   (org-get-heading t t t t)))))
+                        org-clock-history)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_property_space_multivalue_cleanup_parse_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
