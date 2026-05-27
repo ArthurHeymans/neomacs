@@ -85,6 +85,7 @@ mod timer_workflow;
 mod todo_dependencies;
 mod ultra_strict;
 mod yank_dnd;
+mod zetta_strict;
 
 #[test]
 fn org_element_headline_properties() {
