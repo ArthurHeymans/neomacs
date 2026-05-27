@@ -1005,7 +1005,7 @@ fn ud_visibility_all() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn ud_sparse_dates() {
+fn ud_sparse_dates_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"(with-temp-buffer

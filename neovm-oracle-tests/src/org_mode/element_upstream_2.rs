@@ -476,11 +476,54 @@ fn upstream_org_element_cache_drawer_end() {
        (goto-char (point-max))
        (org-element-type (org-element-at-point)))
      ;; Return greater element at :contents-end.
-     (with-temp-buffer
-       (org-mode)
-       (insert ":DRAWER:\ntest\n:END:")
-       (goto-char (point-min))
-       (forward-line 2)
-       (org-element-type (org-element-at-point))))))"##,
+      (with-temp-buffer
+        (org-mode)
+        (insert ":DRAWER:\ntest\n:END:")
+        (goto-char (point-min))
+        (forward-line 2)
+        (org-element-type (org-element-at-point))))))"##,
+    );
+}
+
+#[test]
+fn org_element_parse_cache_edit_reparse_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha :work:\nAlpha body.\n** Beta\nBeta body.\n*** Gamma\nGamma body.\n")
+    (let* ((tree-1 (org-element-parse-buffer))
+           (headlines-1
+            (org-element-map tree-1 'headline
+              (lambda (h)
+                (list (org-element-property :raw-value h)
+                      (org-element-property :level h)
+                      (org-element-property :tags h))))))
+      (goto-char (point-max))
+      (insert "\n** Delta\nDelta body.\n")
+      (let* ((tree-2 (org-element-parse-buffer))
+             (headlines-2
+              (org-element-map tree-2 'headline
+                (lambda (h)
+                  (list (org-element-property :raw-value h)
+                        (org-element-property :level h)
+                        (org-element-property :tags h))))))
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-set-tags '("work" "urgent"))
+        (let* ((tree-3 (org-element-parse-buffer))
+               (headlines-3
+                (org-element-map tree-3 'headline
+                  (lambda (h)
+                    (list (org-element-property :raw-value h)
+                          (org-element-property :tags h))))))
+          (list headlines-1 headlines-2 headlines-3
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
     );
 }
