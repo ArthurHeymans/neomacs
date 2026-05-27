@@ -190,3 +190,69 @@ fn org_mobile_olp_locate_edit_refile_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_mobile_escape_compare_timestamp_checksum_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-mobile)
+  (let* ((root (make-temp-file "org-mobile-utils" t))
+         (stage (expand-file-name "stage" root))
+         (capture (expand-file-name org-mobile-capture-file stage))
+         (checksums (expand-file-name "checksums.dat" stage))
+         (org-mobile-directory stage)
+         (org-mobile-checksum-binary "md5sum"))
+    (unwind-protect
+        (progn
+          (make-directory stage t)
+          (with-temp-file capture
+            (insert "* F(edit:body) [[olp:/Parent\\/One/Child%20Two][Child Two]]\n")
+            (insert "** Old value\nA body\n\n** New value\nA body\n"))
+          (with-temp-file checksums
+            (insert "00000000000000000000000000000000  mobileorg.org\n"))
+          (let ((escape (mapcar #'org-mobile-escape-olp
+                                '("Parent/One" "Space Name" "hash#tag"
+                                  "percent%value")))
+                (tag-same (list
+                           (org-mobile-tags-same-p
+                            '("work" "home") '("home" "work"))
+                           (org-mobile-tags-same-p
+                            '("work" "home") '("work" "other"))))
+                (body-same (list
+                            (org-mobile-bodies-same-p
+                             "A\nB\n" "A\nB")
+                            (org-mobile-bodies-same-p
+                             "A\n\nB" "A\nB"))))
+            (org-mobile-update-checksum-for-capture-file
+             (with-temp-buffer
+               (insert-file-contents capture)
+               (buffer-string)))
+            (with-current-buffer (find-file-noselect capture)
+              (org-mode)
+              (goto-char (point-min))
+              (let ((read-one (org-mobile-smart-read))
+                    timestamped)
+                (org-mobile-timestamp-buffer (current-buffer))
+                (setq timestamped
+                      (replace-regexp-in-string
+                       "^#\\+LAST_MOBILE_CHANGE:.*"
+                       "#+LAST_MOBILE_CHANGE: <time>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))
+                (save-buffer)
+                (list escape
+                      tag-same
+                      body-same
+                      read-one
+                      timestamped
+                      (with-temp-buffer
+                        (insert-file-contents checksums)
+                        (buffer-string)))))))
+      (when (get-file-buffer capture)
+        (kill-buffer (get-file-buffer capture)))
+      (delete-directory root t))))"##,
+    );
+}
