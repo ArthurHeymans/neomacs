@@ -293,3 +293,66 @@ fn org_man_export_sections_lists_tables_refs_combo() {
             normalized))))"##,
     );
 }
+
+#[test]
+fn org_beamer_export_columns_blocks_againframe_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-beamer)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Beamer Deep Combo\n")
+    (insert "#+SUBTITLE: Columns and overlays\n")
+    (insert "#+AUTHOR: Ada\n")
+    (insert "#+DATE: 2026-05-27\n")
+    (insert "#+OPTIONS: H:2 toc:nil num:t\n")
+    (insert "#+BEAMER_THEME: Madrid\n")
+    (insert "#+BEAMER_COLOR_THEME: seahorse\n")
+    (insert "* Section One\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: sec-one\n:END:\n")
+    (insert "** Main Frame\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: main-frame\n:BEAMER_OPT: fragile,label=mainframe\n:END:\n")
+    (insert "#+BEAMER: \\frametitle{Explicit Title}\n")
+    (insert "- @@beamer:<1->@@ First item with *bold* text\n")
+    (insert "- @@beamer:<2->@@ Second item with [[https://example.org][link]]\n")
+    (insert "*** Columns\n")
+    (insert ":PROPERTIES:\n:BEAMER_ENV: columns\n:BEAMER_OPT: [t]\n:END:\n")
+    (insert "**** Left Block\n")
+    (insert ":PROPERTIES:\n:BEAMER_COL: 0.45\n:BEAMER_ENV: block\n:BEAMER_ACT: <2->\n:END:\n")
+    (insert "Left body with =code= and \\alpha.\n")
+    (insert "**** Right Alert\n")
+    (insert ":PROPERTIES:\n:BEAMER_COL: 0.45\n:BEAMER_ENV: alertblock\n:BEAMER_OPT: {Custom Alert}\n:END:\n")
+    (insert "#+begin_example\nliteral \\begin{frame}\n#+end_example\n")
+    (insert "*** Speaker Note\n")
+    (insert ":PROPERTIES:\n:BEAMER_ENV: note\n:BEAMER_ACT: <2>\n:END:\n")
+    (insert "Note body with /italic/.\n")
+    (insert "** Resume Frame\n")
+    (insert ":PROPERTIES:\n:BEAMER_ENV: againframe\n:BEAMER_REF: #main-frame\n:BEAMER_ACT: <3>\n:END:\n")
+    (insert "* Appendix\n")
+    (insert ":PROPERTIES:\n:BEAMER_ENV: appendix\n:END:\n")
+    (insert "** Backup Frame\nBackup content with H_2O.\n")
+    (let* ((org-export-with-toc nil)
+           (org-beamer-frame-default-options "fragile")
+           (latex (org-export-as 'beamer nil nil t nil))
+           (normalized
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+"
+             "sec:org-id"
+             latex)))
+      (list (not (null (string-match-p "\\\\usetheme{Madrid}" latex)))
+            (not (null (string-match-p "\\\\usecolortheme{seahorse}" latex)))
+            (not (null (string-match-p "\\\\begin{frame}\\[fragile,label=mainframe\\]" latex)))
+            (not (null (string-match-p "\\\\frametitle{Explicit Title}" latex)))
+            (not (null (string-match-p "\\\\begin{columns}\\[t\\]" latex)))
+            (not (null (string-match-p "\\\\begin{column}{0.45\\\\columnwidth}" latex)))
+            (not (null (string-match-p "\\\\begin{block}<2->" latex)))
+            (not (null (string-match-p "\\\\begin{alertblock}{Custom Alert}" latex)))
+            (not (null (string-match-p "\\\\note<2>" latex)))
+            (not (null (string-match-p "\\\\againframe<3>{sec-one-main-frame}" latex)))
+            (not (null (string-match-p "\\\\appendix" latex)))
+            (not (null (string-match-p "\\\\begin{verbatim}" latex)))
+            normalized))))"##,
+    );
+}
