@@ -260,6 +260,81 @@ fn org_clock_resolve_open_clock_ranges_combo() {
 }
 
 #[test]
+fn org_clocktable_shift_special_range_regenerate_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-extend-today-until 0)
+          (org-clock-clocktable-default-properties nil))
+      (org-mode)
+      (insert "#+BEGIN: clocktable :scope file :block 2026-05-27 :maxlevel 4 :link nil :compact t :tags t\n")
+      (insert "#+END:\n\n")
+      (insert "* Client :billable:\n")
+      (insert "** TODO Alpha :dev:\n")
+      (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+      (insert "** TODO Beta :qa:\n")
+      (insert "CLOCK: [2026-05-28 Thu 11:00]--[2026-05-28 Thu 12:15] =>  1:15\n")
+      (insert "** TODO Gamma :ops:\n")
+      (insert "CLOCK: [2026-05-29 Fri 13:00]--[2026-05-29 Fri 14:45] =>  1:45\n")
+      (insert "* Internal :admin:\n")
+      (insert "** TODO Planning\n")
+      (insert "CLOCK: [2026-05-27 Wed 16:00]--[2026-05-27 Wed 16:20] =>  0:20\n")
+      (let ((snapshot
+             (lambda (label)
+               (save-excursion
+                 (goto-char (point-min))
+                 (let ((begin-line
+                        (buffer-substring-no-properties
+                         (line-beginning-position) (line-end-position)))
+                       (table
+                        (buffer-substring-no-properties
+                         (point-min)
+                         (save-excursion
+                           (search-forward "#+END:")
+                           (line-end-position)))))
+                   (list label
+                         begin-line
+                         (mapcar (lambda (needle)
+                                   (not (null (string-match-p needle table))))
+                                 '("Alpha" "Beta" "Gamma" "Planning"
+                                   "1:30" "1:15" "1:45" "0:20"))
+                         table)))))
+            states)
+        (goto-char (point-min))
+        (org-update-dblock)
+        (push (funcall snapshot 'day-27) states)
+        (goto-char (point-min))
+        (org-clocktable-shift 'right 1)
+        (push (funcall snapshot 'day-28) states)
+        (goto-char (point-min))
+        (org-clocktable-shift 'right 1)
+        (push (funcall snapshot 'day-29) states)
+        (goto-char (point-min))
+        (org-clocktable-shift 'left 2)
+        (push (funcall snapshot 'back-27) states)
+        (goto-char (point-min))
+        (search-forward ":block")
+        (delete-region (point) (progn (forward-word 1) (point)))
+        (insert " 2026-05")
+        (goto-char (point-min))
+        (org-update-dblock)
+        (push (funcall snapshot 'month) states)
+        (list (mapcar (lambda (key)
+                        (org-clock-special-range
+                         key (encode-time 0 0 12 27 5 2026) t 1 1))
+                      '(today yesterday "2026-05-27" "2026-05"
+                        "2026-W22" "2026-Q2"))
+              (nreverse states)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
 fn org_clock_shift_display_overlay_cleanup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
