@@ -41,7 +41,7 @@ pub enum InputEvent {
         keysym: u32,
         modifiers: u32,
         pressed: bool,
-        /// Emacs frame_id of the window that produced the key event (0 = primary)
+        /// Emacs frame_id of the window that produced the key event
         emacs_frame_id: u64,
     },
     MouseButton {
@@ -84,16 +84,16 @@ pub enum InputEvent {
     WindowResize {
         width: u32,
         height: u32,
-        /// Emacs frame_id of the window that resized (0 = primary)
+        /// Emacs frame_id of the window that resized
         emacs_frame_id: u64,
     },
     WindowClose {
-        /// Emacs frame_id of the window being closed (0 = primary)
+        /// Emacs frame_id of the window being closed
         emacs_frame_id: u64,
     },
     WindowFocus {
         focused: bool,
-        /// Emacs frame_id of the window that gained/lost focus (0 = primary)
+        /// Emacs frame_id of the window that gained/lost focus
         emacs_frame_id: u64,
     },
     /// Monitor configuration changed on the active terminal.
@@ -353,8 +353,8 @@ pub enum RenderCommand {
     SetWindowTitle {
         title: String,
     },
-    /// Set the title for a specific GUI frame window. `emacs_frame_id == 0`
-    /// targets the adopted primary window.
+    /// Set the title for a specific GUI frame window.
+    /// `emacs_frame_id == 0` also targets the adopted primary window.
     SetFrameWindowTitle {
         emacs_frame_id: u64,
         title: String,
@@ -377,16 +377,16 @@ pub enum RenderCommand {
         width: u32,
         height: u32,
     },
-    /// Request resizing a specific GUI frame window. `emacs_frame_id == 0`
-    /// targets the adopted primary window.
+    /// Request resizing a specific GUI frame window.
+    /// `emacs_frame_id == 0` also targets the adopted primary window.
     ResizeWindow {
         emacs_frame_id: u64,
         width: u32,
         height: u32,
         geometry_hints: GuiFrameGeometryHints,
     },
-    /// Update geometry hints for a specific GUI frame window. `emacs_frame_id == 0`
-    /// targets the adopted primary window.
+    /// Update geometry hints for a specific GUI frame window.
+    /// `emacs_frame_id == 0` also targets the adopted primary window.
     SetFrameGeometryHints {
         emacs_frame_id: u64,
         geometry_hints: GuiFrameGeometryHints,
@@ -451,7 +451,7 @@ pub enum RenderCommand {
     },
     /// Show a popup menu at position (x, y)
     ShowPopupMenu {
-        /// Emacs frame_id of the owning top-level frame (0 = primary)
+        /// Emacs frame_id of the owning top-level frame
         emacs_frame_id: u64,
         x: f32,
         y: f32,
@@ -465,7 +465,7 @@ pub enum RenderCommand {
     HidePopupMenu,
     /// Show a tooltip at position (x, y)
     ShowTooltip {
-        /// Emacs frame_id of the owning top-level frame (0 = primary)
+        /// Emacs frame_id of the owning top-level frame
         emacs_frame_id: u64,
         x: f32,
         y: f32,
@@ -481,7 +481,7 @@ pub enum RenderCommand {
     HideTooltip,
     /// Trigger visual bell flash
     VisualBell {
-        /// Emacs frame_id of the flashing top-level frame (0 = primary)
+        /// Emacs frame_id of the flashing top-level frame
         emacs_frame_id: u64,
     },
     /// Request window attention (urgency hint / taskbar flash)

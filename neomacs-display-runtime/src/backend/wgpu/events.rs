@@ -68,7 +68,7 @@ pub struct NeomacsInputEvent {
     pub pixel_precise: u32,
     pub width: u32,
     pub height: u32,
-    /// Target frame pointer for child frame mouse event routing (0 = parent frame)
+    /// Emacs frame_id targeted by hit testing (root frame or child frame)
     pub target_frame_id: u64,
     /// WebKit view ID hit by render-thread glyph search (0 = none)
     pub webkit_id: u32,
