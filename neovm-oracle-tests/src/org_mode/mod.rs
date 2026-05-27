@@ -90,6 +90,7 @@ mod strong_comprehensive;
 mod strong_deep;
 mod strong_edge_cases;
 mod strong_multi_step;
+mod strong_multi_step_2;
 mod strong_tests;
 mod structure_template;
 mod support;
