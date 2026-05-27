@@ -420,9 +420,56 @@ fn org_mobile_apply_refile_delete_archive_flag_combo() {
                                  (org-get-tags nil t)
                                  (org-entry-get nil "THEFLAGGINGNOTE")
                                  (org-entry-get nil "ARCHIVE_TIME")))
-                         nil nil)))))))
+                          nil nil)))))))
       (dolist (path (list file capture))
         (when (get-file-buffer path) (kill-buffer (get-file-buffer path))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_mobile_escape_pull_push_flagsync_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-mobile)
+  (let* ((root (make-temp-file "org-mobile-deep" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-mobile-directory root)
+         (org-mobile-files (list file)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha :work:\n")
+            (insert "Alpha body.\n")
+            (insert "** DONE Sub A\n")
+            (insert "Sub A body.\n")
+            (insert "* WAIT Beta\n")
+            (insert "Beta body.\n"))
+          (let ((escape-olp (org-mobile-escape-olp "A/B:C"))
+                (tags-same (org-mobile-tags-same-p '("a" "b") '("b" "a")))
+                (tags-diff (org-mobile-tags-same-p '("a" "b") '("a" "c")))
+                (body-same (org-mobile-bodies-same-p "  A \n B  " "A\nB"))
+                (body-diff (org-mobile-bodies-same-p "A\nB" "A\n C")))
+            (let ((pull-result
+                   (condition-case err
+                       (progn (org-mobile-pull) 'ok)
+                     (error (cons (car err) (cdr err))))))
+              (let ((checksums-exist (file-exists-p
+                                      (expand-file-name "checksums.dat" root))))
+                (list escape-olp
+                      tags-same
+                      tags-diff
+                      body-same
+                      body-diff
+                      pull-result
+                      checksums-exist
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))))
       (delete-directory root t))))"##,
     );
 }
