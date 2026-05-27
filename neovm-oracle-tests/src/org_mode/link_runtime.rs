@@ -136,6 +136,67 @@ fn org_custom_link_activation_completion_export_combo() {
 }
 
 #[test]
+fn org_link_search_fuzzy_target_radio_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Heading Alpha\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: alpha-id\n:END:\n")
+    (insert "Alpha body.\n\n")
+    (insert "* Heading Beta\n")
+    (insert "Beta body with <<<radio>>> target.\n\n")
+    (insert "* Heading Gamma :tag:\n")
+    (insert "Gamma body.\n\n")
+    (insert "Link to [[#alpha-id][Custom ID]].\n")
+    (insert "Link to [[*Heading Beta][Star Link]].\n")
+    (insert "Link to [[radio][Radio Link]].\n")
+    (insert "Plain https://example.org link.\n")
+    ;; Parse all links
+    (let* ((tree (org-element-parse-buffer))
+           (links
+            (org-element-map tree 'link
+              (lambda (lk)
+                (list (org-element-property :type lk)
+                      (org-element-property :path lk)
+                      (org-element-property :raw-link lk)
+                      (org-element-property :search-option lk)
+                      (and (org-element-contents-begin lk)
+                           (buffer-substring-no-properties
+                            (org-element-contents-begin lk)
+                            (org-element-contents-end lk)))))))
+           ;; Check link descriptions
+           (custom-link (nth 0 links))
+           (star-link (nth 1 links))
+           (radio-link (nth 2 links))
+           (plain-link (nth 3 links))
+           ;; Try org-link-search
+           (search-results
+            (list
+             (condition-case err
+                 (progn (org-link-search "#alpha-id") 'found)
+               (error (cons 'err err)))
+             (condition-case err
+                 (progn (org-link-search "*Heading Beta") 'found)
+               (error (cons 'err err)))
+             (condition-case err
+                 (progn (org-link-search "radio") 'found)
+               (error (cons 'err err))))))
+      (list links
+            custom-link
+            star-link
+            radio-link
+            plain-link
+            search-results
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
 fn org_id_cross_file_folded_context_store_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
