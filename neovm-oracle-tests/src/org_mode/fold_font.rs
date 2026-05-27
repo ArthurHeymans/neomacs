@@ -685,6 +685,71 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_global_cycle_overview_content_all_font_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "Root body.\n")
+      (insert "** DONE Alpha\n")
+      (insert "Alpha body.\n")
+      (insert "*** TODO Beta\n")
+      (insert "Beta body.\n")
+      (insert "**** WAIT Gamma\n")
+      (insert "Gamma body.\n")
+      (insert "** NEXT Sibling\n")
+      (insert "Sibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Capture global cycle states
+      (let ((heading-state
+             (lambda ()
+               (font-lock-ensure (point-min) (point-max))
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward needle)
+                    (list needle
+                          (invisible-p (point))
+                          (org-outline-level)
+                          (get-text-property (line-beginning-position) 'face)
+                          (get-text-property (point) 'face))))
+                '("Root" "Root body" "Alpha" "Alpha body" "Beta" "Beta body" "Gamma" "Gamma body" "Sibling" "Sibling body"))))
+            states)
+        ;; Cycle through all global states
+        (dotimes (_ 6)
+          (org-cycle-global)
+          (push (list org-cycle-global-status (funcall heading-state)) states))
+        ;; Show all
+        (org-fold-show-all)
+        (font-lock-ensure (point-min) (point-max))
+        (let ((final-state (funcall heading-state))
+              (merged nil))
+          (dolist (line (split-string
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         "\n" t))
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line merged)))
+          (list (nreverse states)
+                final-state
+                (nreverse merged)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_narrow_subtree_cycle_edit_widen_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
