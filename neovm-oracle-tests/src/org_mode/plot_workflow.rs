@@ -116,3 +116,90 @@ fn org_plot_radar_script_normalized_combo() {
            script))))"##,
     );
 }
+
+#[test]
+fn org_plot_transpose_preface_time_text_error_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-plot)
+  (let* ((root (make-temp-file "org-plot-transpose" t))
+         (data-file (expand-file-name "transpose.dat" root))
+         (out-file (expand-file-name "plot.svg" root))
+         (org-plot/gnuplot-script-preamble
+          (lambda (type) (format "# preamble %S" type)))
+         (org-plot/gnuplot-term-extra
+          (lambda (type) (format "size %d,%d"
+                                 (if (eq type '2d) 600 300)
+                                 240))))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert "#+PLOT: title:\"Transposed\" type:2d trans:t ind:1 deps:(2 3)\n")
+          (insert "#+PLOT: with:histograms set:\"style fill solid\" timefmt:\"%Y-%m-%d\" file:\"plot.svg\"\n")
+          (insert "| Metric | <2026-05-27 Wed> | <2026-05-28 Thu> |\n")
+          (insert "|--------+-------------------+-------------------|\n")
+          (insert "| Alpha  | 1                 | 2                 |\n")
+          (insert "| Beta   | 3                 | 5                 |\n")
+          (goto-char (point-min))
+          (search-forward "| Metric")
+          (let* ((raw-table (org-table-to-lisp))
+                 (transposed (let ((tbl raw-table))
+                               (setq tbl (apply #'cl-mapcar #'list
+                                                (remove 'hline tbl)))
+                               (push 'hline (cdr tbl))
+                               tbl))
+                 (params (copy-sequence org-plot/gnuplot-default-options)))
+            (goto-char (point-min))
+            (while (re-search-forward "^#\\+PLOT:" nil t)
+              (setq params (org-plot/collect-options params)))
+            (when (eq (cadr transposed) 'hline)
+              (setq params (plist-put params :labels (car transposed)))
+              (setq transposed (delq 'hline (cdr transposed))))
+            (let* ((num-cols (length (car transposed)))
+                   (params (plist-put params :file out-file))
+                   (ind-column (mapcar (lambda (row)
+                                         (nth (1- (plist-get params :ind))
+                                              row))
+                                       transposed))
+                   (time-detected
+                    (cl-every (lambda (el)
+                                (string-match org-ts-regexp3 el))
+                              ind-column))
+                   (text-detected
+                    (cl-notevery (lambda (el)
+                                   (string-match org-table-number-regexp el))
+                                 ind-column)))
+              (when time-detected
+                (setq params (plist-put params :timeind t)))
+              (when text-detected
+                (setq params (plist-put params :textind t)))
+              (org-plot/gnuplot-to-data transposed data-file params)
+              (let ((data (with-temp-buffer
+                            (insert-file-contents data-file)
+                            (buffer-string)))
+                    (preface (org-plot/gnuplot-script
+                              transposed data-file num-cols params t))
+                    (script (org-plot/gnuplot-script
+                             transposed data-file num-cols params))
+                    (bad (condition-case err
+                             (org-plot/gnuplot-script
+                              transposed data-file num-cols
+                              '(:plot-type no-such-type))
+                           (error (cons (car err) (cdr err))))))
+                (list raw-table
+                      transposed
+                      (plist-get params :labels)
+                      (plist-get params :timeind)
+                      (plist-get params :textind)
+                      data
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>" preface)
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>" script)
+                      bad)))))
+      (delete-directory root t))))"##,
+    );
+}
