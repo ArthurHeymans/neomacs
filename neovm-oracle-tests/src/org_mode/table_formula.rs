@@ -495,7 +495,7 @@ fn org_table_marked_duration_lisp_create_columns_combo() {
           (goto-char (point-min))
           (search-forward "Beta")
           (org-table-goto-column 7)
-          (list after-marked
+        (list after-marked
                 stored-after-marked
                 lisp-summary
                 field-formula
@@ -505,5 +505,82 @@ fn org_table_marked_duration_lisp_create_columns_combo() {
                 (org-table-current-column)
                 (org-table-get-field)
                 (org-table-to-lisp)))))))"##,
+    );
+}
+
+#[test]
+fn org_table_hline_constants_range_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+CONSTANTS: fee=7 discount=4\n")
+    (insert "| Item | Qty | Price | Gross | Adjusted | Net |\n")
+    (insert "|------+-----+-------+-------+----------+-----|\n")
+    (insert "| A | 2 | 10 | stale | stale | stale |\n")
+    (insert "| B | 3 | 12 | stale | stale | stale |\n")
+    (insert "|------+-----+-------+-------+----------+-----|\n")
+    (insert "| Total |  |  | stale | stale | stale |\n")
+    (insert "#+TBLFM: $Gross=$Qty*$Price::$Adjusted=$Gross+$fee::$Net=$Adjusted-$discount::@>$Gross=vsum(@I$Gross..@II$Gross)::@>$Adjusted=vsum(@I$Adjusted..@II$Adjusted)::@>$Net=vsum(@I$Net..@II$Net)\n")
+    (goto-char (point-min))
+    (org-table-recalculate 'all)
+    (let ((after-first
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (stored-first (org-table-get-stored-formulas))
+          (range-values nil)
+          (range-corners nil)
+          (first-last nil)
+          (substituted nil)
+          (converted-rc nil)
+          (converted-an nil)
+          (field-summary nil)
+          (prop-summary nil))
+      (goto-char (point-min))
+      (search-forward "B")
+      (org-table-goto-column 5)
+      (org-table-analyze)
+      (setq range-values (org-table-get-range "@I$Gross..@II$Net"))
+      (setq range-corners (org-table-get-range "@I$Gross..@II$Net" nil nil nil t))
+      (setq first-last
+            (org-table-formula-handle-first/last-rc "@>$>=$<+@<$<"))
+      (setq substituted
+            (org-table-formula-substitute-names "$Gross+$fee-$discount"))
+      (setq converted-rc (org-table-convert-refs-to-rc "D3..F4"))
+      (setq converted-an (org-table-convert-refs-to-an "@3$4..@4$6"))
+      (setq field-summary
+            (list (org-table-current-dline)
+                  (org-table-current-column)
+                  (org-table-get-field)
+                  (org-table-current-field-formula 'key 'noerror)
+                  (org-table-get-constant "fee")
+                  (org-table-get-constant "missing")))
+      (org-table-put-field-property 'org-oracle-marker "adjusted-b")
+      (let ((start (progn (skip-chars-backward "^|") (point)))
+            (end (progn (skip-chars-forward "^|") (point))))
+        (setq prop-summary
+              (list (get-text-property start 'org-oracle-marker)
+                    (text-property-any start end 'org-oracle-marker "adjusted-b"))))
+      (org-table-get-field nil "50")
+      (org-table-recalculate)
+      (let ((after-edit
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (stored-edit (org-table-get-stored-formulas)))
+        (list after-first
+              stored-first
+              range-values
+              range-corners
+              first-last
+              substituted
+              converted-rc
+              converted-an
+              field-summary
+              prop-summary
+              after-edit
+              stored-edit
+              (org-table-to-lisp))))))"##,
     );
 }
