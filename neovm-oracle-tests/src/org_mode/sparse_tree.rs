@@ -301,3 +301,74 @@ fn org_sparse_date_type_range_visibility_matrix_combo() {
                      (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_sparse_tag_todo_deps_planning_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (with-temp-buffer
+    (let ((org-use-tag-inheritance t)
+          (org-agenda-span 'day))
+      (org-mode)
+      (insert "* TODO Alpha :work:urgent:\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert "** TODO Sub A1\n")
+      (insert "*** DONE Sub A1a\n")
+      (insert "*** TODO Sub A1b\n")
+      (insert "** WAIT Sub A2\n")
+      (insert "DEADLINE: <2026-05-28 Thu>\n")
+      (insert "* Beta :home:\n")
+      (insert "** TODO Sub B1 :work:\n")
+      (insert "SCHEDULED: <2026-05-26 Tue>\n")
+      (insert "** DONE Sub B2\n")
+      (insert "CLOSED: [2026-05-27 Wed]\n")
+      (insert "* Gamma :work:\n")
+      (insert "** TODO Sub G1\n")
+      (insert "DEADLINE: <2026-05-27 Wed>\n")
+      (insert "* Delta\n")
+      (insert "No planning.\n")
+      (let ((vis (lambda ()
+                   (mapcar
+                    (lambda (needle)
+                      (save-excursion
+                        (goto-char (point-min))
+                        (search-forward needle)
+                        (list needle
+                              (line-number-at-pos)
+                              (invisible-p (point))
+                              (org-get-tags nil t))))
+                    '("Alpha" "Sub A1" "Sub A1a" "Sub A1b" "Sub A2"
+                      "Beta" "Sub B1" "Sub B2" "Gamma" "Sub G1"
+                      "Delta" "No planning")))))
+        ;; Tag sparse tree
+        (org-tags-sparse-tree nil "work")
+        (let ((tag-vis (funcall vis))
+              (tag-buf (buffer-substring-no-properties
+                        (point-min) (point-max))))
+          (org-remove-occur-highlights)
+          ;; TODO sparse tree
+          (org-show-todo-tree nil)
+          (let ((todo-vis (funcall vis))
+                (todo-buf (buffer-substring-no-properties
+                           (point-min) (point-max))))
+            (org-remove-occur-highlights)
+            ;; Planning sparse tree
+            (org-check-deadlines 1)
+            (let ((deadline-vis (funcall vis))
+                  (deadline-buf (buffer-substring-no-properties
+                                 (point-min) (point-max))))
+              (org-remove-occur-highlights)
+              ;; Full buffer after all operations
+              (org-fold-show-all)
+              (let ((final-buf (buffer-substring-no-properties
+                                (point-min) (point-max))))
+                (list tag-vis
+                      todo-vis
+                      deadline-vis
+                      final-buf))))))))))"##,
+    );
+}
