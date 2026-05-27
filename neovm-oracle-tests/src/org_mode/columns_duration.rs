@@ -430,3 +430,128 @@ fn org_columns_dblock_property_summary_refresh_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_columns_overlay_row_move_recompute_allowed_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (require 'org-duration)
+  (with-temp-buffer
+    (let ((org-duration-format '(("h" . t) ("min" . t)))
+          (org-use-property-inheritance '("Owner" "Area"))
+          states)
+      (org-duration-set-regexps)
+      (org-mode)
+      (insert "#+COLUMNS: %22ITEM(Task) %TODO(State) %Owner %Area %Status %Effort{:} %Score{+;%.1f} %Done{X/}\n")
+      (insert "#+PROPERTY: Status_ALL Todo Doing Review Done\n")
+      (insert "* Project\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Area: Core\n:Effort: 0:00\n:Score: 0\n:Done: [ ]\n:Status: Todo\n:END:\n")
+      (insert "** TODO Alpha\n")
+      (insert ":PROPERTIES:\n:Effort: 1:10\n:Score: 2.5\n:Done: [X]\n:Status: Todo\n:END:\n")
+      (insert "** WAIT Beta\n")
+      (insert ":PROPERTIES:\n:Owner: Bea\n:Effort: 0:50\n:Score: 1.5\n:Done: [ ]\n:Status: Doing\n:END:\n")
+      (insert "*** TODO Beta child\n")
+      (insert ":PROPERTIES:\n:Effort: 0:20\n:Score: 0.5\n:Done: [X]\n:Status: Review\n:END:\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (beginning-of-line)
+                          (list needle
+                                (org-outline-level)
+                                (org-get-todo-state)
+                                (org-entry-get nil "Owner" 'inherit)
+                                (org-entry-get nil "Area" 'inherit)
+                                (org-entry-get nil "Status")
+                                (org-entry-get nil "Effort")
+                                (org-entry-get nil "Score")
+                                (org-entry-get nil "Done")
+                                (line-number-at-pos))))
+                      '("Project" "Alpha" "Beta" "Beta child"))
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))))
+        (push (funcall snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "Beta child")
+        (beginning-of-line)
+        (org-columns nil)
+        (let ((overlay-before
+               (mapcar (lambda (ov)
+                         (list (overlay-start ov)
+                               (overlay-end ov)
+                               (overlay-get ov 'org-columns-key)
+                               (overlay-get ov 'org-columns-value)
+                               (overlay-get ov 'before-string)
+                               (overlay-get ov 'after-string)))
+                       (overlays-in (line-beginning-position)
+                                    (line-end-position))))
+              (content-before (org-columns-content))
+              (compiled-before org-columns-current-fmt-compiled))
+          (search-forward "Review")
+          (org-columns-next-allowed-value)
+          (goto-char (line-beginning-position))
+          (search-forward "TODO")
+          (let ((org-todo-keywords '((sequence "TODO" "WAIT" "NEXT" "|"
+                                               "DONE"))))
+            (org-columns-next-allowed-value))
+          (goto-char (line-beginning-position))
+          (search-forward "0:20")
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _) "0:45")))
+            (org-columns-edit-value "Effort"))
+          (goto-char (line-beginning-position))
+          (search-forward "0.5")
+          (cl-letf (((symbol-function 'read-string)
+                     (lambda (&rest _) "4.0")))
+            (org-columns-edit-value "Score"))
+          (let ((line-after-edits
+                 (buffer-substring-no-properties
+                  (line-beginning-position) (line-end-position)))
+                (props-after-edits
+                 (list (org-get-todo-state)
+                       (org-entry-get nil "Status")
+                       (org-entry-get nil "Effort")
+                       (org-entry-get nil "Score"))))
+            (org-columns-move-row-up)
+            (org-columns-redo)
+            (let ((line-after-redo
+                   (buffer-substring-no-properties
+                    (line-beginning-position) (line-end-position)))
+                  (overlay-after-redo
+                   (mapcar (lambda (ov)
+                             (list (overlay-get ov 'org-columns-key)
+                                   (overlay-get ov 'org-columns-value)
+                                   (overlay-get ov 'before-string)))
+                           (overlays-in (line-beginning-position)
+                                        (line-end-position)))))
+              (goto-char (point-min))
+              (search-forward "Project")
+              (beginning-of-line)
+              (org-columns-compute-all)
+              (let ((project-computed
+                     (list (org-entry-get nil "Effort")
+                           (org-entry-get nil "Score")
+                           (org-entry-get nil "Done")))
+                    (content-after (org-columns-content)))
+                (org-columns-quit)
+                (push (funcall snapshot 'after-columns) states)
+                (list compiled-before
+                      overlay-before
+                      content-before
+                      line-after-edits
+                      props-after-edits
+                      line-after-redo
+                      overlay-after-redo
+                      project-computed
+                      content-after
+                      (nreverse states))))))))"##,
+    );
+}
