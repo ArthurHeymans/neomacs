@@ -20,6 +20,7 @@ mod columns_duration;
 mod context_blocks;
 mod core_upstream;
 mod core_upstream_2;
+mod crypt_workflow;
 mod datetree_workflow;
 mod display_state;
 mod dynamic_blocks;
