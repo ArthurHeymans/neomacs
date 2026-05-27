@@ -1080,6 +1080,60 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_var_format_spec_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: data\n")
+      (insert "| X | Y |\n|---+---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |\n\n")
+      ;; Sum block
+      (insert "#+NAME: summer\n")
+      (insert "#+begin_src emacs-lisp :var tbl=data :results value replace\n")
+      (insert "(list :row-count (length tbl)\n")
+      (insert "      :x-sum (apply #'+ (mapcar #'car tbl))\n")
+      (insert "      :y-sum (apply #'+ (mapcar #'cadr tbl)))\n")
+      (insert "#+end_src\n\n")
+      ;; Format spec block
+      (insert "#+NAME: formatter\n")
+      (insert "#+begin_src emacs-lisp :var stats=summer :results output replace\n")
+      (insert "(princ (format \"rows=%d x=%d y=%d\"\n")
+      (insert "               (plist-get stats :row-count)\n")
+      (insert "               (plist-get stats :x-sum)\n")
+      (insert "               (plist-get stats :y-sum)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("summer" "formatter"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        ;; Parse table
+        (let ((table-lisp
+               (progn
+                 (goto-char (point-min))
+                 (search-forward "| X")
+                 (org-table-to-lisp))))
+          (list (nreverse results)
+                table-lisp
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_header_arg_inherit_override_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
