@@ -1080,6 +1080,51 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_noweb_var_chain_output_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Config block
+      (insert "#+NAME: config\n")
+      (insert "#+begin_src emacs-lisp\n")
+      (insert "(defconst base-val 10)\n")
+      (insert "#+end_src\n\n")
+      ;; Noweb block
+      (insert "#+NAME: compute\n")
+      (insert "#+begin_src emacs-lisp :var x=3 :noweb yes :results value replace\n")
+      (insert "(let ((b (progn <<config>> base-val)))\n")
+      (insert "  (* x b))\n")
+      (insert "#+end_src\n\n")
+      ;; Output block
+      (insert "#+NAME: displayer\n")
+      (insert "#+begin_src emacs-lisp :var val=compute :results output replace\n")
+      (insert "(princ (format \"val=%d\" val))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("compute" "displayer"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_var_format_spec_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
