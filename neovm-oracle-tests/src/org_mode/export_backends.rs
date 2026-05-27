@@ -420,6 +420,73 @@ fn org_html_export_detailed_structure_link_image_table_combo() {
          (while (string-match "<td" html s)
            (setq s (match-end 0) td-count (1+ td-count)))
          td-count)
-       normalized)))))"##,
+        normalized)))))"##,
+    );
+}
+
+#[test]
+fn org_multi_backend_export_structure_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (require 'ox-latex)
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Multi Backend\n")
+    (insert "#+AUTHOR: Tester\n\n")
+    (insert "* Section One :tag1:\n")
+    (insert "Paragraph with *bold*, /italic/, =code=, and ~verbatim~.\n\n")
+    (insert "- [X] Done item\n")
+    (insert "- [ ] Todo item\n\n")
+    (insert "| Name | Val |\n|------+-----|\n| A | 1 |\n| B | 2 |\n\n")
+    (insert "#+begin_quote\nQuoted text.\n#+end_quote\n\n")
+    (insert "** Subsection\n:PROPERTIES:\n:CUSTOM_ID: my-id\n:END:\n")
+    (insert "See [[https://example.org][Example]].\n\n")
+    (insert "[fn:1] Footnote body.\n")
+    (let* ((org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil))
+           (latex (org-export-as 'latex nil nil t nil))
+           (ascii (let ((org-ascii-charset 'utf-8))
+                    (org-export-as 'ascii nil nil t nil))))
+      ;; Extract element counts from each backend
+      (let ((count-tag (lambda (s re)
+                         (let ((c 0) (p 0))
+                           (while (string-match re s p)
+                             (setq p (match-end 0) c (1+ c)))
+                           c))))
+        (list
+         ;; HTML element counts
+         (list (funcall count-tag html "<h[1-3]")
+               (funcall count-tag html "<li")
+               (funcall count-tag html "<td")
+               (funcall count-tag html "<blockquote")
+               (funcall count-tag html "<pre")
+               (funcall count-tag html "<code")
+               (funcall count-tag html "<b>")
+               (funcall count-tag html "<i>"))
+         ;; LaTeX element counts
+         (list (funcall count-tag latex "\\\\section")
+               (funcall count-tag latex "\\\\subsection")
+               (funcall count-tag latex "\\\\textbf")
+               (funcall count-tag latex "\\\\textit")
+               (funcall count-tag latex "\\\\texttt")
+               (funcall count-tag latex "\\\\begin{itemize}")
+               (funcall count-tag latex "\\\\begin{quote}")
+               (funcall count-tag latex "tabular"))
+         ;; ASCII check patterns
+         (list (not (null (string-match-p "Multi Backend" ascii)))
+               (not (null (string-match-p "Section One" ascii)))
+               (not (null (string-match-p "Example" ascii)))
+               (not (null (string-match-p "Footnote" ascii))))
+         ;; Full outputs (normalized)
+         (replace-regexp-in-string
+          "sec:org[[:alnum:]-]+" "sec:org-id"
+          (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+                                    html))
+         (replace-regexp-in-string
+          "sec:org[[:alnum:]-]+" "sec:org-id" latex)))))))"##,
     );
 }
