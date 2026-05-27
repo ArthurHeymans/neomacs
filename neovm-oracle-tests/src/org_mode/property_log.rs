@@ -664,3 +664,70 @@ fn org_property_separators_postprocess_global_cleanup_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_todo_tag_property_clock_state_mutation_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-log-done 'time)
+          (org-log-into-drawer t)
+          (org-use-property-inheritance t)
+          (org-todo-keywords '((sequence "TODO" "WAIT" "|" "DONE" "CANCELED"))))
+      (org-mode)
+      (insert "* TODO Project :work:\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:Effort: 5:00\n:END:\n")
+      (insert "** TODO Task A :urgent:\n")
+      (insert ":PROPERTIES:\n:Effort: 1:30\n:ORDERED: t\n:END:\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert "*** TODO Sub A1\n")
+      (insert "*** TODO Sub A2\n")
+      (insert "** WAIT Task B\n")
+      (insert ":PROPERTIES:\n:Effort: 0:45\n:END:\n")
+      (insert "* DONE Finished :work:\n")
+      (insert "CLOSED: [2026-05-26 Mon]\n")
+      (let ((snap (lambda ()
+                    (list (org-get-heading t t t t)
+                          (org-get-tags nil t)
+                          (org-entry-get nil "Effort" t)
+                          (org-entry-get nil "Owner" t)
+                          (substring-no-properties (or (org-get-todo-state) ""))
+                          (org-entry-is-todo-p)
+                          (org-entry-is-done-p)))))
+        (goto-char (point-min))
+        (search-forward "Project")
+        (beginning-of-line)
+        (let ((p1 (funcall snap)))
+          (goto-char (point-min))
+          (search-forward "Task A")
+          (beginning-of-line)
+          (let ((p2 (funcall snap)))
+            (org-clock-in)
+            (let ((p3 (list (org-clocking-p))))
+              (org-clock-out)
+              (goto-char (point-min))
+              (search-forward "Task A")
+              (beginning-of-line)
+              (org-todo "DONE")
+              (let ((p4 (funcall snap)))
+                (goto-char (point-min))
+                (search-forward "Sub A1")
+                (beginning-of-line)
+                (org-set-property "Priority" "High")
+                (let ((p5 (funcall snap)))
+                  (goto-char (point-min))
+                  (search-forward "Task B")
+                  (beginning-of-line)
+                  (org-set-tags '("blocked" "waiting"))
+                  (let ((p6 (funcall snap))
+                        (buf (replace-regexp-in-string
+                              "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+                    (list p1 p2 p3 p4 p5 p6 buf)))))))))))"##,
+    );
+}
