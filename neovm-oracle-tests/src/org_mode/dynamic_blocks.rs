@@ -266,3 +266,104 @@ fn org_custom_dblock_nested_table_rewrite_all_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_clocktable_properties_shift_recalc_ast_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+COLUMNS: %25ITEM %Owner %Effort{:}\n")
+    (insert "* Project :root:\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:Effort: 0:00\n:END:\n")
+    (insert "** TODO Alpha :work:\n")
+    (insert ":PROPERTIES:\n:Owner: Bea\n:Effort: 1:00\n:END:\n")
+    (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+    (insert "** TODO Beta :home:\n")
+    (insert ":PROPERTIES:\n:Owner: Cy\n:Effort: 0:45\n:END:\n")
+    (insert "CLOCK: [2026-05-28 Thu 11:15]--[2026-05-28 Thu 12:00] =>  0:45\n")
+    (insert "*** TODO Beta child :work:\n")
+    (insert ":PROPERTIES:\n:Owner: Dee\n:Effort: 0:30\n:END:\n")
+    (insert "CLOCK: [2026-05-29 Fri 14:00]--[2026-05-29 Fri 15:15] =>  1:15\n\n")
+    (insert "#+BEGIN: clocktable :scope file :block 2026-05-27 :step daysteps ")
+    (insert ":maxlevel 4 :link nil :tags t :properties (\"Owner\" \"Effort\") ")
+    (insert ":formula % :compact nil\n")
+    (insert "#+CAPTION: Clock rollup\n")
+    (insert "| stale | data |\n")
+    (insert "#+END:\n")
+    (goto-char (point-min))
+    (search-forward "#+BEGIN: clocktable")
+    (beginning-of-line)
+    (let ((steps
+           (mapcar (lambda (pair)
+                     (list (format-time-string "%F" (car pair))
+                           (format-time-string "%F" (cdr pair))))
+                   (org-clocktable-steps
+                    '(:block "2026-05-27" :step daysteps))))
+          before-shift after-right after-left ast tables data)
+      (org-update-dblock)
+      (setq before-shift
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "#+BEGIN: clocktable")
+      (beginning-of-line)
+      (setq tables
+            (let (out)
+              (while (search-forward "| File" nil t)
+                (org-table-align)
+                (push (org-table-to-lisp) out))
+              (nreverse out)))
+      (setq data
+            (org-clock-get-table-data
+             (current-buffer)
+             '(:maxlevel 4 :tags t :properties ("Owner" "Effort"))))
+      (goto-char (point-min))
+      (search-forward "#+BEGIN: clocktable")
+      (beginning-of-line)
+      (org-clocktable-shift 'right 1)
+      (setq after-right
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (goto-char (point-min))
+      (search-forward "#+BEGIN: clocktable")
+      (beginning-of-line)
+      (org-clocktable-shift 'left 1)
+      (setq after-left
+            (buffer-substring-no-properties (point-min) (point-max)))
+      (setq ast
+            (org-element-map (org-element-parse-buffer)
+                '(dynamic-block table keyword headline)
+              (lambda (e)
+                (list (org-element-type e)
+                      (org-element-property :block-name e)
+                      (org-element-property :key e)
+                      (org-element-property :value e)
+                      (org-element-property :raw-value e)
+                      (org-element-property :begin e)
+                      (org-element-property :end e)))))
+      (list steps
+            (mapcar (lambda (needle)
+                      (not (null
+                            (string-match-p needle before-shift))))
+                    '("Clock rollup" "Alpha" "Beta" "Owner" "Effort"
+                      "1:30" "0:45"))
+            tables
+            data
+            (mapcar (lambda (needle)
+                      (not (null
+                            (string-match-p needle after-right))))
+                    '("2026-05-28" "Beta" "0:45"))
+            (mapcar (lambda (needle)
+                      (not (null
+                            (string-match-p needle after-left))))
+                    '("2026-05-27" "Alpha" "1:30"))
+            ast
+            before-shift
+            after-right
+            after-left))))"##,
+    );
+}
