@@ -356,11 +356,60 @@ fn org_fold_reveal_context_narrow_widen_deep_state_combo() {
                 (org-narrow-to-subtree)
                 (org-fold-hide-sublevels 1)
                 (let ((narrowed-vis (mapcar probe '("Alpha" "alpha body" "Beta" "gamma body" "Sibling"))))
-                  (list after-hide-1
-                        after-isearch
-                        after-agenda
-                        narrowed-vis
-                        (buffer-substring-no-properties
-                         (point-min) (point-max))))))))))))"##,
+                   (list after-hide-1
+                         after-isearch
+                         after-agenda
+                         narrowed-vis
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_drawer_block_hide_show_all_recovery_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:Effort: 1:00\n:END:\n")
+    (insert ":LOGBOOK:\nclock line\n:END:\n")
+    (insert "Alpha body.\n")
+    (insert "#+begin_quote\nquoted text\n#+end_quote\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+    (insert "** Beta\n")
+    (insert ":PROPERTIES:\n:Owner: Bob\n:END:\n")
+    (insert "Beta body.\n")
+    (let ((probe (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward needle)
+                     (list needle
+                           (invisible-p (point))
+                           (get-text-property (point) 'invisible))))))
+      ;; Hide drawers and blocks
+      (org-fold-hide-drawer-all)
+      (org-fold-hide-block-all)
+      (let ((after-hide (mapcar probe '("Owner" "clock line" "(+ 1 2)" "quoted text" "Alpha body" "Beta body"))))
+        ;; Show all drawers and blocks
+        (org-fold-show-all '(drawers blocks))
+        (let ((after-show (mapcar probe '("Owner" "clock line" "(+ 1 2)" "quoted text" "Alpha body" "Beta body"))))
+          ;; Hide again
+          (org-fold-hide-drawer-all)
+          (org-fold-hide-block-all)
+          (let ((after-hide-again (mapcar probe '("Owner" "clock line" "(+ 1 2)" "quoted text"))))
+            ;; Show all
+            (org-fold-show-all)
+            (let ((after-show-all (mapcar probe '("Owner" "clock line" "(+ 1 2)" "quoted text" "Alpha body" "Beta body"))))
+              (list after-hide
+                    after-show
+                    after-hide-again
+                    after-show-all
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
     );
 }
