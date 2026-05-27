@@ -1,5 +1,5 @@
 use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
-use super::state::TypingSpeedState;
+use super::state::{FpsCounter, TypingSpeedState};
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
@@ -50,6 +50,70 @@ impl RenderApp {
 
         if renderer.effects.window_watermark.enabled {
             renderer.render_window_watermarks(surface_view, frame, glyph_atlas);
+        }
+    }
+
+    fn render_frame_visual_bell_overlay(
+        renderer: &WgpuRenderer,
+        surface_view: &wgpu::TextureView,
+        visual_bell_start: &mut Option<std::time::Instant>,
+        frame_dirty: &mut bool,
+        width: u32,
+        height: u32,
+    ) {
+        if let Some(start) = *visual_bell_start {
+            let elapsed = start.elapsed().as_secs_f32();
+            let duration = 0.15;
+            if elapsed < duration {
+                let alpha = (1.0 - elapsed / duration) * 0.3;
+                renderer.render_visual_bell(surface_view, width, height, alpha);
+                *frame_dirty = true;
+            } else {
+                *visual_bell_start = None;
+            }
+        }
+    }
+
+    fn render_frame_fps_overlay(
+        renderer: &WgpuRenderer,
+        surface_view: &wgpu::TextureView,
+        glyph_atlas: &mut neomacs_renderer_wgpu::WgpuGlyphAtlas,
+        fps: &mut FpsCounter,
+        glyph_count: usize,
+        window_count: usize,
+        transition_count: usize,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        if !fps.enabled {
+            return false;
+        }
+
+        let frame_time = fps.render_start.elapsed().as_secs_f32() * 1000.0;
+        fps.frame_time_ms = fps.frame_time_ms * 0.9 + frame_time * 0.1;
+        let stats_lines = vec![
+            format!("{:.0} FPS | {:.1}ms", fps.display_value, fps.frame_time_ms),
+            format!(
+                "{}g {}w {}t  {}x{}",
+                glyph_count, window_count, transition_count, width, height
+            ),
+        ];
+        renderer.render_fps_overlay(surface_view, &stats_lines, glyph_atlas, width, height);
+        true
+    }
+
+    fn render_frame_typing_speed_overlay(
+        renderer: &WgpuRenderer,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        glyph_atlas: &mut neomacs_renderer_wgpu::WgpuGlyphAtlas,
+        typing_speed: &mut TypingSpeedState,
+        frame_dirty: &mut bool,
+    ) {
+        let keep_redrawing = Self::update_typing_speed_state(typing_speed);
+        renderer.render_typing_speed(surface_view, frame, glyph_atlas, typing_speed.displayed_wpm);
+        if keep_redrawing {
+            *frame_dirty = true;
         }
     }
 
@@ -482,20 +546,14 @@ impl RenderApp {
             }
         }
 
-        if let Some(start) = render.visual_bell_start {
-            let elapsed = start.elapsed().as_secs_f32();
-            let duration = 0.15;
-            if elapsed < duration {
-                let alpha = (1.0 - elapsed / duration) * 0.3;
-                renderer.render_visual_bell(surface_view, native.width, native.height, alpha);
-                render.frame_dirty = true;
-            } else {
-                render.visual_bell_start = None;
-            }
-        }
-        if render.visual_bell_start.is_some() {
-            render.frame_dirty = true;
-        }
+        Self::render_frame_visual_bell_overlay(
+            renderer,
+            surface_view,
+            &mut render.visual_bell_start,
+            &mut render.frame_dirty,
+            native.width,
+            native.height,
+        );
 
         if !native.chrome.decorations_enabled
             && !native.chrome.is_fullscreen
@@ -509,47 +567,29 @@ impl RenderApp {
             );
         }
 
-        if render.fps.enabled {
-            let frame_time = render.fps.render_start.elapsed().as_secs_f32() * 1000.0;
-            render.fps.frame_time_ms = render.fps.frame_time_ms * 0.9 + frame_time * 0.1;
-
-            let transition_count =
-                render.transitions.crossfades.len() + render.transitions.scroll_slides.len();
-            let stats_lines = vec![
-                format!(
-                    "{:.0} FPS | {:.1}ms",
-                    render.fps.display_value, render.fps.frame_time_ms
-                ),
-                format!(
-                    "{}g {}w {}t  {}x{}",
-                    frame.glyphs.len(),
-                    frame.window_infos.len(),
-                    transition_count,
-                    native.width,
-                    native.height
-                ),
-            ];
-            renderer.render_fps_overlay(
-                surface_view,
-                &stats_lines,
-                &mut render.glyph_atlas,
-                native.width,
-                native.height,
-            );
+        if Self::render_frame_fps_overlay(
+            renderer,
+            surface_view,
+            &mut render.glyph_atlas,
+            &mut render.fps,
+            frame.glyphs.len(),
+            frame.window_infos.len(),
+            render.transitions.crossfades.len() + render.transitions.scroll_slides.len(),
+            native.width,
+            native.height,
+        ) {
             render.frame_dirty = true;
         }
 
         if renderer.effects.typing_speed.enabled {
-            let keep_redrawing = Self::update_typing_speed_state(&mut render.typing_speed);
-            renderer.render_typing_speed(
+            Self::render_frame_typing_speed_overlay(
+                renderer,
                 surface_view,
                 frame,
                 &mut render.glyph_atlas,
-                render.typing_speed.displayed_wpm,
+                &mut render.typing_speed,
+                &mut render.frame_dirty,
             );
-            if keep_redrawing {
-                render.frame_dirty = true;
-            }
         }
     }
 
@@ -980,82 +1020,45 @@ impl RenderApp {
             }
         }
 
-        // Render visual bell flash overlay (above everything)
-        if let Some(start) = self.visual_bell_start {
-            let elapsed = start.elapsed().as_secs_f32();
-            let duration = 0.15; // 150ms flash
-            if elapsed < duration {
-                let alpha = (1.0 - elapsed / duration) * 0.3; // max 30% opacity, fading out
-                if let Some(ref renderer) = self.renderer {
-                    renderer.render_visual_bell(&surface_view, self.width, self.height, alpha);
-                }
-                self.frame_dirty = true; // Keep redrawing during animation
-            } else {
-                self.visual_bell_start = None;
-            }
+        if let Some(ref renderer) = self.renderer {
+            Self::render_frame_visual_bell_overlay(
+                renderer,
+                &surface_view,
+                &mut self.visual_bell_start,
+                &mut self.frame_dirty,
+                self.width,
+                self.height,
+            );
         }
 
-        // Render FPS counter overlay (topmost) with profiling stats
-        if self.fps.enabled {
-            // Measure frame time
-            let frame_time = self.fps.render_start.elapsed().as_secs_f32() * 1000.0;
-            // Exponential moving average (smooth over ~10 frames)
-            self.fps.frame_time_ms = self.fps.frame_time_ms * 0.9 + frame_time * 0.1;
-
-            // Gather stats
-            let glyph_count = self
-                .current_frame
-                .as_ref()
-                .map(|f| f.glyphs.len())
-                .unwrap_or(0);
-            let window_count = self
-                .current_frame
-                .as_ref()
-                .map(|f| f.window_infos.len())
-                .unwrap_or(0);
-            let transition_count =
-                self.transitions.crossfades.len() + self.transitions.scroll_slides.len();
-
-            // Build multi-line stats text
-            let stats_lines = vec![
-                format!(
-                    "{:.0} FPS | {:.1}ms",
-                    self.fps.display_value, self.fps.frame_time_ms
-                ),
-                format!(
-                    "{}g {}w {}t  {}x{}",
-                    glyph_count, window_count, transition_count, self.width, self.height
-                ),
-            ];
-
-            if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {
-                renderer.render_fps_overlay(
-                    &surface_view,
-                    &stats_lines,
-                    glyph_atlas,
-                    self.width,
-                    self.height,
-                );
-            }
+        if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {
+            Self::render_frame_fps_overlay(
+                renderer,
+                &surface_view,
+                glyph_atlas,
+                &mut self.fps,
+                self.current_frame.as_ref().map_or(0, |f| f.glyphs.len()),
+                self.current_frame
+                    .as_ref()
+                    .map_or(0, |f| f.window_infos.len()),
+                self.transitions.crossfades.len() + self.transitions.scroll_slides.len(),
+                self.width,
+                self.height,
+            );
         }
 
-        // Render typing speed indicator
         if self.effects.typing_speed.enabled {
-            let keep_redrawing = Self::update_typing_speed_state(&mut self.typing_speed);
-
             if let (Some(renderer), Some(glyph_atlas), Some(frame)) =
                 (&self.renderer, &mut self.glyph_atlas, &self.current_frame)
             {
-                renderer.render_typing_speed(
+                Self::render_frame_typing_speed_overlay(
+                    renderer,
                     &surface_view,
                     frame,
                     glyph_atlas,
-                    self.typing_speed.displayed_wpm,
+                    &mut self.typing_speed,
+                    &mut self.frame_dirty,
                 );
-            }
-            // Keep redrawing while WPM is decaying
-            if keep_redrawing {
-                self.frame_dirty = true;
             }
         }
 
