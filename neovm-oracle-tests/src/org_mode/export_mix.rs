@@ -49,6 +49,94 @@ fn org_html_export_drawer_special_footnote_filter_combo() {
 }
 
 #[test]
+fn org_export_multi_backend_resolution_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (require 'ox-ascii)
+  (require 'ox-org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Multi Export\n")
+    (insert "#+OPTIONS: toc:nil num:2 tags:t prop:t\n")
+    (insert "#+MACRO: mark Mark-$1\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed> DEADLINE: <2026-05-28 Thu>\n")
+    (insert ":PROPERTIES:\n:Owner: Ada\n:CUSTOM_ID: alpha\n:END:\n")
+    (insert "Paragraph {{{mark(ok)}}} with [[#alpha][self]] and [fn:a].\n")
+    (insert "#+NAME: tbl\n")
+    (insert "#+CAPTION: Table cap\n")
+    (insert "| A | B |\n|---+---|\n| 1 | 2 |\n")
+    (insert "#+begin_src emacs-lisp -n -r\n")
+    (insert "(message \"hi\") ;; (ref:call)\n")
+    (insert "#+end_src\n")
+    (insert "** Hidden :noexport:\n")
+    (insert "Hidden body.\n")
+    (insert "* COMMENT Commented\n")
+    (insert "Comment body.\n")
+    (insert "[fn:a] Footnote body with /italic/.\n")
+    (let* ((org-export-exclude-tags '("noexport"))
+           (org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil))
+           (ascii (org-export-as 'ascii nil nil t nil))
+           (org-out (org-export-as 'org nil nil t
+                                   '(:time-stamp-file nil)))
+           (info (org-export-get-environment 'html nil nil))
+           (tree (plist-get info :parse-tree))
+           (links (org-element-map tree 'link #'identity))
+           (table (car (org-export-collect-tables info)))
+           (listing (car (org-export-collect-listings info)))
+           (footnotes (org-export-collect-footnote-definitions info)))
+      (list (mapcar #'substring-no-properties (plist-get info :title))
+            (plist-get info :with-toc)
+            (mapcar (lambda (h)
+                      (list (org-element-property :raw-value h)
+                            (org-export-get-relative-level h info)
+                            (org-export-get-headline-number h info)
+                            (org-export-get-tags h info)))
+                    (org-export-collect-headlines info))
+            (mapcar (lambda (link)
+                      (let ((resolved (org-export-resolve-link link info)))
+                        (list (org-element-property :raw-link link)
+                              (org-element-type resolved)
+                              (org-export-get-reference resolved info))))
+                    links)
+            (and table
+                 (list (org-export-get-caption table)
+                       (org-export-get-reference table info)
+                       (org-export-get-ordinal table info)))
+            (and listing
+                 (list (org-export-get-reference listing info)
+                       (org-export-resolve-coderef "call" info)))
+            (mapcar (lambda (entry)
+                      (let ((def (cdr entry)))
+                        (list (car entry)
+                              (org-element-property :label def))))
+                    footnotes)
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle html))))
+                    '("Mark-ok" "Footnote" "Table cap" "message"))
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle ascii))))
+                    '("Mark-ok" "Footnote" "Table cap" "message"))
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle org-out))))
+                    '("Mark-ok" ":Owner:" "SCHEDULED:" "Footnote"))
+            (mapcar (lambda (needle)
+                      (null (string-match-p needle html)))
+                    '("Hidden body" "Comment body"))
+            (replace-regexp-in-string
+             "org[[:alnum:]]+"
+             "org-id"
+             html)
+            ascii
+            org-out))))"##,
+    );
+}
+
+#[test]
 fn org_latex_export_entities_footnotes_special_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
