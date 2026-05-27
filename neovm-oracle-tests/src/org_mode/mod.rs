@@ -69,6 +69,7 @@ mod misc_upstream;
 mod misc_upstream_2;
 mod mobile_workflow;
 mod mouse_workflow;
+mod mu_deep;
 mod navigation_edit;
 mod num_workflow;
 mod omega_strict;
