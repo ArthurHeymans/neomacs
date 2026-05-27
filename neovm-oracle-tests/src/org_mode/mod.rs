@@ -57,6 +57,7 @@ mod inlinetask_workflow;
 mod iota_deep;
 mod kappa_more;
 mod keys_workflow;
+mod lambda_combos;
 mod link_backends;
 mod link_export;
 mod link_runtime;
