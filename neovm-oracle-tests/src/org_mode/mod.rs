@@ -1524,6 +1524,7 @@ mod strong_ultimate_deep;
 mod strong_ultimate_edge;
 mod strong_uncovered;
 mod strong_uncovered_features_2;
+mod strong_uncovered_features_3;
 mod strong_workflow_combos;
 mod strong_xenna_combos;
 mod strong_xero_combos;
