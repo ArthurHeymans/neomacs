@@ -56,6 +56,7 @@ mod table_agenda;
 mod table_formula;
 mod tag_match;
 mod timer_workflow;
+mod todo_dependencies;
 mod yank_dnd;
 
 #[test]
