@@ -114,3 +114,95 @@ fn org_font_lock_deep_headline_markup_faces_combo() {
       (nreverse out))))"##,
     );
 }
+
+#[test]
+fn org_indent_inlinetask_list_property_refresh_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-indent)
+  (require 'org-inlinetask)
+  (with-temp-buffer
+    (let ((org-indent-indentation-per-level 3)
+          (org-adapt-indentation 'headline-data)
+          (org-indent-mode-turns-off-org-adapt-indentation nil)
+          (org-indent-mode-turns-on-hiding-stars t)
+          (org-inlinetask-min-level 4)
+          (org-inlinetask-show-first-star t))
+      (org-mode)
+      (insert "* Project\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "Paragraph one\n")
+      (insert "- item alpha\n")
+      (insert "  continuation alpha\n")
+      (insert "** Area\n")
+      (insert "Area body\n")
+      (insert "**** Inline task\n")
+      (insert "Inline body\n")
+      (insert "**** END\n")
+      (org-indent-mode 1)
+      (org-indent-indent-buffer)
+      (let ((snapshot
+             (lambda (label)
+               (let (out)
+                 (goto-char (point-min))
+                 (while (not (eobp))
+                   (let* ((pos (line-beginning-position))
+                          (lp (get-text-property pos 'line-prefix))
+                          (wp (get-text-property pos 'wrap-prefix)))
+                     (push
+                      (list (buffer-substring-no-properties
+                             pos (line-end-position))
+                            (and (stringp lp)
+                                 (list (length lp)
+                                       (substring-no-properties lp)
+                                       (get-text-property 0 'face lp)))
+                            (and (stringp wp)
+                                 (list (length wp)
+                                       (substring-no-properties wp)
+                                       (get-text-property 0 'face wp))))
+                      out))
+                   (forward-line 1))
+                 (list label (nreverse out))))))
+        (let ((before (funcall snapshot 'before)))
+          (goto-char (point-min))
+          (search-forward "Area")
+          (beginning-of-line)
+          (insert "*** Inserted\nInserted body\n")
+          (goto-char (point-min))
+          (search-forward "item alpha")
+          (end-of-line)
+          (insert "\n  new continuation")
+          (let* ((after-edit (funcall snapshot 'after-edit))
+                 (copied (filter-buffer-substring
+                          (point-min) (point-max) nil))
+                 (copied-props
+                  (list (text-property-any 0 (length copied)
+                                           'line-prefix nil copied)
+                        (text-property-any 0 (length copied)
+                                           'wrap-prefix nil copied))))
+            (org-indent-mode -1)
+            (list before
+                  after-edit
+                  copied-props
+                  (substring-no-properties copied)
+                  (let (props)
+                    (goto-char (point-min))
+                    (while (not (eobp))
+                      (push (list (buffer-substring-no-properties
+                                   (line-beginning-position)
+                                   (line-end-position))
+                                  (get-text-property
+                                   (line-beginning-position)
+                                   'line-prefix)
+                                  (get-text-property
+                                   (line-beginning-position)
+                                   'wrap-prefix))
+                            props)
+                      (forward-line 1))
+                    (nreverse props)))))))))"##,
+    );
+}
