@@ -734,11 +734,11 @@ impl RenderApp {
                 self.mouse_pos.0,
                 self.mouse_pos.1,
                 menu_bar_height,
-                self.popup_menu.is_some()
+                self.primary_popup_menu().is_some()
             );
         }
 
-        if let Some(ref mut menu) = self.popup_menu {
+        if self.primary_popup_menu().is_some() {
             if state == ElementState::Pressed && button == MouseButton::Left {
                 if compact_bar_height > 0.0 && self.mouse_pos.1 < compact_bar_height {
                     if let Some(idx) =
@@ -746,7 +746,7 @@ impl RenderApp {
                     {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.popup_menu = None;
+                        self.set_primary_popup_menu(None);
                         self.chrome_interaction.compact_bar_menu_active = Some(idx);
                         self.comms.send_input(InputEvent::MenuBarClick {
                             index: idx as i32,
@@ -756,7 +756,7 @@ impl RenderApp {
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.popup_menu = None;
+                        self.set_primary_popup_menu(None);
                         self.chrome_interaction.compact_bar_menu_active = None;
                         self.mark_primary_dirty();
                     }
@@ -764,7 +764,7 @@ impl RenderApp {
                     if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.popup_menu = None;
+                        self.set_primary_popup_menu(None);
                         self.chrome_interaction.menu_bar_active = Some(idx);
                         self.comms.send_input(InputEvent::MenuBarClick {
                             index: idx as i32,
@@ -774,41 +774,48 @@ impl RenderApp {
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.popup_menu = None;
+                        self.set_primary_popup_menu(None);
                         self.chrome_interaction.menu_bar_active = None;
                         self.mark_primary_dirty();
                     }
                 } else {
-                    let idx = menu.hit_test(self.mouse_pos.0, self.mouse_pos.1);
+                    let idx = self
+                        .primary_popup_menu()
+                        .map_or(-1, |menu| menu.hit_test(self.mouse_pos.0, self.mouse_pos.1));
                     if idx >= 0 {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: idx });
-                        self.popup_menu = None;
+                        self.set_primary_popup_menu(None);
                         self.chrome_interaction.menu_bar_active = None;
                         self.mark_primary_dirty();
                     } else {
                         let (depth, local_idx) =
-                            menu.hit_test_all(self.mouse_pos.0, self.mouse_pos.1);
+                            self.primary_popup_menu().map_or((-1, -1), |menu| {
+                                menu.hit_test_all(self.mouse_pos.0, self.mouse_pos.1)
+                            });
                         if depth >= 0 && local_idx >= 0 {
-                            let panel = if depth == 0 {
-                                &menu.root_panel
-                            } else {
-                                &menu.submenu_panels[(depth - 1) as usize]
-                            };
-                            let global_idx = panel.item_indices[local_idx as usize];
-                            if menu.all_items[global_idx].submenu {
+                            let is_submenu = self.primary_popup_menu().is_some_and(|menu| {
+                                let panel = if depth == 0 {
+                                    &menu.root_panel
+                                } else {
+                                    &menu.submenu_panels[(depth - 1) as usize]
+                                };
+                                let global_idx = panel.item_indices[local_idx as usize];
+                                menu.all_items[global_idx].submenu
+                            });
+                            if is_submenu {
                                 self.mark_primary_dirty();
                             } else {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
-                                self.popup_menu = None;
+                                self.set_primary_popup_menu(None);
                                 self.chrome_interaction.menu_bar_active = None;
                                 self.mark_primary_dirty();
                             }
                         } else {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
-                            self.popup_menu = None;
+                            self.set_primary_popup_menu(None);
                             self.chrome_interaction.menu_bar_active = None;
                             self.mark_primary_dirty();
                         }
@@ -817,7 +824,7 @@ impl RenderApp {
             } else if state == ElementState::Pressed {
                 self.comms
                     .send_input(InputEvent::MenuSelection { index: -1 });
-                self.popup_menu = None;
+                self.set_primary_popup_menu(None);
                 self.chrome_interaction.menu_bar_active = None;
                 self.mark_primary_dirty();
             }
@@ -1414,7 +1421,7 @@ impl RenderApp {
             }
         }
 
-        if let Some(ref mut menu) = self.popup_menu {
+        if let Some(menu) = self.primary_popup_menu_mut() {
             let (hit_depth, hit_local) = menu.hit_test_all(lx, ly);
             let mut popup_dirty = false;
             if hit_depth >= 0 {

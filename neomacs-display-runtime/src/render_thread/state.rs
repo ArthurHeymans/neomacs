@@ -341,12 +341,6 @@ pub(super) struct RenderApp {
     pub(super) child_frame_shadow_offset: f32,
     pub(super) child_frame_shadow_opacity: f32,
 
-    // Active popup menu (shown by x-popup-menu)
-    pub(super) popup_menu: Option<PopupMenuState>,
-
-    // Active tooltip overlay
-    pub(super) tooltip: Option<TooltipState>,
-
     // GUI menu bar snapshot for the primary frame, if visible.
     pub(super) menu_bar: Option<GuiMenuBarState>,
 
@@ -363,9 +357,6 @@ pub(super) struct RenderApp {
     pub(super) compact_bar: Option<GuiCompactBarState>,
     pub(super) chrome_interaction: GuiChromeInteractionState,
 
-    // Visual bell state (flash overlay)
-    pub(super) visual_bell_start: Option<Instant>,
-
     // IME state
     pub(super) ime_enabled: bool,
     pub(super) ime_preedit_active: bool,
@@ -375,6 +366,9 @@ pub(super) struct RenderApp {
     // UI overlay state
     pub(super) scroll_indicators_enabled: bool,
     pub(super) primary_fps_enabled: bool,
+    pub(super) pending_primary_popup_menu: Option<PopupMenuState>,
+    pub(super) pending_primary_tooltip: Option<TooltipState>,
+    pub(super) pending_primary_visual_bell_start: Option<Instant>,
 
     // Window chrome (borderless title bar, resize, decorations)
     pub(super) chrome: WindowChrome,
@@ -451,8 +445,6 @@ impl RenderApp {
             child_frame_shadow_layers: 4,
             child_frame_shadow_offset: 2.0,
             child_frame_shadow_opacity: 0.3,
-            popup_menu: None,
-            tooltip: None,
             menu_bar: None,
             tab_bar: None,
             tool_bar: None,
@@ -461,13 +453,15 @@ impl RenderApp {
             toolbar_padding: 5,
             compact_bar: None,
             chrome_interaction: GuiChromeInteractionState::default(),
-            visual_bell_start: None,
             ime_enabled: false,
             ime_preedit_active: false,
             ime_preedit_text: String::new(),
             last_ime_cursor_area: None,
             scroll_indicators_enabled: false,
             primary_fps_enabled: false,
+            pending_primary_popup_menu: None,
+            pending_primary_tooltip: None,
+            pending_primary_visual_bell_start: None,
             chrome: WindowChrome::default(),
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
@@ -535,5 +529,42 @@ impl RenderApp {
         self.primary_frame
             .as_ref()
             .map_or(self.primary_fps_enabled, |frame| frame.fps.enabled)
+    }
+
+    pub(super) fn primary_popup_menu(&self) -> Option<&PopupMenuState> {
+        self.primary_frame
+            .as_ref()
+            .and_then(|frame| frame.popup_menu.as_ref())
+    }
+
+    pub(super) fn primary_popup_menu_mut(&mut self) -> Option<&mut PopupMenuState> {
+        self.primary_frame
+            .as_mut()
+            .and_then(|frame| frame.popup_menu.as_mut())
+    }
+
+    pub(super) fn set_primary_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.popup_menu = popup_menu;
+        } else {
+            self.pending_primary_popup_menu = popup_menu;
+        }
+    }
+
+    pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.tooltip = tooltip;
+        } else {
+            self.pending_primary_tooltip = tooltip;
+        }
+    }
+
+    pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.visual_bell_start = start;
+            primary_frame.frame_dirty = primary_frame.frame_dirty || start.is_some();
+        } else {
+            self.pending_primary_visual_bell_start = start;
+        }
     }
 }

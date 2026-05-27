@@ -133,12 +133,21 @@ impl RenderApp {
 
         // Create adopted-primary frame render state with its own glyph atlas.
         let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
-        let primary_frame = GuiFrameRenderState::new(
+        let mut primary_frame = GuiFrameRenderState::new(
             primary_frame_id,
             &device,
             self.scale_factor,
             self.primary_fps_enabled(),
         );
+        primary_frame.popup_menu = self.pending_primary_popup_menu.take();
+        primary_frame.tooltip = self.pending_primary_tooltip.take();
+        primary_frame.visual_bell_start = self.pending_primary_visual_bell_start.take();
+        if primary_frame.popup_menu.is_some()
+            || primary_frame.tooltip.is_some()
+            || primary_frame.visual_bell_start.is_some()
+        {
+            primary_frame.frame_dirty = true;
+        }
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",

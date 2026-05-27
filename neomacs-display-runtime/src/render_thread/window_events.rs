@@ -146,31 +146,31 @@ impl RenderApp {
                     .frame_windows
                     .get_by_winit(window_id)
                     .is_some_and(|ws| ws.render.ime_preedit_active);
-                if self.popup_menu.is_some() && state == ElementState::Pressed {
+                if self.primary_popup_menu().is_some() && state == ElementState::Pressed {
                     match logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
-                            self.popup_menu = None;
+                            self.set_primary_popup_menu(None);
                             self.chrome_interaction.menu_bar_active = None;
                             self.mark_primary_dirty();
                         }
                         Key::Named(NamedKey::ArrowDown) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 if menu.move_hover(1) {
                                     self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowUp) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 if menu.move_hover(-1) {
                                     self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::Enter) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 let panel = menu.active_panel();
                                 let hi = panel.hover_index;
                                 if hi >= 0 && (hi as usize) < panel.item_indices.len() {
@@ -183,35 +183,35 @@ impl RenderApp {
                                         self.comms.send_input(InputEvent::MenuSelection {
                                             index: global_idx as i32,
                                         });
-                                        self.popup_menu = None;
+                                        self.set_primary_popup_menu(None);
                                         self.chrome_interaction.menu_bar_active = None;
                                         self.mark_primary_dirty();
                                     }
                                 } else {
                                     self.comms
                                         .send_input(InputEvent::MenuSelection { index: -1 });
-                                    self.popup_menu = None;
+                                    self.set_primary_popup_menu(None);
                                     self.chrome_interaction.menu_bar_active = None;
                                     self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowRight) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 if menu.open_submenu() {
                                     self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowLeft) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 if menu.close_submenu() {
                                     self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::Home) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 menu.active_panel_mut().hover_index = -1;
                                 if menu.move_hover(1) {
                                     self.mark_primary_dirty();
@@ -219,7 +219,7 @@ impl RenderApp {
                             }
                         }
                         Key::Named(NamedKey::End) => {
-                            if let Some(ref mut menu) = self.popup_menu {
+                            if let Some(menu) = self.primary_popup_menu_mut() {
                                 let len = menu.active_panel().item_indices.len() as i32;
                                 menu.active_panel_mut().hover_index = len;
                                 if menu.move_hover(-1) {

@@ -1090,16 +1090,12 @@ impl RenderApp {
         let titlebar_background = self
             .primary_current_frame()
             .map(|f| (f.background.r, f.background.g, f.background.b));
-        if let (Some(renderer), Some(glyph_atlas)) = (
-            &self.renderer,
-            self.primary_frame
-                .as_mut()
-                .map(|primary_frame| &mut primary_frame.glyph_atlas),
-        ) {
+        if let (Some(renderer), Some(primary_frame)) = (&self.renderer, self.primary_frame.as_mut())
+        {
             Self::render_frame_chrome_overlays(
                 renderer,
                 &surface_view,
-                glyph_atlas,
+                &mut primary_frame.glyph_atlas,
                 GuiFrameChromeOverlays {
                     native_chrome: &self.chrome,
                     titlebar_background,
@@ -1140,8 +1136,8 @@ impl RenderApp {
                             padding: self.toolbar_padding,
                         }
                     }),
-                    popup_menu: self.popup_menu.as_ref(),
-                    tooltip: self.tooltip.as_ref(),
+                    popup_menu: primary_frame.popup_menu.as_ref(),
+                    tooltip: primary_frame.tooltip.as_ref(),
                     ime_preedit,
                 },
                 self.width,
@@ -1150,18 +1146,16 @@ impl RenderApp {
         }
 
         if let Some(ref renderer) = self.renderer {
-            Self::render_frame_visual_bell_overlay(
-                renderer,
-                &surface_view,
-                &mut self.visual_bell_start,
-                &mut self
-                    .primary_frame
-                    .as_mut()
-                    .expect("checked in render")
-                    .frame_dirty,
-                self.width,
-                self.height,
-            );
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
+                Self::render_frame_visual_bell_overlay(
+                    renderer,
+                    &surface_view,
+                    &mut primary_frame.visual_bell_start,
+                    &mut primary_frame.frame_dirty,
+                    self.width,
+                    self.height,
+                );
+            }
         }
 
         let fps_glyph_count = self.primary_current_frame().map_or(0, |f| f.glyphs.len());

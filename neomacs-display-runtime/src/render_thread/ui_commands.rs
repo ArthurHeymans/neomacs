@@ -205,7 +205,7 @@ impl RenderApp {
                 menu.face_fg = fg;
                 menu.face_bg = bg;
                 if emacs_frame_id == 0 {
-                    self.popup_menu = Some(menu);
+                    self.set_primary_popup_menu(Some(menu));
                     self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.popup_menu = Some(menu);
@@ -220,7 +220,7 @@ impl RenderApp {
             }
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
-                self.popup_menu = None;
+                self.set_primary_popup_menu(None);
                 self.chrome_interaction.menu_bar_active = None;
                 for window_state in self.frame_windows.windows.values_mut() {
                     if window_state.render.popup_menu.is_some() {
@@ -300,7 +300,7 @@ impl RenderApp {
                     cw,
                 );
                 if emacs_frame_id == 0 {
-                    self.tooltip = Some(tooltip);
+                    self.set_primary_tooltip(Some(tooltip));
                     self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.tooltip = Some(tooltip);
@@ -315,7 +315,7 @@ impl RenderApp {
             }
             RenderCommand::HideTooltip => {
                 tracing::debug!("HideTooltip");
-                self.tooltip = None;
+                self.set_primary_tooltip(None);
                 for window_state in self.frame_windows.windows.values_mut() {
                     if window_state.render.tooltip.is_some() {
                         window_state.render.tooltip = None;
@@ -330,8 +330,7 @@ impl RenderApp {
                 if emacs_frame_id == 0
                     || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                 {
-                    self.visual_bell_start = Some(now);
-                    self.mark_primary_dirty();
+                    self.set_primary_visual_bell_start(Some(now));
                     if self.effects.cursor_error_pulse.enabled {
                         if let Some(renderer) = self.renderer.as_ref() {
                             renderer.trigger_transient_cursor_error_pulse(
