@@ -1080,6 +1080,47 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_cond_assoc_lookup_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Conditional
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((x 5))\n  (cond ((< x 3) 'small)\n        ((< x 10) 'medium)\n        (t 'large)))\n")
+      (insert "#+end_src\n\n")
+      ;; Assoc lookup
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((table '((a . 1) (b . 2) (c . 3))))\n  (list (cdr (assoc 'b table))\n        (assoc 'd table)\n        (assq 'a table)))\n")
+      (insert "#+end_src\n\n")
+      ;; Loop construct
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((acc 0))\n  (dotimes (i 10) (setq acc (+ acc i)))\n  acc)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 3)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_arithmetic_comparison_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
