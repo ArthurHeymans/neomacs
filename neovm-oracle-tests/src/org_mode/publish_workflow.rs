@@ -1,0 +1,167 @@
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+
+#[test]
+fn org_publish_sitemap_recursive_sorting_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((root (make-temp-file "org-publish-site" t))
+         (pub (make-temp-file "org-publish-out" t))
+         (sub (expand-file-name "notes" root))
+         (org-publish-use-timestamps-flag nil)
+         (org-publish-project-alist
+          `(("site"
+             :base-directory ,root
+             :publishing-directory ,pub
+             :recursive t
+             :exclude "draft"
+             :auto-sitemap t
+             :sitemap-filename "index.org"
+             :sitemap-title "Site Map"
+             :sitemap-style tree
+             :sitemap-sort-files anti-chronologically
+             :sitemap-sort-folders first
+             :publishing-function org-html-publish-to-html
+             :with-toc nil))))
+    (unwind-protect
+        (progn
+          (make-directory sub)
+          (with-temp-file (expand-file-name "alpha.org" root)
+            (insert "#+TITLE: Alpha\n#+DATE: <2026-05-20 Wed>\n* A\n"))
+          (with-temp-file (expand-file-name "draft.org" root)
+            (insert "#+TITLE: Draft\n#+DATE: <2026-05-30 Sat>\n* D\n"))
+          (with-temp-file (expand-file-name "beta.org" sub)
+            (insert "#+TITLE: Beta\n#+DATE: <2026-05-25 Mon>\n* B\n"))
+          (with-temp-file (expand-file-name "gamma.org" sub)
+            (insert "#+TITLE: Gamma\n#+DATE: <2026-05-22 Fri>\n* G\n"))
+          (org-publish-project "site" t)
+          (let ((sitemap (expand-file-name "index.org" root)))
+            (list
+             (sort (mapcar (lambda (file) (file-relative-name file pub))
+                           (directory-files-recursively pub ".*" nil))
+                   #'string<)
+             (with-temp-buffer
+               (insert-file-contents sitemap)
+               (buffer-string))
+             (mapcar (lambda (name)
+                       (let ((file (expand-file-name name pub)))
+                         (list name
+                               (file-exists-p file)
+                               (and (file-exists-p file)
+                                    (with-temp-buffer
+                                      (insert-file-contents file)
+                                      (not (null
+                                            (string-match-p
+                                             "<title>.*</title>"
+                                             (buffer-string)))))))))
+                     '("alpha.html" "notes/beta.html" "notes/gamma.html"
+                       "draft.html" "index.html")))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}
+
+#[test]
+fn org_publish_attachment_include_and_project_lookup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((root (make-temp-file "org-publish-assets" t))
+         (pub (make-temp-file "org-publish-assets-out" t))
+         (asset (expand-file-name "assets/logo.txt" root))
+         (org-publish-use-timestamps-flag nil)
+         (org-publish-project-alist
+          `(("assets"
+             :base-directory ,root
+             :base-extension "txt"
+             :publishing-directory ,pub
+             :recursive t
+             :include ("manual.dat")
+             :exclude "secret"
+             :publishing-function org-publish-attachment))))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory asset) t)
+          (with-temp-file asset (insert "logo"))
+          (with-temp-file (expand-file-name "secret.txt" root) (insert "secret"))
+          (with-temp-file (expand-file-name "manual.dat" root) (insert "manual"))
+          (let* ((project (assoc "assets" org-publish-project-alist))
+                 (base-files (mapcar (lambda (file)
+                                       (file-relative-name file root))
+                                     (org-publish-get-base-files project)))
+                 (lookups (mapcar
+                           (lambda (name)
+                             (let ((p (org-publish-get-project-from-filename
+                                       (expand-file-name name root))))
+                               (and p (car p))))
+                           '("assets/logo.txt" "manual.dat" "secret.txt"))))
+            (org-publish-project "assets" t)
+            (list
+             (sort base-files #'string<)
+             lookups
+             (mapcar (lambda (name)
+                       (let ((file (expand-file-name name pub)))
+                         (list name
+                               (file-exists-p file)
+                               (and (file-exists-p file)
+                                    (with-temp-buffer
+                                      (insert-file-contents file)
+                                      (buffer-string))))))
+                     '("logo.txt" "manual.dat" "secret.txt")))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}
+
+#[test]
+fn org_publish_needed_timestamp_cache_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (let* ((root (make-temp-file "org-publish-cache" t))
+         (pub (make-temp-file "org-publish-cache-out" t))
+         (src (expand-file-name "page.org" root))
+         (org-publish-use-timestamps-flag t)
+         (org-publish-timestamp-directory
+          (expand-file-name "timestamps" root))
+         (org-publish-project-alist
+          `(("cache"
+             :base-directory ,root
+             :publishing-directory ,pub
+             :publishing-function org-html-publish-to-html
+             :with-toc nil))))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "#+TITLE: Cache\n* One\n"))
+          (let* ((project (assoc "cache" org-publish-project-alist))
+                 (before (org-publish-needed-p
+                          src pub #'org-html-publish-to-html pub root)))
+            (org-publish-project "cache" t)
+            (let ((after (org-publish-needed-p
+                          src pub #'org-html-publish-to-html pub root)))
+              (sleep-for 1)
+              (with-temp-file src
+                (insert "#+TITLE: Cache\n* Two\n"))
+              (let ((changed (org-publish-needed-p
+                              src pub #'org-html-publish-to-html pub root))
+                    (timestamp
+                     (org-publish-timestamp-filename
+                      src pub #'org-html-publish-to-html)))
+                (list before
+                      after
+                      changed
+                      (file-exists-p timestamp)
+                      (file-exists-p (expand-file-name "page.html" pub))
+                      (car project))))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}

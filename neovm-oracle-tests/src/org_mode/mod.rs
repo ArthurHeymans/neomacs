@@ -27,6 +27,7 @@ mod list_checkbox;
 mod macro_include;
 mod planning_timestamp;
 mod property_log;
+mod publish_workflow;
 mod source_block;
 mod sparse_tree;
 mod support;
