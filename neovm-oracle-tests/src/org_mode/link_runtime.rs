@@ -983,3 +983,158 @@ fn org_link_open_store_move_visibility_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_link_attachment_custom_export_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-attach)
+  (require 'ol)
+  (require 'ox-ascii)
+  (require 'ox-html)
+  (let* ((root (file-name-as-directory
+                (make-temp-file "org-link-attach-custom" t)))
+         (org-file (expand-file-name "notes.org" root))
+         (org-attach-id-dir root)
+         (org-attach-store-link-p 'attached)
+         (org-attach-use-inheritance nil)
+         (org-link-descriptive t)
+         (org-stored-links nil)
+         (org-store-link-plist nil)
+         (follow-calls nil)
+         (store-calls nil))
+    (unwind-protect
+        (progn
+          (org-link-set-parameters
+           "audit"
+           :follow (lambda (path arg)
+                     (push (list path arg (buffer-name)) follow-calls))
+           :store (lambda ()
+                    (push (list (buffer-name) (point)) store-calls)
+                    (org-link-store-props
+                     :type "audit"
+                     :link "audit:stored/path"
+                     :description "Stored Audit")
+                    t)
+           :export (lambda (path desc backend _info)
+                     (format "<%s:%s:%s>" backend path (or desc "")))
+           :face (lambda (path)
+                   (if (string-match-p "warn" path)
+                       'org-warning
+                     'org-link))
+           :display "AUDIT")
+          (with-temp-file org-file
+            (insert "#+TITLE: Attach Custom\n")
+            (insert "* Asset Node\n")
+            (insert ":PROPERTIES:\n:ID: asset-id\n:END:\n")
+            (insert "Body with [[audit:warn/path][Audit Warn]].\n")
+            (insert "[[attachment:asset one.txt][Asset One]] ")
+            (insert "[[attachment:asset-two.dat]].\n")
+            (insert "* Other\nOther body\n"))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (setq default-directory root)
+            (goto-char (point-min))
+            (search-forward "Asset Node")
+            (beginning-of-line)
+            (let* ((attach-dir (org-attach-dir-get-create))
+                   (asset-one (expand-file-name "asset one.txt" attach-dir))
+                   (asset-two (expand-file-name "asset-two.dat" attach-dir)))
+              (with-temp-file asset-one (insert "asset one contents\n"))
+              (with-temp-file asset-two (insert "asset two contents\n"))
+              (font-lock-ensure (point-min) (point-max))
+              (let ((norm
+                     (lambda (value)
+                       (cond
+                        ((stringp value)
+                         (replace-regexp-in-string
+                          (regexp-quote root) "<root>/" value t t))
+                        ((consp value) (mapcar norm value))
+                        (t value))))
+                    (props
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward needle)
+                         (list needle
+                               (get-text-property
+                                (match-beginning 0) 'face)
+                               (get-text-property
+                                (match-beginning 0) 'display)
+                               (get-text-property
+                                (match-beginning 0) 'invisible)
+                               (get-text-property
+                                (match-beginning 0) 'mouse-face)
+                               (keymapp
+                                (get-text-property
+                                 (match-beginning 0) 'keymap))))))
+                    (link-summary
+                     (lambda ()
+                       (org-element-map (org-element-parse-buffer) 'link
+                         (lambda (link)
+                           (list (org-element-property :type link)
+                                 (org-element-property :path link)
+                                 (org-element-property :raw-link link)
+                                 (and (org-element-contents-begin link)
+                                      (buffer-substring-no-properties
+                                       (org-element-contents-begin link)
+                                       (org-element-contents-end link)))))))))
+                (let ((before-props
+                       (mapcar props
+                               '("Audit Warn" "Asset One"
+                                 "attachment:asset-two.dat")))
+                      (expanded
+                       (mapcar #'org-attach-expand
+                               '("asset one.txt" "asset-two.dat"
+                                 "missing.bin"))))
+                  (goto-char (point-min))
+                  (search-forward "Audit Warn")
+                  (org-open-at-point '(4))
+                  (goto-char (point-min))
+                  (search-forward "Asset One")
+                  (let ((asset-open
+                         (cl-letf (((symbol-function 'org-link-open-as-file)
+                                    (lambda (path arg)
+                                      (list 'opened
+                                            (funcall norm path)
+                                            arg))))
+                           (org-open-at-point '(16)))))
+                    (goto-char (point-min))
+                    (search-forward "Asset Node")
+                    (beginning-of-line)
+                    (let ((stored-audit
+                           (progn
+                             (setq org-store-link-functions nil)
+                             (org-store-link nil nil)))
+                          (stored-audit-plist org-store-link-plist))
+                      (setq org-store-link-plist nil)
+                      (let ((export-source
+                             (buffer-substring-no-properties
+                              (point-min) (point-max))))
+                        (list before-props
+                              (funcall norm expanded)
+                              asset-open
+                              (nreverse follow-calls)
+                              stored-audit
+                              stored-audit-plist
+                              (nreverse store-calls)
+                              (funcall link-summary)
+                              (funcall norm
+                                       (org-export-string-as
+                                        export-source 'ascii t
+                                        '(:with-toc nil)))
+                              (funcall norm
+                                       (org-export-string-as
+                                        export-source 'html t
+                                        '(:with-toc nil)))
+                              (funcall norm
+                                       (buffer-substring-no-properties
+                                        (point-min) (point-max))))))))))))
+      (when (get-file-buffer org-file)
+        (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
