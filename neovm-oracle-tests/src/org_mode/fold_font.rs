@@ -664,3 +664,117 @@ fn org_fold_reveal_context_after_hidden_search_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_get_level_face_options_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (dotimes (level 10)
+      (insert (make-string (1+ level) ?*) " L" (number-to-string (1+ level)) "\n"))
+    (let (out)
+      (dolist (settings
+               '((nil nil nil nil)
+                 (t nil nil nil)
+                 (nil t nil nil)
+                 (nil t t nil)
+                 (nil nil nil t)
+                 (t t t t)))
+        (let ((org-odd-levels-only (nth 0 settings))
+              (org-cycle-level-faces (nth 1 settings))
+              (org-hide-leading-stars (nth 2 settings))
+              (org-level-color-stars-only (nth 3 settings)))
+          (goto-char (point-min))
+          (while (re-search-forward "^\\(\\*+\\) \\(L[0-9]+\\)" nil t)
+            (push (list settings
+                        (match-string 1)
+                        (substring-no-properties (match-string 2))
+                        (org-outline-level)
+                        (org-get-level-face 1)
+                        (org-get-level-face 2)
+                        (org-get-level-face 3))
+                  out))))
+      (nreverse out))))"##,
+    );
+}
+
+#[test]
+fn org_fontify_like_org_mode_deep_markup_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (let* ((org-link-descriptive t)
+         (input (concat "* TODO L1 :tag:\n"
+                        "**** WAIT L4 [[https://example.org][Example]]\n"
+                        "***** DONE L5 /italic/ =code= *bold*\n"
+                        "[[file:plain.txt]] <<target>> {{{macro(arg)}}}\n"))
+         (fontified (org-fontify-like-in-org-mode input t))
+         (probe (lambda (needle)
+                  (let ((pos (string-match (regexp-quote needle) fontified)))
+                    (and pos
+                         (list needle
+                               pos
+                               (substring-no-properties
+                                fontified pos (+ pos (length needle)))
+                               (get-text-property pos 'face fontified)
+                               (get-text-property pos 'mouse-face fontified)
+                               (get-text-property pos 'help-echo fontified)
+                               (get-text-property pos 'htmlize-link fontified)
+                               (get-text-property pos 'org-emphasis fontified)
+                               (get-text-property pos 'font-lock-multiline fontified)
+                               (get-text-property pos 'font-lock-fontified fontified)
+                               (keymapp (get-text-property pos 'keymap fontified))))))))
+    (list (substring-no-properties fontified)
+          (mapcar probe
+                  '("TODO" "L1" "WAIT" "L4" "Example" "DONE" "L5"
+                    "italic" "code" "bold" "target" "{{{macro(arg)}}}")))))"##,
+    );
+}
+
+#[test]
+fn org_indent_deep_cycle_prefix_properties_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-indent)
+  (with-temp-buffer
+    (let ((org-startup-indented t)
+          (org-hide-leading-stars t)
+          (org-odd-levels-only nil))
+      (org-mode)
+      (org-indent-mode 1)
+      (insert "* L1\nbody 1\n")
+      (insert "** L2\nbody 2\n")
+      (insert "*** L3\nbody 3\n")
+      (insert "**** L4\nbody 4\n")
+      (insert "***** L5\nbody 5\n")
+      (insert "****** L6\nbody 6\n")
+      (dotimes (_ 3) (org-cycle-global))
+      (font-lock-ensure (point-min) (point-max))
+      (let ((probe
+             (lambda (needle)
+               (save-excursion
+                 (goto-char (point-min))
+                 (search-forward needle)
+                 (let ((pos (line-beginning-position)))
+                   (list needle
+                         (org-outline-level)
+                         (get-text-property pos 'line-prefix)
+                         (get-text-property pos 'wrap-prefix)
+                         (get-text-property pos 'face)
+                         (get-text-property (point) 'invisible)))))))
+        (list (mapcar probe
+                      '("L1" "body 1" "L2" "body 2" "L3" "body 3"
+                        "L4" "body 4" "L5" "body 5" "L6" "body 6"))
+              (buffer-substring-no-properties (point-min) (point-max))))))"##,
+    );
+}
