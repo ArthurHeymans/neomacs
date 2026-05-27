@@ -365,3 +365,122 @@ fn org_publish_custom_hooks_cache_sitemap_combo() {
       (delete-directory pub t))))"##,
     );
 }
+
+#[test]
+fn org_publish_crossref_current_project_cache_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-publish)
+  (require 'ox-html)
+  (let* ((root (make-temp-file "org-publish-crossref" t))
+         (pub (make-temp-file "org-publish-crossref-out" t))
+         (org-publish-use-timestamps-flag t)
+         (org-publish-timestamp-directory
+          (expand-file-name "timestamps" root))
+         (published nil)
+         (org-publish-after-publishing-hook
+          (list (lambda (file &rest _)
+                  (push (file-relative-name file root) published))))
+         (org-publish-project-alist
+          `(("pages"
+             :base-directory ,root
+             :base-extension "org"
+             :publishing-directory ,pub
+             :recursive nil
+             :auto-sitemap t
+             :sitemap-filename "sitemap.org"
+             :sitemap-title "Crossrefs"
+             :publishing-function org-html-publish-to-html
+             :html-link-home "index.html"
+             :with-toc nil))))
+    (unwind-protect
+        (progn
+          (with-temp-file (expand-file-name "index.org" root)
+            (insert "#+TITLE: Index\n")
+            (insert "* Home\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: home\n:END:\n")
+            (insert "See [[file:about.org::*About][About]] and [[#home][Home]].\n"))
+          (with-temp-file (expand-file-name "about.org" root)
+            (insert "#+TITLE: About\n")
+            (insert "* About\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: about-target\n:END:\n")
+            (insert "Back [[file:index.org::#home][Home custom]].\n"))
+          (let* ((index (expand-file-name "index.org" root))
+                 (about (expand-file-name "about.org" root))
+                 (project (org-publish-get-project-from-filename index))
+                 (base-files
+                  (sort (mapcar (lambda (file)
+                                  (file-relative-name file root))
+                                (org-publish-get-base-files project))
+                        #'string<)))
+            (with-current-buffer (find-file-noselect index)
+              (org-mode)
+              (org-publish-current-file t))
+            (org-publish-initialize-cache "pages")
+            (let ((after-current-file
+                   (list (file-exists-p (expand-file-name "index.html" pub))
+                         (file-exists-p (expand-file-name "about.html" pub))
+                         (sort published #'string<)
+                         (org-publish-cache-get-file-property
+                          index :title nil t)
+                         (org-publish-cache-get-file-property
+                          index :crossrefs nil t)))
+                  (resolved-about
+                   (org-publish-resolve-external-link
+                    "#about-target" about t)))
+              (setq published nil)
+              (with-current-buffer (find-file-noselect about)
+                (org-mode)
+                (org-publish-current-project t))
+              (org-publish-initialize-cache "pages")
+              (let* ((files
+                      (sort
+                       (mapcar (lambda (file)
+                                 (file-relative-name file pub))
+                               (directory-files-recursively pub ".*" nil))
+                       #'string<))
+                     (sitemap (expand-file-name "sitemap.org" root))
+                     (html-summaries
+                      (mapcar
+                       (lambda (name)
+                         (let ((file (expand-file-name name pub)))
+                           (list name
+                                 (file-exists-p file)
+                                 (and (file-exists-p file)
+                                      (with-temp-buffer
+                                        (insert-file-contents file)
+                                        (mapcar
+                                         (lambda (needle)
+                                           (not (null
+                                                 (string-match-p
+                                                  needle
+                                                  (buffer-string)))))
+                                         '("<title>" "About"
+                                           "Home custom")))))))
+                       '("index.html" "about.html" "sitemap.html"))))
+                (list base-files
+                      (car project)
+                      after-current-file
+                      resolved-about
+                      (sort published #'string<)
+                      files
+                      (and (file-exists-p sitemap)
+                           (with-temp-buffer
+                             (insert-file-contents sitemap)
+                             (buffer-substring-no-properties
+                              (point-min) (point-max))))
+                      html-summaries
+                      (org-publish-cache-get-file-property
+                       about :title nil t)
+                      (org-publish-cache-get-file-property
+                       about :crossrefs nil t))))))
+      (when (get-file-buffer (expand-file-name "index.org" root))
+        (kill-buffer (get-file-buffer (expand-file-name "index.org" root))))
+      (when (get-file-buffer (expand-file-name "about.org" root))
+        (kill-buffer (get-file-buffer (expand-file-name "about.org" root))))
+      (delete-directory root t)
+      (delete-directory pub t))))"##,
+    );
+}
