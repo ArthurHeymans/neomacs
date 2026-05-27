@@ -449,6 +449,130 @@ fn org_fold_region_boundaries_after_hidden_edit_combo() {
 }
 
 #[test]
+fn org_repeated_fold_hidden_boundary_complex_edit_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-hide-block-startup nil))
+      (org-mode)
+      (insert "* Root\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "Root paragraph.\n")
+      (insert "** TODO Alpha\n")
+      (insert "Alpha body\n")
+      (insert "#+begin_quote\nquoted alpha\n#+end_quote\n")
+      (insert "*** TODO Alpha child\n")
+      (insert "- [ ] child task\n")
+      (insert "**** TODO Alpha L4\n")
+      (insert "L4 body\n")
+      (insert "***** TODO Alpha L5\n")
+      (insert "L5 body\n")
+      (insert "** WAIT Beta\n")
+      (insert "Beta body\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:15] =>  0:15\n:END:\n")
+      (insert "*** TODO Beta child\n")
+      (insert "Beta child body\n")
+      (insert "** TODO Gamma\n")
+      (insert "Gamma body\n")
+      (insert "* Tail\nTail body\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (line-number-at-pos)
+                                (not (null (org-invisible-p (point)))))))
+                      '("Root paragraph" "Alpha body" "quoted alpha"
+                        "Alpha child" "Alpha L4" "Alpha L5" "Beta body"
+                        "Beta child" "Gamma body" "Tail body"))
+                     (count-matches "^\\*+ " (point-min) (point-max))
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (get-text-property
+                                 (line-beginning-position) 'face)
+                                (get-text-property
+                                 (match-beginning 0) 'face)
+                                (get-text-property
+                                 (match-beginning 0)
+                                 'font-lock-fontified))))
+                      '("Alpha L4" "Alpha L5")))))
+            states)
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (dotimes (_ 3)
+          (org-cycle)
+          (push (funcall snapshot 'alpha-cycle) states))
+        (org-fold-show-subtree)
+        (search-forward "Alpha L5")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (end-of-line)
+        (insert "\nInserted under hidden L5\n")
+        (push (funcall snapshot 'after-hidden-insert) states)
+        (org-fold-show-subtree)
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (beginning-of-line)
+        (dotimes (_ 2)
+          (org-cycle)
+          (push (funcall snapshot 'beta-cycle) states))
+        (org-fold-show-subtree)
+        (search-forward "Beta child body")
+        (end-of-line)
+        (insert "\n*** TODO Beta inserted\nInserted beta body\n")
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (org-fold-show-all)
+        (font-lock-ensure (point-min) (point-max))
+        (push (funcall snapshot 'after-show-all) states)
+        (let ((lines (split-string
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      "\n" t))
+              (bad-heading-lines nil))
+          (dolist (line lines)
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line bad-heading-lines)))
+          (list (nreverse states)
+                (nreverse bad-heading-lines)
+                (mapcar
+                 (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward needle)
+                     (list needle
+                           (line-number-at-pos)
+                           (buffer-substring-no-properties
+                            (line-beginning-position)
+                            (line-end-position)))))
+                 '("** TODO Alpha" "***** TODO Alpha L5"
+                   "Inserted under hidden L5" "** WAIT Beta"
+                   "*** TODO Beta inserted" "** TODO Gamma" "* Tail"))
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
