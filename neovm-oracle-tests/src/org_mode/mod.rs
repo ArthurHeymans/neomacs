@@ -34,6 +34,7 @@ mod macro_include;
 mod mobile_workflow;
 mod num_workflow;
 mod ox_org_native;
+mod persist_workflow;
 mod planning_timestamp;
 mod plot_workflow;
 mod property_log;
