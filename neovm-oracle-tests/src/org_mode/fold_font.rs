@@ -1443,3 +1443,159 @@ fn org_fold_move_reveal_deep_font_faces_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_fold_mixed_deep_objects_reveal_font_roundtrip_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t)
+          (org-hide-emphasis-markers t)
+          (org-link-descriptive t)
+          (org-cycle-hide-drawer-startup t)
+          (org-cycle-hide-block-startup t)
+          (org-cycle-separator-lines 0))
+      (org-mode)
+      (insert "#+STARTUP: overview hideblocks\n")
+      (insert "* TODO Root [#A] :root:\n")
+      (insert "SCHEDULED: <2026-05-27 Wed 09:00>\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:VISIBILITY: children\n:END:\n")
+      (insert "Root paragraph with *bold* and [[https://example.test][link]].\n")
+      (insert "** NEXT Alpha :work:\n")
+      (insert "- [ ] task one\n  - nested item\n")
+      (insert "| Name | Qty |\n|------+-----|\n| A    |   1 |\n")
+      (insert "*** WAIT Alpha child :deep:\n")
+      (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+      (insert "**** TODO Alpha fourth [#B]\n")
+      (insert "Alpha fourth paragraph with footnote[fn:one].\n")
+      (insert "***** DONE Alpha fifth\n")
+      (insert "Fifth body before folds.\n")
+      (insert "** TODO Beta :work:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-27 Wed 10:00]--[2026-05-27 Wed 10:30] =>  0:30\n:END:\n")
+      (insert "*** TODO Beta child\n")
+      (insert "**** TODO Beta fourth\n")
+      (insert "Beta fourth body.\n")
+      (insert "* Tail\nTail body.\n")
+      (insert "[fn:one] Footnote body.\n")
+      (let ((needles
+             '("Root" "SCHEDULED:" ":Owner:" "Root paragraph"
+               "Alpha" "- [ ] task one" "nested item" "| A"
+               "Alpha child" "(+ 1 2)" "Alpha fourth"
+               "footnote[fn:one]" "Alpha fifth" "Fifth body"
+               "Beta" ":LOGBOOK:" "Beta child" "Beta fourth"
+               "Beta fourth body" "Tail" "Footnote body"))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (font-lock-ensure (point-min) (point-max))
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (let ((pos (match-beginning 0)))
+                              (list needle
+                                    (line-number-at-pos pos)
+                                    (invisible-p pos)
+                                    (get-text-property pos 'face)
+                                    (get-text-property
+                                     (line-beginning-position) 'face)
+                                    (get-text-property pos 'invisible)))))
+                        needles)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (let (out)
+                           (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                             (push (list (match-string 1)
+                                         (match-string 2)
+                                         (org-outline-level)
+                                         (get-text-property
+                                          (line-beginning-position) 'face))
+                                   out))
+                           (nreverse out)))
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))))))
+          (push (funcall snapshot 'initial) states)
+          (org-cycle-set-startup-visibility)
+          (push (funcall snapshot 'startup) states)
+          (org-fold-hide-block-all)
+          (org-fold-hide-drawer-all)
+          (push (funcall snapshot 'hide-blocks-drawers) states)
+          (org-fold-hide-sublevels 3)
+          (push (funcall snapshot 'sublevels-3) states)
+          (goto-char (point-min))
+          (search-forward "(+ 1 2)")
+          (org-fold-show-context 'local)
+          (push (funcall snapshot 'reveal-src-local) states)
+          (goto-char (point-min))
+          (search-forward "Alpha fourth")
+          (beginning-of-line)
+          (dotimes (_ 4)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-alpha-fourth) states))
+          (goto-char (point-min))
+          (search-forward "Alpha fifth")
+          (beginning-of-line)
+          (org-demote-subtree)
+          (search-forward "Alpha fifth")
+          (beginning-of-line)
+          (org-promote-subtree)
+          (push (funcall snapshot 'level-roundtrip) states)
+          (org-fold-show-all)
+          (goto-char (point-min))
+          (search-forward "Fifth body before folds.")
+          (end-of-line)
+          (insert "\nFifth body after reveal edit.")
+          (goto-char (point-min))
+          (search-forward "Beta child")
+          (beginning-of-line)
+          (org-cut-subtree)
+          (goto-char (point-min))
+          (search-forward "Alpha fifth")
+          (beginning-of-line)
+          (org-paste-subtree 5)
+          (push (funcall snapshot 'after-edit-move) states)
+          (goto-char (point-min))
+          (dotimes (_ 5)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((merged nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (push (funcall snapshot 'final) states)
+            (list (nreverse states)
+                  (nreverse merged)
+                  (mapcar (lambda (needle)
+                            (not (null
+                                  (string-match-p
+                                   needle
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max))))))
+                          '("Fifth body after reveal edit."
+                            "***** TODO Beta child"
+                            "****** TODO Beta fourth"
+                            "[fn:one] Footnote body."))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
