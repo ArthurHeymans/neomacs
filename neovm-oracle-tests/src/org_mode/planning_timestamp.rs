@@ -102,3 +102,69 @@ fn org_planning_repeater_warning_element_combo() {
               (org-timestamp-to-time deadline))))))))"##,
     );
 }
+
+#[test]
+fn org_schedule_deadline_timestamp_range_shift_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-log-reschedule nil)
+          (org-log-redeadline nil))
+      (org-mode)
+      (insert "* TODO Task\n")
+      (insert "Body with <2026-05-27 Wed 09:30-10:45> and ")
+      (insert "[2026-05-28 Thu].\n")
+      (goto-char (point-min))
+      (org-schedule nil "2026-06-03 08:15")
+      (org-deadline nil "2026-06-10 +1w -2d")
+      (let ((after-planning
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (search-forward "09:30")
+        (let* ((range-ts (org-timestamp-at-point))
+               (split-start
+                (mapcar (lambda (ts)
+                          (and ts (org-element-property :raw-value ts)))
+                        (org-timestamp-split-range range-ts)))
+               (translated-start
+                (org-timestamp-translate range-ts 'start))
+               (translated-end
+                (org-timestamp-translate range-ts 'end)))
+          (org-timestamp-up-day 2)
+          (search-forward "[2026")
+          (org-timestamp-down-day 1)
+          (goto-char (point-max))
+          (insert "\n")
+          (org-timestamp nil nil)
+          (insert "\n")
+          (org-timestamp-inactive nil)
+          (let ((parsed
+                 (mapcar
+                  (lambda (s)
+                    (let ((ts (org-timestamp-from-string s)))
+                      (list s
+                            (org-element-property :raw-value ts)
+                            (org-timestamp-has-time-p ts)
+                            (format-time-string
+                             "%Y-%m-%d %H:%M"
+                             (org-timestamp-to-time ts))
+                            (format-time-string
+                             "%Y-%m-%d %H:%M"
+                             (org-timestamp-to-time ts 'end)))))
+                  '("<2026-05-27 Wed 09:30-10:45>"
+                    "<2026-06-03 Wed 08:15>"
+                    "[2026-05-28 Thu]"))))
+            (list after-planning
+                  split-start
+                  translated-start
+                  translated-end
+                  parsed
+                  (replace-regexp-in-string
+                   "\\[[0-9][^]\n]+\\]\\|<[0-9][^>\n]+>"
+                   "[stamp]"
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
