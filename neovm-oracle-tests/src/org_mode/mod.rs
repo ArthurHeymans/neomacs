@@ -54,6 +54,7 @@ mod table_agenda;
 mod table_formula;
 mod tag_match;
 mod timer_workflow;
+mod yank_dnd;
 
 #[test]
 fn org_element_headline_properties() {
