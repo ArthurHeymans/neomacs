@@ -343,3 +343,104 @@ fn org_org_export_native_planning_macro_footnote_combo() {
        out))))"##,
     );
 }
+
+#[test]
+fn org_export_hooks_parse_tree_navigation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Hooked\n")
+    (insert "#+MACRO: wrap Before-$1\n")
+    (insert "* Keep\n")
+    (insert "First paragraph with {{{wrap(macro)}}}.\n")
+    (insert "#+begin_comment\n")
+    (insert "comment should vanish\n")
+    (insert "#+end_comment\n")
+    (insert "#+begin_export html\n")
+    (insert "<strong>raw html</strong>\n")
+    (insert "#+end_export\n")
+    (insert "* Drop :noexport:\n")
+    (insert "Dropped paragraph.\n")
+    (let ((calls nil))
+      (let ((org-export-before-processing-functions
+             (list (lambda (backend)
+                     (push (list 'processing backend
+                                 (buffer-substring-no-properties
+                                  (point-min) (line-end-position)))
+                           calls)
+                     (goto-char (point-max))
+                     (insert "* Added\n")
+                     (insert "Added paragraph with [[https://example.org][link]].\n"))))
+            (org-export-before-parsing-functions
+             (list (lambda (backend)
+                     (push (list 'parsing backend
+                                 (buffer-substring-no-properties
+                                  (point-min) (line-end-position)))
+                           calls)
+                     (goto-char (point-min))
+                     (search-forward "First paragraph")
+                     (end-of-line)
+                     (insert "\nSecond paragraph inserted before parsing.\n"))))
+            (org-export-filter-options-functions
+             (list (lambda (info backend)
+                     (push (list 'options backend
+                                 (plist-get info :title)
+                                 (plist-get info :with-toc))
+                           calls)
+                     (plist-put info :with-toc nil))))
+            (org-export-filter-parse-tree-functions
+             (list (lambda (tree backend info)
+                     (push
+                      (list 'tree backend
+                            (mapcar
+                             (lambda (h)
+                               (org-element-property :raw-value h))
+                             (org-element-map tree 'headline #'identity))
+                            (length (plist-get info :ignore-list)))
+                      calls)
+                     tree))))
+        (let* ((org-export-exclude-tags '("noexport"))
+               (html (org-export-as 'html nil nil t nil))
+               (info (org-export-get-environment 'html nil
+                                                 '(:with-toc nil)))
+               (tree (plist-get info :parse-tree))
+               (paragraphs
+                (org-element-map tree 'paragraph #'identity))
+               (first-p (car paragraphs))
+               (second-p (cadr paragraphs))
+               (link (car (org-element-map tree 'link #'identity))))
+          (list (nreverse calls)
+                (mapcar
+                 (lambda (p)
+                   (list (org-element-type
+                          (org-export-get-previous-element p info))
+                         (org-element-type
+                          (org-export-get-next-element p info))
+                         (org-element-type
+                          (org-export-get-parent-headline p))))
+                 paragraphs)
+                (and link
+                     (list (org-element-property :raw-link link)
+                           (org-element-property
+                            :raw-value
+                            (org-export-get-parent-headline link))
+                           (org-element-type
+                            (org-export-get-previous-element link info t))))
+                (org-export-get-category first-p info)
+                (org-export-get-category second-p info)
+                (not (null (string-match-p "Before-macro" html)))
+                (not (null (string-match-p "Second paragraph" html)))
+                (not (null (string-match-p "Added paragraph" html)))
+                (not (null (string-match-p "raw html" html)))
+                (null (string-match-p "Dropped paragraph" html))
+                (null (string-match-p "comment should vanish" html))
+                (replace-regexp-in-string
+                 "org[[:alnum:]]+"
+                 "org-id"
+                 html))))))"##,
+    );
+}
