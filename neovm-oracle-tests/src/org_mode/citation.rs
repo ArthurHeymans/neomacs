@@ -327,3 +327,115 @@ fn org_cite_custom_processor_note_adjust_wrap_combo() {
       (setq org-cite--processors original-processors))))"##,
     );
 }
+
+#[test]
+fn org_cite_insert_processor_affix_boundaries_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (let ((original-processors org-cite--processors)
+        (keys '("new-before" "replace-key" "new-after"
+                "global-prefix" "global-suffix"
+                "fresh-a" "fresh-b"))
+        (styles '("author" "text/bare"))
+        (calls nil))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (org-cite-register-processor
+           'insert-probe
+           :cite-styles '((nil "plain" "Plain")
+                          ("author" "author" "Author")
+                          ("text/bare" "text bare" "Text bare"))
+           :insert
+           (org-cite-make-insert-processor
+            (lambda (multiple)
+              (push (list 'select-key multiple) calls)
+              (if multiple
+                  (list (pop keys) (pop keys))
+                (pop keys)))
+            (lambda (citation)
+              (push (list 'select-style
+                          (and citation
+                               (org-cite-get-references citation t)))
+                    calls)
+              (pop styles))))
+          (let ((org-cite-insert-processor 'insert-probe))
+            (insert "Lead [cite:see @one p. 1; compare @two p. 2] tail.\n")
+            (insert "Solo [cite:@solo].\n")
+            (insert "Plain paragraph end")
+            ;; Before @one: insert a new reference before the first one.
+            (goto-char (point-min))
+            (search-forward "@one")
+            (backward-char 4)
+            (org-cite-insert nil)
+            ;; Inside @one: replace key while preserving affixes.
+            (goto-char (point-min))
+            (search-forward "@one")
+            (backward-char 2)
+            (org-cite-insert nil)
+            ;; After suffix of @two: insert a reference after it.
+            (goto-char (point-min))
+            (search-forward "p. 2")
+            (org-cite-insert nil)
+            ;; On global prefix: insert before first reference.
+            (goto-char (point-min))
+            (search-forward "see ")
+            (org-cite-insert nil)
+            ;; On global suffix: insert after last reference.
+            (goto-char (point-min))
+            (search-forward " tail")
+            (backward-char 1)
+            (org-cite-insert nil)
+            ;; Elsewhere with ARG: insert a fresh styled citation.
+            (goto-char (point-max))
+            (insert " ")
+            (org-cite-insert '(4))
+            ;; Delete the solo citation through insert processor ARG.
+            (goto-char (point-min))
+            (search-forward "@solo")
+            (org-cite-insert '(4))
+            (font-lock-ensure (point-min) (point-max))
+            (let* ((tree (org-element-parse-buffer))
+                   (citations
+                    (org-element-map tree 'citation
+                      (lambda (citation)
+                        (list (org-element-property :style citation)
+                              (org-cite-get-references citation t)
+                              (org-cite-main-affixes citation)
+                              (let ((bounds (org-cite-boundaries citation)))
+                                (cons (- (car bounds) (point-min))
+                                      (- (cdr bounds) (point-min))))
+                              (mapcar
+                               (lambda (ref)
+                                 (list (org-element-property :key ref)
+                                       (org-element-property :prefix ref)
+                                       (org-element-property :suffix ref)
+                                       (let ((bounds
+                                              (org-cite-key-boundaries ref)))
+                                         (cons (- (car bounds) (point-min))
+                                               (- (cdr bounds) (point-min))))))
+                               (org-cite-get-references citation))))))
+                   (faces
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward needle)
+                         (list needle
+                               (get-text-property (match-beginning 0) 'face)
+                               (get-text-property (match-beginning 0)
+                                                  'font-lock-fontified))))
+                     '("@new-before" "@replace-key" "@new-after"
+                       "@global-prefix" "@global-suffix" "@fresh-a"))))
+              (list citations
+                    faces
+                    (nreverse calls)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))
+      (setq org-cite--processors original-processors))))"##,
+    );
+}
