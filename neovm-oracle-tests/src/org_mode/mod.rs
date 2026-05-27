@@ -18,6 +18,7 @@ mod clock_agenda;
 mod columns_duration;
 mod datetree_workflow;
 mod display_state;
+mod edit_layout;
 mod editing_export;
 mod element_ast;
 mod entities_markup;
