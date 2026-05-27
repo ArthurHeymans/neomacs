@@ -215,6 +215,97 @@ fn org_context_drawer_timestamp_comment_latex_combo() {
          ("x_1+y")
          ("src_emacs-lisp")
          ("self")
-         ("alpha")))))"##,
+          ("alpha")))))"##,
+    );
+}
+
+#[test]
+fn org_block_drawer_comment_structure_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Structure Probe\n\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:CUSTOM_ID: alpha-id\n:Owner: Ada\n:END:\n")
+    (insert ":LOGBOOK:\n")
+    (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00\n")
+    (insert ":END:\n")
+    (insert "# This is a comment\n")
+    (insert "Alpha body.\n\n")
+    (insert "#+begin_quote\n")
+    (insert "Quoted text with *markup*.\n")
+    (insert "#+end_quote\n\n")
+    (insert "#+begin_src emacs-lisp :results value\n")
+    (insert "(+ 1 2)\n")
+    (insert "#+end_src\n\n")
+    (insert "#+begin_example\n")
+    (insert "Example block.\n")
+    (insert "#+end_example\n\n")
+    (insert "** DONE Beta\n")
+    (insert "CLOSED: [2026-05-26 Mon 15:00]\n")
+    (insert "Beta body with $x^2$ math.\n\n")
+    (insert "#+begin_center\n")
+    (insert "Centered content.\n")
+    (insert "#+end_center\n")
+    ;; Parse full structure
+    (let* ((tree (org-element-parse-buffer))
+           (element-types
+            (org-element-map tree t
+              (lambda (el) (org-element-type el))))
+           (blocks
+            (org-element-map tree '(src-block quote-block example-block center-block)
+              (lambda (b)
+                (list (org-element-type b)
+                      (org-element-property :language b)
+                      (org-element-property :value b)
+                      (org-element-property :begin b)))))
+           (drawers
+            (org-element-map tree '(property-drawer drawer)
+              (lambda (d)
+                (list (org-element-type d)
+                      (org-element-property :drawer-name d)
+                      (org-element-property :begin d)))))
+           (props
+            (org-element-map tree 'node-property
+              (lambda (np)
+                (list (org-element-property :key np)
+                      (org-element-property :value np)))))
+           (planning
+            (org-element-map tree 'planning
+              (lambda (p)
+                (list (and (org-element-property :scheduled p)
+                           (org-element-property :raw-value
+                            (org-element-property :scheduled p)))
+                      (and (org-element-property :deadline p)
+                           (org-element-property :raw-value
+                            (org-element-property :deadline p)))
+                      (and (org-element-property :closed p)
+                           (org-element-property :raw-value
+                            (org-element-property :closed p)))))))
+           (clocks
+            (org-element-map tree 'clock
+              (lambda (c)
+                (list (org-element-property :duration c)
+                      (org-element-property :status c)))))
+           (comments
+            (org-element-map tree 'comment
+              (lambda (c)
+                (buffer-substring-no-properties
+                 (org-element-property :begin c)
+                 (org-element-property :end c))))))
+      (list element-types
+            blocks
+            drawers
+            props
+            planning
+            clocks
+            comments
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
     );
 }
