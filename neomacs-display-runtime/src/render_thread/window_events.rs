@@ -29,7 +29,7 @@ impl RenderApp {
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
             self.typing_speed.key_press_times.push(now);
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.typing_speed.key_press_times.push(now);
             window_state.render.frame_dirty = true;
@@ -43,7 +43,7 @@ impl RenderApp {
         let now = std::time::Instant::now();
         if self.frame_windows.is_primary_winit(window_id) {
             self.idle_dim.last_activity_time = now;
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.idle_dim.last_activity_time = now;
             window_state.render.frame_dirty = true;
@@ -149,19 +149,19 @@ impl RenderApp {
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             self.popup_menu = None;
                             self.chrome_interaction.menu_bar_active = None;
-                            self.frame_dirty = true;
+                            self.mark_primary_dirty();
                         }
                         Key::Named(NamedKey::ArrowDown) => {
                             if let Some(ref mut menu) = self.popup_menu {
                                 if menu.move_hover(1) {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowUp) => {
                             if let Some(ref mut menu) = self.popup_menu {
                                 if menu.move_hover(-1) {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
@@ -173,7 +173,7 @@ impl RenderApp {
                                     let global_idx = panel.item_indices[hi as usize];
                                     if menu.all_items[global_idx].submenu {
                                         if menu.open_submenu() {
-                                            self.frame_dirty = true;
+                                            self.mark_primary_dirty();
                                         }
                                     } else {
                                         self.comms.send_input(InputEvent::MenuSelection {
@@ -181,28 +181,28 @@ impl RenderApp {
                                         });
                                         self.popup_menu = None;
                                         self.chrome_interaction.menu_bar_active = None;
-                                        self.frame_dirty = true;
+                                        self.mark_primary_dirty();
                                     }
                                 } else {
                                     self.comms
                                         .send_input(InputEvent::MenuSelection { index: -1 });
                                     self.popup_menu = None;
                                     self.chrome_interaction.menu_bar_active = None;
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowRight) => {
                             if let Some(ref mut menu) = self.popup_menu {
                                 if menu.open_submenu() {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
                         Key::Named(NamedKey::ArrowLeft) => {
                             if let Some(ref mut menu) = self.popup_menu {
                                 if menu.close_submenu() {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
@@ -210,7 +210,7 @@ impl RenderApp {
                             if let Some(ref mut menu) = self.popup_menu {
                                 menu.active_panel_mut().hover_index = -1;
                                 if menu.move_hover(1) {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
@@ -219,7 +219,7 @@ impl RenderApp {
                                 let len = menu.active_panel().item_indices.len() as i32;
                                 menu.active_panel_mut().hover_index = len;
                                 if menu.move_hover(-1) {
-                                    self.frame_dirty = true;
+                                    self.mark_primary_dirty();
                                 }
                             }
                         }
@@ -358,7 +358,7 @@ impl RenderApp {
 
             WindowEvent::RedrawRequested => {
                 if self.frame_windows.is_primary_winit(window_id) {
-                    self.frame_dirty = false;
+                    self.set_primary_dirty(false);
                     self.render();
                 } else if let Some(emacs_fid) = self.frame_windows.emacs_frame_for_winit(window_id)
                 {
@@ -427,7 +427,7 @@ impl RenderApp {
                         self.ime_preedit_active = false;
                         self.ime_preedit_text.clear();
                         self.last_ime_cursor_area = None;
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -444,7 +444,7 @@ impl RenderApp {
                     if self.frame_windows.is_primary_winit(window_id) {
                         self.ime_preedit_active = false;
                         self.ime_preedit_text.clear();
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -474,7 +474,7 @@ impl RenderApp {
                         if let Some(target) = self.cursor.target_cloned() {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -532,7 +532,7 @@ impl RenderApp {
                         .glyph_atlas
                         .set_scale_factor(effective_scale as f32);
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
             }
 
             _ => {}

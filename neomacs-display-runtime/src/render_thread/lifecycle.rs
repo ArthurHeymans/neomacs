@@ -186,7 +186,7 @@ impl RenderApp {
 
         // Update cursor blink state
         if self.tick_cursor_blink() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if Self::tick_frame_window_cursor_blink(window_state, std::time::Instant::now()) {
@@ -196,37 +196,41 @@ impl RenderApp {
 
         // Tick cursor animation
         if self.cursor.tick_animation() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if window_state.render.cursor.tick_animation() {
                 window_state.render.frame_dirty = true;
             }
         }
+        let mut visual_cursor_dirty = false;
         for cursor in self.visual_cursors.values_mut() {
-            if cursor.tick_animation() {
-                self.frame_dirty = true;
-            }
+            visual_cursor_dirty |= cursor.tick_animation();
+        }
+        if visual_cursor_dirty {
+            self.mark_primary_dirty();
         }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
         if self.cursor.tick_size_animation() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if window_state.render.cursor.tick_size_animation() {
                 window_state.render.frame_dirty = true;
             }
         }
+        let mut visual_cursor_size_dirty = false;
         for cursor in self.visual_cursors.values_mut() {
-            if cursor.tick_size_animation() {
-                self.frame_dirty = true;
-            }
+            visual_cursor_size_dirty |= cursor.tick_size_animation();
+        }
+        if visual_cursor_size_dirty {
+            self.mark_primary_dirty();
         }
 
         if self.effects.idle_dim.enabled {
             if Self::tick_idle_dim_state(&mut self.idle_dim, &self.effects.idle_dim) {
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
             }
             for window_state in self.frame_windows.windows.values_mut() {
                 if Self::tick_idle_dim_state(
@@ -247,22 +251,22 @@ impl RenderApp {
 
         // Keep dirty if cursor pulse is active (needs continuous redraw)
         if self.effects.cursor_pulse.enabled && self.effects.cursor_glow.enabled {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Keep dirty if frame-owned renderer effects are still active.
         if self.renderer_effects.needs_redraw() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Keep dirty if transitions are active
         if self.transitions.has_active() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Check for terminal PTY activity
         if self.has_terminal_activity() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Determine if continuous rendering is needed
@@ -285,9 +289,9 @@ impl RenderApp {
             }
         }
 
-        if self.frame_dirty || has_active_content {
+        if self.primary_dirty() || has_active_content {
             tracing::debug!(
-                frame_dirty = self.frame_dirty,
+                frame_dirty = self.primary_dirty(),
                 has_active_content,
                 renderer_effects_need_redraw = self.renderer_effects.needs_redraw(),
                 cursor_animating = self.cursor.animating,
@@ -304,7 +308,7 @@ impl RenderApp {
         // Use WaitUntil with smart timeouts instead of Poll to save CPU.
         // Window events (key, mouse, resize) still wake immediately.
         let now = std::time::Instant::now();
-        let next_wake = if self.frame_dirty
+        let next_wake = if self.primary_dirty()
             || has_active_content
             || self.frame_windows.any_dirty()
             || self.cursor.animating

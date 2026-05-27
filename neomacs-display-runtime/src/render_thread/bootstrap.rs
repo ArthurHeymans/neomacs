@@ -231,7 +231,7 @@ impl RenderApp {
         // Force immediate re-render with old frame at new surface size.
         // Ensures the window always shows content during resize
         // (background fills new area, old glyphs stay at their positions).
-        self.frame_dirty = true;
+        self.mark_primary_dirty();
 
         tracing::debug!("Surface resized to {}x{}", width, height);
     }

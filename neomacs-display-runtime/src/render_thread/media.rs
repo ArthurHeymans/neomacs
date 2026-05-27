@@ -282,7 +282,7 @@ impl RenderApp {
         // Get frame font metrics for terminal cell sizing.
         // These come from FRAME_COLUMN_WIDTH / FRAME_LINE_HEIGHT / FRAME_FONT->pixel_size.
         let (cell_w, cell_h, font_size, frame_w, frame_h) =
-            if let Some(ref frame) = self.current_frame {
+            if let Some(frame) = self.primary_current_frame() {
                 (
                     frame.char_width,
                     frame.char_height,
@@ -332,9 +332,8 @@ impl RenderApp {
         }
 
         // Expand FrameGlyph::Terminal entries (placed by C redisplay) into cells
-        if let Some(ref mut frame) = self.current_frame {
-            let mut extra_glyphs = Vec::new();
-
+        let mut extra_glyphs = Vec::new();
+        if let Some(frame) = self.primary_current_frame() {
             for glyph in &frame.glyphs {
                 if let FrameGlyph::Terminal {
                     terminal_id,
@@ -378,118 +377,119 @@ impl RenderApp {
                     }
                 }
             }
-
-            if !extra_glyphs.is_empty() {
+        }
+        if !extra_glyphs.is_empty() {
+            if let Some(frame) = self.primary_current_frame_mut() {
                 frame.glyphs.extend(extra_glyphs);
-                self.frame_dirty = true;
             }
+            self.mark_primary_dirty();
         }
 
         // Render Window-mode terminals as overlays covering the frame body.
-        if let Some(ref mut frame) = self.current_frame {
-            let mut win_glyphs = Vec::new();
-            for id in self.terminal_manager.ids() {
-                if let Some(view) = self.terminal_manager.get(id) {
-                    if view.mode != TerminalMode::Window {
-                        continue;
-                    }
-                    if let Some(content) = view.content() {
-                        let x = 0.0_f32;
-                        let y = 0.0_f32;
-                        let width = content.cols as f32 * cell_w;
-                        let height = content.rows as f32 * cell_h;
-
-                        // Terminal background
-                        win_glyphs.push(FrameGlyph::Stretch {
-                            window_id: 0,
-                            row_role: GlyphRowRole::ModeLine,
-                            clip_rect: None,
-                            slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
-                            bidi_level: 0,
-                            x,
-                            y,
-                            width,
-                            height,
-                            bg: content.default_bg,
-                            face_id: 0,
-                            stipple_id: 0,
-                            stipple_fg: None,
-                        });
-
-                        Self::expand_terminal_cells(
-                            content,
-                            x,
-                            y,
-                            cell_w,
-                            cell_h,
-                            ascent,
-                            font_size,
-                            true,
-                            1.0,
-                            &mut win_glyphs,
-                        );
-                    }
+        let mut win_glyphs = Vec::new();
+        for id in self.terminal_manager.ids() {
+            if let Some(view) = self.terminal_manager.get(id) {
+                if view.mode != TerminalMode::Window {
+                    continue;
                 }
-            }
+                if let Some(content) = view.content() {
+                    let x = 0.0_f32;
+                    let y = 0.0_f32;
+                    let width = content.cols as f32 * cell_w;
+                    let height = content.rows as f32 * cell_h;
 
-            if !win_glyphs.is_empty() {
-                frame.glyphs.extend(win_glyphs);
-                self.frame_dirty = true;
+                    // Terminal background
+                    win_glyphs.push(FrameGlyph::Stretch {
+                        window_id: 0,
+                        row_role: GlyphRowRole::ModeLine,
+                        clip_rect: None,
+                        slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
+                        bidi_level: 0,
+                        x,
+                        y,
+                        width,
+                        height,
+                        bg: content.default_bg,
+                        face_id: 0,
+                        stipple_id: 0,
+                        stipple_fg: None,
+                    });
+
+                    Self::expand_terminal_cells(
+                        content,
+                        x,
+                        y,
+                        cell_w,
+                        cell_h,
+                        ascent,
+                        font_size,
+                        true,
+                        1.0,
+                        &mut win_glyphs,
+                    );
+                }
             }
         }
 
+        if !win_glyphs.is_empty() {
+            if let Some(frame) = self.primary_current_frame_mut() {
+                frame.glyphs.extend(win_glyphs);
+            }
+            self.mark_primary_dirty();
+        }
+
         // Render floating terminals
-        if let Some(ref mut frame) = self.current_frame {
-            let mut float_glyphs = Vec::new();
-            for id in self.terminal_manager.ids() {
-                if let Some(view) = self.terminal_manager.get(id) {
-                    if view.mode != TerminalMode::Floating {
-                        continue;
-                    }
-                    if let Some(content) = view.content() {
-                        let x = view.float_x;
-                        let y = view.float_y;
-                        let width = content.cols as f32 * cell_w;
-                        let height = content.rows as f32 * cell_h;
+        let mut float_glyphs = Vec::new();
+        for id in self.terminal_manager.ids() {
+            if let Some(view) = self.terminal_manager.get(id) {
+                if view.mode != TerminalMode::Floating {
+                    continue;
+                }
+                if let Some(content) = view.content() {
+                    let x = view.float_x;
+                    let y = view.float_y;
+                    let width = content.cols as f32 * cell_w;
+                    let height = content.rows as f32 * cell_h;
 
-                        let mut bg = content.default_bg;
-                        bg.a = view.float_opacity;
-                        float_glyphs.push(FrameGlyph::Stretch {
-                            window_id: 0,
-                            row_role: GlyphRowRole::ModeLine,
-                            clip_rect: None,
-                            slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
-                            bidi_level: 0,
-                            x,
-                            y,
-                            width,
-                            height,
-                            bg,
-                            face_id: 0,
-                            stipple_id: 0,
-                            stipple_fg: None,
-                        });
+                    let mut bg = content.default_bg;
+                    bg.a = view.float_opacity;
+                    float_glyphs.push(FrameGlyph::Stretch {
+                        window_id: 0,
+                        row_role: GlyphRowRole::ModeLine,
+                        clip_rect: None,
+                        slot_id: DisplaySlotId::from_pixels(0, x, y, cell_w, cell_h),
+                        bidi_level: 0,
+                        x,
+                        y,
+                        width,
+                        height,
+                        bg,
+                        face_id: 0,
+                        stipple_id: 0,
+                        stipple_fg: None,
+                    });
 
-                        Self::expand_terminal_cells(
-                            content,
-                            x,
-                            y,
-                            cell_w,
-                            cell_h,
-                            ascent,
-                            font_size,
-                            true,
-                            view.float_opacity,
-                            &mut float_glyphs,
-                        );
-                    }
+                    Self::expand_terminal_cells(
+                        content,
+                        x,
+                        y,
+                        cell_w,
+                        cell_h,
+                        ascent,
+                        font_size,
+                        true,
+                        view.float_opacity,
+                        &mut float_glyphs,
+                    );
                 }
             }
+        }
 
-            if !float_glyphs.is_empty() {
+        if !float_glyphs.is_empty() {
+            if let Some(frame) = self.primary_current_frame_mut() {
                 frame.glyphs.extend(float_glyphs);
-                self.frame_dirty = true;
             }
+            self.mark_primary_dirty();
         }
     }
 

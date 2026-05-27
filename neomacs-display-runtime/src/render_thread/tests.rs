@@ -145,8 +145,8 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     assert!(app.surface.is_none());
     assert!(app.surface_config.is_none());
     assert!(app.primary_frame.is_none());
-    assert!(app.current_frame.is_none());
-    assert!(!app.frame_dirty);
+    assert!(app.primary_current_frame().is_none());
+    assert!(!app.primary_dirty());
     assert!(app.primary_window_destroyed);
     assert_eq!(app.frame_windows.primary_frame_id(), None);
 }

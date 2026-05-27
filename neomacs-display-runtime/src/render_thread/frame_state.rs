@@ -30,7 +30,7 @@ impl RenderApp {
 
     fn refresh_faces_from_frames(&mut self) {
         let old_face_ids: std::collections::HashSet<u32> = self.faces.keys().copied().collect();
-        if let Some(ref frame) = self.current_frame {
+        if let Some(frame) = self.primary_current_frame() {
             self.faces = frame.faces.clone();
         }
         for entry in self.child_frames.frames.values() {
@@ -70,28 +70,45 @@ impl RenderApp {
         if self.visual_cursors.is_empty() {
             return;
         }
-        if let Some(ref mut frame) = self.current_frame {
+        let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
+            .visual_cursors
+            .iter()
+            .map(|(id, state)| {
+                (
+                    *id,
+                    (
+                        state.current_x,
+                        state.current_y,
+                        state.current_w,
+                        state.current_h,
+                    ),
+                )
+            })
+            .collect();
+        if let Some(frame) = self.primary_current_frame_mut() {
             for cursor in &mut frame.window_cursors {
-                let Some(state) = self.visual_cursors.get(&cursor.window_id) else {
+                let Some((x, y, width, height)) = visual_cursor_rects.get(&cursor.window_id) else {
                     continue;
                 };
-                cursor.x = state.current_x;
-                cursor.y = state.current_y;
-                cursor.width = state.current_w;
-                cursor.height = state.current_h;
+                cursor.x = *x;
+                cursor.y = *y;
+                cursor.width = *width;
+                cursor.height = *height;
             }
         }
     }
 
     fn apply_extra_spacing_if_needed(&mut self) {
         if self.extra_line_spacing != 0.0 || self.extra_letter_spacing != 0.0 {
-            if let Some(ref mut frame) = self.current_frame {
+            let extra_line_spacing = self.extra_line_spacing;
+            let extra_letter_spacing = self.extra_letter_spacing;
+            if let Some(frame) = self.primary_current_frame_mut() {
                 Self::apply_extra_spacing(
                     &mut frame.glyphs,
                     &mut frame.window_cursors,
                     &mut frame.phys_cursor,
-                    self.extra_line_spacing,
-                    self.extra_letter_spacing,
+                    extra_line_spacing,
+                    extra_letter_spacing,
                 );
             }
         }

@@ -84,7 +84,7 @@ impl RenderApp {
                 self.cursor.blink_interval = std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
                     self.cursor.blink_on = true;
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
                     window_state.render.cursor.copy_config_from(&self.cursor);
@@ -206,7 +206,7 @@ impl RenderApp {
                 menu.face_bg = bg;
                 if emacs_frame_id == 0 {
                     self.popup_menu = Some(menu);
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.popup_menu = Some(menu);
                     window_state.render.frame_dirty = true;
@@ -228,7 +228,7 @@ impl RenderApp {
                         window_state.render.frame_dirty = true;
                     }
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::ShowTooltip {
@@ -301,7 +301,7 @@ impl RenderApp {
                 );
                 if emacs_frame_id == 0 {
                     self.tooltip = Some(tooltip);
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.tooltip = Some(tooltip);
                     window_state.render.frame_dirty = true;
@@ -322,7 +322,7 @@ impl RenderApp {
                         window_state.render.frame_dirty = true;
                     }
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
@@ -331,7 +331,7 @@ impl RenderApp {
                     || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                 {
                     self.visual_bell_start = Some(now);
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                     if self.effects.cursor_error_pulse.enabled {
                         if let Some(renderer) = self.renderer.as_ref() {
                             renderer.trigger_transient_cursor_error_pulse(
@@ -341,24 +341,26 @@ impl RenderApp {
                         }
                     }
                     if self.effects.edge_snap.enabled {
-                        if let Some(ref frame) = self.current_frame {
-                            for info in &frame.window_infos {
-                                if info.selected && !info.is_minibuffer {
-                                    let at_top = info.window_start <= 1;
-                                    let at_bottom = info.window_end >= info.buffer_size;
-                                    if at_top || at_bottom {
-                                        if let Some(renderer) = self.renderer.as_ref() {
-                                            renderer.trigger_transient_edge_snap(
-                                                &mut self.renderer_effects,
-                                                info.bounds,
-                                                info.mode_line_height,
-                                                at_top,
-                                                at_bottom,
-                                                now,
-                                            );
-                                        }
-                                    }
-                                    break;
+                        let selected_info = self.primary_current_frame().and_then(|frame| {
+                            frame
+                                .window_infos
+                                .iter()
+                                .find(|info| info.selected && !info.is_minibuffer)
+                                .cloned()
+                        });
+                        if let Some(info) = selected_info {
+                            let at_top = info.window_start <= 1;
+                            let at_bottom = info.window_end >= info.buffer_size;
+                            if at_top || at_bottom {
+                                if let Some(renderer) = self.renderer.as_ref() {
+                                    renderer.trigger_transient_edge_snap(
+                                        &mut self.renderer_effects,
+                                        info.bounds,
+                                        info.mode_line_height,
+                                        at_top,
+                                        at_bottom,
+                                        now,
+                                    );
                                 }
                             }
                         }
@@ -416,7 +418,7 @@ impl RenderApp {
                     renderer.effects = self.effects.clone();
                 }
                 self.mark_frame_windows_dirty();
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorEffect(command) => {
@@ -425,13 +427,13 @@ impl RenderApp {
                     renderer.effects = self.effects.clone();
                 }
                 self.mark_frame_windows_dirty();
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetScrollIndicators { enabled } => {
                 self.scroll_indicators_enabled = enabled;
                 self.mark_frame_windows_dirty();
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetTitlebarHeight { height } => {
@@ -441,7 +443,7 @@ impl RenderApp {
                     window_state.native.chrome.titlebar_height = height;
                     window_state.render.frame_dirty = true;
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetShowFps { enabled } => {
@@ -451,7 +453,7 @@ impl RenderApp {
                     window_state.render.fps.enabled = enabled;
                     window_state.render.frame_dirty = true;
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetCornerRadius { radius } => {
@@ -461,7 +463,7 @@ impl RenderApp {
                     window_state.native.chrome.corner_radius = radius;
                     window_state.render.frame_dirty = true;
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetExtraSpacing {
@@ -470,7 +472,7 @@ impl RenderApp {
             } => {
                 self.extra_line_spacing = line_spacing;
                 self.extra_letter_spacing = letter_spacing;
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetIndentGuideRainbow { enabled, colors } => {
@@ -486,7 +488,7 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.set_indent_guide_rainbow(enabled, linear_colors);
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorSizeTransition {
@@ -502,7 +504,7 @@ impl RenderApp {
                     window_state.render.cursor.copy_config_from(&self.cursor);
                     window_state.render.frame_dirty = true;
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetLigaturesEnabled { enabled } => {
@@ -555,7 +557,7 @@ impl RenderApp {
                         window_state.render.frame_dirty = true;
                     }
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetChildFrameStyle {
@@ -570,7 +572,7 @@ impl RenderApp {
                 self.child_frame_shadow_layers = shadow_layers;
                 self.child_frame_shadow_offset = shadow_offset;
                 self.child_frame_shadow_opacity = shadow_opacity;
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetToolBar {
@@ -591,12 +593,12 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 });
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetToolBarConfig { icon_size, padding } => {
                 self.set_toolbar_visual_config(icon_size, padding);
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::SetMenuBar {
@@ -626,7 +628,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 });
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             other => Err(other),

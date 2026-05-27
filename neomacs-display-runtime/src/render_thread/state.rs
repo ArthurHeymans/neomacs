@@ -267,7 +267,6 @@ pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
     pub(super) window: Option<Arc<Window>>,
     pub(super) primary_window_destroyed: bool,
-    pub(super) current_frame: Option<FrameGlyphBuffer>,
     pub(super) width: u32,
     pub(super) height: u32,
     pub(super) title: String,
@@ -297,9 +296,6 @@ pub(super) struct RenderApp {
 
     // Shared image dimensions (written here, read from main thread)
     pub(super) image_dimensions: SharedImageDimensions,
-
-    // Frame dirty flag: set when new frame data arrives, cleared after render
-    pub(super) frame_dirty: bool,
 
     // Cursor state (blink, animation, size transition)
     pub(super) cursor: CursorState,
@@ -419,7 +415,6 @@ impl RenderApp {
             comms,
             window: None,
             primary_window_destroyed: false,
-            current_frame: None,
             width,
             height,
             title,
@@ -435,7 +430,6 @@ impl RenderApp {
             mouse_pos: (0.0, 0.0),
             mouse_hidden_for_typing: false,
             image_dimensions,
-            frame_dirty: false,
             cursor: CursorState::default(),
             visual_cursors: HashMap::new(),
             effects: EffectsConfig::default(),
@@ -505,6 +499,40 @@ impl RenderApp {
             resumed_seen: false,
             about_to_wait_seen: false,
             poll_when_idle,
+        }
+    }
+
+    pub(super) fn primary_current_frame(&self) -> Option<&FrameGlyphBuffer> {
+        self.primary_frame
+            .as_ref()
+            .and_then(|frame| frame.current_frame.as_ref())
+    }
+
+    pub(super) fn primary_current_frame_mut(&mut self) -> Option<&mut FrameGlyphBuffer> {
+        self.primary_frame
+            .as_mut()
+            .and_then(|frame| frame.current_frame.as_mut())
+    }
+
+    pub(super) fn set_primary_current_frame(&mut self, frame: Option<FrameGlyphBuffer>) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.current_frame = frame;
+        }
+    }
+
+    pub(super) fn primary_dirty(&self) -> bool {
+        self.primary_frame
+            .as_ref()
+            .is_some_and(|frame| frame.frame_dirty)
+    }
+
+    pub(super) fn mark_primary_dirty(&mut self) {
+        self.set_primary_dirty(true);
+    }
+
+    pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.frame_dirty = dirty;
         }
     }
 }

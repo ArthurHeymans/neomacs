@@ -1,10 +1,29 @@
 use super::*;
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole};
 use crate::render_thread::cursor::{CursorState, CursorTarget};
+use crate::render_thread::frame_windows::GuiFrameRenderState;
 use crate::thread_comm::ThreadComms;
 use neomacs_display_protocol::types::Color;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+fn make_test_device() -> Option<wgpu::Device> {
+    let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance_descriptor.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .ok()?;
+    let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("frame-state test device"),
+        ..Default::default()
+    }))
+    .ok()?;
+    Some(device)
+}
 
 #[test]
 fn apply_extra_spacing_remaps_cursor_by_slot_id() {
@@ -69,6 +88,15 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
         #[cfg(feature = "neo-term")]
         Arc::new(Mutex::new(HashMap::new())),
     );
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.primary_frame = Some(GuiFrameRenderState::new(
+        0,
+        &device,
+        app.scale_factor,
+        false,
+    ));
 
     let mut frame = FrameGlyphBuffer::with_size(320.0, 200.0);
     frame.add_cursor(
@@ -80,7 +108,7 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
         CursorStyle::Bar(8.0),
         Color::WHITE,
     );
-    app.current_frame = Some(frame);
+    app.set_primary_current_frame(Some(frame));
 
     let mut state = CursorState::default();
     state.set_target(CursorTarget {
@@ -107,7 +135,7 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
 
     app.apply_visual_cursor_animations();
 
-    let cursor = &app.current_frame.as_ref().expect("frame").window_cursors[0];
+    let cursor = &app.primary_current_frame().expect("frame").window_cursors[0];
     assert_eq!(cursor.x, 80.0);
     assert_eq!(cursor.y, 20.0);
     assert_eq!(cursor.width, 8.0);

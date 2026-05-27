@@ -286,7 +286,7 @@ impl RenderApp {
             if parent_id != 0 {
                 self.child_frames.update_frame(frame);
             } else {
-                self.current_frame = Some(frame);
+                self.set_primary_current_frame(Some(frame));
                 if let Some(menu_bar) = gui_menu_bar {
                     self.menu_bar = Some(menu_bar);
                 } else {
@@ -310,19 +310,18 @@ impl RenderApp {
                     self.chrome_interaction.clear_compact_bar();
                 }
                 self.tab_bar = self
-                    .current_frame
-                    .as_ref()
+                    .primary_current_frame()
                     .and_then(|frame| frame.tab_bar.clone());
                 if self.tab_bar.is_none() {
                     self.chrome_interaction.clear_tab_bar();
                 }
                 self.cursor.reset_blink();
             }
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         let mut active_cursor: Option<CursorTarget> =
-            self.current_frame.as_ref().and_then(|frame| {
+            self.primary_current_frame().and_then(|frame| {
                 frame.phys_cursor.as_ref().map(|cursor| CursorTarget {
                     window_id: cursor.window_id,
                     x: cursor.x,
@@ -391,34 +390,36 @@ impl RenderApp {
         }
 
         let mut live_visual_cursor_ids = HashSet::new();
-        if let Some(frame) = self.current_frame.as_ref() {
-            for cursor in &frame.window_cursors {
-                if cursor.window_id >= 0 {
-                    continue;
-                }
-                live_visual_cursor_ids.insert(cursor.window_id);
-                let target = CursorTarget {
-                    window_id: cursor.window_id,
-                    x: cursor.x,
-                    y: cursor.y,
-                    width: cursor.width,
-                    height: cursor.height,
-                    style: cursor.style,
-                    color: cursor.color,
-                    frame_id: 0,
-                };
-                let state = self.visual_cursors.entry(cursor.window_id).or_default();
-                state.anim_enabled = self.cursor.anim_enabled;
-                state.anim_speed = self.cursor.anim_speed;
-                state.anim_style = self.cursor.anim_style;
-                state.anim_duration = self.cursor.anim_duration;
-                state.trail_size = self.cursor.trail_size;
-                state.size_transition_enabled = self.cursor.size_transition_enabled;
-                state.size_transition_duration = self.cursor.size_transition_duration;
-                let (_had_target, target_moved) = state.set_target(target);
-                if target_moved {
-                    self.frame_dirty = true;
-                }
+        let window_cursors = self
+            .primary_current_frame()
+            .map(|frame| frame.window_cursors.clone())
+            .unwrap_or_default();
+        for cursor in &window_cursors {
+            if cursor.window_id >= 0 {
+                continue;
+            }
+            live_visual_cursor_ids.insert(cursor.window_id);
+            let target = CursorTarget {
+                window_id: cursor.window_id,
+                x: cursor.x,
+                y: cursor.y,
+                width: cursor.width,
+                height: cursor.height,
+                style: cursor.style,
+                color: cursor.color,
+                frame_id: 0,
+            };
+            let state = self.visual_cursors.entry(cursor.window_id).or_default();
+            state.anim_enabled = self.cursor.anim_enabled;
+            state.anim_speed = self.cursor.anim_speed;
+            state.anim_style = self.cursor.anim_style;
+            state.anim_duration = self.cursor.anim_duration;
+            state.trail_size = self.cursor.trail_size;
+            state.size_transition_enabled = self.cursor.size_transition_enabled;
+            state.size_transition_duration = self.cursor.size_transition_duration;
+            let (_had_target, target_moved) = state.set_target(target);
+            if target_moved {
+                self.mark_primary_dirty();
             }
         }
         self.visual_cursors

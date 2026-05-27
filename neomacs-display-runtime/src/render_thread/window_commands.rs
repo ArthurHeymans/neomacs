@@ -50,7 +50,7 @@ impl RenderApp {
                     window.set_title(&title);
                 }
                 if !self.chrome.decorations_enabled {
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 }
                 Ok(())
             }
@@ -64,7 +64,7 @@ impl RenderApp {
                         window.set_title(&title);
                     }
                     if !self.chrome.decorations_enabled {
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     }
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.native.chrome.title = title.clone();
@@ -97,7 +97,7 @@ impl RenderApp {
                             self.chrome.is_fullscreen = false;
                         }
                     }
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 }
                 Ok(())
             }
@@ -189,7 +189,7 @@ impl RenderApp {
                     window_state.native.window.set_decorations(decorated);
                     window_state.render.frame_dirty = true;
                 }
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::RequestAttention { urgent } => {
@@ -234,8 +234,6 @@ impl RenderApp {
                     self.surface = None;
                     self.surface_config = None;
                     self.primary_frame = None;
-                    self.current_frame = None;
-                    self.frame_dirty = false;
                     self.primary_window_destroyed = true;
                 } else {
                     self.frame_windows.request_destroy(emacs_frame_id);

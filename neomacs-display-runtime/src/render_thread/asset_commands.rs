@@ -205,7 +205,7 @@ impl RenderApp {
                     if let Some(ref mut renderer) = self.renderer {
                         renderer.remove_webkit_view(id);
                     }
-                    self.frame_dirty = true;
+                    self.mark_primary_dirty();
                 }
                 Ok(())
             }
@@ -345,7 +345,7 @@ impl RenderApp {
                     let primary_len = self.floating_webkits.len();
                     self.floating_webkits.retain(|w| w.webkit_id != id);
                     if self.floating_webkits.len() != primary_len {
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
                         let old_len = window_state.render.floating_webkits.len();
@@ -361,7 +361,7 @@ impl RenderApp {
                         || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                     {
                         self.floating_webkits.push(overlay);
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.floating_webkits.push(overlay);
                         window_state.render.frame_dirty = true;
@@ -381,7 +381,7 @@ impl RenderApp {
                     let primary_len = self.floating_webkits.len();
                     self.floating_webkits.retain(|w| w.webkit_id != id);
                     if self.floating_webkits.len() != primary_len {
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
                         let old_len = window_state.render.floating_webkits.len();
@@ -396,7 +396,7 @@ impl RenderApp {
                     if emacs_frame_id == 0
                         || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                     {
-                        self.frame_dirty = true;
+                        self.mark_primary_dirty();
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.frame_dirty = true;
                     } else {

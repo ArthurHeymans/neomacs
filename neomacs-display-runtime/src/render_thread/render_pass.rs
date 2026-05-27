@@ -846,7 +846,7 @@ impl RenderApp {
 
     pub(super) fn render(&mut self) {
         // Early return checks
-        if self.current_frame.is_none()
+        if self.primary_current_frame().is_none()
             || self.surface.is_none()
             || self.renderer.is_none()
             || self.primary_frame.is_none()
@@ -912,13 +912,13 @@ impl RenderApp {
                 .current_offscreen_view_and_bg()
                 .map(|(v, bg)| (v as *const wgpu::TextureView, bg))
             {
-                let frame = self.current_frame.as_ref().expect("checked in render");
+                let primary_frame = self.primary_frame.as_mut().expect("checked in render");
+                let frame = primary_frame
+                    .current_frame
+                    .as_ref()
+                    .expect("checked in render");
                 let renderer = self.renderer.as_mut().expect("checked in render");
-                let glyph_atlas = &mut self
-                    .primary_frame
-                    .as_mut()
-                    .expect("checked in render")
-                    .glyph_atlas;
+                let glyph_atlas = &mut primary_frame.glyph_atlas;
 
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                     renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
@@ -938,21 +938,26 @@ impl RenderApp {
             }
 
             // Detect transitions (compare window_infos)
-            if let Some(renderer) = self.renderer.as_mut() {
+            if let (Some(renderer), Some(primary_frame)) =
+                (self.renderer.as_mut(), self.primary_frame.as_mut())
+            {
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                     detect_frame_transitions(
                         renderer,
                         &mut self.transitions,
                         &self.effects.clone(),
-                        self.current_frame.as_mut().expect("checked in render"),
-                        &mut self.frame_dirty,
+                        primary_frame
+                            .current_frame
+                            .as_mut()
+                            .expect("checked in render"),
+                        &mut primary_frame.frame_dirty,
                         self.width,
                         self.height,
                     );
                 });
             }
             if self.renderer_effects.needs_redraw() {
-                self.frame_dirty = true;
+                self.mark_primary_dirty();
             }
 
             // Blit current offscreen to surface
@@ -973,13 +978,13 @@ impl RenderApp {
             self.render_transitions(&surface_view);
         } else {
             // Simple path: render directly to surface
-            let frame = self.current_frame.as_ref().expect("checked in render");
+            let primary_frame = self.primary_frame.as_mut().expect("checked in render");
+            let frame = primary_frame
+                .current_frame
+                .as_ref()
+                .expect("checked in render");
             let renderer = self.renderer.as_mut().expect("checked in render");
-            let glyph_atlas = &mut self
-                .primary_frame
-                .as_mut()
-                .expect("checked in render")
-                .glyph_atlas;
+            let glyph_atlas = &mut primary_frame.glyph_atlas;
 
             renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                 renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
@@ -998,7 +1003,7 @@ impl RenderApp {
             });
         }
         if self.renderer_effects.needs_redraw() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Render child frames as floating overlays on top of the parent frame
@@ -1034,7 +1039,7 @@ impl RenderApp {
             }
         }
         if self.renderer_effects.needs_redraw() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         // Render floating WebKit overlays above frame contents but below GUI chrome.
@@ -1045,27 +1050,25 @@ impl RenderApp {
             }
         }
 
-        if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
-            &mut self.renderer,
-            self.primary_frame
-                .as_mut()
-                .map(|primary_frame| &mut primary_frame.glyph_atlas),
-            &self.current_frame,
-        ) {
-            renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
-                Self::render_frame_common_overlays(
-                    renderer,
-                    &surface_view,
-                    frame,
-                    glyph_atlas,
-                    self.width,
-                    self.height,
-                    self.scroll_indicators_enabled,
-                );
-            });
+        if let (Some(renderer), Some(primary_frame)) =
+            (&mut self.renderer, self.primary_frame.as_mut())
+        {
+            if let Some(frame) = primary_frame.current_frame.as_ref() {
+                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                    Self::render_frame_common_overlays(
+                        renderer,
+                        &surface_view,
+                        frame,
+                        &mut primary_frame.glyph_atlas,
+                        self.width,
+                        self.height,
+                        self.scroll_indicators_enabled,
+                    );
+                });
+            }
         }
         if self.renderer_effects.needs_redraw() {
-            self.frame_dirty = true;
+            self.mark_primary_dirty();
         }
 
         tracing::trace!(
@@ -1082,6 +1085,9 @@ impl RenderApp {
             0,
             &self.child_frames,
         );
+        let titlebar_background = self
+            .primary_current_frame()
+            .map(|f| (f.background.r, f.background.g, f.background.b));
         if let (Some(renderer), Some(glyph_atlas)) = (
             &self.renderer,
             self.primary_frame
@@ -1094,10 +1100,7 @@ impl RenderApp {
                 glyph_atlas,
                 GuiFrameChromeOverlays {
                     native_chrome: &self.chrome,
-                    titlebar_background: self
-                        .current_frame
-                        .as_ref()
-                        .map(|f| (f.background.r, f.background.g, f.background.b)),
+                    titlebar_background,
                     chrome_interaction: self.chrome_interaction,
                     menu_bar: self
                         .menu_bar
@@ -1149,12 +1152,20 @@ impl RenderApp {
                 renderer,
                 &surface_view,
                 &mut self.visual_bell_start,
-                &mut self.frame_dirty,
+                &mut self
+                    .primary_frame
+                    .as_mut()
+                    .expect("checked in render")
+                    .frame_dirty,
                 self.width,
                 self.height,
             );
         }
 
+        let fps_glyph_count = self.primary_current_frame().map_or(0, |f| f.glyphs.len());
+        let fps_window_count = self
+            .primary_current_frame()
+            .map_or(0, |f| f.window_infos.len());
         if let (Some(renderer), Some(glyph_atlas)) = (
             &self.renderer,
             self.primary_frame
@@ -1166,10 +1177,8 @@ impl RenderApp {
                 &surface_view,
                 glyph_atlas,
                 &mut self.fps,
-                self.current_frame.as_ref().map_or(0, |f| f.glyphs.len()),
-                self.current_frame
-                    .as_ref()
-                    .map_or(0, |f| f.window_infos.len()),
+                fps_glyph_count,
+                fps_window_count,
                 self.transitions.crossfades.len() + self.transitions.scroll_slides.len(),
                 self.width,
                 self.height,
@@ -1177,21 +1186,19 @@ impl RenderApp {
         }
 
         if self.effects.typing_speed.enabled {
-            if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
-                &self.renderer,
-                self.primary_frame
-                    .as_mut()
-                    .map(|primary_frame| &mut primary_frame.glyph_atlas),
-                &self.current_frame,
-            ) {
-                Self::render_frame_typing_speed_overlay(
-                    renderer,
-                    &surface_view,
-                    frame,
-                    glyph_atlas,
-                    &mut self.typing_speed,
-                    &mut self.frame_dirty,
-                );
+            if let (Some(renderer), Some(primary_frame)) =
+                (&self.renderer, self.primary_frame.as_mut())
+            {
+                if let Some(frame) = primary_frame.current_frame.as_ref() {
+                    Self::render_frame_typing_speed_overlay(
+                        renderer,
+                        &surface_view,
+                        frame,
+                        &mut primary_frame.glyph_atlas,
+                        &mut self.typing_speed,
+                        &mut primary_frame.frame_dirty,
+                    );
+                }
             }
         }
 
@@ -1205,7 +1212,8 @@ impl RenderApp {
             );
         }
 
-        if let (Some(renderer), Some(frame)) = (&self.renderer, &self.current_frame) {
+        let readback_frame = self.primary_current_frame().cloned();
+        if let (Some(renderer), Some(frame)) = (&self.renderer, readback_frame.as_ref()) {
             surface_readback::maybe_log_first_frame_surface_readback(
                 &mut self.debug_first_frame_readback_pending,
                 &output.texture,
