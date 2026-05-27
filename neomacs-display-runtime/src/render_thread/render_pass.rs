@@ -1123,19 +1123,16 @@ impl RenderApp {
                     native_chrome: &self.chrome,
                     titlebar_background,
                     chrome_interaction: self.chrome_interaction,
-                    menu_bar: self
-                        .menu_bar
-                        .as_ref()
-                        .map(|menu_bar| GuiFrameMenuBarOverlay {
+                    menu_bar: primary_frame.menu_bar.as_ref().map(|menu_bar| {
+                        GuiFrameMenuBarOverlay {
                             items: &menu_bar.items,
                             height: menu_bar.height,
                             fg: menu_bar.fg,
                             bg: menu_bar.bg,
-                        }),
-                    tool_bar: self
-                        .tool_bar
-                        .as_ref()
-                        .map(|tool_bar| GuiFrameToolBarOverlay {
+                        }
+                    }),
+                    tool_bar: primary_frame.tool_bar.as_ref().map(|tool_bar| {
+                        GuiFrameToolBarOverlay {
                             items: &tool_bar.items,
                             y_origin: toolbar_y_origin,
                             height: tool_bar.height,
@@ -1144,8 +1141,9 @@ impl RenderApp {
                             icon_textures: &self.toolbar_icon_textures,
                             icon_size: self.toolbar_icon_size,
                             padding: self.toolbar_padding,
-                        }),
-                    compact_bar: self.compact_bar.as_ref().map(|compact_bar| {
+                        }
+                    }),
+                    compact_bar: primary_frame.compact_bar.as_ref().map(|compact_bar| {
                         GuiFrameCompactBarOverlay {
                             menu_items: &compact_bar.menu_items,
                             tool_items: &compact_bar.tool_items,

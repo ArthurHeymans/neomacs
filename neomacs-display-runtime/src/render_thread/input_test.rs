@@ -1,4 +1,6 @@
 use super::*;
+use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::render_thread::frame_windows::GuiFrameRenderState;
 use crate::thread_comm::ToolBarItem;
 use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
@@ -34,6 +36,37 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
     app
 }
 
+fn make_test_device() -> Option<wgpu::Device> {
+    let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance_descriptor.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .ok()?;
+    let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("input test device"),
+        ..Default::default()
+    }))
+    .ok()?;
+    Some(device)
+}
+
+fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState> {
+    if app.primary_frame.is_none() {
+        let device = make_test_device()?;
+        app.primary_frame = Some(GuiFrameRenderState::new(
+            0,
+            &device,
+            app.scale_factor,
+            false,
+        ));
+    }
+    app.primary_frame.as_mut()
+}
+
 fn toolbar_item(index: u32) -> ToolBarItem {
     ToolBarItem {
         index,
@@ -49,13 +82,16 @@ fn toolbar_item(index: u32) -> ToolBarItem {
 #[test]
 fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar = Some(GuiMenuBarState {
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
-    app.tool_bar = Some(GuiToolBarState {
+    primary_frame.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -68,18 +104,23 @@ fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
 #[test]
 fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar = Some(GuiMenuBarState {
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
-    app.tab_bar = Some(FrameTabBarState {
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.tab_bar = Some(FrameTabBarState {
         items: Vec::new(),
         y: 33.0,
         height: 33.0,
     });
-    app.tool_bar = Some(GuiToolBarState {
+    primary_frame.current_frame = Some(frame);
+    primary_frame.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -92,13 +133,16 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
 #[test]
 fn toolbar_hit_test_uses_toolbar_local_y() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.menu_bar = Some(GuiMenuBarState {
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
-    app.tool_bar = Some(GuiToolBarState {
+    primary_frame.tool_bar = Some(GuiToolBarState {
         items: vec![toolbar_item(7)],
         height: 33.0,
         fg: (0.0, 0.0, 0.0),

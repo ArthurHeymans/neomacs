@@ -324,6 +324,9 @@ pub(super) struct RenderApp {
     pub(super) pending_primary_child_frames: ChildFrameManager,
     #[cfg(feature = "wpe-webkit")]
     pub(super) pending_primary_floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
+    pub(super) pending_primary_menu_bar: Option<GuiMenuBarState>,
+    pub(super) pending_primary_tool_bar: Option<GuiToolBarState>,
+    pub(super) pending_primary_compact_bar: Option<GuiCompactBarState>,
     // Child frame visual style
     pub(super) child_frame_corner_radius: f32,
     pub(super) child_frame_shadow_enabled: bool,
@@ -331,20 +334,10 @@ pub(super) struct RenderApp {
     pub(super) child_frame_shadow_offset: f32,
     pub(super) child_frame_shadow_opacity: f32,
 
-    // GUI menu bar snapshot for the primary frame, if visible.
-    pub(super) menu_bar: Option<GuiMenuBarState>,
-
-    // Frame tab bar metadata for the primary frame, if visible.
-    pub(super) tab_bar: Option<FrameTabBarState>,
-
-    // GUI toolbar snapshot for the primary frame, if visible.
-    pub(super) tool_bar: Option<GuiToolBarState>,
+    // Primary toolbar visual defaults and GPU texture handles.
     pub(super) toolbar_icon_textures: HashMap<String, u32>,
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
-
-    // Compact GUI chrome snapshot for the primary frame, if visible.
-    pub(super) compact_bar: Option<GuiCompactBarState>,
     pub(super) chrome_interaction: GuiChromeInteractionState,
 
     // Primary native IME state; preedit text/active state lives on primary_frame.
@@ -425,18 +418,17 @@ impl RenderApp {
             pending_primary_child_frames: ChildFrameManager::new(),
             #[cfg(feature = "wpe-webkit")]
             pending_primary_floating_webkits: Vec::new(),
+            pending_primary_menu_bar: None,
+            pending_primary_tool_bar: None,
+            pending_primary_compact_bar: None,
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
             child_frame_shadow_layers: 4,
             child_frame_shadow_offset: 2.0,
             child_frame_shadow_opacity: 0.3,
-            menu_bar: None,
-            tab_bar: None,
-            tool_bar: None,
             toolbar_icon_textures: HashMap::new(),
             toolbar_icon_size: 24,
             toolbar_padding: 5,
-            compact_bar: None,
             chrome_interaction: GuiChromeInteractionState::default(),
             ime_enabled: false,
             last_ime_cursor_area: None,
@@ -605,6 +597,29 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_frame.as_mut() {
             primary_frame.transitions.policy = self.transition_policy;
         }
+    }
+
+    pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
+        self.primary_frame
+            .as_ref()
+            .and_then(|frame| frame.menu_bar.as_ref())
+    }
+
+    pub(super) fn primary_tool_bar(&self) -> Option<&GuiToolBarState> {
+        self.primary_frame
+            .as_ref()
+            .and_then(|frame| frame.tool_bar.as_ref())
+    }
+
+    pub(super) fn primary_compact_bar(&self) -> Option<&GuiCompactBarState> {
+        self.primary_frame
+            .as_ref()
+            .and_then(|frame| frame.compact_bar.as_ref())
+    }
+
+    pub(super) fn primary_tab_bar(&self) -> Option<&FrameTabBarState> {
+        self.primary_current_frame()
+            .and_then(|frame| frame.tab_bar.as_ref())
     }
 
     pub(super) fn primary_ime_preedit_active(&self) -> bool {

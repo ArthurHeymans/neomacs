@@ -162,6 +162,15 @@ impl RenderApp {
                 primary_frame.frame_dirty = true;
             }
         }
+        primary_frame.menu_bar = self.pending_primary_menu_bar.take();
+        primary_frame.tool_bar = self.pending_primary_tool_bar.take();
+        primary_frame.compact_bar = self.pending_primary_compact_bar.take();
+        if primary_frame.menu_bar.is_some()
+            || primary_frame.tool_bar.is_some()
+            || primary_frame.compact_bar.is_some()
+        {
+            primary_frame.frame_dirty = true;
+        }
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",
@@ -180,6 +189,22 @@ impl RenderApp {
         self.surface_config = Some(config);
         self.renderer = Some(renderer);
         self.primary_frame = Some(primary_frame);
+        let pending_tool_items = self
+            .primary_frame
+            .as_ref()
+            .and_then(|frame| frame.tool_bar.as_ref())
+            .map(|tool_bar| tool_bar.items.clone());
+        let pending_compact_tool_items = self
+            .primary_frame
+            .as_ref()
+            .and_then(|frame| frame.compact_bar.as_ref())
+            .map(|compact_bar| compact_bar.tool_items.clone());
+        if let Some(items) = pending_tool_items.as_ref() {
+            self.ensure_toolbar_icon_textures(items);
+        }
+        if let Some(items) = pending_compact_tool_items.as_ref() {
+            self.ensure_toolbar_icon_textures(items);
+        }
 
         // Initialize WPE backend for WebKit
         #[cfg(feature = "wpe-webkit")]

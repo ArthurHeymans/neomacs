@@ -629,12 +629,17 @@ impl RenderApp {
             } => {
                 self.sync_toolbar_visual_config_from_height(height);
                 self.ensure_toolbar_icon_textures(&items);
-                self.tool_bar = Some(GuiToolBarState {
+                let tool_bar = GuiToolBarState {
                     items,
                     height,
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
-                });
+                };
+                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    primary_frame.tool_bar = Some(tool_bar);
+                } else {
+                    self.pending_primary_tool_bar = Some(tool_bar);
+                }
                 self.mark_primary_dirty();
                 Ok(())
             }
@@ -664,12 +669,17 @@ impl RenderApp {
                     bg_g,
                     bg_b
                 );
-                self.menu_bar = Some(GuiMenuBarState {
+                let menu_bar = GuiMenuBarState {
                     items,
                     height,
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
-                });
+                };
+                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    primary_frame.menu_bar = Some(menu_bar);
+                } else {
+                    self.pending_primary_menu_bar = Some(menu_bar);
+                }
                 self.mark_primary_dirty();
                 Ok(())
             }

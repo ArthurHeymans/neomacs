@@ -111,7 +111,7 @@ impl RenderApp {
     /// Hit-test toolbar items. Returns the index of the item under (x, y), or None.
     /// The y coordinate is local to the toolbar row.
     pub(super) fn toolbar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let Some(tool_bar) = self.tool_bar.as_ref() else {
+        let Some(tool_bar) = self.primary_tool_bar() else {
             return None;
         };
         if tool_bar.height <= 0.0 || y >= tool_bar.height {
@@ -139,43 +139,41 @@ impl RenderApp {
     }
 
     pub(super) fn toolbar_y_origin(&self) -> f32 {
-        if let Some(tab_bar) = self.tab_bar.as_ref().filter(|tab_bar| tab_bar.height > 0.0) {
+        if let Some(tab_bar) = self
+            .primary_tab_bar()
+            .filter(|tab_bar| tab_bar.height > 0.0)
+        {
             tab_bar.y + tab_bar.height
         } else {
-            self.menu_bar
-                .as_ref()
+            self.primary_menu_bar()
                 .map_or(0.0, |menu_bar| menu_bar.height)
                 + self
-                    .compact_bar
-                    .as_ref()
+                    .primary_compact_bar()
                     .map_or(0.0, |compact_bar| compact_bar.height)
         }
     }
 
     pub(super) fn menu_bar_height(&self) -> f32 {
-        self.menu_bar
-            .as_ref()
+        self.primary_menu_bar()
             .map_or(0.0, |menu_bar| menu_bar.height)
     }
 
     pub(super) fn tool_bar_height(&self) -> f32 {
-        self.tool_bar
-            .as_ref()
+        self.primary_tool_bar()
             .map_or(0.0, |tool_bar| tool_bar.height)
     }
 
     pub(super) fn compact_bar_height(&self) -> f32 {
-        self.compact_bar
-            .as_ref()
+        self.primary_compact_bar()
             .map_or(0.0, |compact_bar| compact_bar.height)
     }
 
     pub(super) fn tab_bar_y(&self) -> f32 {
-        self.tab_bar.as_ref().map_or(0.0, |tab_bar| tab_bar.y)
+        self.primary_tab_bar().map_or(0.0, |tab_bar| tab_bar.y)
     }
 
     pub(super) fn tab_bar_height(&self) -> f32 {
-        self.tab_bar.as_ref().map_or(0.0, |tab_bar| tab_bar.height)
+        self.primary_tab_bar().map_or(0.0, |tab_bar| tab_bar.height)
     }
 
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
@@ -185,8 +183,7 @@ impl RenderApp {
             .as_ref()
             .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
         let menu_width = self
-            .compact_bar
-            .as_ref()
+            .primary_compact_bar()
             .map_or([].as_slice(), |compact_bar| {
                 compact_bar.menu_items.as_slice()
             })
@@ -198,7 +195,7 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let Some(compact_bar) = self.compact_bar.as_ref() else {
+        let Some(compact_bar) = self.primary_compact_bar() else {
             return None;
         };
         if compact_bar.height <= 0.0 || y >= compact_bar.height || compact_bar.menu_items.is_empty()
@@ -222,7 +219,7 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_tool_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let Some(compact_bar) = self.compact_bar.as_ref() else {
+        let Some(compact_bar) = self.primary_compact_bar() else {
             return None;
         };
         if compact_bar.height <= 0.0 || y >= compact_bar.height || compact_bar.tool_items.is_empty()
@@ -255,7 +252,7 @@ impl RenderApp {
 
     /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let Some(tab_bar) = self.tab_bar.as_ref() else {
+        let Some(tab_bar) = self.primary_tab_bar() else {
             return None;
         };
         if tab_bar.height <= 0.0 || tab_bar.items.is_empty() {
@@ -288,7 +285,7 @@ impl RenderApp {
 
     /// Hit-test menu bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<u32> {
-        let Some(menu_bar) = self.menu_bar.as_ref() else {
+        let Some(menu_bar) = self.primary_menu_bar() else {
             return None;
         };
         if menu_bar.height <= 0.0 || menu_bar.items.is_empty() {

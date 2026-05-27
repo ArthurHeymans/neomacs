@@ -287,33 +287,32 @@ impl RenderApp {
                 self.primary_child_frames_mut().update_frame(frame);
             } else {
                 self.set_primary_current_frame(Some(frame));
-                if let Some(menu_bar) = gui_menu_bar {
-                    self.menu_bar = Some(menu_bar);
-                } else {
-                    self.menu_bar = None;
+                if gui_menu_bar.is_none() {
                     self.chrome_interaction.clear_menu_bar();
                 }
-                if let Some(tool_bar) = gui_tool_bar {
+                if let Some(tool_bar) = gui_tool_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(tool_bar.height);
                     self.ensure_toolbar_icon_textures(&tool_bar.items);
-                    self.tool_bar = Some(tool_bar);
-                } else {
-                    self.tool_bar = None;
+                } else if gui_tool_bar.is_none() {
                     self.chrome_interaction.clear_toolbar();
                 }
-                if let Some(compact_bar) = gui_compact_bar {
+                if let Some(compact_bar) = gui_compact_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(compact_bar.height);
                     self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
-                    self.compact_bar = Some(compact_bar);
-                } else {
-                    self.compact_bar = None;
+                } else if gui_compact_bar.is_none() {
                     self.chrome_interaction.clear_compact_bar();
                 }
-                self.tab_bar = self
-                    .primary_current_frame()
-                    .and_then(|frame| frame.tab_bar.clone());
-                if self.tab_bar.is_none() {
+                if self.primary_tab_bar().is_none() {
                     self.chrome_interaction.clear_tab_bar();
+                }
+                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    primary_frame.menu_bar = gui_menu_bar;
+                    primary_frame.tool_bar = gui_tool_bar;
+                    primary_frame.compact_bar = gui_compact_bar;
+                } else {
+                    self.pending_primary_menu_bar = gui_menu_bar;
+                    self.pending_primary_tool_bar = gui_tool_bar;
+                    self.pending_primary_compact_bar = gui_compact_bar;
                 }
                 if let Some(cursor) = self.primary_cursor_mut() {
                     cursor.reset_blink();
