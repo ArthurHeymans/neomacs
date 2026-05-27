@@ -447,10 +447,62 @@ fn org_export_derived_backend_transcoder_combo() {
             (not (null (string-match-p "data-oracle" out)))
             (not (null (string-match-p "oracle-p" out)))
             (not (null (string-match-p "oracle-html" out)))
-            (replace-regexp-in-string
-             "org[[:alnum:]]+"
-             "org-id"
-             out)))))"##,
+                 (replace-regexp-in-string
+                  "org[[:alnum:]]+"
+                  "org-id"
+                  html))))))"##,
+    );
+}
+
+#[test]
+fn org_export_filter_babel_call_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (require 'ob-emacs-lisp)
+  (let ((calls nil)
+        (org-confirm-babel-evaluate nil))
+    (org-export-define-derived-backend 'test-html 'html
+      :translate-alist
+      '((template . (lambda (contents info)
+                      (push 'template calls)
+                      (concat "<test>" contents "</test>")))))
+    (with-temp-buffer
+      (org-mode)
+      (insert "#+TITLE: Filter Test\n\n")
+      (insert "* Section\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n(+ 1 2)\n#+end_src\n\n")
+      (insert "Paragraph.\n\n")
+      (insert "#+begin_quote\nQuoted.\n#+end_quote\n")
+      (let* ((html (org-export-as 'html nil nil t nil))
+             (tree (org-element-parse-buffer))
+             (src-blocks
+              (org-element-map tree 'src-block
+                (lambda (sb)
+                  (list (org-element-property :language sb)
+                        (org-element-property :value sb)))))
+             (quotes
+              (org-element-map tree 'quote-block
+                (lambda (q)
+                  (buffer-substring-no-properties
+                   (org-element-property :contents-begin q)
+                   (org-element-property :contents-end q)))))
+             (html-has-section (string-match-p "Section" html))
+             (html-has-quoted (string-match-p "Quoted" html))
+             (html-has-src (string-match-p "src" html)))
+        (list calls
+              src-blocks
+              quotes
+              html-has-section
+              html-has-quoted
+              html-has-src
+              (replace-regexp-in-string
+               "org[[:alnum:]]+" "org-id"
+               (replace-regexp-in-string
+                "sec:org[[:alnum:]-]+" "sec:org-id" html))))))))"##,
     );
 }
 
