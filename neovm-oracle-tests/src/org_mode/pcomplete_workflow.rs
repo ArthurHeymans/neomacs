@@ -127,3 +127,64 @@ fn org_pcomplete_link_drawer_src_block_option_combo() {
               (complete-at ":sc"))))))"##,
     );
 }
+
+#[test]
+fn org_pcomplete_entities_searchhead_options_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-pcomplete)
+  (require 'ox)
+  (with-temp-buffer
+    (let ((org-file-tags '("filetag" "shared"))
+          (org-export-default-language "en")
+          (org-priority-highest ?A)
+          (org-priority-lowest ?D)
+          (org-priority-default ?B)
+          (org-babel-load-languages
+           '((emacs-lisp . t) (shell . t) (python . nil)))
+          (user-full-name "Ada Lovelace")
+          (user-mail-address "ada@example.invalid"))
+      (org-mode)
+      (insert "* Alpha Heading\n")
+      (insert "** Beta Child\n")
+      (insert "[[*Al\n")
+      (insert "\\alp\n")
+      (insert "#+DATE: \n")
+      (insert "#+EMAIL: \n")
+      (insert "#+LANGUAGE: \n")
+      (insert "#+PRIORITIES: \n")
+      (insert "#+FILETAGS: \n")
+      (insert "#+OPTIONS: to\n")
+      (cl-labels
+          ((complete-at
+            (needle)
+            (goto-char (point-min))
+            (search-forward needle)
+            (let* ((thing (org-thing-at-point))
+                   (command (org-command-at-point))
+                   (args (org-parse-arguments))
+                   (capf (run-hook-with-args-until-success
+                          'completion-at-point-functions))
+                   (beg (nth 0 capf))
+                   (end (nth 1 capf))
+                   (table (nth 2 capf))
+                   (stub (buffer-substring-no-properties beg end)))
+              (list needle
+                    thing
+                    command
+                    stub
+                    (sort (all-completions stub table) #'string<)
+                    args)))))
+        (list (complete-at "[[*Al")
+              (complete-at "\\alp")
+              (complete-at "#+DATE: ")
+              (complete-at "#+EMAIL: ")
+              (complete-at "#+LANGUAGE: ")
+              (complete-at "#+PRIORITIES: ")
+              (complete-at "#+FILETAGS: ")
+              (complete-at "to"))))))"##,
+    );
+}
