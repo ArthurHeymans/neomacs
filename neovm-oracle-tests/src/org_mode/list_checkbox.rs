@@ -821,3 +821,160 @@ fn org_list_checkbox_dependency_sort_visibility_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_send_item_struct_navigation_kill_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (let ((org-list-use-circular-motion t)
+          (org-list-allow-alphabetical t)
+          (org-list-demote-modify-bullet
+           '(("1." . "-")
+             ("1)" . "+")
+             ("A." . "1.")
+             ("a)" . "-")
+             ("-" . "a)"))))
+      (org-mode)
+      (setq kill-ring nil)
+      (insert "* Plan [0/3]\n")
+      (insert "1. [ ] Alpha [1/2]\n")
+      (insert "   a) [X] Alpha child one\n")
+      (insert "      child one body\n")
+      (insert "   b) [ ] Alpha child two\n")
+      (insert "      child two body\n")
+      (insert "2. [X] Beta :: definition\n")
+      (insert "   - [ ] Beta child\n")
+      (insert "     beta body\n")
+      (insert "3. [ ] Gamma\n")
+      (insert "   gamma body\n")
+      (let ((snapshot
+             (lambda (label)
+               (let* ((struct (save-excursion
+                                (goto-char (point-min))
+                                (search-forward "Alpha")
+                                (beginning-of-line)
+                                (org-list-struct)))
+                      (prevs (org-list-prevs-alist struct))
+                      (parents (org-list-parents-alist struct))
+                      (items (org-list-get-all-items
+                              (org-list-get-top-point struct)
+                              struct prevs)))
+                 (list label
+                       (mapcar
+                        (lambda (item)
+                          (save-excursion
+                            (goto-char item)
+                            (list (- item (point-min))
+                                  (buffer-substring-no-properties
+                                   item (line-end-position))
+                                  (org-list-get-bullet item struct)
+                                  (org-list-get-checkbox item struct)
+                                  (org-list-get-counter item struct)
+                                  (org-list-get-parent item struct parents)
+                                  (org-list-get-children item struct parents)
+                                  (org-list-get-prev-item item struct prevs)
+                                  (org-list-get-next-item item struct prevs)
+                                  (org-list-get-list-type item struct prevs)
+                                  (org-list-item-body-column item)
+                                  (- (org-list-get-item-end item struct)
+                                     (point-min)))))
+                        items)
+                       (org-list-to-lisp)
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))
+            states)
+        (push (funcall snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "Beta ::")
+        (beginning-of-line)
+        (let* ((struct (org-list-struct))
+               (item (line-beginning-position))
+               (moved (org-list-send-item item 'begin struct)))
+          (org-list-write-struct moved (org-list-parents-alist moved)))
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (push (funcall snapshot 'after-send-begin) states)
+        (goto-char (point-min))
+        (search-forward "Alpha child two")
+        (beginning-of-line)
+        (let* ((struct (org-list-struct))
+               (item (line-beginning-position))
+               (moved (org-list-send-item item "1" struct)))
+          (org-list-write-struct moved (org-list-parents-alist moved)))
+        (push (funcall snapshot 'after-send-child-first) states)
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (beginning-of-line)
+        (let* ((struct (org-list-struct))
+               (item (line-beginning-position))
+               (deleted (org-list-send-item item 'kill struct)))
+          (org-list-write-struct deleted (org-list-parents-alist deleted)))
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (push (funcall snapshot 'after-kill-gamma) states)
+        (goto-char (point-min))
+        (search-forward "Alpha child one")
+        (beginning-of-line)
+        (let* ((old (org-list-struct))
+               (parents (org-list-parents-alist old))
+               (out-parents
+                (org-list-struct-outdent
+                 (line-beginning-position)
+                 (save-excursion (forward-line 1) (point))
+                 old parents)))
+          (org-list-write-struct old out-parents old))
+        (push (funcall snapshot 'after-struct-outdent) states)
+        (goto-char (point-min))
+        (search-forward "Alpha child one")
+        (beginning-of-line)
+        (let* ((old (org-list-struct))
+               (parents (org-list-parents-alist old))
+               (prevs (org-list-prevs-alist old))
+               (in-parents
+                (org-list-struct-indent
+                 (line-beginning-position)
+                 (save-excursion (forward-line 1) (point))
+                 old parents prevs)))
+          (org-list-write-struct old in-parents old))
+        (push (funcall snapshot 'after-struct-indent) states)
+        (goto-char (point-min))
+        (search-forward "Beta ::")
+        (beginning-of-line)
+        (let ((nav nil))
+          (org-previous-item)
+          (push (buffer-substring-no-properties
+                 (line-beginning-position) (line-end-position))
+                nav)
+          (org-next-item)
+          (push (buffer-substring-no-properties
+                 (line-beginning-position) (line-end-position))
+                nav)
+          (goto-char (point-min))
+          (search-forward "Alpha child one")
+          (beginning-of-line)
+          (push (condition-case err
+                    (progn
+                      (let ((org-list-use-circular-motion nil))
+                        (org-previous-item))
+                      'ok)
+                  (error (cons (car err) (cdr err))))
+                nav)
+          (list (nreverse states)
+                (nreverse nav)
+                (current-kill 0 t)
+                (org-element-map (org-element-parse-buffer) 'item
+                  (lambda (item)
+                    (list (org-element-property :checkbox item)
+                          (org-element-property :counter item)
+                          (org-element-property :tag item)
+                          (org-element-property :begin item)
+                          (org-element-property :end item))))
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
