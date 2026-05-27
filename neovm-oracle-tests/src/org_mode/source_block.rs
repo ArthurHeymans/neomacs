@@ -714,3 +714,101 @@ fn org_src_fontify_coderef_escape_inline_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_src_edit_buffer_coordinates_multi_block_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-src)
+  (with-temp-buffer
+    (let ((org-src-window-setup 'current-window)
+          (org-src-preserve-indentation nil)
+          (org-edit-src-content-indentation 2))
+      (org-mode)
+      (insert "* Source edit\n")
+      (insert "#+NAME: first\n")
+      (insert "#+begin_src emacs-lisp -n -r :results value\n")
+      (insert "  (let ((x 1))\n")
+      (insert "    (+ x 2))\n")
+      (insert "#+end_src\n\n")
+      (insert "#+NAME: second\n")
+      (insert "#+begin_src emacs-lisp :results output replace\n")
+      (insert "  (princ \"a\")\n")
+      (insert "  (princ \"b\")\n")
+      (insert "#+end_src\n")
+      (let (first-summary after-first-save second-summary after-abort)
+        (goto-char (point-min))
+        (search-forward "(+ x 2)")
+        (let* ((src (org-element-at-point))
+               (area (org-src--contents-area src))
+               (beg (copy-marker (nth 0 area)))
+               (end (copy-marker (nth 1 area)))
+               (coord (org-src--coordinates (point) beg end)))
+          (org-edit-src-code)
+          (setq first-summary
+                (list (buffer-name)
+                      major-mode
+                      (org-src-edit-buffer-p)
+                      (eq (org-src-source-buffer)
+                          (marker-buffer org-src--beg-marker))
+                      (org-src-source-type)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      coord
+                      (with-current-buffer (org-src-source-buffer)
+                        (list (buffer-name (org-src--edit-buffer beg end))
+                              (org-src--coordinates
+                               (marker-position beg) beg end)
+                              (org-src--coordinates
+                               (marker-position end) beg end)))))
+          (goto-char (point-min))
+          (search-forward "(+ x 2)")
+          (replace-match "(* x 3)" t t)
+          (goto-char (point-max))
+          (insert ";; saved tail\n")
+          (org-edit-src-save)
+          (setq after-first-save
+                (with-current-buffer (marker-buffer org-src--beg-marker)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))
+          (org-edit-src-exit))
+        (goto-char (point-min))
+        (search-forward "(princ \"b\")")
+        (let* ((src (org-element-at-point))
+               (area (org-src--contents-area src))
+               (beg (copy-marker (nth 0 area)))
+               (end (copy-marker (nth 1 area))))
+          (org-edit-special)
+          (setq second-summary
+                (list (buffer-name)
+                      major-mode
+                      (org-src-edit-buffer-p)
+                      (org-src-source-type)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))
+                      (with-current-buffer (org-src-source-buffer)
+                        (buffer-name (org-src--edit-buffer beg end)))))
+          (goto-char (point-min))
+          (search-forward "(princ \"a\")")
+          (replace-match "(princ \"aborted\")" t t)
+          (org-edit-src-abort)
+          (setq after-abort
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))
+        (list first-summary
+              after-first-save
+              second-summary
+              after-abort
+              (mapcar (lambda (block)
+                        (list (org-element-property :name block)
+                              (org-element-property :switches block)
+                              (org-element-property :parameters block)
+                              (org-element-property :value block)))
+                      (org-element-map
+                          (org-element-parse-buffer)
+                          'src-block #'identity))))))"##,
+    );
+}
