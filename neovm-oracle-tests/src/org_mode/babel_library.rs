@@ -523,8 +523,92 @@ fn org_babel_session_dir_noweb_file_tangle_combo() {
                     (nreverse all-results)
                     (replace-regexp-in-string
                      (regexp-quote root) "<root>"
-                     (buffer-substring-no-properties
-                      (point-min) (point-max))))))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))
+             (kill-buffer)))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_babel_cache_file_var_result_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-babel-cache" t))
+         (cache-file (expand-file-name "cache.org" root))
+         (out-file (expand-file-name "output.txt" root))
+         (org-confirm-babel-evaluate nil)
+         (norm (lambda (s)
+                 (replace-regexp-in-string
+                  "[0-9a-f]\\{40\\}" "HASH"
+                  (replace-regexp-in-string
+                   "(27[0-9]+ [0-9]+ [0-9]+ [0-9]+)"
+                   "(TIMESTAMP)"
+                   (replace-regexp-in-string
+                    (regexp-quote root) "<root>" s))))))
+    (unwind-protect
+        (progn
+          (with-temp-file cache-file
+            (insert "#+PROPERTY: header-args:emacs-lisp :results value replace\n\n")
+            (insert "#+NAME: counter\n")
+            (insert "#+begin_src emacs-lisp :var n=1 :cache yes\n")
+            (insert "(list :count n :double (* 2 n) :ts (format \"%s\" (current-time)))\n")
+            (insert "#+end_src\n\n")
+            (insert "#+RESULTS[abc]: counter\n")
+            (insert ":cached-placeholder\n\n")
+            (insert "#+NAME: adder\n")
+            (insert "#+begin_src emacs-lisp :var a=1 b=2 :results value replace\n")
+            (insert "(list :sum (+ a b) :product (* a b) :diff (- a b))\n")
+            (insert "#+end_src\n\n")
+            (insert "#+NAME: writer\n")
+            (insert "#+begin_src emacs-lisp :var data=adder :file " out-file "\n")
+            (insert "(with-temp-file \"" out-file "\"\n")
+            (insert "  (insert (format \"sum=%s prod=%s\" (plist-get data :sum) (plist-get data :product))))\n")
+            (insert "\"done\")\n")
+            (insert "#+end_src\n\n"))
+          (with-current-buffer (find-file-noselect cache-file)
+            (org-mode)
+            (let ((snap (lambda ()
+                          (funcall norm
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max))))))
+              (let ((before (funcall snap)))
+                ;; Execute counter
+                (goto-char (point-min))
+                (search-forward "counter")
+                (org-babel-execute-src-block)
+                (let ((after-counter (funcall snap)))
+                  ;; Execute adder
+                  (goto-char (point-min))
+                  (search-forward "adder")
+                  (org-babel-execute-src-block)
+                  (let ((after-adder (funcall snap)))
+                    ;; Execute writer
+                    (goto-char (point-min))
+                    (search-forward "writer")
+                    (org-babel-execute-src-block)
+                    (let ((after-writer (funcall snap))
+                          (file-content
+                           (when (file-exists-p out-file)
+                             (with-temp-buffer
+                               (insert-file-contents out-file)
+                               (funcall norm (buffer-string))))))
+                      ;; Re-execute counter with different var
+                      (goto-char (point-min))
+                      (search-forward "counter")
+                      (org-babel-execute-src-block '(4))
+                      (let ((after-re-exec (funcall snap)))
+                        (list before
+                              after-counter
+                              after-adder
+                              after-writer
+                              (or file-content "no-file")
+                              after-re-exec))))))))
             (kill-buffer)))
       (delete-directory root t))))"##,
     );
