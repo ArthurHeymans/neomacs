@@ -213,8 +213,60 @@ fn org_link_export_html_latex_structure_deep_state_combo() {
              (replace-regexp-in-string
               "org[[:alnum:]-]\\{8,\\}" "orgHASH"
               html))
-            (replace-regexp-in-string
-             "sec:org[[:alnum:]-]+" "sec:org-id"
-             latex))))))"##,
+              (replace-regexp-in-string
+              "sec:org[[:alnum:]-]+" "sec:org-id"
+              latex))))))"##,
+    );
+}
+
+#[test]
+fn org_link_export_footnote_anchor_custom_id_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Link Footnote\n\n")
+    (insert "* Section :tag:\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: sec-one\n:END:\n")
+    (insert "See [[#sec-one][Section]] and footnote[fn:1].\n\n")
+    (insert "Another[fn:2:inline note].\n\n")
+    (insert "[fn:1] Definition with *bold*.\n\n")
+    (insert "* Other\n")
+    (insert "Link to [[id:some-id][target]].\n")
+    (let* ((org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil)))
+      ;; Count anchors
+      (let ((anchor-count
+             (let ((c 0) (s 0))
+               (while (string-match "<a " html s)
+                 (setq s (match-end 0) c (1+ c)))
+               c))
+            ;; Count href patterns
+            (href-count
+             (let ((c 0) (s 0))
+               (while (string-match "href=" html s)
+                 (setq s (match-end 0) c (1+ c)))
+               c))
+            ;; Check specific patterns
+            (has-custom-id (string-match-p "sec-one" html))
+            (has-fn-1 (string-match-p "fn\\.1" html))
+            (has-fn-2 (string-match-p "fn\\.2" html))
+            (has-bold (string-match-p "<b>bold</b>" html))
+            (has-tag (string-match-p "tag" html)))
+        (list anchor-count
+              href-count
+              has-custom-id
+              has-fn-1
+              has-fn-2
+              has-bold
+              has-tag
+              (replace-regexp-in-string
+               "sec:org[[:alnum:]-]+" "sec:org-id"
+               (replace-regexp-in-string "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+                                         html))))))))"##,
     );
 }
