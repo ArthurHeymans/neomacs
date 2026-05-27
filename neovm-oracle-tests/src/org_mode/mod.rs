@@ -1451,6 +1451,7 @@ mod strong_advanced_combos;
 mod strong_advanced_edge;
 mod strong_complex_combos;
 mod strong_comprehensive_edge;
+mod strong_deep_divergence;
 mod strong_deep_state;
 mod strong_divergence_hunt;
 mod strong_edge_combos;
