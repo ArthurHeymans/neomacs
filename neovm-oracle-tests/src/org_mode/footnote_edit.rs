@@ -259,3 +259,59 @@ fn org_footnote_action_context_matrix_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_footnote_local_normalize_nested_missing_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Chapter A\n")
+    (insert "Top A[fn:a] inline[fn::Anon A with nested [fn:nested]].\n")
+    (insert "** Child A\n")
+    (insert "Child ref[fn:missing] and repeat[fn:a].\n")
+    (insert "[fn:a] Local A definition\n")
+    (insert "[fn:nested] Nested definition\n")
+    (insert "* Chapter B\n")
+    (insert "Top B[fn:b] and anonymous[fn::Anon B].\n")
+    (insert "[fn:unused] Unused B definition\n")
+    (insert "[fn:b] Bee definition\n")
+    (let ((org-footnote-section nil)
+          (org-footnote-fill-after-inline-note-extraction nil))
+      (let ((before (list (org-footnote-all-labels)
+                          (org-footnote--collect-references 'anonymous)
+                          (org-footnote--collect-definitions))))
+        (org-footnote-normalize)
+        (let ((after-normalize
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (labels-after-normalize (org-footnote-all-labels))
+              (defs-after-normalize (org-footnote--collect-definitions)))
+          (org-footnote-sort)
+          (goto-char (point-min))
+          (search-forward "Chapter B")
+          (let ((next-b (org-footnote-get-next-reference nil nil
+                                                         (save-excursion
+                                                           (outline-next-heading)
+                                                           (point))))
+                (prev-global (org-footnote-get-next-reference nil t)))
+            (list before
+                  labels-after-normalize
+                  defs-after-normalize
+                  after-normalize
+                  (org-footnote-all-labels)
+                  (org-footnote--collect-references 'anonymous)
+                  (org-footnote--collect-definitions)
+                  (and next-b
+                       (list (car next-b)
+                             (line-number-at-pos (nth 1 next-b))))
+                  (and prev-global
+                       (list (car prev-global)
+                             (line-number-at-pos (nth 1 prev-global))))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
