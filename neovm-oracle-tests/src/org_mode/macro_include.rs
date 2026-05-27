@@ -485,3 +485,66 @@ fn org_macro_chained_nested_expansion_divergence() {
           (list before after))))))"##,
     );
 }
+
+#[test]
+fn org_include_file_lines_blocks_export_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (let* ((root (make-temp-file "org-include-deep" t))
+         (src-file (expand-file-name "src.org" root))
+         (code-file (expand-file-name "code.el" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file src-file
+            (insert "#+TITLE: Include Test\n\n")
+            (insert "* Section\n")
+            (insert "#+INCLUDE: \"" code-file "\" src emacs-lisp\n\n")
+            (insert "After include.\n"))
+          (with-temp-file code-file
+            (insert "(defun hello ()\n  (message \"hello\"))\n"))
+          (with-current-buffer (find-file-noselect src-file)
+            (org-mode)
+            ;; Preview includes
+            (let* ((before (buffer-substring-no-properties
+                            (point-min) (point-max)))
+                   (tree-before (org-element-parse-buffer))
+                   (types-before
+                    (mapcar #'org-element-type
+                            (org-element-map tree-before t #'identity))))
+              ;; Execute include
+              (org-export-expand-include-keyword)
+                (let* ((norm (lambda (s)
+                              (replace-regexp-in-string
+                               "org[[:alnum:]]\\{7,9\\}" "orgHASH"
+                              (replace-regexp-in-string
+                               (regexp-quote root) "<root>" s))))
+                       (after (funcall norm
+                              (buffer-substring-no-properties
+                               (point-min) (point-max))))
+                       (tree-after (org-element-parse-buffer))
+                       (types-after
+                        (mapcar #'org-element-type
+                                (org-element-map tree-after t #'identity)))
+                       (src-blocks
+                        (org-element-map tree-after 'src-block
+                          (lambda (sb)
+                            (list (org-element-property :language sb)
+                                  (org-element-property :value sb)))))
+                       (html (funcall norm
+                              (org-export-as 'html nil nil t nil)))
+                       (has-code (string-match-p "defun" html)))
+                  (kill-buffer)
+                  (list (funcall norm before)
+                        types-before
+                        after
+                        types-after
+                        src-blocks
+                        has-code
+                        html))))))
+      (delete-directory root t))))"##,
+    );
+}
