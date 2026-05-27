@@ -133,3 +133,108 @@ fn org_crypt_detect_encrypted_entry_combo() {
                   (cdr encrypted)))))))"#,
     );
 }
+
+#[test]
+fn org_macs_plist_string_visibility_time_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (let ((prop-string (copy-sequence "aaBBcc"))
+        (now (float-time (encode-time 0 0 12 27 5 2026))))
+    (add-text-properties 2 4 '(face bold invisible org-fold-outline)
+                         prop-string)
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Alpha\nVisible line\n** Hidden\nSecret line\n* Beta\n")
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (let* ((secret-pos (save-excursion
+                           (goto-char (point-min))
+                           (search-forward "Secret")
+                           (point)))
+             (visible-pos (save-excursion
+                            (goto-char (point-min))
+                            (search-forward "Beta")
+                            (point)))
+             (plist-a '(:a 1 :b 2 :drop 9))
+             (plist-b '(:b override :c nil :d 4))
+             (combined (org-combine-plists plist-a plist-b))
+             (deleted (org-plist-delete-all combined '(:drop :c)))
+             (added (org-add-props (copy-sequence "PROP")
+                        '(face italic)
+                      'mouse-face 'highlight
+                      'help-echo "help"))
+             (restricted (org-no-properties (copy-sequence prop-string) t))
+             (plain (org-no-properties (copy-sequence prop-string)))
+             (template
+              (org-fill-template
+               "%noweb-ref/%noweb/%missing/%tangle-mode"
+               '(("noweb" . "N")
+                 ("noweb-ref" . "NR")
+                 ("tangle-mode" . "TM")
+                 ("missing" . nil))))
+             (escapes
+              (org-replace-escapes
+               "%-8a|%b|%c|%a"
+               '(("%a" . "alpha")
+                 ("%b" . "%a-beta")
+                 ("%c" . nil)))))
+        (let ((org-matcher-time-now now))
+          (list (org-uniquify-alist
+                 '((a 1) (b 2) (a 3 4) (c) (b 5)))
+                (org-delete-all '(b d) '(a b c b d e))
+                combined
+                deleted
+                (org-make-parameter-alist
+                 '(:alpha 1 :beta two :gamma nil))
+                (mapcar (lambda (s)
+                          (list s
+                                (org-unbracket-string "[" "]" s)
+                                (org-strip-quotes s)
+                                (org-shorten-string s 10)))
+                        '("[inside]" "\"quoted\""
+                          "short" "long words break here"))
+                (org-remove-tabs "a\tbb\tc" 4)
+                (org-remove-blank-lines "a\n\n  \n b\n\nc")
+                (list (org-wrap "one two three four five" 9)
+                      (org-wrap "one two three four five" nil 2))
+                (org-remove-indentation
+                 "    alpha\n      beta\n    gamma\n")
+                template
+                escapes
+                (list (get-text-property 0 'face added)
+                      (get-text-property 0 'mouse-face added)
+                      (get-text-property 0 'help-echo added)
+                      (org-find-text-property-in-string 'face added))
+                (list restricted
+                      (text-properties-at 2 restricted)
+                      plain
+                      (text-properties-at 2 plain))
+                (list (not (null (org-invisible-p secret-pos)))
+                      (not (null (org-invisible-p secret-pos t)))
+                      (org-invisible-p visible-pos)
+                      (save-excursion
+                        (goto-char secret-pos)
+                        (org-find-visible))
+                      (save-excursion
+                        (goto-char visible-pos)
+                        (org-find-invisible)))
+                (mapcar (lambda (pair)
+                          (list (car pair)
+                                (org-parse-time-string (cdr pair))
+                                (org-parse-time-string (cdr pair) t)))
+                        '((active . "<2026-05-27 Wed 13:45>")
+                          (range . "<2026-05-27 Wed 13:45-15:00>")))
+                (list (org-time< "<2026-05-27 Wed>" "<2026-05-28 Thu>")
+                      (org-time= "<2026-05-27 Wed>" "<2026-05-27 Wed>")
+                      (org-time<> "<2026-05-27 Wed>" "<2026-05-28 Thu>")
+                      (org-time> 10 5)
+                      (org-time<= nil 5)
+                      (org-2ft "not a time"))))))))"##,
+    );
+}
