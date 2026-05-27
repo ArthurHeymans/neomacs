@@ -25,7 +25,7 @@ use crate::buffer::{Buffer, BufferManager};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
-    FontWidth, UnderlineStyle,
+    FontWidth, LFaceAttr, UnderlineStyle,
 };
 use crate::heap_types::LispString;
 use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, WindowId};
@@ -472,14 +472,14 @@ fn set_runtime_face_color_from_frame_parameter(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
     face_name: &str,
-    attr_name: &str,
+    attr: LFaceAttr,
     value: Value,
 ) -> Result<(), crate::emacs_core::error::Flow> {
     builtin_internal_set_lisp_face_attribute(
         eval,
         vec![
             Value::symbol(face_name),
-            Value::symbol(attr_name),
+            Value::symbol(attr.keyword()),
             value,
             Value::make_frame(frame_id.0),
         ],
@@ -489,7 +489,7 @@ fn set_runtime_face_color_from_frame_parameter(
         .and_then(crate::face::Color::parse)
         .map(crate::face::FaceAttrValue::Color)
         .unwrap_or(crate::face::FaceAttrValue::Unspecified);
-    eval.set_face_attribute(face_name, attr_name, attr_value);
+    eval.set_face_attribute(face_name, attr, attr_value);
     mirror_runtime_face_into_frame(eval, frame_id, face_name);
     Ok(())
 }
@@ -506,7 +506,7 @@ pub(crate) fn update_face_from_frame_parameter(
                 eval,
                 frame_id,
                 "default",
-                ":foreground",
+                LFaceAttr::Foreground,
                 new_value,
             )?;
         }
@@ -518,7 +518,7 @@ pub(crate) fn update_face_from_frame_parameter(
                 eval,
                 frame_id,
                 "default",
-                ":background",
+                LFaceAttr::Background,
                 new_value,
             )?;
         }
@@ -549,7 +549,7 @@ pub fn seed_live_frame_default_face_from_font_parameter(
 
     for (attr_name, attr_value) in derived_face_attrs_from_font_value(&font_value) {
         if let Some(face_attr) = lisp_value_to_face_attr(attr_name, attr_value) {
-            eval.set_face_attribute("default", resolve_sym(attr_name), face_attr);
+            eval.set_face_attribute("default", attr_name, face_attr);
         }
     }
 
@@ -1709,7 +1709,7 @@ fn public_live_frame_font_value(font_value: Value) -> Value {
 fn live_frame_font_attribute_fallback(
     eval: &super::eval::Context,
     frame_id: FrameId,
-    attr_name: &str,
+    attr: LFaceAttr,
 ) -> Option<Value> {
     let frame = eval.frames.get(frame_id)?;
     let font_value = frame.parameter("font-parameter")?;
@@ -1717,15 +1717,13 @@ fn live_frame_font_attribute_fallback(
         return None;
     }
 
-    if attr_name == ":font" {
+    if attr == LFaceAttr::Font {
         return Some(public_live_frame_font_value(font_value));
     }
 
     derived_face_attrs_from_font_value(&font_value)
         .into_iter()
-        .find_map(|(derived_attr, derived_value)| {
-            (derived_attr == face_attr_id(attr_name)).then_some(derived_value)
-        })
+        .find_map(|(derived_attr, derived_value)| (derived_attr == attr).then_some(derived_value))
 }
 
 fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::Frame) -> Value {
@@ -1949,57 +1947,50 @@ fn known_face_id(name: &str) -> Option<i64> {
     }
 }
 
-const LISP_FACE_VECTOR_LEN: usize = 20;
-const VALID_FACE_ATTRIBUTES: &[&str] = &[
-    ":family",
-    ":foundry",
-    ":height",
-    ":weight",
-    ":slant",
-    ":underline",
-    ":overline",
-    ":strike-through",
-    ":box",
-    ":inverse-video",
-    ":foreground",
-    ":distant-foreground",
-    ":background",
-    ":stipple",
-    ":width",
-    ":inherit",
-    ":extend",
-    ":font",
-    ":fontset",
+const LISP_FACE_VECTOR_LEN: usize = LFACE_VECTOR_SIZE;
+const LFACE_VECTOR_SIZE: usize = 20;
+
+const LFACE_ATTRS: [LFaceAttr; LFACE_VECTOR_SIZE - 1] = [
+    LFaceAttr::Family,
+    LFaceAttr::Foundry,
+    LFaceAttr::Width,
+    LFaceAttr::Height,
+    LFaceAttr::Weight,
+    LFaceAttr::Slant,
+    LFaceAttr::Underline,
+    LFaceAttr::InverseVideo,
+    LFaceAttr::Foreground,
+    LFaceAttr::Background,
+    LFaceAttr::Stipple,
+    LFaceAttr::Overline,
+    LFaceAttr::StrikeThrough,
+    LFaceAttr::Box,
+    LFaceAttr::Font,
+    LFaceAttr::Inherit,
+    LFaceAttr::Fontset,
+    LFaceAttr::DistantForeground,
+    LFaceAttr::Extend,
 ];
-const LISP_FACE_VECTOR_ATTRIBUTES: &[&str] = &[
-    ":family",
-    ":foundry",
-    ":width",
-    ":height",
-    ":weight",
-    ":slant",
-    ":underline",
-    ":inverse-video",
-    ":foreground",
-    ":background",
-    ":stipple",
-    ":overline",
-    ":strike-through",
-    ":box",
-    ":font",
-    ":inherit",
-    ":extend",
-    ":distant-foreground",
-    ":fontset",
-];
-const DISCRETE_BOOLEAN_FACE_ATTRIBUTES: &[&str] = &[
-    ":underline",
-    ":overline",
-    ":strike-through",
-    ":inverse-video",
-    ":extend",
-];
-const SET_ONLY_FACE_ATTRIBUTES: &[&str] = &[":bold", ":italic"];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SetFaceAttr {
+    LFace(LFaceAttr),
+    Bold,
+    Italic,
+}
+
+impl SetFaceAttr {
+    fn from_keyword(name: &str) -> Option<Self> {
+        LFaceAttr::from_keyword(name)
+            .map(Self::LFace)
+            .or_else(|| match name {
+                ":bold" => Some(Self::Bold),
+                ":italic" => Some(Self::Italic),
+                _ => None,
+            })
+    }
+}
+
 const VALID_FACE_WEIGHTS: &[&str] = &[
     "thin",
     "ultra-light",
@@ -2065,8 +2056,8 @@ const VALID_FACE_WIDTHS: &[&str] = &[
 #[derive(Default)]
 struct FaceAttrState {
     selected_created: HashSet<SymId>,
-    selected_overrides: HashMap<SymId, HashMap<SymId, Value>>,
-    defaults_overrides: HashMap<SymId, HashMap<SymId, Value>>,
+    selected_overrides: HashMap<SymId, HashMap<LFaceAttr, Value>>,
+    defaults_overrides: HashMap<SymId, HashMap<LFaceAttr, Value>>,
 }
 
 thread_local! {
@@ -2224,7 +2215,7 @@ fn face_exists_for_domain(name: &str, defaults_frame: bool) -> bool {
     }
 }
 
-fn get_face_override(face_name: &str, attr: SymId, defaults_frame: bool) -> Option<Value> {
+fn get_face_override(face_name: &str, attr: LFaceAttr, defaults_frame: bool) -> Option<Value> {
     let face = face_symbol_id(face_name);
     FACE_ATTR_STATE.with(|slot| {
         let state = slot.borrow();
@@ -2237,7 +2228,7 @@ fn get_face_override(face_name: &str, attr: SymId, defaults_frame: bool) -> Opti
     })
 }
 
-fn set_face_override(face_name: &str, attr: SymId, value: Value, defaults_frame: bool) {
+fn set_face_override(face_name: &str, attr: LFaceAttr, value: Value, defaults_frame: bool) {
     let face = face_symbol_id(face_name);
     FACE_ATTR_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
@@ -2411,14 +2402,14 @@ fn make_lisp_face_vector_for_domain(face_name: &str, defaults_frame: bool) -> Va
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
     values.push(Value::symbol("face"));
     values.extend(
-        LISP_FACE_VECTOR_ATTRIBUTES
+        LFACE_ATTRS
             .iter()
-            .map(|attr| lisp_face_attribute_value(face_name, face_attr_id(attr), defaults_frame)),
+            .map(|attr| lisp_face_attribute_value(face_name, *attr, defaults_frame)),
     );
     Value::vector(values)
 }
 
-fn normalize_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
+fn normalize_face_attribute_name(attr: &Value) -> Result<LFaceAttr, Flow> {
     let name = match attr.kind() {
         ValueKind::Symbol(id) => resolve_sym(id),
         ValueKind::Nil => "nil",
@@ -2431,8 +2422,8 @@ fn normalize_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
         }
     };
 
-    if VALID_FACE_ATTRIBUTES.contains(&name) {
-        Ok(face_attr_id(name))
+    if let Some(attr) = LFaceAttr::from_keyword(name) {
+        Ok(attr)
     } else if attr.is_nil() {
         Err(signal(
             "error",
@@ -2446,7 +2437,7 @@ fn normalize_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
     }
 }
 
-fn normalize_set_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
+fn normalize_set_face_attribute_name(attr: &Value) -> Result<SetFaceAttr, Flow> {
     let name = match attr.kind() {
         ValueKind::Symbol(id) => resolve_sym(id),
         ValueKind::Nil => "nil",
@@ -2459,8 +2450,8 @@ fn normalize_set_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
         }
     };
 
-    if VALID_FACE_ATTRIBUTES.contains(&name) || SET_ONLY_FACE_ATTRIBUTES.contains(&name) {
-        Ok(face_attr_id(name))
+    if let Some(attr) = SetFaceAttr::from_keyword(name) {
+        Ok(attr)
     } else if attr.is_nil() {
         Err(signal(
             "error",
@@ -2474,17 +2465,23 @@ fn normalize_set_face_attribute_name(attr: &Value) -> Result<SymId, Flow> {
     }
 }
 
-fn default_face_attribute_value(attr: SymId) -> Value {
-    match resolve_sym(attr) {
-        ":family" | ":foundry" => Value::string("default"),
-        ":height" => Value::fixnum(1),
-        ":weight" | ":slant" | ":width" => Value::symbol("normal"),
-        ":underline" | ":overline" | ":strike-through" | ":box" | ":inverse-video" | ":stipple"
-        | ":inherit" | ":extend" | ":fontset" => Value::NIL,
-        ":foreground" => Value::string("unspecified-fg"),
-        ":background" => Value::string("unspecified-bg"),
-        ":distant-foreground" | ":font" => Value::symbol("unspecified"),
-        _ => Value::symbol("unspecified"),
+fn default_face_attribute_value(attr: LFaceAttr) -> Value {
+    match attr {
+        LFaceAttr::Family | LFaceAttr::Foundry => Value::string("default"),
+        LFaceAttr::Height => Value::fixnum(1),
+        LFaceAttr::Weight | LFaceAttr::Slant | LFaceAttr::Width => Value::symbol("normal"),
+        LFaceAttr::Underline
+        | LFaceAttr::Overline
+        | LFaceAttr::StrikeThrough
+        | LFaceAttr::Box
+        | LFaceAttr::InverseVideo
+        | LFaceAttr::Stipple
+        | LFaceAttr::Inherit
+        | LFaceAttr::Extend
+        | LFaceAttr::Fontset => Value::NIL,
+        LFaceAttr::Foreground => Value::string("unspecified-fg"),
+        LFaceAttr::Background => Value::string("unspecified-bg"),
+        LFaceAttr::DistantForeground | LFaceAttr::Font => Value::symbol("unspecified"),
     }
 }
 
@@ -2495,7 +2492,7 @@ fn is_reset_like_face_attr_value(value: &Value) -> bool {
     })
 }
 
-fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(SymId, Value)> {
+fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> {
     if !value.is_vector() {
         return Vec::new();
     };
@@ -2507,21 +2504,21 @@ fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(SymId, Value)> {
     let mut derived = Vec::new();
 
     for (field, attr) in [
-        ("family", ":family"),
-        ("foundry", ":foundry"),
-        ("weight", ":weight"),
-        ("slant", ":slant"),
-        ("width", ":width"),
+        ("family", LFaceAttr::Family),
+        ("foundry", LFaceAttr::Foundry),
+        ("weight", LFaceAttr::Weight),
+        ("slant", LFaceAttr::Slant),
+        ("width", LFaceAttr::Width),
     ] {
         if let Some(v) = font_vector_get_flexible(&elems, field) {
-            derived.push((face_attr_id(attr), v));
+            derived.push((attr, v));
         }
     }
 
     if let Some(v) = font_vector_get_flexible(&elems, "height")
         .or_else(|| font_vector_get_flexible(&elems, "size"))
     {
-        derived.push((face_attr_id(":height"), v));
+        derived.push((LFaceAttr::Height, v));
     }
 
     derived
@@ -2534,46 +2531,46 @@ fn apply_derived_font_face_overrides(
 ) -> Result<(), Flow> {
     for (attr_name, attr_value) in derived_face_attrs_from_font_value(font_value) {
         let (canonical_attr, canonical_value) =
-            normalize_face_attr_for_set(face_name, attr_name, attr_value)?;
+            normalize_face_attr_for_set(face_name, SetFaceAttr::LFace(attr_name), attr_value)?;
         set_face_override(face_name, canonical_attr, canonical_value, defaults_frame);
     }
     Ok(())
 }
 
-fn lisp_face_attribute_base_value(face: &str, attr: SymId, defaults_frame: bool) -> Value {
+fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, defaults_frame: bool) -> Value {
     if defaults_frame {
         return Value::symbol("unspecified");
     }
     if face == "default" {
         return default_face_attribute_value(attr);
     }
-    match (face, resolve_sym(attr)) {
-        ("bold", ":weight") => Value::symbol("bold"),
-        ("italic", ":slant") => Value::symbol("italic"),
-        ("underline", ":underline") => Value::T,
-        ("highlight", ":inverse-video") => Value::T,
-        ("region", ":inverse-video") => Value::T,
-        ("mode-line", ":inverse-video") => Value::T,
-        ("mode-line-highlight", ":inherit") => Value::symbol("highlight"),
-        ("mode-line-emphasis", ":weight") => Value::symbol("bold"),
-        ("mode-line-buffer-id", ":weight") => Value::symbol("bold"),
-        ("mode-line-inactive", ":inherit") => Value::symbol("mode-line"),
-        ("header-line", ":inherit") => Value::symbol("mode-line"),
-        ("header-line-highlight", ":inherit") => Value::symbol("mode-line-highlight"),
-        ("header-line-active", ":inherit") => Value::symbol("header-line"),
-        ("header-line-inactive", ":inherit") => Value::symbol("header-line"),
-        ("fringe", ":background") => Value::string("gray"),
-        ("cursor", ":background") => Value::string("white"),
-        ("vertical-border", ":inherit") => Value::symbol("mode-line-inactive"),
-        ("tool-bar", ":foreground") => Value::string("black"),
-        ("tool-bar", ":box") => Value::symbol("t"),
-        ("tab-bar", ":inherit") => Value::symbol("variable-pitch"),
-        ("tab-line", ":inherit") => Value::symbol("variable-pitch"),
+    match (face, attr) {
+        ("bold", LFaceAttr::Weight) => Value::symbol("bold"),
+        ("italic", LFaceAttr::Slant) => Value::symbol("italic"),
+        ("underline", LFaceAttr::Underline) => Value::T,
+        ("highlight", LFaceAttr::InverseVideo) => Value::T,
+        ("region", LFaceAttr::InverseVideo) => Value::T,
+        ("mode-line", LFaceAttr::InverseVideo) => Value::T,
+        ("mode-line-highlight", LFaceAttr::Inherit) => Value::symbol("highlight"),
+        ("mode-line-emphasis", LFaceAttr::Weight) => Value::symbol("bold"),
+        ("mode-line-buffer-id", LFaceAttr::Weight) => Value::symbol("bold"),
+        ("mode-line-inactive", LFaceAttr::Inherit) => Value::symbol("mode-line"),
+        ("header-line", LFaceAttr::Inherit) => Value::symbol("mode-line"),
+        ("header-line-highlight", LFaceAttr::Inherit) => Value::symbol("mode-line-highlight"),
+        ("header-line-active", LFaceAttr::Inherit) => Value::symbol("header-line"),
+        ("header-line-inactive", LFaceAttr::Inherit) => Value::symbol("header-line"),
+        ("fringe", LFaceAttr::Background) => Value::string("gray"),
+        ("cursor", LFaceAttr::Background) => Value::string("white"),
+        ("vertical-border", LFaceAttr::Inherit) => Value::symbol("mode-line-inactive"),
+        ("tool-bar", LFaceAttr::Foreground) => Value::string("black"),
+        ("tool-bar", LFaceAttr::Box) => Value::symbol("t"),
+        ("tab-bar", LFaceAttr::Inherit) => Value::symbol("variable-pitch"),
+        ("tab-line", LFaceAttr::Inherit) => Value::symbol("variable-pitch"),
         _ => Value::symbol("unspecified"),
     }
 }
 
-fn lisp_face_attribute_value(face: &str, attr: SymId, defaults_frame: bool) -> Value {
+fn lisp_face_attribute_value(face: &str, attr: LFaceAttr, defaults_frame: bool) -> Value {
     if let Some(value) = get_face_override(face, attr, defaults_frame) {
         return value;
     }
@@ -2685,9 +2682,9 @@ fn symbol_name_or_type_error(value: &Value) -> Result<String, Flow> {
 
 fn normalize_face_attr_for_set(
     face_name: &str,
-    attr: SymId,
+    attr: SetFaceAttr,
     value: Value,
-) -> Result<(SymId, Value), Flow> {
+) -> Result<(LFaceAttr, Value), Flow> {
     normalize_face_attr_for_set_with_eval(None, face_name, attr, value)
 }
 
@@ -2720,10 +2717,14 @@ fn merge_face_height_value(
 fn normalize_face_attr_for_set_with_eval(
     eval: Option<&mut super::eval::Context>,
     face_name: &str,
-    attr: SymId,
+    attr: SetFaceAttr,
     value: Value,
-) -> Result<(SymId, Value), Flow> {
-    let attr_name = resolve_sym(attr);
+) -> Result<(LFaceAttr, Value), Flow> {
+    let attr_name = match attr {
+        SetFaceAttr::LFace(attr) => attr.keyword(),
+        SetFaceAttr::Bold => ":bold",
+        SetFaceAttr::Italic => ":italic",
+    };
     let normalized = match attr_name {
         ":foreground" | ":background" | ":distant-foreground" if value.is_nil() => {
             Value::symbol("unspecified")
@@ -2897,7 +2898,7 @@ fn normalize_face_attr_for_set_with_eval(
             } else {
                 Value::symbol("bold")
             };
-            return Ok((face_attr_id(":weight"), mapped));
+            return Ok((LFaceAttr::Weight, mapped));
         }
         ":italic" => {
             let mapped = if normalized.is_nil() {
@@ -2905,12 +2906,15 @@ fn normalize_face_attr_for_set_with_eval(
             } else {
                 Value::symbol("italic")
             };
-            return Ok((face_attr_id(":slant"), mapped));
+            return Ok((LFaceAttr::Slant, mapped));
         }
         _ => {}
     }
 
-    Ok((attr, normalized))
+    match attr {
+        SetFaceAttr::LFace(attr) => Ok((attr, normalized)),
+        SetFaceAttr::Bold | SetFaceAttr::Italic => unreachable!("aliases returned above"),
+    }
 }
 
 /// `(internal-lisp-face-p FACE &optional FRAME)` -- return a face descriptor
@@ -3038,8 +3042,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             let (canonical_attr, canonical_value) =
                 normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
             set_face_override(&face_name, canonical_attr, canonical_value, defaults_frame);
-            if canonical_attr == face_attr_id(":font")
-                && !is_reset_like_face_attr_value(&canonical_value)
+            if canonical_attr == LFaceAttr::Font && !is_reset_like_face_attr_value(&canonical_value)
             {
                 apply_derived_font_face_overrides(&face_name, &canonical_value, defaults_frame)?;
             }
@@ -3074,9 +3077,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             require_symbol_face_name(&args[0]),
             normalize_set_face_attribute_name(&args[1]),
         ) {
-            let attr_name_str = resolve_sym(attr_name);
+            let (canonical_attr, canonical_value) =
+                normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
+            let attr_name_str = canonical_attr.keyword();
             let live_frame_id = live_frame_id_for_face_update(eval, args.get(3))?;
-            let font_resolution = if attr_name == face_attr_id(":font") {
+            let font_resolution = if canonical_attr == LFaceAttr::Font {
                 live_frame_id
                     .map(|frame_id| resolve_live_frame_font_request(eval, frame_id, &value))
             } else {
@@ -3084,33 +3089,33 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             };
             let effective_value = font_resolution
                 .as_ref()
-                .map_or(value, |resolution| resolution.font_value);
-            let public_effective_value = if attr_name == face_attr_id(":font") {
+                .map_or(canonical_value, |resolution| resolution.font_value);
+            let public_effective_value = if canonical_attr == LFaceAttr::Font {
                 public_live_frame_font_value(effective_value)
             } else {
                 effective_value
             };
 
-            if attr_name == face_attr_id(":font") && effective_value != value {
-                set_face_override(&face_name, attr_name, public_effective_value, false);
+            if canonical_attr == LFaceAttr::Font && effective_value != value {
+                set_face_override(&face_name, canonical_attr, public_effective_value, false);
             }
 
-            let face_attr = lisp_value_to_face_attr(attr_name, public_effective_value);
+            let face_attr = lisp_value_to_face_attr(canonical_attr, public_effective_value);
             if let Some(fav) = face_attr {
-                eval.set_face_attribute(&face_name, attr_name_str, fav);
+                eval.set_face_attribute(&face_name, canonical_attr, fav);
             }
-            if attr_name == face_attr_id(":font") {
+            if canonical_attr == LFaceAttr::Font {
                 for (derived_attr, derived_value) in
                     derived_face_attrs_from_font_value(&effective_value)
                 {
                     set_face_override(&face_name, derived_attr, derived_value, false);
                     if let Some(fav) = lisp_value_to_face_attr(derived_attr, derived_value) {
-                        eval.set_face_attribute(&face_name, resolve_sym(derived_attr), fav);
+                        eval.set_face_attribute(&face_name, derived_attr, fav);
                     }
                 }
             }
 
-            if attr_name == face_attr_id(":font") && face_name == "default" {
+            if canonical_attr == LFaceAttr::Font && face_name == "default" {
                 if let (Some(frame_id), Some(resolution)) =
                     (live_frame_id, font_resolution.as_ref())
                 {
@@ -3146,7 +3151,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
 }
 
 /// Convert a Lisp face attribute value to `FaceAttrValue` for `FaceTable`.
-fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face::FaceAttrValue> {
+fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face::FaceAttrValue> {
     use crate::face::{
         BoxBorder, BoxStyle, Color, FaceAttrValue, FaceHeight, FontSlant, FontWeight, FontWidth,
         Underline, UnderlineStyle,
@@ -3157,37 +3162,37 @@ fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face
         return Some(FaceAttrValue::Unspecified);
     }
 
-    match resolve_sym(attr_name) {
-        ":foreground" | ":background" | ":distant-foreground" => {
+    match attr {
+        LFaceAttr::Foreground | LFaceAttr::Background | LFaceAttr::DistantForeground => {
             let s = value.as_utf8_str()?;
             let c = Color::from_name(s).or_else(|| Color::from_hex(s))?;
             Some(FaceAttrValue::Color(c))
         }
-        ":weight" => {
+        LFaceAttr::Weight => {
             let name = value.as_symbol_name()?;
             Some(FaceAttrValue::Weight(FontWeight::from_symbol(name)?))
         }
-        ":slant" => {
+        LFaceAttr::Slant => {
             let name = value.as_symbol_name()?;
             Some(FaceAttrValue::Slant(FontSlant::from_symbol(name)?))
         }
-        ":width" => {
+        LFaceAttr::Width => {
             let name = value.as_symbol_name()?;
             Some(FaceAttrValue::Width(FontWidth::from_symbol(name)?))
         }
-        ":height" => match value.kind() {
+        LFaceAttr::Height => match value.kind() {
             ValueKind::Fixnum(n) => Some(FaceAttrValue::Height(FaceHeight::Absolute(n as i32))),
             ValueKind::Float => Some(FaceAttrValue::Height(FaceHeight::Relative(value.xfloat()))),
             _ => None,
         },
-        ":family" | ":foundry" => {
+        LFaceAttr::Family | LFaceAttr::Foundry => {
             if value.is_string() {
                 Some(FaceAttrValue::Text(value))
             } else {
                 None
             }
         }
-        ":underline" => {
+        LFaceAttr::Underline => {
             if value.is_nil() {
                 return Some(FaceAttrValue::Unspecified);
             }
@@ -3243,7 +3248,7 @@ fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face
             }
             Some(FaceAttrValue::Bool(true))
         }
-        ":overline" | ":strike-through" => {
+        LFaceAttr::Overline | LFaceAttr::StrikeThrough => {
             if value.is_nil() {
                 return Some(FaceAttrValue::Bool(false));
             }
@@ -3256,7 +3261,7 @@ fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face
             }
             Some(FaceAttrValue::Bool(value.is_truthy()))
         }
-        ":box" => {
+        LFaceAttr::Box => {
             if value.is_nil() {
                 return Some(FaceAttrValue::Unspecified);
             }
@@ -3324,8 +3329,8 @@ fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face
                 style: BoxStyle::Flat,
             }))
         }
-        ":inverse-video" | ":extend" => Some(FaceAttrValue::Bool(value.is_truthy())),
-        ":inherit" => {
+        LFaceAttr::InverseVideo | LFaceAttr::Extend => Some(FaceAttrValue::Bool(value.is_truthy())),
+        LFaceAttr::Inherit => {
             // Store raw face_ref. Matches GNU's `LFACE_INHERIT_INDEX`
             // slot which holds any face_ref (symbol / list / plist);
             // `merge_face_ref` dispatches on shape at resolution time.
@@ -3334,7 +3339,7 @@ fn lisp_value_to_face_attr(attr_name: SymId, value: Value) -> Option<crate::face
             }
             Some(FaceAttrValue::Inherit(Some(value)))
         }
-        _ => None,
+        LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => None,
     }
 }
 
@@ -3399,34 +3404,34 @@ fn runtime_width_to_lisp_value(width: FontWidth) -> Value {
     })
 }
 
-pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr_name: &str) -> Value {
-    match attr_name {
-        ":family" => face
+pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) -> Value {
+    match attr {
+        LFaceAttr::Family => face
             .family
             .filter(|value| value.is_string())
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":foundry" => face
+        LFaceAttr::Foundry => face
             .foundry
             .filter(|value| value.is_string())
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":height" => match face.height {
+        LFaceAttr::Height => match face.height {
             Some(FaceHeight::Absolute(n)) => Value::fixnum(n as i64),
             Some(FaceHeight::Relative(f)) => Value::make_float(f),
             None => Value::symbol("unspecified"),
         },
-        ":weight" => face
+        LFaceAttr::Weight => face
             .weight
             .map(runtime_weight_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":slant" => face
+        LFaceAttr::Slant => face
             .slant
             .map(runtime_slant_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":width" => face
+        LFaceAttr::Width => face
             .width
             .map(runtime_width_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":underline" => match &face.underline {
+        LFaceAttr::Underline => match &face.underline {
             None => Value::symbol("unspecified"),
             Some(underline)
                 if underline.color.is_none()
@@ -3456,17 +3461,17 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr_name: &str) 
                 Value::list(plist)
             }
         },
-        ":overline" => match (face.overline, face.overline_color) {
+        LFaceAttr::Overline => match (face.overline, face.overline_color) {
             (Some(true), Some(color)) => runtime_color_to_lisp_value(&color),
             (Some(value), None) => Value::bool_val(value),
             _ => Value::symbol("unspecified"),
         },
-        ":strike-through" => match (face.strike_through, face.strike_through_color) {
+        LFaceAttr::StrikeThrough => match (face.strike_through, face.strike_through_color) {
             (Some(true), Some(color)) => runtime_color_to_lisp_value(&color),
             (Some(value), None) => Value::bool_val(value),
             _ => Value::symbol("unspecified"),
         },
-        ":box" => match &face.box_border {
+        LFaceAttr::Box => match &face.box_border {
             None => Value::symbol("unspecified"),
             Some(border) => Value::list({
                 let mut plist = Vec::new();
@@ -3485,32 +3490,31 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr_name: &str) 
                 plist
             }),
         },
-        ":inverse-video" => face
+        LFaceAttr::InverseVideo => face
             .inverse_video
             .map(Value::bool)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":foreground" => face
+        LFaceAttr::Foreground => face
             .foreground
             .as_ref()
             .map(runtime_color_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":distant-foreground" => face
+        LFaceAttr::DistantForeground => face
             .distant_foreground
             .as_ref()
             .map(runtime_color_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":background" => face
+        LFaceAttr::Background => face
             .background
             .as_ref()
             .map(runtime_color_to_lisp_value)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        ":stipple" | ":font" | ":fontset" => Value::symbol("unspecified"),
-        ":inherit" => face.inherit.unwrap_or(Value::NIL),
-        ":extend" => face
+        LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => Value::symbol("unspecified"),
+        LFaceAttr::Inherit => face.inherit.unwrap_or(Value::NIL),
+        LFaceAttr::Extend => face
             .extend
             .map(Value::bool)
             .unwrap_or_else(|| Value::symbol("unspecified")),
-        _ => Value::symbol("unspecified"),
     }
 }
 
@@ -3518,9 +3522,9 @@ pub(crate) fn runtime_face_to_lisp_vector(face: &RuntimeFace) -> Value {
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
     values.push(Value::symbol("face"));
     values.extend(
-        LISP_FACE_VECTOR_ATTRIBUTES
+        LFACE_ATTRS
             .iter()
-            .map(|attr| runtime_face_attribute_value(face, attr)),
+            .map(|attr| runtime_face_attribute_value(face, *attr)),
     );
     Value::vector(values)
 }
@@ -3550,7 +3554,6 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
 
     let face_name = resolve_face_name_for_domain(&args[0], defaults_frame)?;
     let attr_name = normalize_face_attribute_name(&args[1])?;
-    let attr_name_str = resolve_sym(attr_name);
 
     if defaults_frame {
         return Ok(lisp_face_attribute_value(&face_name, attr_name, true));
@@ -3566,14 +3569,18 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
     if face_name == "default"
         && get_face_override(&face_name, attr_name, false).is_none()
         && matches!(
-            attr_name_str,
-            ":font" | ":family" | ":foundry" | ":weight" | ":slant" | ":width" | ":height"
+            attr_name,
+            LFaceAttr::Font
+                | LFaceAttr::Family
+                | LFaceAttr::Foundry
+                | LFaceAttr::Weight
+                | LFaceAttr::Slant
+                | LFaceAttr::Width
+                | LFaceAttr::Height
         )
     {
         if let Some(frame_id) = frame_id {
-            if let Some(fallback) =
-                live_frame_font_attribute_fallback(eval, frame_id, attr_name_str)
-            {
+            if let Some(fallback) = live_frame_font_attribute_fallback(eval, frame_id, attr_name) {
                 return Ok(fallback);
             }
         }
@@ -3581,16 +3588,16 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
 
     let lisp_value = lisp_face_attribute_value(&face_name, attr_name, false);
     let lisp_value_unspecified = lisp_value.is_symbol_named("unspecified")
-        || (attr_name == face_attr_id(":foreground")
+        || (attr_name == LFaceAttr::Foreground
             && lisp_value.as_utf8_str() == Some("unspecified-fg"))
-        || (attr_name == face_attr_id(":background")
+        || (attr_name == LFaceAttr::Background
             && lisp_value.as_utf8_str() == Some("unspecified-bg"));
     if !lisp_value_unspecified {
         return Ok(lisp_value);
     }
 
     if let Some(face) = eval.face_table().get(&face_name) {
-        let runtime_value = runtime_face_attribute_value(face, attr_name_str);
+        let runtime_value = runtime_face_attribute_value(face, attr_name);
         if !runtime_value.is_symbol_named("unspecified") {
             return Ok(runtime_value);
         }
@@ -3604,7 +3611,7 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
 pub(crate) fn builtin_internal_lisp_face_attribute_values(args: Vec<Value>) -> EvalResult {
     expect_args("internal-lisp-face-attribute-values", &args, 1)?;
     let attr_name = face_attr_value_name(&args[0])?;
-    if DISCRETE_BOOLEAN_FACE_ATTRIBUTES.contains(&resolve_sym(attr_name)) {
+    if LFaceAttr::from_keyword(resolve_sym(attr_name)).is_some_and(LFaceAttr::is_discrete_boolean) {
         Ok(Value::list(vec![Value::T, Value::NIL]))
     } else {
         Ok(Value::NIL)
@@ -3620,9 +3627,9 @@ pub(crate) fn builtin_internal_lisp_face_equal_p(args: Vec<Value>) -> EvalResult
     let defaults_frame = frame_defaults_flag(args.get(2))?;
     let face1 = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
     let face2 = resolve_known_face_name_for_compare(&args[1], defaults_frame)?;
-    for attr in VALID_FACE_ATTRIBUTES {
-        let v1 = lisp_face_attribute_value(&face1, face_attr_id(attr), defaults_frame);
-        let v2 = lisp_face_attribute_value(&face2, face_attr_id(attr), defaults_frame);
+    for attr in LFACE_ATTRS {
+        let v1 = lisp_face_attribute_value(&face1, attr, defaults_frame);
+        let v2 = lisp_face_attribute_value(&face2, attr, defaults_frame);
         if v1 != v2 {
             return Ok(Value::NIL);
         }
@@ -3637,8 +3644,8 @@ pub(crate) fn builtin_internal_lisp_face_empty_p(args: Vec<Value>) -> EvalResult
     expect_max_args("internal-lisp-face-empty-p", &args, 2)?;
     let defaults_frame = frame_defaults_flag(args.get(1))?;
     let face = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
-    for attr in VALID_FACE_ATTRIBUTES {
-        let v = lisp_face_attribute_value(&face, face_attr_id(attr), defaults_frame);
+    for attr in LFACE_ATTRS {
+        let v = lisp_face_attribute_value(&face, attr, defaults_frame);
         if !v.is_symbol_named("unspecified") {
             return Ok(Value::NIL);
         }
@@ -3669,18 +3676,14 @@ pub(crate) fn builtin_internal_merge_in_global_face(
         if let Some(attrs) = state.defaults_overrides.get(&face_symbol_id(&face_name)) {
             for (attr_name, value) in attrs {
                 if let Some(face_attr) = lisp_value_to_face_attr(*attr_name, *value) {
-                    eval.set_face_attribute(&face_name, resolve_sym(*attr_name), face_attr);
+                    eval.set_face_attribute(&face_name, *attr_name, face_attr);
                 }
-                if *attr_name == face_attr_id(":font") {
+                if *attr_name == LFaceAttr::Font {
                     for (derived_attr, derived_value) in derived_face_attrs_from_font_value(value) {
                         if let Some(face_attr) =
                             lisp_value_to_face_attr(derived_attr, derived_value)
                         {
-                            eval.set_face_attribute(
-                                &face_name,
-                                resolve_sym(derived_attr),
-                                face_attr,
-                            );
+                            eval.set_face_attribute(&face_name, derived_attr, face_attr);
                         }
                     }
                 }
@@ -4187,12 +4190,12 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
     if defaults_frame {
         let face_name = resolve_face_name_for_domain(&args[0], true)?;
         let mut styles = Vec::new();
-        let weight = lisp_face_attribute_value(&face_name, face_attr_id(":weight"), true);
+        let weight = lisp_face_attribute_value(&face_name, LFaceAttr::Weight, true);
         if matches!(weight.as_symbol_name(), Some(name) if name != "normal" && name != "unspecified")
         {
             styles.push(Value::symbol("bold"));
         }
-        let slant = lisp_face_attribute_value(&face_name, face_attr_id(":slant"), true);
+        let slant = lisp_face_attribute_value(&face_name, LFaceAttr::Slant, true);
         if matches!(slant.as_symbol_name(), Some(name) if name != "normal" && name != "unspecified")
         {
             styles.push(Value::symbol("italic"));

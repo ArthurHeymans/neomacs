@@ -7227,7 +7227,7 @@ impl Context {
     pub fn set_face_attribute(
         &mut self,
         face_name: &str,
-        attr: &str,
+        attr: crate::face::LFaceAttr,
         value: crate::face::FaceAttrValue,
     ) -> bool {
         let changed = self.face_table.set_attribute(face_name, attr, value);

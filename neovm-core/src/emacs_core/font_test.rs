@@ -525,7 +525,7 @@ fn created_face_runtime_state_uses_symbol_identity() {
             state
                 .selected_overrides
                 .get(&face_symbol)
-                .and_then(|attrs| attrs.get(&crate::emacs_core::intern::intern(":foreground")))
+                .and_then(|attrs| attrs.get(&crate::face::LFaceAttr::Foreground))
                 .copied(),
             Some(Value::string("green"))
         );
@@ -2178,7 +2178,7 @@ fn internal_get_lisp_face_attribute_eval_reads_live_face_table() {
     let mut eval = crate::emacs_core::eval::Context::new();
     eval.set_face_attribute(
         "mode-line",
-        ":background",
+        crate::face::LFaceAttr::Background,
         FaceAttrValue::Color(Color::rgb(191, 191, 191)),
     );
 

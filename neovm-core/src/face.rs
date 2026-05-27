@@ -18,6 +18,92 @@ use std::collections::{HashMap, HashSet};
 // X11 color table generated at compile time from etc/rgb.txt
 include!(concat!(env!("OUT_DIR"), "/x11_colors.rs"));
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(usize)]
+pub enum LFaceAttr {
+    Family = 1,
+    Foundry,
+    Width,
+    Height,
+    Weight,
+    Slant,
+    Underline,
+    InverseVideo,
+    Foreground,
+    Background,
+    Stipple,
+    Overline,
+    StrikeThrough,
+    Box,
+    Font,
+    Inherit,
+    Fontset,
+    DistantForeground,
+    Extend,
+}
+
+impl LFaceAttr {
+    pub(crate) const fn keyword(self) -> &'static str {
+        match self {
+            LFaceAttr::Family => ":family",
+            LFaceAttr::Foundry => ":foundry",
+            LFaceAttr::Width => ":width",
+            LFaceAttr::Height => ":height",
+            LFaceAttr::Weight => ":weight",
+            LFaceAttr::Slant => ":slant",
+            LFaceAttr::Underline => ":underline",
+            LFaceAttr::InverseVideo => ":inverse-video",
+            LFaceAttr::Foreground => ":foreground",
+            LFaceAttr::Background => ":background",
+            LFaceAttr::Stipple => ":stipple",
+            LFaceAttr::Overline => ":overline",
+            LFaceAttr::StrikeThrough => ":strike-through",
+            LFaceAttr::Box => ":box",
+            LFaceAttr::Font => ":font",
+            LFaceAttr::Inherit => ":inherit",
+            LFaceAttr::Fontset => ":fontset",
+            LFaceAttr::DistantForeground => ":distant-foreground",
+            LFaceAttr::Extend => ":extend",
+        }
+    }
+
+    pub(crate) const fn is_discrete_boolean(self) -> bool {
+        matches!(
+            self,
+            LFaceAttr::Underline
+                | LFaceAttr::Overline
+                | LFaceAttr::StrikeThrough
+                | LFaceAttr::InverseVideo
+                | LFaceAttr::Extend
+        )
+    }
+
+    pub(crate) fn from_keyword(name: &str) -> Option<Self> {
+        match name {
+            ":family" => Some(LFaceAttr::Family),
+            ":foundry" => Some(LFaceAttr::Foundry),
+            ":width" => Some(LFaceAttr::Width),
+            ":height" => Some(LFaceAttr::Height),
+            ":weight" => Some(LFaceAttr::Weight),
+            ":slant" => Some(LFaceAttr::Slant),
+            ":underline" => Some(LFaceAttr::Underline),
+            ":inverse-video" => Some(LFaceAttr::InverseVideo),
+            ":foreground" => Some(LFaceAttr::Foreground),
+            ":background" => Some(LFaceAttr::Background),
+            ":stipple" => Some(LFaceAttr::Stipple),
+            ":overline" => Some(LFaceAttr::Overline),
+            ":strike-through" => Some(LFaceAttr::StrikeThrough),
+            ":box" => Some(LFaceAttr::Box),
+            ":font" => Some(LFaceAttr::Font),
+            ":inherit" => Some(LFaceAttr::Inherit),
+            ":fontset" => Some(LFaceAttr::Fontset),
+            ":distant-foreground" => Some(LFaceAttr::DistantForeground),
+            ":extend" => Some(LFaceAttr::Extend),
+            _ => None,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Color
 // ---------------------------------------------------------------------------
@@ -1242,7 +1328,7 @@ impl FaceTable {
     /// Update a single attribute on a face.
     /// Creates the face if it doesn't exist.
     /// Returns true if the face was actually modified.
-    pub fn set_attribute(&mut self, name: &str, attr: &str, value: FaceAttrValue) -> bool {
+    pub fn set_attribute(&mut self, name: &str, attr: LFaceAttr, value: FaceAttrValue) -> bool {
         self.ensure_face(name);
         let key = face_symbol_value(name);
         let face = self.faces.get_mut(&key).unwrap();
@@ -1259,24 +1345,24 @@ impl FaceTable {
         }
 
         match attr {
-            ":foreground" => set_option!(face.foreground, Color),
-            ":background" => set_option!(face.background, Color),
-            ":distant-foreground" => set_option!(face.distant_foreground, Color),
-            ":weight" => set_option!(face.weight, Weight),
-            ":slant" => set_option!(face.slant, Slant),
-            ":width" => set_option!(face.width, Width),
-            ":height" => set_option!(face.height, Height),
-            ":family" => match value {
+            LFaceAttr::Foreground => set_option!(face.foreground, Color),
+            LFaceAttr::Background => set_option!(face.background, Color),
+            LFaceAttr::DistantForeground => set_option!(face.distant_foreground, Color),
+            LFaceAttr::Weight => set_option!(face.weight, Weight),
+            LFaceAttr::Slant => set_option!(face.slant, Slant),
+            LFaceAttr::Width => set_option!(face.width, Width),
+            LFaceAttr::Height => set_option!(face.height, Height),
+            LFaceAttr::Family => match value {
                 FaceAttrValue::Text(text) => face.family = Some(text),
                 FaceAttrValue::Unspecified => face.family = None,
                 _ => return false,
             },
-            ":foundry" => match value {
+            LFaceAttr::Foundry => match value {
                 FaceAttrValue::Text(text) => face.foundry = Some(text),
                 FaceAttrValue::Unspecified => face.foundry = None,
                 _ => return false,
             },
-            ":underline" => match value {
+            LFaceAttr::Underline => match value {
                 FaceAttrValue::Underline(u) => face.underline = Some(u),
                 FaceAttrValue::Bool(true) => {
                     face.underline = Some(Underline {
@@ -1290,7 +1376,7 @@ impl FaceTable {
                 }
                 _ => face.underline = None,
             },
-            ":overline" => match value {
+            LFaceAttr::Overline => match value {
                 FaceAttrValue::Bool(b) => face.overline = Some(b),
                 FaceAttrValue::Color(c) => {
                     face.overline = Some(true);
@@ -1299,7 +1385,7 @@ impl FaceTable {
                 FaceAttrValue::Unspecified => face.overline = None,
                 _ => return false,
             },
-            ":strike-through" => match value {
+            LFaceAttr::StrikeThrough => match value {
                 FaceAttrValue::Bool(b) => face.strike_through = Some(b),
                 FaceAttrValue::Color(c) => {
                     face.strike_through = Some(true);
@@ -1308,15 +1394,15 @@ impl FaceTable {
                 FaceAttrValue::Unspecified => face.strike_through = None,
                 _ => return false,
             },
-            ":box" => set_option!(face.box_border, Box),
-            ":inverse-video" => set_option!(face.inverse_video, Bool),
-            ":extend" => set_option!(face.extend, Bool),
-            ":inherit" => match value {
+            LFaceAttr::Box => set_option!(face.box_border, Box),
+            LFaceAttr::InverseVideo => set_option!(face.inverse_video, Bool),
+            LFaceAttr::Extend => set_option!(face.extend, Bool),
+            LFaceAttr::Inherit => match value {
                 FaceAttrValue::Inherit(v) => face.inherit = v,
                 FaceAttrValue::Unspecified => face.inherit = None,
                 _ => return false,
             },
-            _ => return false,
+            LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => return false,
         }
         true
     }
