@@ -274,3 +274,82 @@ fn org_archive_all_done_tag_then_move_old_combo() {
              nil nil)))))"##,
     );
 }
+
+#[test]
+fn org_refile_completion_new_parent_verify_history_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let* ((root (make-temp-file "org-refile-complete" t))
+         (file (expand-file-name "targets.org" root))
+         (org-refile-targets `((,file . (:maxlevel . 3))))
+         (org-refile-use-outline-path t)
+         (org-outline-path-complete-in-steps t)
+         (org-refile-allow-creating-parent-nodes 'confirm)
+         (org-refile-history nil)
+         prompts answers)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Inbox\n")
+            (insert "* Projects :target:\n")
+            (insert "** Skip :skip:\n*** Hidden target\n")
+            (insert "** Keep :target:\n"))
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (let ((org-refile-target-verify-function
+                   (lambda ()
+                     (let ((tags (org-get-tags nil t)))
+                       (cond
+                        ((member "skip" tags)
+                         (org-end-of-subtree t t)
+                         nil)
+                        ((or (= (org-current-level) 1)
+                             (member "target" tags))
+                         t)
+                        (t nil))))))
+              (cl-letf (((symbol-function 'completing-read)
+                         (lambda (prompt collection &rest _)
+                           (push (list prompt
+                                       (sort
+                                        (mapcar #'car
+                                                (if (functionp collection)
+                                                    (all-completions
+                                                     "" collection)
+                                                  collection))
+                                        #'string<))
+                                 prompts)
+                           (pop answers)))
+                        ((symbol-function 'y-or-n-p)
+                         (lambda (prompt)
+                           (push prompt prompts)
+                           t)))
+                (setq answers '("Projects/Keep/New child"))
+                (let ((new-target
+                       (org-refile-get-location "Move to" nil
+                                                org-refile-allow-creating-parent-nodes))
+                      (after-new (buffer-substring-no-properties
+                                  (point-min) (point-max))))
+                  (setq answers '("Projects/Keep/New child"))
+                  (let ((existing
+                         (org-refile-get-location "Again" nil nil)))
+                    (list (list (car new-target)
+                                (file-relative-name (nth 1 new-target) root)
+                                (nth 2 new-target)
+                                (not (null (nth 3 new-target))))
+                          (list (car existing)
+                                (file-relative-name (nth 1 existing) root)
+                                (nth 2 existing)
+                                (not (null (nth 3 existing))))
+                          (nreverse prompts)
+                          org-refile-history
+                          after-new
+                          (buffer-substring-no-properties
+                           (point-min) (point-max)))))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
