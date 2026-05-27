@@ -503,3 +503,164 @@ fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
               (buffer-substring-no-properties (point-min) (point-max))))))"#,
     );
 }
+
+#[test]
+fn org_cycle_startup_visibility_archived_drawers_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-archive-tag "ARCHIVE")
+          (org-cycle-hide-drawer-startup t)
+          (org-cycle-hide-block-startup t))
+      (org-mode)
+      (insert "#+STARTUP: content\n")
+      (insert "* Active\n")
+      (insert ":PROPERTIES:\n:VISIBILITY: children\n:END:\n")
+      (insert "active body\n")
+      (insert "** Child\nchild body\n*** Grand\nbody grand\n")
+      (insert "* Archived :ARCHIVE:\narchived body\n** Hidden child\nhidden body\n")
+      (insert "* Blocks\n")
+      (insert "#+begin_quote\nquoted body\n#+end_quote\n")
+      (org-cycle-set-startup-visibility)
+      (let ((snapshot
+             (lambda ()
+               (mapcar
+                (lambda (needle)
+                  (list needle
+                        (invisible-p
+                         (save-excursion
+                           (goto-char (point-min))
+                           (search-forward needle)
+                           (point)))))
+                '("Active" ":VISIBILITY:" "active body" "Child" "child body"
+                  "Grand" "body grand" "Archived" "archived body"
+                  "Hidden child" "hidden body" "Blocks" "quoted body")))))
+        (let ((startup (funcall snapshot)))
+          (goto-char (point-min))
+          (search-forward "Active")
+          (beginning-of-line)
+          (org-cycle)
+          (org-cycle)
+          (let ((active-after-local (funcall snapshot)))
+            (org-cycle-global)
+            (org-cycle-global)
+            (let ((after-global (funcall snapshot)))
+              (org-fold-show-all)
+              (list startup
+                    active-after-local
+                    after-global
+                    (funcall snapshot)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_core_mixed_regions_recovery_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\n")
+    (insert ":LOGBOOK:\nclock line\n:END:\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+    (insert "** B\nbody B\n*** C\nbody C\n")
+    (insert "* D\nbody D\n")
+    (let ((offset-region
+           (lambda (region)
+             (and region
+                  (cons (- (car region) (point-min))
+                        (- (cdr region) (point-min))))))
+          (probe
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (search-forward needle)
+               (list needle
+                     (invisible-p (point))
+                     (get-text-property (point) 'invisible)
+                     (funcall offset-region
+                              (org-fold-get-region-at-point 'drawer (point)))
+                     (funcall offset-region
+                              (org-fold-get-region-at-point 'block (point)))
+                     (funcall offset-region
+                              (org-fold-get-region-at-point 'outline
+                                                            (point))))))))
+      (org-fold-hide-drawer-all)
+      (org-fold-hide-block-all)
+      (goto-char (point-min))
+      (search-forward "B")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (let ((hidden (mapcar probe
+                            '("clock line" "(+ 1 2)" "body B" "C"
+                              "body C" "D" "body D"))))
+        (org-fold-show-subtree)
+        (org-fold-show-all '(blocks drawers))
+        (let ((shown (mapcar probe
+                             '("clock line" "(+ 1 2)" "body B" "C"
+                               "body C" "D" "body D"))))
+          (list hidden
+                shown
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_reveal_context_after_hidden_search_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Root\nroot body\n")
+    (insert "** Alpha\nalpha body\n")
+    (insert "*** Beta\nbeta body\n")
+    (insert "**** Gamma\nneedle body\n")
+    (insert "** Sibling\nsibling body\n")
+    (let ((visible
+           (lambda ()
+             (mapcar
+              (lambda (needle)
+                (list needle
+                      (invisible-p
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward needle)
+                         (point)))))
+              '("Root" "root body" "Alpha" "alpha body" "Beta"
+                "beta body" "Gamma" "needle body" "Sibling"
+                "sibling body")))))
+      (org-fold-hide-sublevels 1)
+      (let ((overview (funcall visible)))
+        (goto-char (point-min))
+        (search-forward "needle body")
+        (org-fold-show-context 'isearch)
+        (let ((after-context (funcall visible)))
+          (org-fold-hide-sublevels 1)
+          (goto-char (point-min))
+          (search-forward "needle body")
+          (org-fold-reveal '(4))
+          (let ((after-reveal (funcall visible)))
+            (org-fold-show-all)
+            (list overview
+                  after-context
+                  after-reveal
+                  (funcall visible)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
