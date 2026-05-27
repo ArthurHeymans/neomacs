@@ -372,3 +372,60 @@ fn org_sparse_tag_todo_deps_planning_combo() {
                       final-buf))))))))))"##,
     );
 }
+
+#[test]
+fn org_occur_highlight_count_visibility_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha :work:\n")
+    (insert "Alpha body with important keyword.\n")
+    (insert "** DONE Sub A\n")
+    (insert "Sub A body.\n")
+    (insert "** TODO Sub B :urgent:\n")
+    (insert "Sub B body with important note.\n")
+    (insert "* Beta :home:\n")
+    (insert "Beta body.\n")
+    (insert "** TODO Sub C\n")
+    (insert "Sub C body with another important line.\n")
+    (insert "* DONE Gamma\n")
+    (insert "Gamma body with keyword inside.\n")
+    ;; Run occur for "important"
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward needle)
+                      (list needle
+                            (line-number-at-pos)
+                            (invisible-p (point))
+                            (org-get-tags nil t))))
+                  '("Alpha" "Sub A" "Sub B" "Beta" "Sub C" "Gamma")))))
+      (goto-char (point-min))
+      (occur "important")
+      (let ((occur-buf (buffer-name (other-buffer (current-buffer) t)))
+            (occur-count (length org-occur-highlights))
+            (occur-text
+             (when (get-buffer "*Occur*")
+               (with-current-buffer "*Occur*"
+                 (buffer-substring-no-properties
+                  (point-min) (point-max))))))
+        (let ((after-occur-vis (funcall vis)))
+          ;; Remove highlights
+          (org-remove-occur-highlights)
+          (let ((after-remove-vis (funcall vis))
+                (highlights-after-remove (length org-occur-highlights)))
+            (list occur-count
+                  occur-text
+                  after-occur-vis
+                  after-remove-vis
+                  highlights-after-remove
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))))))"##,
+    );
+}
