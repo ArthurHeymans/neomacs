@@ -1458,5 +1458,6 @@ mod strong_final_combos;
 mod strong_final_comprehensive;
 mod strong_final_edge;
 mod strong_integration_combos;
+mod strong_mega_combos;
 mod strong_ultimate_edge;
 mod strong_workflow_combos;
