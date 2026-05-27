@@ -195,3 +195,147 @@ fn org_table_rectangle_cut_paste_sum_wrap_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_table_create_convert_export_import_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (let* ((root (make-temp-file "org-table-io" t))
+         (csv (expand-file-name "data.csv" root))
+         (out (expand-file-name "out.tsv" root)))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert "name,qty,price\nalpha,2,10\nbeta,3,7\n")
+          (org-table-convert-region (point-min) (point-max) ",")
+          (let ((converted (buffer-substring-no-properties
+                            (point-min) (point-max))))
+            (goto-char (point-max))
+            (insert "\n")
+            (org-table-create "2x3")
+            (let ((created (buffer-substring-no-properties
+                            (point-min) (point-max))))
+              (with-temp-file csv
+                (insert "x;y;z\n1;2;3\n4;5;6\n"))
+              (goto-char (point-max))
+              (insert "\n")
+              (org-table-import csv ";")
+              (org-table-export out "orgtbl-to-tsv")
+              (list converted
+                    created
+                    (org-table-to-lisp
+                     (buffer-substring-no-properties
+                      (save-excursion
+                        (goto-char (point-min))
+                        (search-forward "x")
+                        (line-beginning-position))
+                      (point-max)))
+                    (with-temp-buffer
+                      (insert-file-contents out)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_table_row_column_cell_motion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| A | B | C |\n")
+    (insert "|---+---+---|\n")
+    (insert "| 1 | 2 | 3 |\n")
+    (insert "| 4 | 5 | 6 |\n")
+    (insert "| 7 | 8 | 9 |\n")
+    (goto-char (point-min))
+    (search-forward "5")
+    (org-table-move-cell-left)
+    (org-table-move-cell-up)
+    (let ((after-cell (buffer-substring-no-properties
+                       (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "7")
+      (org-table-move-row-up)
+      (goto-char (point-min))
+      (search-forward "C")
+      (org-table-move-column-left)
+      (let ((after-row-col (buffer-substring-no-properties
+                            (point-min) (point-max))))
+        (goto-char (point-min))
+        (search-forward "B")
+        (org-table-insert-column)
+        (org-table-put 1 (org-table-current-column) "Inserted" t)
+        (goto-char (point-min))
+        (search-forward "4")
+        (org-table-insert-row)
+        (org-table-put (org-table-current-dline) 1 "new" t)
+        (list after-cell
+              after-row-col
+              (org-table-to-lisp)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_table_column_width_shrink_expand_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | <6> Description | Count |\n")
+    (insert "|------+-----------------+-------|\n")
+    (insert "| A | alpha beta gamma | 1 |\n")
+    (insert "| B | delta epsilon zeta | 2 |\n")
+    (goto-char (point-min))
+    (search-forward "Description")
+    (let ((before (buffer-substring-no-properties
+                   (point-min) (point-max))))
+      (org-table-toggle-column-width)
+      (font-lock-ensure (point-min) (point-max))
+      (let ((shrunk
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (list needle
+                        (get-text-property (match-beginning 0) 'display)
+                        (get-text-property (match-beginning 0) 'invisible)
+                        (overlays-at (match-beginning 0)))))
+              '("Description" "alpha" "delta"))))
+        (org-table-expand (point-min) (point-max))
+        (let ((expanded
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward needle)
+                    (list needle
+                          (get-text-property (match-beginning 0) 'display)
+                          (get-text-property (match-beginning 0)
+                                             'invisible))))
+                '("Description" "alpha" "delta"))))
+          (list before
+                shrunk
+                expanded
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
