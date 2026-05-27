@@ -31,6 +31,28 @@ impl RenderApp {
         state.displayed_wpm > 0.5 || !state.key_press_times.is_empty()
     }
 
+    fn render_frame_common_overlays(
+        renderer: &mut WgpuRenderer,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        glyph_atlas: &mut neomacs_renderer_wgpu::WgpuGlyphAtlas,
+        width: u32,
+        height: u32,
+        scroll_indicators_enabled: bool,
+    ) {
+        if renderer.effects.breadcrumb.enabled {
+            renderer.render_breadcrumbs(surface_view, frame, glyph_atlas);
+        }
+
+        if scroll_indicators_enabled {
+            renderer.render_scroll_indicators(surface_view, &frame.window_infos, width, height);
+        }
+
+        if renderer.effects.window_watermark.enabled {
+            renderer.render_window_watermarks(surface_view, frame, glyph_atlas);
+        }
+    }
+
     fn render_secondary_frame_window(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
@@ -306,25 +328,18 @@ impl RenderApp {
         }
 
         renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            if renderer.effects.breadcrumb.enabled {
-                renderer.render_breadcrumbs(surface_view, frame, &mut render.glyph_atlas);
-            }
+            Self::render_frame_common_overlays(
+                renderer,
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
+                scroll_indicators_enabled,
+            );
         });
         if render.renderer_effects.is_active() {
             render.frame_dirty = true;
-        }
-
-        if scroll_indicators_enabled {
-            renderer.render_scroll_indicators(
-                surface_view,
-                &frame.window_infos,
-                native.width,
-                native.height,
-            );
-        }
-
-        if renderer.effects.window_watermark.enabled {
-            renderer.render_window_watermarks(surface_view, frame, &mut render.glyph_atlas);
         }
 
         if !native.chrome.decorations_enabled
@@ -802,36 +817,20 @@ impl RenderApp {
             }
         }
 
-        // Render breadcrumb/path bar overlay
-        if self.effects.breadcrumb.enabled {
-            if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
-                &mut self.renderer,
-                &mut self.glyph_atlas,
-                &self.current_frame,
-            ) {
-                renderer.render_breadcrumbs(&surface_view, frame, glyph_atlas);
-            }
-        }
-
-        // Render scroll position indicators and focus ring
-        if self.scroll_indicators_enabled {
-            if let (Some(renderer), Some(frame)) = (&self.renderer, &self.current_frame) {
-                renderer.render_scroll_indicators(
-                    &surface_view,
-                    &frame.window_infos,
-                    self.width,
-                    self.height,
-                );
-            }
-        }
-
-        // Render window watermarks for empty/small buffers
-        if self.effects.window_watermark.enabled {
-            if let (Some(renderer), Some(glyph_atlas), Some(frame)) =
-                (&self.renderer, &mut self.glyph_atlas, &self.current_frame)
-            {
-                renderer.render_window_watermarks(&surface_view, frame, glyph_atlas);
-            }
+        if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
+            &mut self.renderer,
+            &mut self.glyph_atlas,
+            &self.current_frame,
+        ) {
+            Self::render_frame_common_overlays(
+                renderer,
+                &surface_view,
+                frame,
+                glyph_atlas,
+                self.width,
+                self.height,
+                self.scroll_indicators_enabled,
+            );
         }
 
         // Render custom title bar when decorations are disabled (not in fullscreen)
