@@ -349,3 +349,80 @@ fn org_mobile_push_agenda_index_checksums_hooks_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_mobile_apply_refile_delete_archive_flag_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-archive)
+  (require 'org-mobile)
+  (let* ((root (make-temp-file "org-mobile-actions" t))
+         (org-directory root)
+         (file (expand-file-name "tasks.org" root))
+         (capture (expand-file-name "mobileorg.org" root))
+         (org-mobile-force-mobile-change t)
+         (org-archive-location "::* Archived")
+         (org-log-done nil)
+         messages)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: Mobile Actions\n")
+            (insert "* Source\n")
+            (insert "** TODO Refile me :old:\nBody refile\n")
+            (insert "** TODO Delete me\nBody delete\n")
+            (insert "** DONE Archive sibling\nBody archive\n")
+            (insert "** TODO Flag me\nBody flag\n")
+            (insert "* Target\n")
+            (insert "** Existing child\n")
+            (insert "* Tail\n"))
+          (with-temp-file capture
+            (insert "* F(refile:ignored) [[olp:tasks.org:/Source/Refile%20me][Refile me]]\n")
+            (insert "** Old value\nignored\n")
+            (insert "** New value\nolp:tasks.org:/Target\n")
+            (insert "* F(delete:ignored) [[olp:tasks.org:/Source/Delete%20me][Delete me]]\n")
+            (insert "** Old value\nignored\n** New value\nignored\n")
+            (insert "* F(archive-sibling:ignored) [[olp:tasks.org:/Source/Archive%20sibling][Archive sibling]]\n")
+            (insert "** Old value\nignored\n** New value\nignored\n")
+            (insert "* F() [[olp:tasks.org:/Source/Flag%20me][Flag me]]\n")
+            (insert "Flag note line one\nFlag note line two\n")
+            (insert "* F(delete:ignored) [[olp:tasks.org:/Missing][Missing]]\n")
+            (insert "** Old value\nignored\n** New value\nignored\n")
+            (insert "* New mobile capture\nCaptured body\n"))
+          (with-current-buffer (find-file-noselect capture)
+            (org-mode)
+            (cl-letf (((symbol-function 'message)
+                       (lambda (fmt &rest args)
+                         (push (apply #'format fmt args) messages)))
+                      ((symbol-function 'sit-for) (lambda (&rest _) nil)))
+              (org-mobile-apply (point-min) (point-max)))
+            (let ((capture-after
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))
+              (with-current-buffer (find-file-noselect file)
+                (org-mode)
+                (let ((text (replace-regexp-in-string
+                             "^#\\+LAST_MOBILE_CHANGE:.*\n"
+                             "#+LAST_MOBILE_CHANGE: <time>\n"
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))))
+                  (list (nreverse messages)
+                        capture-after
+                        text
+                        org-mobile-last-flagged-files
+                        (org-map-entries
+                         (lambda ()
+                           (list (org-get-heading t t t t)
+                                 (org-current-level)
+                                 (org-get-tags nil t)
+                                 (org-entry-get nil "THEFLAGGINGNOTE")
+                                 (org-entry-get nil "ARCHIVE_TIME")))
+                         nil nil)))))))
+      (dolist (path (list file capture))
+        (when (get-file-buffer path) (kill-buffer (get-file-buffer path))))
+      (delete-directory root t))))"##,
+    );
+}
