@@ -196,8 +196,11 @@ impl RenderApp {
                     self.webkit_views.remove(&id);
                     self.floating_webkits.retain(|w| w.webkit_id != id);
                     for window_state in self.frame_windows.windows.values_mut() {
-                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
-                        window_state.frame_dirty = true;
+                        window_state
+                            .render
+                            .floating_webkits
+                            .retain(|w| w.webkit_id != id);
+                        window_state.render.frame_dirty = true;
                     }
                     if let Some(ref mut renderer) = self.renderer {
                         renderer.remove_webkit_view(id);
@@ -345,10 +348,13 @@ impl RenderApp {
                         self.frame_dirty = true;
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
-                        let old_len = window_state.floating_webkits.len();
-                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
-                        if window_state.floating_webkits.len() != old_len {
-                            window_state.frame_dirty = true;
+                        let old_len = window_state.render.floating_webkits.len();
+                        window_state
+                            .render
+                            .floating_webkits
+                            .retain(|w| w.webkit_id != id);
+                        if window_state.render.floating_webkits.len() != old_len {
+                            window_state.render.frame_dirty = true;
                         }
                     }
                     if emacs_frame_id == 0
@@ -357,8 +363,8 @@ impl RenderApp {
                         self.floating_webkits.push(overlay);
                         self.frame_dirty = true;
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                        window_state.floating_webkits.push(overlay);
-                        window_state.frame_dirty = true;
+                        window_state.render.floating_webkits.push(overlay);
+                        window_state.render.frame_dirty = true;
                     } else {
                         tracing::warn!(
                             "WebKitSetFloating requested for unknown frame_id=0x{:x}",
@@ -378,10 +384,13 @@ impl RenderApp {
                         self.frame_dirty = true;
                     }
                     for window_state in self.frame_windows.windows.values_mut() {
-                        let old_len = window_state.floating_webkits.len();
-                        window_state.floating_webkits.retain(|w| w.webkit_id != id);
-                        if window_state.floating_webkits.len() != old_len {
-                            window_state.frame_dirty = true;
+                        let old_len = window_state.render.floating_webkits.len();
+                        window_state
+                            .render
+                            .floating_webkits
+                            .retain(|w| w.webkit_id != id);
+                        if window_state.render.floating_webkits.len() != old_len {
+                            window_state.render.frame_dirty = true;
                         }
                     }
                     if emacs_frame_id == 0
@@ -389,7 +398,7 @@ impl RenderApp {
                     {
                         self.frame_dirty = true;
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                        window_state.frame_dirty = true;
+                        window_state.render.frame_dirty = true;
                     } else {
                         tracing::warn!(
                             "WebKitRemoveFloating requested for unknown frame_id=0x{:x}",

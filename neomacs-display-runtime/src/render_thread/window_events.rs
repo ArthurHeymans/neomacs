@@ -65,8 +65,11 @@ impl RenderApp {
                 } else if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
                     if let Some(ws) = self.frame_windows.get_mut(emacs_fid) {
                         ws.handle_resize(&device, size.width, size.height);
-                        let (emacs_w, emacs_h) =
-                            emacs_pixels_from_window_size(size.width, size.height, ws.scale_factor);
+                        let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
+                            size.width,
+                            size.height,
+                            ws.native.scale_factor,
+                        );
                         self.comms.send_input(InputEvent::WindowResize {
                             width: emacs_w,
                             height: emacs_h,
@@ -110,7 +113,7 @@ impl RenderApp {
                 let secondary_ime_preedit_active = self
                     .frame_windows
                     .get_by_winit(window_id)
-                    .is_some_and(|ws| ws.ime_preedit_active);
+                    .is_some_and(|ws| ws.render.ime_preedit_active);
                 if self.popup_menu.is_some() && state == ElementState::Pressed {
                     match logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
@@ -278,10 +281,10 @@ impl RenderApp {
                                     }
                                 } else if let Some(window_state) =
                                     self.frame_windows.get_by_winit_mut(window_id)
-                                    && !window_state.mouse_hidden_for_typing
+                                    && !window_state.native.mouse_hidden_for_typing
                                 {
-                                    window_state.window.set_cursor_visible(false);
-                                    window_state.mouse_hidden_for_typing = true;
+                                    window_state.native.window.set_cursor_visible(false);
+                                    window_state.native.mouse_hidden_for_typing = true;
                                 }
                             }
                             if self.effects.typing_speed.enabled && state == ElementState::Pressed {
@@ -369,9 +372,9 @@ impl RenderApp {
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
-                        window_state.ime_enabled = true;
-                        window_state.last_ime_cursor_area = None;
-                        if let Some(target) = window_state.cursor.target_cloned() {
+                        window_state.native.ime_enabled = true;
+                        window_state.native.last_ime_cursor_area = None;
+                        if let Some(target) = window_state.render.cursor.target_cloned() {
                             Self::update_frame_window_ime_cursor_area_if_needed(
                                 window_state,
                                 &target,
@@ -390,11 +393,11 @@ impl RenderApp {
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
-                        window_state.ime_enabled = false;
-                        window_state.ime_preedit_active = false;
-                        window_state.ime_preedit_text.clear();
-                        window_state.last_ime_cursor_area = None;
-                        window_state.frame_dirty = true;
+                        window_state.native.ime_enabled = false;
+                        window_state.render.ime_preedit_active = false;
+                        window_state.render.ime_preedit_text.clear();
+                        window_state.native.last_ime_cursor_area = None;
+                        window_state.render.frame_dirty = true;
                     }
                     tracing::info!("IME disabled");
                 }
@@ -407,9 +410,9 @@ impl RenderApp {
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
-                        window_state.ime_preedit_active = false;
-                        window_state.ime_preedit_text.clear();
-                        window_state.frame_dirty = true;
+                        window_state.render.ime_preedit_active = false;
+                        window_state.render.ime_preedit_text.clear();
+                        window_state.render.frame_dirty = true;
                     }
                     for ch in text.chars() {
                         let keysym = ch as u32;
@@ -435,15 +438,15 @@ impl RenderApp {
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
-                        window_state.ime_preedit_active = !text.is_empty();
-                        window_state.ime_preedit_text = text.clone();
-                        if let Some(target) = window_state.cursor.target_cloned() {
+                        window_state.render.ime_preedit_active = !text.is_empty();
+                        window_state.render.ime_preedit_text = text.clone();
+                        if let Some(target) = window_state.render.cursor.target_cloned() {
                             Self::update_frame_window_ime_cursor_area_if_needed(
                                 window_state,
                                 &target,
                             );
                         }
-                        window_state.frame_dirty = true;
+                        window_state.render.frame_dirty = true;
                     }
                 }
             },
@@ -465,8 +468,8 @@ impl RenderApp {
                     if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
                         tracing::info!(
                             "Scale factor changed for frame 0x{:x}: previous_effective={} raw={} effective={}",
-                            ws.emacs_frame_id,
-                            ws.scale_factor,
+                            ws.render.emacs_frame_id,
+                            ws.native.scale_factor,
                             scale_factor,
                             effective_scale
                         );

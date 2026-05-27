@@ -8,8 +8,9 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         target: &CursorTarget,
     ) -> ImeCursorArea {
-        let (ime_off_x, ime_off_y) = if target.frame_id != window_state.emacs_frame_id {
+        let (ime_off_x, ime_off_y) = if target.frame_id != window_state.render.emacs_frame_id {
             window_state
+                .render
                 .child_frames
                 .frames
                 .get(&target.frame_id)
@@ -20,11 +21,14 @@ impl RenderApp {
         };
 
         ImeCursorArea {
-            x: ((target.x as f64 + ime_off_x) * window_state.scale_factor).round() as i32,
-            y: ((target.y as f64 + target.height as f64 + ime_off_y) * window_state.scale_factor)
+            x: ((target.x as f64 + ime_off_x) * window_state.native.scale_factor).round() as i32,
+            y: ((target.y as f64 + target.height as f64 + ime_off_y)
+                * window_state.native.scale_factor)
                 .round() as i32,
-            width: ((target.width as f64 * window_state.scale_factor).max(1.0)).round() as u32,
-            height: ((target.height as f64 * window_state.scale_factor).max(1.0)).round() as u32,
+            width: ((target.width as f64 * window_state.native.scale_factor).max(1.0)).round()
+                as u32,
+            height: ((target.height as f64 * window_state.native.scale_factor).max(1.0)).round()
+                as u32,
         }
     }
 
@@ -76,36 +80,38 @@ impl RenderApp {
         window_state: &mut GuiFrameWindowState,
         target: &CursorTarget,
     ) {
-        if !window_state.ime_enabled && !window_state.ime_preedit_active {
+        if !window_state.native.ime_enabled && !window_state.render.ime_preedit_active {
             return;
         }
 
         let area = Self::ime_cursor_area_for_window_target(window_state, target);
-        if window_state.last_ime_cursor_area == Some(area) {
+        if window_state.native.last_ime_cursor_area == Some(area) {
             return;
         }
 
-        window_state.window.set_ime_cursor_area(
+        window_state.native.window.set_ime_cursor_area(
             PhysicalPosition::new(area.x as f64, area.y as f64),
             PhysicalSize::new(area.width as f64, area.height as f64),
         );
-        window_state.last_ime_cursor_area = Some(area);
+        window_state.native.last_ime_cursor_area = Some(area);
     }
 
     pub(super) fn tick_frame_window_cursor_blink(
         window_state: &mut GuiFrameWindowState,
         now: std::time::Instant,
     ) -> bool {
-        if !window_state.cursor.blink_enabled || window_state.cursor.target_cloned().is_none() {
-            return false;
-        }
-        if now.duration_since(window_state.cursor.last_blink_toggle)
-            < window_state.cursor.blink_interval
+        if !window_state.render.cursor.blink_enabled
+            || window_state.render.cursor.target_cloned().is_none()
         {
             return false;
         }
-        window_state.cursor.blink_on = !window_state.cursor.blink_on;
-        window_state.cursor.last_blink_toggle = now;
+        if now.duration_since(window_state.render.cursor.last_blink_toggle)
+            < window_state.render.cursor.blink_interval
+        {
+            return false;
+        }
+        window_state.render.cursor.blink_on = !window_state.render.cursor.blink_on;
+        window_state.render.cursor.last_blink_toggle = now;
         true
     }
 
@@ -133,7 +139,7 @@ impl RenderApp {
     pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
         let mut next = self.cursor.next_blink_deadline();
         for window_state in self.frame_windows.windows.values() {
-            if let Some(deadline) = window_state.cursor.next_blink_deadline() {
+            if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {
                 next = Some(next.map_or(deadline, |current| current.min(deadline)));
             }
         }

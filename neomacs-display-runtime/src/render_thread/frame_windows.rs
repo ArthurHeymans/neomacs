@@ -30,20 +30,24 @@ use neomacs_renderer_wgpu::{
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
-/// Per-window state for a top-level GUI frame.
-pub(crate) struct GuiFrameWindowState {
-    /// The winit window.
+/// Native window/surface state for a top-level GUI frame.
+pub(crate) struct GuiFrameNativeWindowState {
     pub window: Arc<Window>,
-    /// wgpu surface for this window.
     pub surface: wgpu::Surface<'static>,
-    /// Surface configuration.
     pub surface_config: wgpu::SurfaceConfiguration,
-    /// Physical width in pixels.
     pub width: u32,
-    /// Physical height in pixels.
     pub height: u32,
-    /// Display scale factor for this window's monitor.
     pub scale_factor: f64,
+    /// Whether this window's native pointer cursor is hidden during typing.
+    pub mouse_hidden_for_typing: bool,
+    /// Whether native IME composition is active in this frame window.
+    pub ime_enabled: bool,
+    /// Last native IME cursor rectangle sent to this frame window.
+    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
+}
+
+/// Frame-owned render, input, overlay, and transient visual state.
+pub(crate) struct GuiFrameRenderState {
     /// The Emacs frame_id that owns this window (used for routing).
     pub emacs_frame_id: u64,
     /// Current root frame glyph buffer for this window.
@@ -58,10 +62,6 @@ pub(crate) struct GuiFrameWindowState {
     pub mouse_pos: (f32, f32),
     /// Text cursor animation and blink state for this frame window.
     pub(super) cursor: CursorState,
-    /// Whether this window's native pointer cursor is hidden during typing.
-    pub mouse_hidden_for_typing: bool,
-    /// Window title.
-    pub title: String,
     /// GUI menu bar snapshot for this frame, if visible.
     pub menu_bar: Option<GuiMenuBarState>,
     /// GUI tool bar snapshot for this frame, if visible.
@@ -76,19 +76,21 @@ pub(crate) struct GuiFrameWindowState {
     pub tooltip: Option<TooltipState>,
     /// Visual bell flash start time for this frame window.
     pub visual_bell_start: Option<Instant>,
-    /// Whether native IME composition is active in this frame window.
-    pub ime_enabled: bool,
     /// Whether an IME preedit overlay is active in this frame window.
     pub ime_preedit_active: bool,
     /// Current IME preedit text for this frame window.
     pub ime_preedit_text: String,
-    /// Last native IME cursor rectangle sent to this frame window.
-    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
     /// Renderer transient effects owned by this frame window.
     pub transient_effects: RendererTransientEffects,
     /// Floating WebKit overlays rendered on this frame window.
     #[cfg(feature = "wpe-webkit")]
     pub floating_webkits: Vec<FloatingWebKit>,
+}
+
+/// Per-window state for a top-level GUI frame.
+pub(crate) struct GuiFrameWindowState {
+    pub native: GuiFrameNativeWindowState,
+    pub render: GuiFrameRenderState,
 }
 
 impl GuiFrameWindowState {
@@ -97,19 +99,23 @@ impl GuiFrameWindowState {
         if width == 0 || height == 0 {
             return;
         }
-        self.width = width;
-        self.height = height;
-        self.surface_config.width = width;
-        self.surface_config.height = height;
-        self.surface.configure(device, &self.surface_config);
-        self.frame_dirty = true;
+        self.native.width = width;
+        self.native.height = height;
+        self.native.surface_config.width = width;
+        self.native.surface_config.height = height;
+        self.native
+            .surface
+            .configure(device, &self.native.surface_config);
+        self.render.frame_dirty = true;
     }
 
     pub fn set_scale_factor(&mut self, scale_factor: f64) {
         let effective_scale = effective_window_scale_factor(scale_factor);
-        self.scale_factor = effective_scale;
-        self.glyph_atlas.set_scale_factor(effective_scale as f32);
-        self.frame_dirty = true;
+        self.native.scale_factor = effective_scale;
+        self.render
+            .glyph_atlas
+            .set_scale_factor(effective_scale as f32);
+        self.render.frame_dirty = true;
     }
 }
 
@@ -320,38 +326,41 @@ impl GuiFrameWindowManager {
                     self.windows.insert(
                         req.emacs_frame_id,
                         GuiFrameWindowState {
-                            window,
-                            surface,
-                            surface_config: config,
-                            width: phys.width,
-                            height: phys.height,
-                            scale_factor,
-                            emacs_frame_id: req.emacs_frame_id,
-                            current_frame: None,
-                            child_frames: ChildFrameManager::new(),
-                            glyph_atlas: WgpuGlyphAtlas::new_with_scale(
-                                device,
-                                scale_factor as f32,
-                            ),
-                            frame_dirty: false,
-                            mouse_pos: (0.0, 0.0),
-                            cursor: CursorState::default(),
-                            mouse_hidden_for_typing: false,
-                            title: req.title,
-                            menu_bar: None,
-                            tool_bar: None,
-                            compact_bar: None,
-                            chrome_interaction: GuiChromeInteractionState::default(),
-                            popup_menu: None,
-                            tooltip: None,
-                            visual_bell_start: None,
-                            ime_enabled: false,
-                            ime_preedit_active: false,
-                            ime_preedit_text: String::new(),
-                            last_ime_cursor_area: None,
-                            transient_effects: RendererTransientEffects::default(),
-                            #[cfg(feature = "wpe-webkit")]
-                            floating_webkits: Vec::new(),
+                            native: GuiFrameNativeWindowState {
+                                window,
+                                surface,
+                                surface_config: config,
+                                width: phys.width,
+                                height: phys.height,
+                                scale_factor,
+                                mouse_hidden_for_typing: false,
+                                ime_enabled: false,
+                                last_ime_cursor_area: None,
+                            },
+                            render: GuiFrameRenderState {
+                                emacs_frame_id: req.emacs_frame_id,
+                                current_frame: None,
+                                child_frames: ChildFrameManager::new(),
+                                glyph_atlas: WgpuGlyphAtlas::new_with_scale(
+                                    device,
+                                    scale_factor as f32,
+                                ),
+                                frame_dirty: false,
+                                mouse_pos: (0.0, 0.0),
+                                cursor: CursorState::default(),
+                                menu_bar: None,
+                                tool_bar: None,
+                                compact_bar: None,
+                                chrome_interaction: GuiChromeInteractionState::default(),
+                                popup_menu: None,
+                                tooltip: None,
+                                visual_bell_start: None,
+                                ime_preedit_active: false,
+                                ime_preedit_text: String::new(),
+                                transient_effects: RendererTransientEffects::default(),
+                                #[cfg(feature = "wpe-webkit")]
+                                floating_webkits: Vec::new(),
+                            },
                         },
                     );
                 }
@@ -371,7 +380,7 @@ impl GuiFrameWindowManager {
         let pending = std::mem::take(&mut self.pending_destroys);
         for frame_id in pending {
             if let Some(state) = self.windows.remove(&frame_id) {
-                self.winit_to_emacs.remove(&state.window.id());
+                self.winit_to_emacs.remove(&state.native.window.id());
                 tracing::info!("Destroyed window for frame {}", frame_id);
                 // Window and surface are dropped here
             }
@@ -433,31 +442,31 @@ impl GuiFrameWindowManager {
                 // Child frame: route to the window that owns the parent
                 // Find which window has the parent as its root frame
                 for (_, ws) in self.windows.iter_mut() {
-                    if ws.emacs_frame_id == frame.parent_id {
-                        ws.child_frames.update_frame(frame);
-                        ws.frame_dirty = true;
+                    if ws.render.emacs_frame_id == frame.parent_id {
+                        ws.render.child_frames.update_frame(frame);
+                        ws.render.frame_dirty = true;
                         return true;
                     }
                 }
             } else if let Some(ws) = self.windows.get_mut(&frame_id) {
                 // Root frame for a secondary window
                 if menu_bar.is_none() {
-                    ws.chrome_interaction.clear_menu_bar();
+                    ws.render.chrome_interaction.clear_menu_bar();
                 }
                 if tool_bar.is_none() {
-                    ws.chrome_interaction.clear_toolbar();
+                    ws.render.chrome_interaction.clear_toolbar();
                 }
                 if compact_bar.is_none() {
-                    ws.chrome_interaction.clear_compact_bar();
+                    ws.render.chrome_interaction.clear_compact_bar();
                 }
                 if frame.tab_bar.is_none() {
-                    ws.chrome_interaction.clear_tab_bar();
+                    ws.render.chrome_interaction.clear_tab_bar();
                 }
-                ws.menu_bar = menu_bar;
-                ws.tool_bar = tool_bar;
-                ws.compact_bar = compact_bar;
-                ws.current_frame = Some(frame);
-                ws.frame_dirty = true;
+                ws.render.menu_bar = menu_bar;
+                ws.render.tool_bar = tool_bar;
+                ws.render.compact_bar = compact_bar;
+                ws.render.current_frame = Some(frame);
+                ws.render.frame_dirty = true;
                 return true;
             }
         }
@@ -466,7 +475,7 @@ impl GuiFrameWindowManager {
 
     /// Check if any secondary window needs redrawing.
     pub fn any_dirty(&self) -> bool {
-        self.windows.values().any(|ws| ws.frame_dirty)
+        self.windows.values().any(|ws| ws.render.frame_dirty)
     }
 
     /// Return number of secondary windows.
@@ -478,7 +487,7 @@ impl GuiFrameWindowManager {
     pub fn dirty_windows(&mut self) -> Vec<u64> {
         self.windows
             .iter()
-            .filter(|(_, ws)| ws.frame_dirty)
+            .filter(|(_, ws)| ws.render.frame_dirty)
             .map(|(&id, _)| id)
             .collect()
     }

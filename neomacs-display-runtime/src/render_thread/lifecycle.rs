@@ -189,7 +189,7 @@ impl RenderApp {
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if Self::tick_frame_window_cursor_blink(window_state, std::time::Instant::now()) {
-                window_state.frame_dirty = true;
+                window_state.render.frame_dirty = true;
             }
         }
 
@@ -198,8 +198,8 @@ impl RenderApp {
             self.frame_dirty = true;
         }
         for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.cursor.tick_animation() {
-                window_state.frame_dirty = true;
+            if window_state.render.cursor.tick_animation() {
+                window_state.render.frame_dirty = true;
             }
         }
         for cursor in self.visual_cursors.values_mut() {
@@ -213,8 +213,8 @@ impl RenderApp {
             self.frame_dirty = true;
         }
         for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.cursor.tick_size_animation() {
-                window_state.frame_dirty = true;
+            if window_state.render.cursor.tick_size_animation() {
+                window_state.render.frame_dirty = true;
             }
         }
         for cursor in self.visual_cursors.values_mut() {
@@ -286,7 +286,7 @@ impl RenderApp {
         // or webkit/video content changed
         for frame_id in self.frame_windows.dirty_windows() {
             if let Some(state) = self.frame_windows.get(frame_id) {
-                state.window.request_redraw();
+                state.native.window.request_redraw();
             }
         }
 
@@ -321,7 +321,7 @@ impl RenderApp {
                 .frame_windows
                 .windows
                 .values()
-                .any(|ws| ws.cursor.is_animating())
+                .any(|ws| ws.render.cursor.is_animating())
             || self.idle_dim_active
             || self.transitions.has_active()
         {

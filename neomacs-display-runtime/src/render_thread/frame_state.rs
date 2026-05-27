@@ -41,12 +41,12 @@ impl RenderApp {
             }
         }
         for window_state in self.frame_windows.windows.values() {
-            if let Some(frame) = window_state.current_frame.as_ref() {
+            if let Some(frame) = window_state.render.current_frame.as_ref() {
                 for (face_id, face) in &frame.faces {
                     self.faces.entry(*face_id).or_insert_with(|| face.clone());
                 }
             }
-            for entry in window_state.child_frames.frames.values() {
+            for entry in window_state.render.child_frames.frames.values() {
                 for (face_id, face) in &entry.frame.faces {
                     self.faces.entry(*face_id).or_insert_with(|| face.clone());
                 }

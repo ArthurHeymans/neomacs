@@ -67,7 +67,7 @@ impl RenderApp {
                         self.frame_dirty = true;
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
-                    window_state.window.set_title(&title);
+                    window_state.native.window.set_title(&title);
                 } else {
                     tracing::warn!(
                         "SetFrameWindowTitle requested for unknown frame_id=0x{:x}",
@@ -137,8 +137,8 @@ impl RenderApp {
                         let _ = window.request_inner_size(size);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
-                    apply_window_geometry_hints(&window_state.window, geometry_hints);
-                    let _ = window_state.window.request_inner_size(size);
+                    apply_window_geometry_hints(&window_state.native.window, geometry_hints);
+                    let _ = window_state.native.window.request_inner_size(size);
                 } else {
                     tracing::warn!(
                         "ResizeWindow requested for unknown frame_id=0x{:x}",
@@ -165,7 +165,7 @@ impl RenderApp {
                         apply_window_geometry_hints(window, geometry_hints);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
-                    apply_window_geometry_hints(&window_state.window, geometry_hints);
+                    apply_window_geometry_hints(&window_state.native.window, geometry_hints);
                 } else {
                     tracing::warn!(
                         "SetFrameGeometryHints requested for unknown frame_id=0x{:x}",

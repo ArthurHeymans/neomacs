@@ -1,4 +1,4 @@
-use super::frame_windows::GuiFrameWindowState;
+use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
 use super::{RenderApp, surface_readback};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
@@ -14,28 +14,29 @@ impl RenderApp {
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
     ) {
-        let Some(mut frame) = window_state.current_frame.clone() else {
+        let GuiFrameWindowState { native, render } = window_state;
+        let Some(mut frame) = render.current_frame.clone() else {
             return;
         };
-        let animated_cursor = window_state.cursor.animated_cursor();
+        let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor =
-            animated_cursor.filter(|cursor| cursor.frame_id == window_state.emacs_frame_id);
+            animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
         if let Some(cursor) = frame.phys_cursor.as_mut()
             && root_animated_cursor.is_some_and(|target| target.window_id == cursor.window_id)
         {
-            cursor.x = window_state.cursor.current_x;
-            cursor.y = window_state.cursor.current_y;
-            cursor.width = window_state.cursor.current_w;
-            cursor.height = window_state.cursor.current_h;
+            cursor.x = render.cursor.current_x;
+            cursor.y = render.cursor.current_y;
+            cursor.width = render.cursor.current_w;
+            cursor.height = render.cursor.current_h;
         }
 
-        let output = match window_state.surface.get_current_texture() {
+        let output = match native.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output)
             | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
-                window_state
+                native
                     .surface
-                    .configure(renderer.device(), &window_state.surface_config);
+                    .configure(renderer.device(), &native.surface_config);
                 return;
             }
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
@@ -44,7 +45,7 @@ impl RenderApp {
             wgpu::CurrentSurfaceTexture::Validation => {
                 tracing::warn!(
                     "Surface validation error for frame 0x{:x}",
-                    window_state.emacs_frame_id
+                    render.emacs_frame_id
                 );
                 return;
             }
@@ -56,36 +57,77 @@ impl RenderApp {
         let old_scale_factor = renderer.scale_factor();
         let old_width = renderer.width();
         let old_height = renderer.height();
-        renderer.set_scale_factor(window_state.scale_factor as f32);
-        renderer.resize(window_state.width, window_state.height);
-        let cursor_visible = window_state.cursor.blink_on;
-        renderer.render_with_transient_effects(&mut window_state.transient_effects, |renderer| {
+        renderer.set_scale_factor(native.scale_factor as f32);
+        renderer.resize(native.width, native.height);
+        let cursor_visible = render.cursor.blink_on;
+        Self::render_secondary_frame_contents(
+            renderer,
+            faces,
+            native,
+            render,
+            &surface_view,
+            &frame,
+            cursor_visible,
+            root_animated_cursor,
+            animated_cursor,
+            bg_gradient,
+            child_frame_corner_radius,
+            child_frame_shadow_enabled,
+            child_frame_shadow_layers,
+            child_frame_shadow_offset,
+            child_frame_shadow_opacity,
+        );
+
+        output.present();
+        renderer.set_scale_factor(old_scale_factor);
+        renderer.resize(old_width, old_height);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_secondary_frame_contents(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+    ) {
+        renderer.render_with_transient_effects(&mut render.transient_effects, |renderer| {
             renderer.render_frame_glyphs(
-                &surface_view,
-                &frame,
-                &mut window_state.glyph_atlas,
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
                 faces,
-                window_state.width,
-                window_state.height,
+                native.width,
+                native.height,
                 cursor_visible,
                 root_animated_cursor,
-                window_state.mouse_pos,
+                render.mouse_pos,
                 bg_gradient,
             );
         });
-        let transient_still_active = window_state.transient_effects.is_active();
+        let transient_still_active = render.transient_effects.is_active();
 
-        for &child_id in window_state.child_frames.sorted_for_rendering() {
-            if let Some(child_entry) = window_state.child_frames.frames.get(&child_id) {
+        for &child_id in render.child_frames.sorted_for_rendering() {
+            if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
                 renderer.render_child_frame(
-                    &surface_view,
+                    surface_view,
                     &child_entry.frame,
                     child_entry.abs_x,
                     child_entry.abs_y,
-                    &mut window_state.glyph_atlas,
+                    &mut render.glyph_atlas,
                     faces,
-                    window_state.width,
-                    window_state.height,
+                    native.width,
+                    native.height,
                     cursor_visible,
                     animated_cursor.filter(|ac| ac.frame_id == child_id),
                     child_frame_corner_radius,
@@ -98,62 +140,68 @@ impl RenderApp {
         }
 
         #[cfg(feature = "wpe-webkit")]
-        if !window_state.floating_webkits.is_empty() {
-            renderer.render_floating_webkits(&surface_view, &window_state.floating_webkits);
+        if !render.floating_webkits.is_empty() {
+            renderer.render_floating_webkits(surface_view, &render.floating_webkits);
         }
 
-        if let Some(menu_bar) = window_state.menu_bar.as_ref() {
+        if let Some(menu_bar) = render.menu_bar.as_ref() {
             if menu_bar.height > 0.0 && !menu_bar.items.is_empty() {
                 renderer.render_menu_bar(
-                    &surface_view,
+                    surface_view,
                     &menu_bar.items,
                     menu_bar.height,
                     menu_bar.fg,
                     menu_bar.bg,
-                    window_state.chrome_interaction.menu_bar_hovered,
-                    window_state.chrome_interaction.menu_bar_active,
-                    &mut window_state.glyph_atlas,
-                    window_state.width,
-                    window_state.height,
+                    render.chrome_interaction.menu_bar_hovered,
+                    render.chrome_interaction.menu_bar_active,
+                    &mut render.glyph_atlas,
+                    native.width,
+                    native.height,
                 );
             }
         }
 
-        if let Some(tool_bar) = window_state.tool_bar.as_ref() {
+        if let Some(tool_bar) = render.tool_bar.as_ref() {
             if tool_bar.height > 0.0 && !tool_bar.items.is_empty() {
                 renderer.render_toolbar(
-                    &surface_view,
+                    surface_view,
                     &tool_bar.items,
                     frame
                         .tab_bar
                         .as_ref()
+                        .filter(|tab_bar| tab_bar.height > 0.0)
                         .map(|tab_bar| tab_bar.y + tab_bar.height)
                         .unwrap_or_else(|| {
-                            window_state
+                            let menu_height = render
                                 .menu_bar
                                 .as_ref()
-                                .map_or(0.0, |menu_bar| menu_bar.height)
+                                .map_or(0.0, |menu_bar| menu_bar.height);
+                            let compact_height = render
+                                .compact_bar
+                                .as_ref()
+                                .map_or(0.0, |compact_bar| compact_bar.height);
+                            menu_height + compact_height
                         }),
                     tool_bar.height,
                     tool_bar.fg,
                     tool_bar.bg,
                     &std::collections::HashMap::new(),
-                    window_state.chrome_interaction.toolbar_hovered,
-                    window_state.chrome_interaction.toolbar_pressed,
+                    render.chrome_interaction.toolbar_hovered,
+                    render.chrome_interaction.toolbar_pressed,
                     24,
                     5,
-                    window_state.width,
-                    window_state.height,
+                    native.width,
+                    native.height,
                 );
             }
         }
 
-        if let Some(compact_bar) = window_state.compact_bar.as_ref() {
+        if let Some(compact_bar) = render.compact_bar.as_ref() {
             if compact_bar.height > 0.0
                 && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
             {
                 renderer.render_compact_bar(
-                    &surface_view,
+                    surface_view,
                     &compact_bar.menu_items,
                     &compact_bar.tool_items,
                     compact_bar.height,
@@ -162,43 +210,43 @@ impl RenderApp {
                     compact_bar.tool_fg,
                     compact_bar.tool_bg,
                     &std::collections::HashMap::new(),
-                    window_state.chrome_interaction.compact_bar_menu_hovered,
-                    window_state.chrome_interaction.compact_bar_menu_active,
-                    window_state.chrome_interaction.compact_bar_tool_hovered,
-                    window_state.chrome_interaction.compact_bar_tool_pressed,
+                    render.chrome_interaction.compact_bar_menu_hovered,
+                    render.chrome_interaction.compact_bar_menu_active,
+                    render.chrome_interaction.compact_bar_tool_hovered,
+                    render.chrome_interaction.compact_bar_tool_pressed,
                     24,
                     5,
-                    &mut window_state.glyph_atlas,
-                    window_state.width,
-                    window_state.height,
+                    &mut render.glyph_atlas,
+                    native.width,
+                    native.height,
                 );
             }
         }
 
-        if let Some(menu) = window_state.popup_menu.as_ref() {
+        if let Some(menu) = render.popup_menu.as_ref() {
             renderer.render_popup_menu(
-                &surface_view,
+                surface_view,
                 menu,
-                &mut window_state.glyph_atlas,
-                window_state.width,
-                window_state.height,
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
             );
         }
 
-        if let Some(tooltip) = window_state.tooltip.as_ref() {
+        if let Some(tooltip) = render.tooltip.as_ref() {
             renderer.render_tooltip(
-                &surface_view,
+                surface_view,
                 tooltip,
-                &mut window_state.glyph_atlas,
-                window_state.width,
-                window_state.height,
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
             );
         }
 
-        if window_state.ime_preedit_active && !window_state.ime_preedit_text.is_empty() {
-            if let Some(target) = window_state.cursor.target_cloned() {
-                let (offset_x, offset_y) = if target.frame_id != window_state.emacs_frame_id {
-                    window_state
+        if render.ime_preedit_active && !render.ime_preedit_text.is_empty() {
+            if let Some(target) = render.cursor.target_cloned() {
+                let (offset_x, offset_y) = if target.frame_id != render.emacs_frame_id {
+                    render
                         .child_frames
                         .frames
                         .get(&target.frame_id)
@@ -208,40 +256,31 @@ impl RenderApp {
                     (0.0, 0.0)
                 };
                 renderer.render_ime_preedit(
-                    &surface_view,
-                    &window_state.ime_preedit_text,
+                    surface_view,
+                    &render.ime_preedit_text,
                     target.x + offset_x,
                     target.y + offset_y,
                     target.height,
-                    &mut window_state.glyph_atlas,
-                    window_state.width,
-                    window_state.height,
+                    &mut render.glyph_atlas,
+                    native.width,
+                    native.height,
                 );
             }
         }
 
-        if let Some(start) = window_state.visual_bell_start {
+        if let Some(start) = render.visual_bell_start {
             let elapsed = start.elapsed().as_secs_f32();
             let duration = 0.15;
             if elapsed < duration {
                 let alpha = (1.0 - elapsed / duration) * 0.3;
-                renderer.render_visual_bell(
-                    &surface_view,
-                    window_state.width,
-                    window_state.height,
-                    alpha,
-                );
-                window_state.frame_dirty = true;
+                renderer.render_visual_bell(surface_view, native.width, native.height, alpha);
+                render.frame_dirty = true;
             } else {
-                window_state.visual_bell_start = None;
+                render.visual_bell_start = None;
             }
         }
-        let visual_bell_still_active = window_state.visual_bell_start.is_some();
-
-        output.present();
-        window_state.frame_dirty = transient_still_active || visual_bell_still_active;
-        renderer.set_scale_factor(old_scale_factor);
-        renderer.resize(old_width, old_height);
+        let visual_bell_still_active = render.visual_bell_start.is_some();
+        render.frame_dirty = transient_still_active || visual_bell_still_active;
     }
 
     pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) {

@@ -80,10 +80,10 @@ impl RenderApp {
                     self.frame_dirty = true;
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.cursor.copy_config_from(&self.cursor);
+                    window_state.render.cursor.copy_config_from(&self.cursor);
                     if !enabled {
-                        window_state.cursor.blink_on = true;
-                        window_state.frame_dirty = true;
+                        window_state.render.cursor.blink_on = true;
+                        window_state.render.frame_dirty = true;
                     }
                 }
                 Ok(())
@@ -96,8 +96,8 @@ impl RenderApp {
                     self.cursor.animating = false;
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.cursor.copy_config_from(&self.cursor);
-                    window_state.frame_dirty = true;
+                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state.render.frame_dirty = true;
                 }
                 Ok(())
             }
@@ -135,8 +135,8 @@ impl RenderApp {
                     self.cursor.animating = false;
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.cursor.copy_config_from(&self.cursor);
-                    window_state.frame_dirty = true;
+                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state.render.frame_dirty = true;
                 }
                 if !self.transitions.policy.crossfade_enabled {
                     self.transitions.crossfades.clear();
@@ -177,7 +177,7 @@ impl RenderApp {
                     self.frame_windows
                         .get(emacs_frame_id)
                         .map(|window_state| {
-                            let atlas = &window_state.glyph_atlas;
+                            let atlas = &window_state.render.glyph_atlas;
                             (
                                 atlas.default_font_size(),
                                 atlas.default_line_height(),
@@ -193,8 +193,8 @@ impl RenderApp {
                     self.popup_menu = Some(menu);
                     self.frame_dirty = true;
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.popup_menu = Some(menu);
-                    window_state.frame_dirty = true;
+                    window_state.render.popup_menu = Some(menu);
+                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "ShowPopupMenu requested for unknown frame_id=0x{:x}",
@@ -208,9 +208,9 @@ impl RenderApp {
                 self.popup_menu = None;
                 self.chrome_interaction.menu_bar_active = None;
                 for window_state in self.frame_windows.windows.values_mut() {
-                    if window_state.popup_menu.is_some() {
-                        window_state.popup_menu = None;
-                        window_state.frame_dirty = true;
+                    if window_state.render.popup_menu.is_some() {
+                        window_state.render.popup_menu = None;
+                        window_state.render.frame_dirty = true;
                     }
                 }
                 self.frame_dirty = true;
@@ -252,13 +252,15 @@ impl RenderApp {
                     self.frame_windows
                         .get(emacs_frame_id)
                         .map(|window_state| {
-                            let atlas = &window_state.glyph_atlas;
+                            let atlas = &window_state.render.glyph_atlas;
                             (
                                 atlas.default_font_size(),
                                 atlas.default_line_height(),
                                 atlas.default_char_width(),
-                                window_state.width as f32 / window_state.scale_factor as f32,
-                                window_state.height as f32 / window_state.scale_factor as f32,
+                                window_state.native.width as f32
+                                    / window_state.native.scale_factor as f32,
+                                window_state.native.height as f32
+                                    / window_state.native.scale_factor as f32,
                             )
                         })
                         .unwrap_or((
@@ -285,8 +287,8 @@ impl RenderApp {
                     self.tooltip = Some(tooltip);
                     self.frame_dirty = true;
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.tooltip = Some(tooltip);
-                    window_state.frame_dirty = true;
+                    window_state.render.tooltip = Some(tooltip);
+                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "ShowTooltip requested for unknown frame_id=0x{:x}",
@@ -299,9 +301,9 @@ impl RenderApp {
                 tracing::debug!("HideTooltip");
                 self.tooltip = None;
                 for window_state in self.frame_windows.windows.values_mut() {
-                    if window_state.tooltip.is_some() {
-                        window_state.tooltip = None;
-                        window_state.frame_dirty = true;
+                    if window_state.render.tooltip.is_some() {
+                        window_state.render.tooltip = None;
+                        window_state.render.frame_dirty = true;
                     }
                 }
                 self.frame_dirty = true;
@@ -342,34 +344,44 @@ impl RenderApp {
                         }
                     }
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.visual_bell_start = Some(now);
+                    window_state.render.visual_bell_start = Some(now);
                     if self.effects.cursor_error_pulse.enabled {
                         window_state
+                            .render
                             .transient_effects
                             .trigger_cursor_error_pulse(now);
                     }
                     if self.effects.edge_snap.enabled {
-                        if let Some(ref frame) = window_state.current_frame {
-                            for info in &frame.window_infos {
-                                if info.selected && !info.is_minibuffer {
-                                    let at_top = info.window_start <= 1;
-                                    let at_bottom = info.window_end >= info.buffer_size;
-                                    if at_top || at_bottom {
-                                        window_state.transient_effects.trigger_edge_snap(
-                                            info.bounds,
-                                            info.mode_line_height,
-                                            at_top,
-                                            at_bottom,
-                                            now,
-                                            self.effects.edge_snap.duration_ms,
-                                        );
-                                    }
-                                    break;
+                        let selected_info =
+                            window_state
+                                .render
+                                .current_frame
+                                .as_ref()
+                                .and_then(|frame| {
+                                    frame
+                                        .window_infos
+                                        .iter()
+                                        .find(|info| info.selected && !info.is_minibuffer)
+                                        .cloned()
+                                });
+                        if let Some(info) = selected_info {
+                            {
+                                let at_top = info.window_start <= 1;
+                                let at_bottom = info.window_end >= info.buffer_size;
+                                if at_top || at_bottom {
+                                    window_state.render.transient_effects.trigger_edge_snap(
+                                        info.bounds,
+                                        info.mode_line_height,
+                                        at_top,
+                                        at_bottom,
+                                        now,
+                                        self.effects.edge_snap.duration_ms,
+                                    );
                                 }
                             }
                         }
                     }
-                    window_state.frame_dirty = true;
+                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "VisualBell requested for unknown frame_id=0x{:x}",
@@ -449,8 +461,8 @@ impl RenderApp {
                     self.cursor.size_animating = false;
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.cursor.copy_config_from(&self.cursor);
-                    window_state.frame_dirty = true;
+                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state.render.frame_dirty = true;
                 }
                 self.frame_dirty = true;
                 Ok(())
@@ -479,25 +491,30 @@ impl RenderApp {
                     }
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
-                    let removed = window_state.child_frames.frames.contains_key(&frame_id);
-                    window_state.child_frames.remove_frame(frame_id);
+                    let removed = window_state
+                        .render
+                        .child_frames
+                        .frames
+                        .contains_key(&frame_id);
+                    window_state.render.child_frames.remove_frame(frame_id);
                     if removed {
-                        window_state.frame_dirty = true;
+                        window_state.render.frame_dirty = true;
                     }
                     if window_state
+                        .render
                         .cursor
                         .target_cloned()
                         .is_some_and(|target| target.frame_id == frame_id)
                     {
-                        window_state.cursor.clear_target();
-                        window_state.last_ime_cursor_area = None;
-                        window_state.ime_preedit_active = false;
-                        window_state.ime_preedit_text.clear();
-                        window_state.window.set_ime_cursor_area(
+                        window_state.render.cursor.clear_target();
+                        window_state.native.last_ime_cursor_area = None;
+                        window_state.render.ime_preedit_active = false;
+                        window_state.render.ime_preedit_text.clear();
+                        window_state.native.window.set_ime_cursor_area(
                             PhysicalPosition::new(0.0, 0.0),
                             PhysicalSize::new(1.0, 1.0),
                         );
-                        window_state.frame_dirty = true;
+                        window_state.render.frame_dirty = true;
                     }
                 }
                 self.frame_dirty = true;
