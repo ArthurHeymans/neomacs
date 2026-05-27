@@ -552,6 +552,62 @@ fn org_columns_overlay_row_move_recompute_allowed_combo() {
                       overlay-after-redo
                       project-computed
                       content-after
-                      (nreverse states))))))))"##,
+                       (nreverse states))))))))"##,
+    );
+}
+
+#[test]
+fn org_columns_compute_all_dblock_insert_refresh_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+COLUMNS: %25ITEM %TODO %3PRIORITY %Effort{:} %Score{:sum}\n")
+    (insert "* TODO Project\n")
+    (insert ":PROPERTIES:\n:Effort: 0:00\n:Score: 0\n:END:\n")
+    (insert "** TODO Alpha\n")
+    (insert ":PROPERTIES:\n:Effort: 1:30\n:Score: 5\n:END:\n")
+    (insert "** WAIT Beta\n")
+    (insert ":PROPERTIES:\n:Effort: 0:45\n:Score: 3\n:END:\n")
+    (insert "*** TODO Beta child\n")
+    (insert ":PROPERTIES:\n:Effort: 0:30\n:Score: 2\n:END:\n")
+    (insert "* DONE Gamma\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:Score: 8\n:END:\n")
+    (insert "#+BEGIN: columnview :hlines 1 :id local :indent t\n")
+    (insert "#+END:\n")
+    ;; Column view
+    (goto-char (point-min))
+    (org-columns)
+    (let ((content (org-columns-content)))
+      ;; Compute all
+      (goto-char (point-min))
+      (search-forward "Project")
+      (beginning-of-line)
+      (org-columns-compute-all)
+      (let ((project-effort (org-entry-get nil "Effort"))
+            (project-score (org-entry-get nil "Score"))
+            (content-after (org-columns-content)))
+        (org-columns-quit)
+        ;; Update dblock
+        (goto-char (point-min))
+        (search-forward "columnview")
+        (org-dblock-update)
+        (let ((dblock-content
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (table-lisp
+               (progn
+                 (goto-char (point-min))
+                 (search-forward "|")
+                 (org-table-to-lisp))))
+          (list content
+                project-effort
+                project-score
+                content-after
+                dblock-content
+                table-lisp)))))"##,
     );
 }
