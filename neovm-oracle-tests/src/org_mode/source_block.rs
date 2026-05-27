@@ -288,6 +288,88 @@ fn org_babel_named_navigation_results_combo() {
 }
 
 #[test]
+fn org_babel_subtree_execute_hooks_results_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (let ((org-confirm-babel-evaluate
+           (lambda (lang body)
+             (push (list 'confirm lang
+                         (replace-regexp-in-string "[ \t\n]+" " " body))
+                   events)
+             nil))
+          (org-babel-after-execute-hook
+           (list (lambda ()
+                   (push (list 'after
+                               (org-babel-where-is-src-block-head)
+                               (save-excursion
+                                 (org-babel-goto-src-block-head)
+                                 (org-element-property
+                                  :name (org-element-at-point))))
+                         events))))
+          events)
+      (org-mode)
+      (insert "#+PROPERTY: header-args:emacs-lisp :results value replace drawer\n")
+      (insert "* Run\n")
+      (insert ":PROPERTIES:\n:header-args:emacs-lisp: :var base=10\n:END:\n")
+      (insert "#+NAME: first\n")
+      (insert "#+begin_src emacs-lisp\n(+ base 1)\n#+end_src\n\n")
+      (insert "** Child\n")
+      (insert "#+NAME: second\n")
+      (insert "#+begin_src emacs-lisp :var base=20\n(+ base 2)\n#+end_src\n")
+      (insert "* Skip\n")
+      (insert "#+NAME: outside\n")
+      (insert "#+begin_src emacs-lisp\n(+ 100 3)\n#+end_src\n")
+      (goto-char (point-min))
+      (search-forward "* Run")
+      (beginning-of-line)
+      (org-babel-execute-subtree)
+      (let ((after-subtree
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (subtree-events (nreverse events))
+            (first-result (save-excursion
+                            (org-babel-goto-named-result "first")
+                            (buffer-substring-no-properties
+                             (line-beginning-position)
+                             (line-end-position))))
+            (second-result (save-excursion
+                             (org-babel-goto-named-result "second")
+                             (buffer-substring-no-properties
+                              (line-beginning-position)
+                              (line-end-position))))
+            (outside-result (org-babel-find-named-result "outside")))
+        (setq events nil)
+        (goto-char (point-min))
+        (search-forward "(+ 100 3)")
+        (org-babel-execute-src-block)
+        (let ((outside-after-one
+               (save-excursion
+                 (org-babel-goto-named-result "outside")
+                 (buffer-substring-no-properties
+                  (line-beginning-position)
+                  (line-end-position)))))
+          (goto-char (point-min))
+          (search-forward "(+ base 1)")
+          (replace-match "(* base 3)" t t)
+          (org-babel-execute-buffer)
+          (list subtree-events
+                first-result
+                second-result
+                outside-result
+                outside-after-one
+                (nreverse events)
+                after-subtree
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_tangle_collect_single_block_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
