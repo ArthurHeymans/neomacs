@@ -1293,3 +1293,153 @@ fn org_repeated_deep_fold_expand_edit_no_heading_merge_combo() {
                  "\n" t))))))"##,
     );
 }
+
+#[test]
+fn org_fold_move_reveal_deep_font_faces_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t)
+          (org-cycle-hide-drawer-startup t)
+          (org-cycle-hide-block-startup t)
+          (org-cycle-global-at-bob t)
+          (org-cycle-separator-lines 1))
+      (org-mode)
+      (insert "#+STARTUP: content\n")
+      (insert "* TODO Project :work:\n")
+      (insert ":PROPERTIES:\n:VISIBILITY: children\n:Owner: Ada\n:END:\n")
+      (insert "project body\n")
+      (insert "** NEXT Alpha\nalpha body\n")
+      (insert "*** WAIT Alpha child\nchild body\n")
+      (insert "**** TODO Alpha level four :deep:\nlevel four body\n")
+      (insert "***** DONE Alpha level five\nlevel five body\n")
+      (insert "****** TODO Alpha level six\nlevel six body\n")
+      (insert "#+begin_src emacs-lisp\n(message \"alpha\")\n#+end_src\n")
+      (insert "** TODO Beta\nbeta body\n")
+      (insert "*** TODO Beta child\nbeta child body\n")
+      (insert "**** TODO Beta level four\nbeta level four body\n")
+      (insert "* Tail\ntail body\n")
+      (let ((needles
+             '("Project" ":Owner:" "project body" "Alpha" "alpha body"
+               "Alpha child" "child body" "Alpha level four"
+               "level four body" "Alpha level five" "level five body"
+               "Alpha level six" "level six body" "(message \"alpha\")"
+               "Beta" "beta body" "Beta child" "beta child body"
+               "Beta level four" "beta level four body" "Tail"
+               "tail body"))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (font-lock-ensure (point-min) (point-max))
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle
+                                  (line-number-at-pos)
+                                  (invisible-p (point))
+                                  (get-text-property
+                                   (line-beginning-position) 'face)
+                                  (get-text-property
+                                   (match-beginning 0) 'face))))
+                        needles)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (let (out)
+                           (while (re-search-forward
+                                   "^\\(\\*+\\) \\([A-Z]+\\)? ?\\([^:\n]+\\)\\(?: \\(:[[:alnum:]_@#%:]+:\\)\\)?"
+                                   nil t)
+                             (push (list (match-string 1)
+                                         (match-string 2)
+                                         (substring-no-properties
+                                          (match-string 3))
+                                         (match-string 4)
+                                         (org-outline-level)
+                                         (get-text-property
+                                          (line-beginning-position) 'face)
+                                         (get-text-property
+                                          (match-beginning 1) 'face)
+                                         (and (match-beginning 2)
+                                              (get-text-property
+                                               (match-beginning 2) 'face))
+                                         (get-text-property
+                                          (match-beginning 3) 'face))
+                                   out))
+                           (nreverse out)))
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (split-string
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))
+                        "\n" t)))))
+          (org-cycle-set-startup-visibility)
+          (push (funcall snapshot 'startup) states)
+          (goto-char (point-min))
+          (search-forward "Alpha level four")
+          (beginning-of-line)
+          (dotimes (_ 4)
+            (org-cycle)
+            (push (funcall snapshot 'local-alpha-four) states))
+          (org-fold-show-subtree)
+          (search-forward "Alpha level six")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (org-end-of-subtree t t)
+          (insert "****** TODO Alpha inserted after hidden\ninserted alpha body\n")
+          (push (funcall snapshot 'hidden-insert) states)
+          (org-fold-show-all)
+          (push (funcall snapshot 'show-all-after-insert) states)
+          (goto-char (point-min))
+          (search-forward "Beta child")
+          (beginning-of-line)
+          (org-cut-subtree)
+          (goto-char (point-min))
+          (search-forward "Alpha inserted")
+          (beginning-of-line)
+          (org-paste-subtree 5)
+          (push (funcall snapshot 'after-move-beta-child) states)
+          (goto-char (point-min))
+          (search-forward "Beta level four")
+          (beginning-of-line)
+          (org-demote-subtree)
+          (search-forward "Beta level four")
+          (beginning-of-line)
+          (org-promote-subtree)
+          (push (funcall snapshot 'after-level-roundtrip) states)
+          (org-fold-hide-sublevels 2)
+          (goto-char (point-min))
+          (search-forward "beta level four body")
+          (org-fold-show-context 'isearch)
+          (push (funcall snapshot 'after-context-reveal) states)
+          (goto-char (point-min))
+          (dotimes (_ 5)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((bad-lines nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line bad-lines)))
+            (push (funcall snapshot 'final) states)
+            (list (nreverse states)
+                  (nreverse bad-lines)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
