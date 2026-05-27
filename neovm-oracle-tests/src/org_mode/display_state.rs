@@ -206,3 +206,167 @@ fn org_indent_inlinetask_list_property_refresh_combo() {
                     (nreverse props)))))))))"##,
     );
 }
+
+#[test]
+fn org_preview_latex_inline_image_overlay_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cl-lib)
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (let* ((root (file-name-as-directory
+                  (make-temp-file "org-oracle-images-" t)))
+           (one (expand-file-name "one.png" root))
+           (two (expand-file-name "two.jpg" root))
+           (three (expand-file-name "three.gif" root))
+           (flushes nil)
+           (created nil)
+           (org-image-actual-width '(300))
+           (org-image-align 'right)
+           (org-preview-latex-image-directory root)
+           org-inline-image-overlays)
+      (with-temp-file one (insert "not-real-png"))
+      (with-temp-file two (insert "not-real-jpg"))
+      (with-temp-file three (insert "not-real-gif"))
+      (cl-letf (((symbol-function 'display-graphic-p) (lambda (&rest _) t))
+                ((symbol-function 'clear-image-cache)
+                 (lambda (&rest _) (push '(clear-image-cache) flushes)))
+                ((symbol-function 'image-flush)
+                 (lambda (image) (push (list 'image-flush image) flushes)))
+                ((symbol-function 'org--create-inline-image)
+                 (lambda (file width)
+                   (let ((image (list 'fake-image
+                                      (file-name-nondirectory file)
+                                      width)))
+                     (push image created)
+                     image)))
+                ((symbol-function 'org--latex-preview-region)
+                 (lambda (beg end)
+                   (save-excursion
+                     (goto-char beg)
+                     (while (re-search-forward
+                             "\\$[^$\n]+\\$\\|\\\\([^)\n]+\\\\)"
+                             end t)
+                       (org--make-preview-overlay
+                        (match-beginning 0) (match-end 0)
+                        (expand-file-name
+                         (format "latex-%d.svg" (match-beginning 0))
+                         root)
+                        "svg"))))))
+        (org-mode)
+        (insert "#+TITLE: Preview overlay combo\n")
+        (insert "* Head\n")
+        (insert "Text before $a+b$ then inline \\(c+d\\).\n")
+        (insert "#+ATTR_ORG: :width 120 :align center\n")
+        (insert "[[file:" one "]]\n")
+        (insert "#+ATTR_HTML: :width 45% :align right\n")
+        (insert "[[file:" two "][file:" two "]]\n")
+        (insert "Plain linked image [[file:" three "][visible gif]].\n")
+        (let ((norm
+               (lambda (value)
+                 (cond
+                  ((stringp value)
+                   (replace-regexp-in-string
+                    (regexp-quote root) "<root>/" value t t))
+                  ((consp value) (mapcar norm value))
+                  (t value))))
+              (latex-snapshot
+               (lambda (label)
+                 (let (out)
+                   (dolist (ov (sort (cl-remove-if-not
+                                      (lambda (ov)
+                                        (eq (overlay-get ov 'org-overlay-type)
+                                            'org-latex-overlay))
+                                      (overlays-in (point-min) (point-max)))
+                                     (lambda (a b)
+                                       (< (overlay-start a)
+                                          (overlay-start b)))))
+                     (push
+                      (list (overlay-start ov)
+                            (overlay-end ov)
+                            (buffer-substring-no-properties
+                             (overlay-start ov) (overlay-end ov))
+                            (overlay-get ov 'evaporate)
+                            (and (overlay-get ov 'modification-hooks) t)
+                            (funcall norm (overlay-get ov 'display)))
+                      out))
+                   (list label (nreverse out)))))
+              (image-snapshot
+               (lambda (label)
+                 (let (out)
+                   (dolist (ov (sort (copy-sequence org-inline-image-overlays)
+                                     (lambda (a b)
+                                       (< (overlay-start a)
+                                          (overlay-start b)))))
+                     (push
+                      (list (overlay-start ov)
+                            (overlay-end ov)
+                            (buffer-substring-no-properties
+                             (overlay-start ov) (overlay-end ov))
+                            (overlay-get ov 'org-image-overlay)
+                            (overlay-get ov 'face)
+                            (keymapp (overlay-get ov 'keymap))
+                            (overlay-get ov 'before-string)
+                            (overlay-get ov 'display))
+                      out))
+                   (list label (nreverse out))))))
+          (goto-char (point-min))
+          (search-forward "$a+b$")
+          (org-latex-preview)
+          (let ((latex-one (funcall latex-snapshot 'latex-one)))
+            (org-latex-preview)
+            (let ((latex-toggled (funcall latex-snapshot 'latex-toggled)))
+              (org-latex-preview '(16))
+              (let ((latex-buffer (funcall latex-snapshot 'latex-buffer)))
+                (org-clear-latex-preview
+                 (point-min) (save-excursion
+                               (goto-char (point-min))
+                               (search-forward "\\(c+d\\)")
+                               (match-beginning 0)))
+                (let ((latex-partial-clear
+                       (funcall latex-snapshot 'latex-partial-clear)))
+                  (org-clear-latex-preview (point-min) (point-max))
+                  (org-display-inline-images nil nil
+                                             (point-min) (point-max))
+                  (let ((images-unlinked
+                         (funcall image-snapshot 'images-unlinked)))
+                    (setq flushes nil created nil)
+                    (org-display-inline-images t t
+                                               (point-min) (point-max))
+                    (let ((images-refresh
+                           (funcall image-snapshot 'images-refresh))
+                          (refresh-flushes
+                           (funcall norm (nreverse flushes)))
+                          (refresh-created
+                           (funcall norm (nreverse created))))
+                      (goto-char (point-min))
+                      (search-forward "one.png")
+                      (delete-char 1)
+                      (let ((images-after-modification
+                             (funcall image-snapshot
+                                      'images-after-modification)))
+                        (org-remove-inline-images
+                         (save-excursion
+                           (goto-char (point-min))
+                           (search-forward "two.jpg")
+                           (match-beginning 0))
+                         (point-max))
+                        (list latex-one
+                              latex-toggled
+                              latex-buffer
+                              latex-partial-clear
+                              (funcall latex-snapshot 'latex-cleared)
+                              images-unlinked
+                              images-refresh
+                              refresh-flushes
+                              refresh-created
+                              images-after-modification
+                              (funcall image-snapshot
+                                       'images-after-region-remove)
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))))))))))))"##,
+    );
+}
