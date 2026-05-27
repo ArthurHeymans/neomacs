@@ -203,3 +203,54 @@ fn org_plot_transpose_preface_time_text_error_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_plot_collect_options_multi_series_line_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-plot)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+PLOT: title:\"Multi Series\" type:2d with:lines\n")
+    (insert "#+PLOT: set:\"grid\" set:\"style data linespoints\"\n")
+    (insert "#+PLOT: ind:1 deps:(2 3) transpose:yes\n")
+    (insert "| X | A | B |\n")
+    (insert "|---+---+---|\n")
+    (insert "| 1 | 10 | 100 |\n")
+    (insert "| 2 | 20 | 200 |\n")
+    (insert "| 3 | 30 | 300 |\n")
+    (goto-char (point-min))
+    (let* ((opts (org-plot/collect-options '(:include t)))
+           (title (plist-get opts :title))
+           (type (plist-get opts :type))
+           (with (plist-get opts :with))
+           (ind (plist-get opts :ind))
+           (deps (plist-get opts :deps))
+           (set (plist-get opts :set))
+           (transpose (plist-get opts :transpose)))
+      (goto-char (point-min))
+      (search-forward "| X")
+      (let* ((table (org-table-to-lisp))
+             (num-cols (length (nth 2 table))))
+        (let* ((root (make-temp-file "org-plot" t))
+               (data-file (expand-file-name "data.tsv" root)))
+          (unwind-protect
+              (progn
+                (org-plot/gnuplot-to-data table data-file opts)
+                (let ((tsv (with-temp-buffer
+                             (insert-file-contents data-file)
+                             (buffer-string))))
+                  (let ((script (org-plot/gnuplot-script
+                                 table data-file num-cols opts)))
+                    (list title type with ind deps set transpose
+                          table
+                          (replace-regexp-in-string
+                           (regexp-quote root) "<root>" tsv)
+                          (replace-regexp-in-string
+                           (regexp-quote root) "<root>" script)))))
+            (delete-directory root t)))))))"##,
+    );
+}
