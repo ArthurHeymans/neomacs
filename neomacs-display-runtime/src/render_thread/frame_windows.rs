@@ -261,6 +261,50 @@ impl GuiFrameWindowState {
         self.reset_ime_cursor_area();
         self.render.frame_dirty = true;
     }
+
+    pub(super) fn drag_resize_for_current_edge(&self) -> bool {
+        let Some(dir) = self.native.chrome.resize_edge else {
+            return false;
+        };
+        let _ = self.native.window.drag_resize_window(dir);
+        true
+    }
+
+    pub(super) fn handle_titlebar_action(&mut self, action: u32) -> bool {
+        match action {
+            1 => {
+                let now = Instant::now();
+                if now
+                    .duration_since(self.native.chrome.last_titlebar_click)
+                    .as_millis()
+                    < 400
+                {
+                    self.native
+                        .window
+                        .set_maximized(!self.native.window.is_maximized());
+                } else {
+                    let _ = self.native.window.drag_window();
+                }
+                self.native.chrome.last_titlebar_click = now;
+                true
+            }
+            3 => {
+                self.native
+                    .window
+                    .set_maximized(!self.native.window.is_maximized());
+                true
+            }
+            4 => {
+                self.native.window.set_minimized(true);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub(super) fn drag_window(&self) {
+        let _ = self.native.window.drag_window();
+    }
 }
 
 /// Manages top-level GUI frame windows in the render thread.
