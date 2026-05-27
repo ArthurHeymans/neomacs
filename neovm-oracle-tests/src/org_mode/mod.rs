@@ -15,6 +15,7 @@ mod attach_git;
 mod attach_lint;
 mod babel_export;
 mod babel_library;
+mod beta_interpreter;
 mod capture_workflow;
 mod citation;
 mod clock_agenda;
