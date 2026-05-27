@@ -685,6 +685,68 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_sublevels_show_context_font_level_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fold-show-context-detail '((default . lineage)
+                                          (isearch . lineage))))
+      (org-mode)
+      (insert "* L1\nL1 body\n")
+      (insert "** L2\nL2 body\n")
+      (insert "*** L3\nL3 body\n")
+      (insert "**** L4\nL4 body\n")
+      (insert "***** L5\nL5 body\n")
+      (insert "****** L6\nL6 body\n")
+      (insert "** L2b\nL2b body\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide to level 1
+      (org-fold-hide-sublevels 1)
+      (let ((after-hide (mapcar
+                         (lambda (needle)
+                           (save-excursion
+                             (goto-char (point-min))
+                             (search-forward needle)
+                             (list needle
+                                   (line-number-at-pos)
+                                   (invisible-p (point))
+                                   (org-outline-level)
+                                   (get-text-property (line-beginning-position) 'face))))
+                         '("L1" "L2" "L3" "L4" "L5" "L6" "L2b"))))
+        ;; Reveal L5 with isearch
+        (goto-char (point-min))
+        (search-forward "L5 body")
+        (org-fold-show-context 'isearch)
+        (let ((after-reveal (mapcar
+                             (lambda (needle)
+                               (save-excursion
+                                 (goto-char (point-min))
+                                 (search-forward needle)
+                                 (list needle
+                                       (invisible-p (point))
+                                       (org-outline-level))))
+                             '("L1" "L2" "L3" "L4" "L5" "L6" "L2b"))))
+          ;; Check merged headings
+          (let ((merged nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (list after-hide
+                  after-reveal
+                  (nreverse merged)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_cycle_hidden_edit_global_font_state_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
