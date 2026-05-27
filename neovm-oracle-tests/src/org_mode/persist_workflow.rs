@@ -313,7 +313,41 @@ fn org_persist_write_read_gc_unregister_lifecycle_combo() {
                         read-missing
                         index-after-gc
                         index-after-unreg
-                        read-after-unreg
+                         read-after-unreg
+                         (file-exists-p org-persist-directory)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_persist_write_read_hash_table_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-persist)
+  (let* ((root (make-temp-file "org-persist-hash" t))
+         (org-persist-directory (expand-file-name "persist-data" root))
+         (org-persist--index nil))
+    (unwind-protect
+        (progn
+          (org-persist-write :version '(version "hash-v1")
+                             :value '(:str "hello" :num 42 :list (1 2 3))
+                             :key "hash-key")
+          (org-persist-write :version '(version "hash-v2")
+                             :value '(("key1" . "val1") ("key2" . "val2"))
+                             :key "assoc-key")
+          (let ((idx-len (length org-persist--index)))
+            (let ((read-hash (org-persist-read '(version "hash-v1") '(:key "hash-key")))
+                  (read-assoc (org-persist-read '(version "hash-v2") '(:key "assoc-key"))))
+              (let ((dir-files
+                     (and (file-exists-p org-persist-directory)
+                          (length (directory-files-recursively
+                                   org-persist-directory "." nil)))))
+                (org-persist-unregister '(version "hash-v1") 'all)
+                (org-persist-unregister '(version "hash-v2") 'all)
+                (let ((after-unreg (length org-persist--index)))
+                  (list idx-len read-hash read-assoc dir-files after-unreg
                         (file-exists-p org-persist-directory)))))))
       (delete-directory root t))))"##,
     );
