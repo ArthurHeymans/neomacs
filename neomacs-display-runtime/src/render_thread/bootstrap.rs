@@ -259,20 +259,15 @@ impl RenderApp {
         self.width = width;
         self.height = height;
 
-        // Reconfigure surface
-        self.configure_primary_surface(width, height);
+        if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
+            if let Some(primary_state) = self.primary_window_state_mut() {
+                primary_state.handle_resize(&device, width, height);
+            }
+        }
 
         // Resize renderer
         if let Some(renderer) = &mut self.renderer {
             renderer.resize(width, height);
-        }
-
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            // Invalidate offscreen textures and active transitions for the old size.
-            primary_frame.transitions.offscreen_a = None;
-            primary_frame.transitions.offscreen_b = None;
-            primary_frame.transitions.crossfades.clear();
-            primary_frame.transitions.scroll_slides.clear();
         }
 
         // Trigger resize padding transition

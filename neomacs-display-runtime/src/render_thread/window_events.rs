@@ -539,15 +539,10 @@ impl RenderApp {
                 );
                 self.scale_factor = effective_scale;
                 if let Some(window_state) = self.primary_window_state_mut() {
-                    window_state.native.scale_factor = effective_scale;
+                    window_state.set_scale_factor(scale_factor);
                 }
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.set_scale_factor(effective_scale as f32);
-                }
-                if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame
-                        .glyph_atlas
-                        .set_scale_factor(effective_scale as f32);
                 }
                 self.mark_primary_dirty();
             }
