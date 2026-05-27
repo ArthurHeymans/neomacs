@@ -268,3 +268,107 @@ fn org_datetree_narrow_cleanup_sort_timestamp_shift_combo() {
                (point-min) (point-max))))))"#,
     );
 }
+
+#[test]
+fn org_datetree_keep_restriction_subtree_property_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (let ((org-datetree-add-timestamp 'active)
+          states)
+      (org-mode)
+      (insert "* Property target\n")
+      (insert ":PROPERTIES:\n:DATE_TREE: t\n:END:\n")
+      (insert "** Existing child\n")
+      (insert "* Narrow target\n")
+      (insert "** Seed\n")
+      (insert "seed body\n")
+      (insert "* Explicit target\n")
+      (insert "** Existing explicit\n")
+      (cl-labels
+          ((heads
+            ()
+            (let (out)
+              (org-element-map (org-element-parse-buffer) 'headline
+                (lambda (headline)
+                  (push (list (org-element-property :level headline)
+                              (org-element-property :raw-value headline)
+                              (org-element-property :begin headline)
+                              (org-element-property :end headline))
+                        out)))
+              (nreverse out)))
+           (line-info
+            (needle)
+            (save-excursion
+              (goto-char (point-min))
+              (search-forward needle)
+              (list needle
+                    (line-number-at-pos)
+                    (org-outline-level)
+                    org-datetree-base-level
+                    (buffer-narrowed-p))))
+           (snapshot
+            (label)
+            (save-restriction
+              (widen)
+              (list label
+                    org-datetree-base-level
+                    (buffer-narrowed-p)
+                    (heads)
+                    (mapcar #'line-info
+                            '("Property target" "Narrow target"
+                              "Explicit target" "2026"
+                              "2026-05 May" "2026-05-27 Wednesday"
+                              "2026-06 June" "2026-06-02 Tuesday"
+                              "2027-01 January" "2027-01-03 Sunday"))
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))
+        (push (snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "Narrow target")
+        (beginning-of-line)
+        (org-narrow-to-subtree)
+        (goto-char (point-min))
+        (org-datetree-find-date-create '(5 27 2026) t)
+        (org-end-of-subtree t t)
+        (insert "\n**** Restricted insert\n")
+        (push (snapshot 'after-keep-restriction) states)
+        (widen)
+        (goto-char (point-min))
+        (search-forward "Narrow target")
+        (org-datetree-find-date-create '(6 2 2026) nil)
+        (org-end-of-subtree t t)
+        (insert "\n**** Property insert\n")
+        (push (snapshot 'after-property-widen) states)
+        (goto-char (point-min))
+        (search-forward "Explicit target")
+        (beginning-of-line)
+        (let ((explicit-pos (point)))
+          (org-datetree-find-month-create '(1 3 2027) 'subtree-at-point)
+          (org-end-of-subtree t t)
+          (insert "\n*** Explicit month insert\n")
+          (goto-char explicit-pos)
+          (org-datetree-find-date-create '(1 3 2027) 'subtree-at-point)
+          (org-end-of-subtree t t)
+          (insert "\n**** Explicit day insert\n"))
+        (push (snapshot 'after-explicit-subtree) states)
+        (goto-char (point-min))
+        (search-forward "seed body")
+        (let ((not-heading-error
+               (condition-case err
+                   (org-datetree-find-date-create '(7 4 2026)
+                                                  'subtree-at-point)
+                 (error (list (car err) (cadr err))))))
+          (org-datetree-cleanup)
+          (push (snapshot 'after-cleanup) states)
+          (list (nreverse states)
+                not-heading-error
+                (count-matches "^\\*+ " (point-min) (point-max))
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"#,
+    );
+}
