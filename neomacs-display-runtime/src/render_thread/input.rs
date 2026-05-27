@@ -4,6 +4,8 @@ use crate::backend::wgpu::{NEOMACS_CTRL_MASK, NEOMACS_META_MASK, NEOMACS_SUPER_M
 use winit::keyboard::{Key, NamedKey};
 
 use super::RenderApp;
+use super::frame_windows::GuiFrameWindowState;
+use super::state::WindowChrome;
 
 impl RenderApp {
     /// Translate winit key to X11 keysym
@@ -269,17 +271,19 @@ impl RenderApp {
 
     /// Detect if the mouse is on a resize edge of a borderless window.
     /// Returns the resize direction if within the border zone, or None.
-    pub(super) fn detect_resize_edge(
-        &self,
+    pub(super) fn detect_resize_edge_for_chrome(
+        chrome: &WindowChrome,
+        logical_width: f32,
+        logical_height: f32,
         x: f32,
         y: f32,
     ) -> Option<winit::window::ResizeDirection> {
         use winit::window::ResizeDirection;
-        if self.chrome.decorations_enabled {
+        if chrome.decorations_enabled {
             return None;
         }
-        let w = self.width as f32;
-        let h = self.height as f32;
+        let w = logical_width;
+        let h = logical_height;
         let border = 5.0_f32;
         let on_left = x < border;
         let on_right = x >= w - border;
@@ -298,20 +302,38 @@ impl RenderApp {
         }
     }
 
+    /// Detect if the mouse is on a resize edge of the primary borderless window.
+    /// Returns the resize direction if within the border zone, or None.
+    pub(super) fn detect_resize_edge(
+        &self,
+        x: f32,
+        y: f32,
+    ) -> Option<winit::window::ResizeDirection> {
+        Self::detect_resize_edge_for_chrome(
+            &self.chrome,
+            self.width as f32 / self.scale_factor as f32,
+            self.height as f32 / self.scale_factor as f32,
+            x,
+            y,
+        )
+    }
+
     /// Title bar button width in logical pixels.
     pub(super) const TITLEBAR_BUTTON_WIDTH: f32 = 46.0;
 
     /// Check if a point is in the custom title bar area.
     /// Returns: 0 = not in title bar, 1 = drag area, 2 = close, 3 = maximize, 4 = minimize
-    pub(super) fn titlebar_hit_test(&self, x: f32, y: f32) -> u32 {
-        if self.chrome.decorations_enabled
-            || self.chrome.is_fullscreen
-            || self.chrome.titlebar_height <= 0.0
-        {
+    pub(super) fn titlebar_hit_test_for_chrome(
+        chrome: &WindowChrome,
+        logical_width: f32,
+        x: f32,
+        y: f32,
+    ) -> u32 {
+        if chrome.decorations_enabled || chrome.is_fullscreen || chrome.titlebar_height <= 0.0 {
             return 0;
         }
-        let w = self.width as f32 / self.scale_factor as f32;
-        let tb_h = self.chrome.titlebar_height;
+        let w = logical_width;
+        let tb_h = chrome.titlebar_height;
         if y >= tb_h {
             return 0; // Below title bar
         }
@@ -329,6 +351,30 @@ impl RenderApp {
         } else {
             1 // Drag area
         }
+    }
+
+    /// Check if a point is in the primary custom title bar area.
+    /// Returns: 0 = not in title bar, 1 = drag area, 2 = close, 3 = maximize, 4 = minimize
+    pub(super) fn titlebar_hit_test(&self, x: f32, y: f32) -> u32 {
+        Self::titlebar_hit_test_for_chrome(
+            &self.chrome,
+            self.width as f32 / self.scale_factor as f32,
+            x,
+            y,
+        )
+    }
+
+    pub(super) fn frame_window_titlebar_hit_test(
+        window_state: &GuiFrameWindowState,
+        x: f32,
+        y: f32,
+    ) -> u32 {
+        Self::titlebar_hit_test_for_chrome(
+            &window_state.native.chrome,
+            window_state.native.width as f32 / window_state.native.scale_factor as f32,
+            x,
+            y,
+        )
     }
 }
 

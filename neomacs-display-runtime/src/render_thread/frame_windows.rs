@@ -15,7 +15,7 @@ use winit::window::{Window, WindowId};
 use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
 use super::state::{
-    GuiChromeInteractionState, ImeCursorArea, effective_window_scale_factor,
+    GuiChromeInteractionState, ImeCursorArea, WindowChrome, effective_window_scale_factor,
     window_size_from_emacs_pixels,
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
@@ -43,6 +43,8 @@ pub(crate) struct GuiFrameNativeWindowState {
     pub ime_enabled: bool,
     /// Last native IME cursor rectangle sent to this frame window.
     pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
+    /// Borderless native-window chrome state for this frame window.
+    pub(super) chrome: WindowChrome,
 }
 
 /// Frame-owned render, input, overlay, and transient visual state.
@@ -158,6 +160,8 @@ pub(crate) struct GuiFrameWindowManager {
     pub pending_creates: Vec<PendingWindow>,
     /// Pending window destruction requests
     pub pending_destroys: Vec<u64>,
+    /// Native chrome defaults applied to future secondary frame windows.
+    pub(super) chrome_defaults: WindowChrome,
 }
 
 /// A request to create a new OS window.
@@ -178,6 +182,7 @@ impl GuiFrameWindowManager {
             primary_winit_id: None,
             pending_creates: Vec::new(),
             pending_destroys: Vec::new(),
+            chrome_defaults: WindowChrome::default(),
         }
     }
 
@@ -276,7 +281,8 @@ impl GuiFrameWindowManager {
             let attrs = Window::default_attributes()
                 .with_title(&req.title)
                 .with_inner_size(window_size_from_emacs_pixels(req.width, req.height))
-                .with_transparent(true);
+                .with_transparent(true)
+                .with_decorations(self.chrome_defaults.decorations_enabled);
 
             match event_loop.create_window(attrs) {
                 Ok(window) => {
@@ -356,6 +362,13 @@ impl GuiFrameWindowManager {
                                 mouse_hidden_for_typing: false,
                                 ime_enabled: false,
                                 last_ime_cursor_area: None,
+                                chrome: WindowChrome {
+                                    title: req.title.clone(),
+                                    titlebar_hover: 0,
+                                    resize_edge: None,
+                                    last_titlebar_click: Instant::now(),
+                                    ..self.chrome_defaults.clone()
+                                },
                             },
                             render: GuiFrameRenderState {
                                 emacs_frame_id: req.emacs_frame_id,

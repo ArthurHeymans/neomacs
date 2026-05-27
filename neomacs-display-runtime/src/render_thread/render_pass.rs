@@ -301,6 +301,22 @@ impl RenderApp {
             renderer.render_window_watermarks(surface_view, frame, &mut render.glyph_atlas);
         }
 
+        if !native.chrome.decorations_enabled
+            && !native.chrome.is_fullscreen
+            && native.chrome.titlebar_height > 0.0
+        {
+            renderer.render_custom_titlebar(
+                surface_view,
+                &native.chrome.title,
+                native.chrome.titlebar_height,
+                native.chrome.titlebar_hover,
+                Some((frame.background.r, frame.background.g, frame.background.b)),
+                &mut render.glyph_atlas,
+                native.width,
+                native.height,
+            );
+        }
+
         if let Some(menu_bar) = render.menu_bar.as_ref() {
             if menu_bar.height > 0.0 && !menu_bar.items.is_empty() {
                 renderer.render_menu_bar(
@@ -438,6 +454,18 @@ impl RenderApp {
         }
         if render.visual_bell_start.is_some() {
             render.frame_dirty = true;
+        }
+
+        if !native.chrome.decorations_enabled
+            && !native.chrome.is_fullscreen
+            && native.chrome.corner_radius > 0.0
+        {
+            renderer.render_corner_mask(
+                surface_view,
+                native.chrome.corner_radius,
+                native.width,
+                native.height,
+            );
         }
     }
 

@@ -359,11 +359,66 @@ impl RenderApp {
             let mut handled_chrome = false;
             let mut delivered_mouse_button = false;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+                let x = window_state.render.mouse_pos.0;
+                let y = window_state.render.mouse_pos.1;
+                if state == ElementState::Pressed && button == MouseButton::Left {
+                    if let Some(dir) = window_state.native.chrome.resize_edge {
+                        let _ = window_state.native.window.drag_resize_window(dir);
+                        handled_chrome = true;
+                    }
+
+                    if !handled_chrome
+                        && Self::frame_window_titlebar_hit_test(window_state, x, y) > 0
+                    {
+                        match Self::frame_window_titlebar_hit_test(window_state, x, y) {
+                            1 => {
+                                let now = std::time::Instant::now();
+                                if now
+                                    .duration_since(window_state.native.chrome.last_titlebar_click)
+                                    .as_millis()
+                                    < 400
+                                {
+                                    window_state
+                                        .native
+                                        .window
+                                        .set_maximized(!window_state.native.window.is_maximized());
+                                } else {
+                                    let _ = window_state.native.window.drag_window();
+                                }
+                                window_state.native.chrome.last_titlebar_click = now;
+                            }
+                            2 => {
+                                event = Some(InputEvent::WindowClose {
+                                    emacs_frame_id: window_state.render.emacs_frame_id,
+                                });
+                            }
+                            3 => {
+                                window_state
+                                    .native
+                                    .window
+                                    .set_maximized(!window_state.native.window.is_maximized());
+                            }
+                            4 => {
+                                window_state.native.window.set_minimized(true);
+                            }
+                            _ => {}
+                        }
+                        handled_chrome = true;
+                    }
+
+                    if !handled_chrome
+                        && !window_state.native.chrome.decorations_enabled
+                        && (self.modifiers & NEOMACS_SUPER_MASK) != 0
+                    {
+                        let _ = window_state.native.window.drag_window();
+                        handled_chrome = true;
+                    }
+                }
+
                 if window_state.render.popup_menu.is_some() {
                     if state == ElementState::Pressed && button == MouseButton::Left {
-                        let x = window_state.render.mouse_pos.0;
-                        let y = window_state.render.mouse_pos.1;
-                        if let Some(compact_bar) = window_state.render.compact_bar.as_ref()
+                        if !handled_chrome
+                            && let Some(compact_bar) = window_state.render.compact_bar.as_ref()
                             && compact_bar.height > 0.0
                             && y < compact_bar.height
                         {
@@ -1036,6 +1091,39 @@ impl RenderApp {
                 let ly = (position.y / window_state.native.scale_factor) as f32;
                 window_state.render.mouse_pos = (lx, ly);
                 let mut dirty = false;
+
+                let edge = Self::detect_resize_edge_for_chrome(
+                    &window_state.native.chrome,
+                    window_state.native.width as f32 / window_state.native.scale_factor as f32,
+                    window_state.native.height as f32 / window_state.native.scale_factor as f32,
+                    lx,
+                    ly,
+                );
+                if edge != window_state.native.chrome.resize_edge {
+                    window_state.native.chrome.resize_edge = edge;
+                    let icon = match edge {
+                        Some(dir) => winit::window::CursorIcon::from(dir),
+                        None => winit::window::CursorIcon::Default,
+                    };
+                    if !window_state.native.chrome.decorations_enabled {
+                        window_state.native.window.set_cursor(icon);
+                    }
+                }
+
+                if !window_state.native.chrome.decorations_enabled {
+                    let new_hover = Self::frame_window_titlebar_hit_test(window_state, lx, ly);
+                    if new_hover != window_state.native.chrome.titlebar_hover {
+                        window_state.native.chrome.titlebar_hover = new_hover;
+                        dirty = true;
+                        if window_state.native.chrome.resize_edge.is_none() {
+                            let icon = match new_hover {
+                                2..=4 => winit::window::CursorIcon::Pointer,
+                                _ => winit::window::CursorIcon::Default,
+                            };
+                            window_state.native.window.set_cursor(icon);
+                        }
+                    }
+                }
 
                 if let Some(menu_bar) = window_state.render.menu_bar.as_ref()
                     && menu_bar.height > 0.0

@@ -66,8 +66,12 @@ impl RenderApp {
                     if !self.chrome.decorations_enabled {
                         self.frame_dirty = true;
                     }
-                } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
+                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.native.chrome.title = title.clone();
                     window_state.native.window.set_title(&title);
+                    if !window_state.native.chrome.decorations_enabled {
+                        window_state.render.frame_dirty = true;
+                    }
                 } else {
                     tracing::warn!(
                         "SetFrameWindowTitle requested for unknown frame_id=0x{:x}",
@@ -176,8 +180,14 @@ impl RenderApp {
             }
             RenderCommand::SetWindowDecorated { decorated } => {
                 self.chrome.decorations_enabled = decorated;
+                self.frame_windows.chrome_defaults.decorations_enabled = decorated;
                 if let Some(ref window) = self.window {
                     window.set_decorations(decorated);
+                }
+                for window_state in self.frame_windows.windows.values_mut() {
+                    window_state.native.chrome.decorations_enabled = decorated;
+                    window_state.native.window.set_decorations(decorated);
+                    window_state.render.frame_dirty = true;
                 }
                 self.frame_dirty = true;
                 Ok(())

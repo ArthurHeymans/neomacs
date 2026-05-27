@@ -151,7 +151,8 @@ impl Default for FpsCounter {
     }
 }
 
-/// Borderless window chrome state (title bar, resize edges, decorations).
+/// Borderless native-window chrome state (title bar, resize edges, decorations).
+#[derive(Clone)]
 pub(super) struct WindowChrome {
     pub(super) decorations_enabled: bool,
     pub(super) resize_edge: Option<winit::window::ResizeDirection>,
