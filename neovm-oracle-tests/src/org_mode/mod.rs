@@ -43,6 +43,7 @@ mod link_export;
 mod link_runtime;
 mod list_checkbox;
 mod macro_include;
+mod misc_upstream;
 mod mobile_workflow;
 mod navigation_edit;
 mod num_workflow;
