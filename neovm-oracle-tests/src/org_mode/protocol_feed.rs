@@ -153,3 +153,121 @@ fn org_feed_update_with_custom_retriever_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_feed_handlers_changed_update_all_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let* ((root (make-temp-file "org-feed-handlers" t))
+         (file (expand-file-name "feeds.org" root))
+         (calls nil)
+         (retrieved nil)
+         (messages nil)
+         (org-feed-save-after-adding nil)
+         (org-feed-after-adding-hook
+          (list (lambda ()
+                  (push (list 'after
+                              (file-relative-name (buffer-file-name) root)
+                              (line-number-at-pos))
+                        calls))))
+         (feed-xml
+          (lambda (title body)
+            (concat "<?xml version=\"1.0\"?><rss><channel>"
+                    "<item><guid>stable-guid</guid><title>" title
+                    "</title><link>https://example.org/stable</link>"
+                    "<description>" body "</description></item>"
+                    "<item><guid>new-guid</guid><title>New keep</title>"
+                    "<link>https://example.org/new</link>"
+                    "<description>fresh</description></item>"
+                    "</channel></rss>")))
+         (retriever
+          (lambda (url)
+            (push url retrieved)
+            (when (string-match-p "bad" url)
+              (error "mock unavailable"))
+            (let ((buf (get-buffer-create (format " *feed-%s*" url))))
+              (with-current-buffer buf
+                (erase-buffer)
+                (insert (funcall feed-xml "Changed keep" "changed body")))
+              buf)))
+         (new-handler
+          (lambda (entries)
+            (push (list 'new
+                        (line-number-at-pos)
+                        (mapcar (lambda (entry)
+                                  (list (plist-get entry :guid)
+                                        (plist-get entry :title)
+                                        (plist-get entry :handled)))
+                                entries))
+                  calls)
+            (insert "** HANDLED NEW\n")
+            (dolist (entry entries)
+              (insert "*** " (plist-get entry :title) "\n"
+                      (plist-get entry :link) "\n"))))
+         (changed-handler
+          (lambda (entries)
+            (push (list 'changed
+                        (line-number-at-pos)
+                        (mapcar (lambda (entry)
+                                  (list (plist-get entry :guid)
+                                        (plist-get entry :title)
+                                        (plist-get entry :handled)))
+                                entries))
+                  calls)
+            (insert "** HANDLED CHANGED\n")
+            (dolist (entry entries)
+              (insert "*** " (plist-get entry :title) "\n"))))
+         feed good bad)
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Inbox\n")
+            (insert ":CUSTOMSTATUS:\n")
+            (insert "((\"stable-guid\" t \"")
+            (insert (sha1 "<item><guid>stable-guid</guid><title>Old keep</title><link>https://example.org/stable</link><description>old body</description></item>"))
+            (insert "\"))\n")
+            (insert ":END:\n"))
+          (setq feed (list "Handlers" "mock://good" file "Inbox"
+                           :drawer "CUSTOMSTATUS"
+                           :new-handler new-handler
+                           :changed-handler changed-handler
+                           :filter (lambda (entry)
+                                     (and (string-match-p
+                                           "keep\\|New"
+                                           (plist-get entry :title))
+                                          entry))))
+          (setq good (append feed (list :parse-feed 'org-feed-parse-rss-feed
+                                        :parse-entry 'org-feed-parse-rss-entry)))
+          (setq bad (list "Bad" "mock://bad" file "Inbox"))
+          (let* ((org-feed-retrieve-method retriever)
+                 (org-feed-alist (list good bad))
+                 (update-one (cl-letf (((symbol-function 'message)
+                                        (lambda (fmt &rest args)
+                                          (push (apply #'format fmt args)
+                                                messages))))
+                               (org-feed-update "Handlers")))
+                 (update-all (cl-letf (((symbol-function 'message)
+                                        (lambda (fmt &rest args)
+                                          (push (apply #'format fmt args)
+                                                messages))))
+                               (org-feed-update-all))))
+            (with-current-buffer (find-file-noselect file)
+              (list update-one
+                    update-all
+                    (sort retrieved #'string<)
+                    (nreverse calls)
+                    (nreverse messages)
+                    (org-feed-read-previous-status (point-min)
+                                                   "CUSTOMSTATUS")
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))
+      (dolist (buf '(" *feed-mock://good*" " *feed-mock://bad*"))
+        (when (get-buffer buf) (kill-buffer buf)))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
