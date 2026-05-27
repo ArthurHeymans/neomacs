@@ -235,3 +235,174 @@ fn org_babel_update_body_remove_result_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_babel_named_navigation_results_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Code\n")
+    (insert "#+NAME: alpha\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
+    (insert "#+RESULTS: alpha\n: 3\n\n")
+    (insert "** More\n")
+    (insert "#+NAME: beta\n")
+    (insert "#+begin_src emacs-lisp\n(+ 3 4)\n#+end_src\n")
+    (insert "#+RESULTS: beta\n: 7\n")
+    (let ((offset
+           (lambda (pos) (and pos (- pos (point-min)))))
+          alpha-head alpha-result beta-head beta-result current-head)
+      (setq alpha-head (funcall offset (org-babel-find-named-block "alpha"))
+            beta-head (funcall offset (org-babel-find-named-block "beta"))
+            alpha-result (funcall offset
+                                  (org-babel-find-named-result "alpha"))
+            beta-result (funcall offset
+                                 (org-babel-find-named-result "beta")))
+      (goto-char (point-min))
+      (search-forward "(+ 3 4)")
+      (setq current-head (funcall offset (org-babel-where-is-src-block-head)))
+      (org-babel-goto-named-result "alpha")
+      (let ((after-result (list (funcall offset (point))
+                                (buffer-substring-no-properties
+                                 (line-beginning-position)
+                                 (line-end-position)))))
+        (org-babel-goto-named-src-block "beta")
+        (list (org-babel-src-block-names)
+              (org-babel-result-names)
+              alpha-head
+              alpha-result
+              beta-head
+              beta-result
+              current-head
+              after-result
+              (funcall offset (point))
+              (buffer-substring-no-properties
+               (line-beginning-position)
+               (line-end-position))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_tangle_collect_single_block_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-tangle)
+  (let* ((root (make-temp-file "org-tangle-collect" t))
+         (org-file (expand-file-name "main.org" root))
+         (out-a (expand-file-name "a.el" root))
+         (out-b (expand-file-name "b.el" root)))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect org-file)
+          (erase-buffer)
+          (org-mode)
+          (insert "#+PROPERTY: header-args:emacs-lisp :comments both\n")
+          (insert "* First\nText for comments.\n")
+          (insert "#+NAME: helper\n")
+          (insert "#+begin_src emacs-lisp :tangle \"" out-a "\"\n")
+          (insert "(defun helper () 10)\n")
+          (insert "#+end_src\n\n")
+          (insert "* Second\n")
+          (insert "#+begin_src emacs-lisp :noweb yes :tangle \"" out-a "\"\n")
+          (insert "<<helper>>\n(+ (helper) 5)\n")
+          (insert "#+end_src\n\n")
+          (insert "* Other\n")
+          (insert "#+begin_src emacs-lisp :tangle \"" out-b "\" :comments no\n")
+          (insert "(message \"other\")\n")
+          (insert "#+end_src\n")
+          (save-buffer)
+          (goto-char (point-min))
+          (search-forward ":noweb")
+          (let* ((single (org-babel-tangle-single-block 1 t))
+                 (collected (org-babel-tangle-collect-blocks "emacs-lisp"))
+                 (limited (org-babel-tangle-collect-blocks
+                           "emacs-lisp" out-a))
+                 (summary
+                  (mapcar
+                   (lambda (entry)
+                     (list (file-name-nondirectory (car entry))
+                           (mapcar
+                            (lambda (block)
+                              (let ((spec (cdr block)))
+                                (list (car block)
+                                      (nth 3 spec)
+                                      (cdr (assq :comments (nth 4 spec)))
+                                      (cdr (assq :noweb (nth 4 spec)))
+                                      (nth 5 spec)
+                                      (nth 6 spec))))
+                            (cdr entry))))
+                   collected)))
+            (list (mapcar (lambda (entry)
+                            (file-name-nondirectory (car entry)))
+                          single)
+                  (mapcar (lambda (entry)
+                            (file-name-nondirectory (car entry)))
+                          limited)
+                  summary)))
+      (when (get-file-buffer org-file)
+        (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_babel_tangle_write_noweb_comments_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-tangle-write" t))
+         (org-file (expand-file-name "main.org" root))
+         (out (expand-file-name "out.el" root))
+         (nested (expand-file-name "sub/nested.el" root))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect org-file)
+          (erase-buffer)
+          (org-mode)
+          (insert "#+PROPERTY: header-args:emacs-lisp :mkdirp yes\n")
+          (insert "* Library\nComment text.\n")
+          (insert "#+NAME: lib\n")
+          (insert "#+begin_src emacs-lisp :tangle \"" out "\" :comments both\n")
+          (insert "(defun lib (x) (+ x 1))\n")
+          (insert "#+end_src\n\n")
+          (insert "* Caller\n")
+          (insert "#+begin_src emacs-lisp :noweb yes :tangle \"" out "\" :comments link\n")
+          (insert "<<lib>>\n(lib 4)\n")
+          (insert "#+end_src\n\n")
+          (insert "* Nested\n")
+          (insert "#+begin_src emacs-lisp :tangle \"" nested "\"\n")
+          (insert "(message \"nested\")\n")
+          (insert "#+end_src\n")
+          (make-directory (file-name-directory nested) t)
+          (save-buffer)
+          (let ((files (mapcar #'file-name-nondirectory
+                               (org-babel-tangle nil nil "emacs-lisp"))))
+            (list (sort files #'string<)
+                  (file-exists-p out)
+                  (file-exists-p nested)
+                  (with-temp-buffer
+                    (insert-file-contents out)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))
+                  (with-temp-buffer
+                    (insert-file-contents nested)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))
+      (when (get-file-buffer org-file)
+        (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
