@@ -98,6 +98,7 @@ mod table_agenda;
 mod table_formula;
 mod table_upstream;
 mod tag_match;
+mod tau_deep;
 mod tera_strict;
 mod theta_combos;
 mod timer_workflow;
