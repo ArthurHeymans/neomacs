@@ -381,3 +381,108 @@ fn org_list_nested_counter_checkbox_repair_cycle_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_struct_write_visibility_apply_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "- [ ] Alpha\n")
+    (insert "  continuation alpha\n")
+    (insert "  - [ ] Alpha child one\n")
+    (insert "    child one body\n")
+    (insert "  - [X] Alpha child two\n")
+    (insert "- [ ] Beta\n")
+    (insert "  beta body\n")
+    (insert "- Gamma\n")
+    (goto-char (point-min))
+    (let* ((old-struct (org-list-struct))
+           (struct (copy-tree old-struct))
+           (prevs (org-list-prevs-alist struct))
+           (parents (org-list-parents-alist struct))
+           (items (org-list-get-all-items (point-min) struct prevs))
+           (first (nth 0 items))
+           (child-one (nth 1 items))
+           (beta (nth 3 items))
+           (before
+            (mapcar (lambda (item)
+                      (list (- item (point-min))
+                            (org-list-get-bullet item struct)
+                            (org-list-get-checkbox item struct)
+                            (org-list-get-parent item struct parents)
+                            (org-list-item-body-column item)))
+                    items)))
+      (org-list-set-checkbox first struct "[X]")
+      (org-list-set-checkbox child-one struct "[X]")
+      (org-list-set-checkbox beta struct nil)
+      (org-list-write-struct struct parents old-struct)
+      (let* ((after-write
+              (buffer-substring-no-properties (point-min) (point-max)))
+             (written-struct (org-list-struct))
+             (written-pre (org-list-prevs-alist written-struct))
+             (written-parents (org-list-parents-alist written-struct))
+             (written-items
+              (org-list-get-all-items (point-min) written-struct written-pre))
+             (after-summary
+              (mapcar
+               (lambda (item)
+                 (list (- item (point-min))
+                       (buffer-substring-no-properties
+                        item (line-end-position))
+                       (org-list-get-checkbox item written-struct)
+                       (org-list-get-parent item written-struct
+                                            written-parents)
+                       (org-list-get-children item written-struct
+                                              written-parents)
+                       (org-list-item-body-column item)))
+               written-items))
+             (applied
+              (progn
+                (goto-char (point-min))
+                (org-apply-on-list
+                 (lambda (acc)
+                   (cons (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         acc))
+                 nil)))
+             folded children-state subtree-state)
+        (goto-char (point-min))
+        (org-list-set-item-visibility (car written-items) written-struct
+                                      'children)
+        (setq children-state
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle (invisible-p (line-beginning-position)))))
+                      '("continuation" "Alpha child one" "child one body"
+                        "Alpha child two" "Beta")))
+        (setq folded buffer-invisibility-spec)
+        (org-list-set-item-visibility (car written-items) written-struct
+                                      'subtree)
+        (setq subtree-state
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle (invisible-p (line-beginning-position)))))
+                      '("continuation" "Alpha child one" "child one body"
+                        "Alpha child two" "Beta")))
+        (list before
+              after-write
+              after-summary
+              applied
+              children-state
+              folded
+              subtree-state
+              (org-list-to-lisp)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
