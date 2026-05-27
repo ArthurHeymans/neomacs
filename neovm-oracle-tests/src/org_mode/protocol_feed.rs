@@ -897,3 +897,51 @@ fn org_feed_raw_inbox_headers_error_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_feed_atom_parse_entry_insert_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let* ((root (make-temp-file "org-feed-atom" t))
+         (file (expand-file-name "inbox.org" root))
+         (atom-buffer (generate-new-buffer " *atom-test*"))
+         (org-feed-alist
+          `(("TestAtom"
+             :url "https://example.org/atom.xml"
+             :file ,file
+             :headline "Incoming"))))
+    (unwind-protect
+        (progn
+          (with-current-buffer atom-buffer
+            (insert "<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><title>Atom</title>")
+            (insert "<entry><title>Entry One</title><id>tag:one</id><updated>2026-05-27T10:00:00Z</updated><link href=\"https://example.org/1\"/><content type=\"text\">Body one</content></entry>")
+            (insert "<entry><title>Entry Two</title><id>tag:two</id><updated>2026-05-27T11:00:00Z</updated><link href=\"https://example.org/2\"/><content type=\"text\">Body two</content></entry>")
+            (insert "</feed>"))
+          (let ((entries (org-feed-parse-atom-feed atom-buffer)))
+            (with-temp-file file
+              (insert "* Incoming\n"))
+            (let ((updated (condition-case nil
+                               (org-feed-update "TestAtom")
+                             (error 'error))))
+              (let ((inbox-content
+                     (with-current-buffer (find-file-noselect file)
+                       (prog1 (buffer-substring-no-properties
+                               (point-min) (point-max))
+                         (kill-buffer)))))
+                (list (mapcar (lambda (e)
+                                (list (plist-get e :title)
+                                      (plist-get e :guid)
+                                      (plist-get e :link)))
+                              entries)
+                      updated
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       inbox-content))))))
+      (kill-buffer atom-buffer)
+      (delete-directory root t))))"##,
+    );
+}
