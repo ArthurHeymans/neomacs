@@ -292,6 +292,7 @@ pub struct RendererFrameEffects {
     active_scroll_spacings: Vec<ScrollSpacingEntry>,
     cursor_trail_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
     cursor_trail_last_pos: (f32, f32),
+    idle_dim_alpha: f32,
     cursor_wake_started: Option<std::time::Instant>,
     cursor_magnetism_entries: Vec<(f32, f32, std::time::Instant)>,
     cursor_comet_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,

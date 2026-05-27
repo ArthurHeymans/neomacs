@@ -252,6 +252,7 @@ impl WgpuRenderer {
             active_scroll_spacings: std::mem::take(&mut self.active_scroll_spacings),
             cursor_trail_positions: std::mem::take(&mut self.cursor_trail_positions),
             cursor_trail_last_pos: self.cursor_trail_last_pos,
+            idle_dim_alpha: self.idle_dim_alpha,
             cursor_wake_started: self.cursor_wake_started.take(),
             cursor_magnetism_entries: std::mem::take(&mut self.cursor_magnetism_entries),
             cursor_comet_positions: std::mem::take(&mut self.cursor_comet_positions),
@@ -323,6 +324,7 @@ impl WgpuRenderer {
         self.active_scroll_spacings = effects.active_scroll_spacings;
         self.cursor_trail_positions = effects.cursor_trail_positions;
         self.cursor_trail_last_pos = effects.cursor_trail_last_pos;
+        self.idle_dim_alpha = effects.idle_dim_alpha;
         self.cursor_wake_started = effects.cursor_wake_started;
         self.cursor_magnetism_entries = effects.cursor_magnetism_entries;
         self.cursor_comet_positions = effects.cursor_comet_positions;
