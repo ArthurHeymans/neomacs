@@ -1060,9 +1060,11 @@ impl RenderApp {
 
         // Render floating WebKit overlays above frame contents but below GUI chrome.
         #[cfg(feature = "wpe-webkit")]
-        if !self.floating_webkits.is_empty() {
+        if let Some(primary_frame) = self.primary_frame.as_ref()
+            && !primary_frame.floating_webkits.is_empty()
+        {
             if let Some(ref renderer) = self.renderer {
-                renderer.render_floating_webkits(&surface_view, &self.floating_webkits);
+                renderer.render_floating_webkits(&surface_view, &primary_frame.floating_webkits);
             }
         }
 

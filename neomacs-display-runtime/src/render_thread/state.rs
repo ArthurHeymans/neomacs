@@ -312,10 +312,6 @@ pub(super) struct RenderApp {
     #[cfg(feature = "wpe-webkit")]
     pub(super) webkit_import_policy: WebKitImportPolicy,
 
-    // Floating WebKit overlays (position/size from C side, rendered on render thread)
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
-
     // Terminal manager (neo-term)
     #[cfg(feature = "neo-term")]
     pub(super) terminal_manager: crate::terminal::TerminalManager,
@@ -326,6 +322,8 @@ pub(super) struct RenderApp {
     pub(super) frame_windows: GuiFrameWindowManager,
     // Child frames received before primary frame render state exists.
     pub(super) pending_primary_child_frames: ChildFrameManager,
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) pending_primary_floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
     // Child frame visual style
     pub(super) child_frame_corner_radius: f32,
     pub(super) child_frame_shadow_enabled: bool,
@@ -419,14 +417,14 @@ impl RenderApp {
             webkit_views: HashMap::new(),
             #[cfg(feature = "wpe-webkit")]
             webkit_import_policy,
-            #[cfg(feature = "wpe-webkit")]
-            floating_webkits: Vec::new(),
             #[cfg(feature = "neo-term")]
             terminal_manager: crate::terminal::TerminalManager::new(),
             #[cfg(feature = "neo-term")]
             shared_terminals,
             frame_windows: GuiFrameWindowManager::new(),
             pending_primary_child_frames: ChildFrameManager::new(),
+            #[cfg(feature = "wpe-webkit")]
+            pending_primary_floating_webkits: Vec::new(),
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
             child_frame_shadow_layers: 4,

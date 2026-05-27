@@ -194,7 +194,11 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
-                    self.floating_webkits.retain(|w| w.webkit_id != id);
+                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                    }
+                    self.pending_primary_floating_webkits
+                        .retain(|w| w.webkit_id != id);
                     for window_state in self.frame_windows.windows.values_mut() {
                         window_state
                             .render
@@ -342,11 +346,15 @@ impl RenderApp {
                         width,
                         height,
                     };
-                    let primary_len = self.floating_webkits.len();
-                    self.floating_webkits.retain(|w| w.webkit_id != id);
-                    if self.floating_webkits.len() != primary_len {
-                        self.mark_primary_dirty();
+                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                        let primary_len = primary_frame.floating_webkits.len();
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                        if primary_frame.floating_webkits.len() != primary_len {
+                            primary_frame.frame_dirty = true;
+                        }
                     }
+                    self.pending_primary_floating_webkits
+                        .retain(|w| w.webkit_id != id);
                     for window_state in self.frame_windows.windows.values_mut() {
                         let old_len = window_state.render.floating_webkits.len();
                         window_state
@@ -360,8 +368,12 @@ impl RenderApp {
                     if emacs_frame_id == 0
                         || self.frame_windows.primary_frame_id() == Some(emacs_frame_id)
                     {
-                        self.floating_webkits.push(overlay);
-                        self.mark_primary_dirty();
+                        if let Some(primary_frame) = self.primary_frame.as_mut() {
+                            primary_frame.floating_webkits.push(overlay);
+                            primary_frame.frame_dirty = true;
+                        } else {
+                            self.pending_primary_floating_webkits.push(overlay);
+                        }
                     } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.floating_webkits.push(overlay);
                         window_state.render.frame_dirty = true;
@@ -378,11 +390,15 @@ impl RenderApp {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
-                    let primary_len = self.floating_webkits.len();
-                    self.floating_webkits.retain(|w| w.webkit_id != id);
-                    if self.floating_webkits.len() != primary_len {
-                        self.mark_primary_dirty();
+                    if let Some(primary_frame) = self.primary_frame.as_mut() {
+                        let primary_len = primary_frame.floating_webkits.len();
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                        if primary_frame.floating_webkits.len() != primary_len {
+                            primary_frame.frame_dirty = true;
+                        }
                     }
+                    self.pending_primary_floating_webkits
+                        .retain(|w| w.webkit_id != id);
                     for window_state in self.frame_windows.windows.values_mut() {
                         let old_len = window_state.render.floating_webkits.len();
                         window_state

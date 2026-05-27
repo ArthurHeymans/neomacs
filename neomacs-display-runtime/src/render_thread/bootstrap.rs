@@ -154,6 +154,14 @@ impl RenderApp {
             &mut self.pending_primary_child_frames,
             crate::render_thread::child_frames::ChildFrameManager::new(),
         );
+        #[cfg(feature = "wpe-webkit")]
+        {
+            primary_frame.floating_webkits =
+                std::mem::take(&mut self.pending_primary_floating_webkits);
+            if !primary_frame.floating_webkits.is_empty() {
+                primary_frame.frame_dirty = true;
+            }
+        }
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",

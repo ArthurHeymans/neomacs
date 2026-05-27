@@ -307,8 +307,10 @@ impl RenderApp {
 
     fn pointer_target_at(&self, x: f32, y: f32) -> (f32, f32, u64) {
         #[cfg(feature = "wpe-webkit")]
-        if Self::floating_webkit_hit_test(&self.floating_webkits, x, y).is_some() {
-            return (x, y, 0);
+        if let Some(primary_frame) = self.primary_frame.as_ref() {
+            if Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some() {
+                return (x, y, 0);
+            }
         }
         if let Some((fid, local_x, local_y)) = self.primary_child_frames().hit_test(x, y) {
             (local_x, local_y, fid)
@@ -324,12 +326,14 @@ impl RenderApp {
 
         #[cfg(feature = "wpe-webkit")]
         if target_fid == 0 {
-            if let Some((id, rx, ry)) =
-                Self::floating_webkit_hit_test(&self.floating_webkits, ev_x, ev_y)
-            {
-                wk_id = id;
-                wk_rx = rx;
-                wk_ry = ry;
+            if let Some(primary_frame) = self.primary_frame.as_ref() {
+                if let Some((id, rx, ry)) =
+                    Self::floating_webkit_hit_test(&primary_frame.floating_webkits, ev_x, ev_y)
+                {
+                    wk_id = id;
+                    wk_rx = rx;
+                    wk_ry = ry;
+                }
             }
         }
 
