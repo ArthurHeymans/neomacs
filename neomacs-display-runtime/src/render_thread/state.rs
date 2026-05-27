@@ -289,8 +289,6 @@ pub(super) struct RenderApp {
     // Current modifier state (NEOMACS_*_MASK flags)
     pub(super) modifiers: u32,
 
-    // Last known cursor position
-    pub(super) mouse_pos: (f32, f32),
     /// Whether the mouse cursor is hidden during keyboard input
     pub(super) mouse_hidden_for_typing: bool,
 
@@ -418,7 +416,6 @@ impl RenderApp {
             primary_frame: None,
             faces: HashMap::new(),
             modifiers: 0,
-            mouse_pos: (0.0, 0.0),
             mouse_hidden_for_typing: false,
             image_dimensions,
             cursor: CursorState::default(),
@@ -565,6 +562,18 @@ impl RenderApp {
             primary_frame.frame_dirty = primary_frame.frame_dirty || start.is_some();
         } else {
             self.pending_primary_visual_bell_start = start;
+        }
+    }
+
+    pub(super) fn primary_mouse_pos(&self) -> (f32, f32) {
+        self.primary_frame
+            .as_ref()
+            .map_or((0.0, 0.0), |frame| frame.mouse_pos)
+    }
+
+    pub(super) fn set_primary_mouse_pos(&mut self, mouse_pos: (f32, f32)) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.mouse_pos = mouse_pos;
         }
     }
 }

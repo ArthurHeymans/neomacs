@@ -731,8 +731,8 @@ impl RenderApp {
             tracing::debug!(
                 "MouseInput: {:?} at ({:.1}, {:.1}), menu_bar_h={}, popup={}",
                 button,
-                self.mouse_pos.0,
-                self.mouse_pos.1,
+                self.primary_mouse_pos().0,
+                self.primary_mouse_pos().1,
                 menu_bar_height,
                 self.primary_popup_menu().is_some()
             );
@@ -740,10 +740,11 @@ impl RenderApp {
 
         if self.primary_popup_menu().is_some() {
             if state == ElementState::Pressed && button == MouseButton::Left {
-                if compact_bar_height > 0.0 && self.mouse_pos.1 < compact_bar_height {
-                    if let Some(idx) =
-                        self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1)
-                    {
+                if compact_bar_height > 0.0 && self.primary_mouse_pos().1 < compact_bar_height {
+                    if let Some(idx) = self.compact_bar_menu_hit_test(
+                        self.primary_mouse_pos().0,
+                        self.primary_mouse_pos().1,
+                    ) {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
                         self.set_primary_popup_menu(None);
@@ -760,8 +761,10 @@ impl RenderApp {
                         self.chrome_interaction.compact_bar_menu_active = None;
                         self.mark_primary_dirty();
                     }
-                } else if menu_bar_height > 0.0 && self.mouse_pos.1 < menu_bar_height {
-                    if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+                } else if menu_bar_height > 0.0 && self.primary_mouse_pos().1 < menu_bar_height {
+                    if let Some(idx) = self
+                        .menu_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                    {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
                         self.set_primary_popup_menu(None);
@@ -779,9 +782,9 @@ impl RenderApp {
                         self.mark_primary_dirty();
                     }
                 } else {
-                    let idx = self
-                        .primary_popup_menu()
-                        .map_or(-1, |menu| menu.hit_test(self.mouse_pos.0, self.mouse_pos.1));
+                    let idx = self.primary_popup_menu().map_or(-1, |menu| {
+                        menu.hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                    });
                     if idx >= 0 {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: idx });
@@ -791,7 +794,10 @@ impl RenderApp {
                     } else {
                         let (depth, local_idx) =
                             self.primary_popup_menu().map_or((-1, -1), |menu| {
-                                menu.hit_test_all(self.mouse_pos.0, self.mouse_pos.1)
+                                menu.hit_test_all(
+                                    self.primary_mouse_pos().0,
+                                    self.primary_mouse_pos().1,
+                                )
                             });
                         if depth >= 0 && local_idx >= 0 {
                             let is_submenu = self.primary_popup_menu().is_some_and(|menu| {
@@ -843,9 +849,9 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.titlebar_hit_test(self.mouse_pos.0, self.mouse_pos.1) > 0
+            && self.titlebar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1) > 0
         {
-            match self.titlebar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+            match self.titlebar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1) {
                 1 => {
                     let now = std::time::Instant::now();
                     if now
@@ -899,9 +905,11 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && compact_bar_height > 0.0
-            && self.mouse_pos.1 < compact_bar_height
+            && self.primary_mouse_pos().1 < compact_bar_height
         {
-            if let Some(idx) = self.compact_bar_menu_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+            if let Some(idx) = self
+                .compact_bar_menu_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+            {
                 if self.chrome_interaction.compact_bar_menu_active == Some(idx) {
                     self.chrome_interaction.compact_bar_menu_active = None;
                 } else {
@@ -914,7 +922,9 @@ impl RenderApp {
                 self.mark_primary_dirty();
                 return;
             }
-            if let Some(idx) = self.compact_bar_tool_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+            if let Some(idx) = self
+                .compact_bar_tool_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+            {
                 self.chrome_interaction.compact_bar_tool_pressed = Some(idx);
                 self.comms.send_input(InputEvent::ToolBarClick {
                     index: idx as i32,
@@ -928,15 +938,17 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && menu_bar_height > 0.0
-            && self.mouse_pos.1 < menu_bar_height
+            && self.primary_mouse_pos().1 < menu_bar_height
         {
             tracing::debug!(
                 "Menu bar click at ({:.1}, {:.1}), menu_bar_height={}",
-                self.mouse_pos.0,
-                self.mouse_pos.1,
+                self.primary_mouse_pos().0,
+                self.primary_mouse_pos().1,
                 menu_bar_height
             );
-            if let Some(idx) = self.menu_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+            if let Some(idx) =
+                self.menu_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+            {
                 self.chrome_interaction.menu_bar_active = Some(idx);
                 self.comms.send_input(InputEvent::MenuBarClick {
                     index: idx as i32,
@@ -951,10 +963,12 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && tab_bar_height > 0.0
-            && self.mouse_pos.1 >= tab_bar_y
-            && self.mouse_pos.1 < tab_bar_y + tab_bar_height
+            && self.primary_mouse_pos().1 >= tab_bar_y
+            && self.primary_mouse_pos().1 < tab_bar_y + tab_bar_height
         {
-            if let Some(idx) = self.tab_bar_hit_test(self.mouse_pos.0, self.mouse_pos.1) {
+            if let Some(idx) =
+                self.tab_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+            {
                 self.chrome_interaction.tab_bar_pressed = Some(idx);
                 self.comms.send_input(InputEvent::TabBarClick {
                     index: idx as i32,
@@ -977,12 +991,13 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && tool_bar_height > 0.0
-            && self.mouse_pos.1 < self.toolbar_y_origin() + tool_bar_height
-            && self.mouse_pos.1 >= self.toolbar_y_origin()
+            && self.primary_mouse_pos().1 < self.toolbar_y_origin() + tool_bar_height
+            && self.primary_mouse_pos().1 >= self.toolbar_y_origin()
         {
-            if let Some(idx) =
-                self.toolbar_hit_test(self.mouse_pos.0, self.mouse_pos.1 - self.toolbar_y_origin())
-            {
+            if let Some(idx) = self.toolbar_hit_test(
+                self.primary_mouse_pos().0,
+                self.primary_mouse_pos().1 - self.toolbar_y_origin(),
+            ) {
                 self.chrome_interaction.toolbar_pressed = Some(idx);
                 self.comms.send_input(InputEvent::ToolBarClick {
                     index: idx as i32,
@@ -1014,8 +1029,8 @@ impl RenderApp {
         if state == ElementState::Pressed && button == MouseButton::Left {
             tracing::trace!(
                 "Left click at ({:.1}, {:.1}) NOT in menu bar (h={}) or toolbar (h={})",
-                self.mouse_pos.0,
-                self.mouse_pos.1,
+                self.primary_mouse_pos().0,
+                self.primary_mouse_pos().1,
                 menu_bar_height,
                 tool_bar_height
             );
@@ -1030,7 +1045,8 @@ impl RenderApp {
             MouseButton::Other(n) => n as u32,
         };
 
-        let (ev_x, ev_y, target_fid) = self.pointer_target_at(self.mouse_pos.0, self.mouse_pos.1);
+        let (ev_x, ev_y, target_fid) =
+            self.pointer_target_at(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
         if target_fid != 0 {
             if let Some(entry) = self.child_frames.frames.get(&target_fid) {
                 tracing::trace!(
@@ -1040,8 +1056,8 @@ impl RenderApp {
                     entry.abs_y,
                     entry.frame.width,
                     entry.frame.height,
-                    self.mouse_pos.0,
-                    self.mouse_pos.1,
+                    self.primary_mouse_pos().0,
+                    self.primary_mouse_pos().1,
                     ev_x,
                     ev_y
                 );
@@ -1085,11 +1101,12 @@ impl RenderApp {
 
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
+            let mouse_pos = self.primary_mouse_pos();
             if let Some(renderer) = self.renderer.as_ref() {
                 renderer.trigger_transient_click_halo(
                     &mut self.renderer_effects,
-                    self.mouse_pos.0,
-                    self.mouse_pos.1,
+                    mouse_pos.0,
+                    mouse_pos.1,
                     now,
                 );
             }
@@ -1298,7 +1315,7 @@ impl RenderApp {
 
         let lx = (position.x / self.scale_factor) as f32;
         let ly = (position.y / self.scale_factor) as f32;
-        self.mouse_pos = (lx, ly);
+        self.set_primary_mouse_pos((lx, ly));
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
         if self.mouse_hidden_for_typing {
@@ -1505,7 +1522,8 @@ impl RenderApp {
             ),
         };
 
-        let (ev_x, ev_y, target_fid) = self.pointer_target_at(self.mouse_pos.0, self.mouse_pos.1);
+        let (ev_x, ev_y, target_fid) =
+            self.pointer_target_at(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
         let (wk_id, wk_rx, wk_ry) = self.webkit_target_at(target_fid, ev_x, ev_y);
 
         self.comms.send_input(InputEvent::MouseScroll {

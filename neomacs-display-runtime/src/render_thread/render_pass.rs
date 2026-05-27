@@ -921,6 +921,7 @@ impl RenderApp {
                     .expect("checked in render");
                 let renderer = self.renderer.as_mut().expect("checked in render");
                 let glyph_atlas = &mut primary_frame.glyph_atlas;
+                let mouse_pos = primary_frame.mouse_pos;
 
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                     renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
@@ -933,7 +934,7 @@ impl RenderApp {
                         self.height,
                         self.cursor.blink_on,
                         root_animated_cursor,
-                        self.mouse_pos,
+                        mouse_pos,
                         bg_gradient,
                     );
                 });
@@ -987,6 +988,7 @@ impl RenderApp {
                 .expect("checked in render");
             let renderer = self.renderer.as_mut().expect("checked in render");
             let glyph_atlas = &mut primary_frame.glyph_atlas;
+            let mouse_pos = primary_frame.mouse_pos;
 
             renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                 renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
@@ -999,7 +1001,7 @@ impl RenderApp {
                     self.height,
                     self.cursor.blink_on,
                     root_animated_cursor,
-                    self.mouse_pos,
+                    mouse_pos,
                     bg_gradient,
                 );
             });
