@@ -35,6 +35,91 @@ fn org_footnote_renumber_delete_sort_combo() {
 }
 
 #[test]
+fn org_footnote_local_inline_export_edit_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-footnote)
+  (require 'ox-ascii)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Footnote Combo\n")
+    (insert "* Chapter One\n")
+    (insert "Alpha[fn:a] inline[fn::Inline A] repeat[fn:a].\n")
+    (insert "** Local Notes\n")
+    (insert "[fn:a] A definition\n")
+    (insert "[fn:orphan] Orphan definition\n")
+    (insert "* Chapter Two\n")
+    (insert "Beta[fn:b] inline[fn::Inline B with *bold*].\n")
+    (insert "[fn:b] Bee definition\n")
+    (insert "* Tail\n")
+    (let ((org-footnote-section nil)
+          (org-footnote-fill-after-inline-note-extraction nil)
+          (org-export-with-toc nil))
+      (let ((before
+             (list (org-footnote-all-labels)
+                   (org-footnote--collect-references 'anonymous)
+                   (org-footnote--collect-definitions))))
+        (org-footnote-normalize)
+        (let ((after-normalize
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (labels-normalized (org-footnote-all-labels))
+              (defs-normalized (org-footnote--collect-definitions)))
+          (goto-char (point-min))
+          (search-forward "repeat")
+          (let ((deleted-a (org-footnote-delete "a"))
+                (after-delete-a nil))
+            (setq after-delete-a
+                  (buffer-substring-no-properties (point-min) (point-max)))
+            (goto-char (point-min))
+            (search-forward "Chapter Two")
+            (search-forward "Beta")
+            (let ((org-footnote-auto-label 'plain)
+                  (org-footnote-define-inline nil)
+                  (org-footnote-auto-adjust 'renumber))
+              (org-footnote-new)
+              (insert "Added note")
+              (org-footnote-auto-adjust-maybe))
+            (org-footnote-sort)
+            (let* ((tree (org-element-parse-buffer))
+                   (footnotes
+                    (org-element-map tree 'footnote-reference
+                      (lambda (fn)
+                        (list (org-element-property :label fn)
+                              (org-element-property :type fn)
+                              (org-element-property :begin fn)
+                              (org-element-property :end fn)))))
+                   (paras
+                    (org-element-map tree 'paragraph
+                      (lambda (p)
+                        (buffer-substring-no-properties
+                         (org-element-property :begin p)
+                         (org-element-property :end p)))))
+                   (ascii
+                    (org-export-string-as
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))
+                     'ascii t '(:with-toc nil))))
+              (list before
+                    labels-normalized
+                    defs-normalized
+                    after-normalize
+                    deleted-a
+                    after-delete-a
+                    (org-footnote-all-labels)
+                    (org-footnote--collect-references 'anonymous)
+                    (org-footnote--collect-definitions)
+                    footnotes
+                    paras
+                    ascii
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_footnote_inline_normalize_section_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
