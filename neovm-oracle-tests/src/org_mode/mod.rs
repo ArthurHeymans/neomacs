@@ -47,6 +47,7 @@ mod export_upstream;
 mod export_upstream_2;
 mod fold_core;
 mod fold_font;
+mod fold_regression;
 mod footnote_edit;
 mod gamma_context;
 mod giga_strict;
