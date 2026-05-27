@@ -193,3 +193,44 @@ fn org_attach_git_annex_detection_and_open_hook_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_attach_dir_file_list_sync_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-attach)
+  (let* ((root (make-temp-file "org-attach-deep" t))
+         (org-file (expand-file-name "task.org" root))
+         (org-attach-id-dir (expand-file-name "data" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file org-file
+            (insert "* Task\n:PROPERTIES:\n:ID: fixed-attach-id\n:END:\n"))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (goto-char (point-min))
+            (let* ((dir (org-attach-dir t))
+                   (_ (make-directory dir t))
+                   (_ (with-temp-file (expand-file-name "doc.txt" dir)
+                        (insert "document content")))
+                   (_ (with-temp-file (expand-file-name "img.png" dir)
+                        (insert "image data")))
+                   (files (sort (mapcar #'file-name-nondirectory
+                                        (org-attach-file-list dir))
+                                #'string<))
+                   (doc-content
+                    (with-temp-buffer
+                      (insert-file-contents
+                       (expand-file-name "doc.txt" dir))
+                      (buffer-string)))
+                   (dir-exists (file-directory-p dir))
+                   (dir-path (replace-regexp-in-string
+                              (regexp-quote root) "<root>" dir)))
+              (kill-buffer)
+              (list dir-exists dir-path files doc-content))))
+      (delete-directory root t))))"##,
+    );
+}
