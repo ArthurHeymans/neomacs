@@ -71,6 +71,7 @@ mod mobile_workflow;
 mod mouse_workflow;
 mod mu_deep;
 mod navigation_edit;
+mod nu_operations;
 mod num_workflow;
 mod omega_strict;
 mod org_indent_workflow;
