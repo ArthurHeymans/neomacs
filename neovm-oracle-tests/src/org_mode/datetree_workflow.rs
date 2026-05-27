@@ -166,3 +166,105 @@ fn org_datetree_dual_tree_cleanup_level_matrix_combo() {
                (point-min) (point-max))))))"#,
     );
 }
+
+#[test]
+fn org_datetree_narrow_cleanup_sort_timestamp_shift_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (let ((org-datetree-add-timestamp 'inactive)
+          states)
+      (org-mode)
+      (insert "* Journal\n:PROPERTIES:\n:DATE_TREE: t\n:END:\n")
+      (insert "* Archive\n")
+      (goto-char (point-min))
+      (search-forward "Journal")
+      (beginning-of-line)
+      (org-datetree-file-entry-under "* Morning\nBody <2026-05-27 Wed 08:00>\n" '(5 27 2026))
+      (goto-char (point-min))
+      (search-forward "Journal")
+      (beginning-of-line)
+      (org-datetree-file-entry-under "* Evening\nBody <2026-05-27 Wed 20:00>\n" '(5 27 2026))
+      (goto-char (point-min))
+      (search-forward "Journal")
+      (beginning-of-line)
+      (org-datetree-file-entry-under "* Tomorrow\nBody <2026-05-28 Thu 09:00>\n" '(5 28 2026))
+      (let ((snapshot
+             (lambda (label)
+               (let (heads)
+                 (org-element-map (org-element-parse-buffer) 'headline
+                   (lambda (headline)
+                     (push (list (org-element-property :level headline)
+                                 (org-element-property :raw-value headline)
+                                 (org-element-property :begin headline)
+                                 (org-element-property :end headline))
+                           heads)))
+                 (list label
+                       (nreverse heads)
+                       (mapcar (lambda (needle)
+                                 (save-excursion
+                                   (goto-char (point-min))
+                                   (search-forward needle)
+                                   (list needle
+                                         (org-outline-level)
+                                         (line-number-at-pos))))
+                               '("Journal" "2026" "2026-05 May"
+                                 "2026-05-27 Wednesday"
+                                 "Morning" "Evening"
+                                 "2026-05-28 Thursday" "Tomorrow"
+                                 "Archive"))
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))))))
+        (push (funcall snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "Journal")
+        (org-narrow-to-subtree)
+        (goto-char (point-min))
+        (search-forward "Evening")
+        (beginning-of-line)
+        (org-cut-subtree)
+        (goto-char (point-max))
+        (org-paste-subtree 4)
+        (search-backward "2026-05-27 Wed 20:00")
+        (org-timestamp-down-day 1)
+        (widen)
+        (push (funcall snapshot 'after-shift-hidden-place) states)
+        (org-datetree-cleanup)
+        (push (funcall snapshot 'after-cleanup) states)
+        (goto-char (point-min))
+        (search-forward "2026-05-27 Wednesday")
+        (beginning-of-line)
+        (org-sort-entries nil ?a)
+        (push (funcall snapshot 'after-sort-day) states)
+        (goto-char (point-min))
+        (search-forward "Morning")
+        (beginning-of-line)
+        (org-copy-subtree)
+        (goto-char (point-min))
+        (search-forward "Archive")
+        (beginning-of-line)
+        (org-paste-subtree 2)
+        (push (funcall snapshot 'after-copy-archive) states)
+        (list (nreverse states)
+              (count-matches "^\\*+ " (point-min) (point-max))
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (list needle
+                                (org-outline-level)
+                                (buffer-substring-no-properties
+                                 (line-beginning-position)
+                                 (line-end-position)))))
+                      '("2026-05-26 Tuesday"
+                        "2026-05-27 Wednesday"
+                        "2026-05-28 Thursday"
+                        "** Morning"))
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"#,
+    );
+}
