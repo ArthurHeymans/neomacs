@@ -98,3 +98,96 @@ fn org_duration_custom_units_columns_time_summary_combo() {
        (buffer-substring-no-properties (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_columns_allowed_value_cycle_and_update_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+COLUMNS: %20ITEM %TODO %Status %Priority %Effort\n")
+    (insert "#+PROPERTY: Status_ALL Todo Doing Review Done\n")
+    (insert "* Project\n")
+    (insert "** TODO Task\n")
+    (insert ":PROPERTIES:\n:Status: Todo\n:Priority: B\n:Effort: 0:30\n:END:\n")
+    (goto-char (point-min))
+    (search-forward "Task")
+    (beginning-of-line)
+    (org-columns nil)
+    (let ((snapshots nil))
+      (cl-labels
+          ((capture
+            (label)
+            (push (list label
+                        (org-entry-get nil "Status")
+                        (org-entry-get nil "TODO")
+                        (org-entry-get nil "PRIORITY")
+                        (buffer-substring-no-properties
+                         (line-beginning-position) (line-end-position)))
+                  snapshots)))
+        (search-forward "Todo")
+        (org-columns-next-allowed-value)
+        (capture 'status-next)
+        (org-columns-next-allowed-value nil 4)
+        (capture 'status-nth)
+        (goto-char (line-beginning-position))
+        (search-forward "TODO")
+        (let ((org-todo-keywords '((sequence "TODO" "NEXT" "|" "DONE"))))
+          (org-columns-next-allowed-value))
+        (capture 'todo-next)
+        (goto-char (line-beginning-position))
+        (search-forward "B")
+        (org-columns-next-allowed-value)
+        (capture 'priority-next)
+        (org-columns-quit)
+        (list (nreverse snapshots)
+              (org-entry-properties nil 'standard)
+              (buffer-substring-no-properties (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
+fn org_columns_format_store_insert_delete_move_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Root\n")
+    (insert "#+COLUMNS: %10ITEM %Owner %Effort{:}\n")
+    (insert "** A\n:PROPERTIES:\n:Owner: Ada\n:Effort: 0:30\n:END:\n")
+    (insert "** B\n:PROPERTIES:\n:Owner: Bea\n:Effort: 1:00\n:END:\n")
+    (goto-char (point-min))
+    (search-forward "A")
+    (beginning-of-line)
+    (org-columns nil)
+    (let ((fmt-before org-columns-current-fmt)
+          (compiled-before org-columns-current-fmt-compiled))
+      (org-columns-store-format)
+      (org-columns-new "Status" :title "State" :width 8)
+      (org-columns-move-left)
+      (org-columns-widen 2)
+      (org-columns-narrow 1)
+      (let ((fmt-edited org-columns-current-fmt)
+            (compiled-edited org-columns-current-fmt-compiled)
+            (line-with-overlays
+             (buffer-substring-no-properties
+              (line-beginning-position) (line-end-position))))
+        (org-columns-delete)
+        (org-columns-quit)
+        (list fmt-before
+              compiled-before
+              fmt-edited
+              compiled-edited
+              line-with-overlays
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
