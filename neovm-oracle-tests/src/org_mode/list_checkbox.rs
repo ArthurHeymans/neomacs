@@ -288,6 +288,140 @@ fn org_list_descriptive_generic_roundtrip_combo() {
 }
 
 #[test]
+fn org_list_checkbox_table_fold_element_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-element)
+  (require 'org-fold)
+  (require 'org-list)
+  (require 'org-table)
+  (with-temp-buffer
+    (let ((org-cycle-include-plain-lists 'integrate)
+          (org-checkbox-hierarchical-statistics nil)
+          (org-list-allow-alphabetical t))
+      (org-mode)
+      (insert "* TODO Sprint [0/4] [0%] :work:\n")
+      (insert "- [ ] Implement API\n")
+      (insert "  - [X] schema\n")
+      (insert "  - [ ] endpoint\n")
+      (insert "- [-] Review docs [1/2]\n")
+      (insert "  1. [X] intro\n")
+      (insert "  2. [ ] examples\n")
+      (insert "- [ ] Ship release\n")
+      (insert "\n| Task | Estimate | Done | Weight |\n")
+      (insert "|------+----------+------+--------|\n")
+      (insert "| API  |        3 |    0 |        |\n")
+      (insert "| Docs |        2 |    1 |        |\n")
+      (insert "| Ship |        1 |    0 |        |\n")
+      (insert "| Sum  |          |      |        |\n")
+      (insert "#+TBLFM: @2$4=$2*2+@2$3::@3$4=$2*2+@3$3::@4$4=$2*2+@4$3::@5$4=vsum(@2$4..@4$4)\n")
+      (let ((snapshot
+             (lambda (label)
+               (let* ((struct (save-excursion
+                                (goto-char (point-min))
+                                (search-forward "- [")
+                                (org-list-struct)))
+                      (prevs (org-list-prevs-alist struct))
+                      (parents (org-list-parents-alist struct)))
+                 (list label
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       (mapcar
+                        (lambda (item)
+                          (save-excursion
+                            (goto-char item)
+                            (list (- item (point-min))
+                                  (buffer-substring-no-properties
+                                   (line-beginning-position)
+                                   (line-end-position))
+                                  (org-list-get-parent item struct parents)
+                                  (org-list-get-children item struct parents)
+                                  (org-list-get-item-number
+                                   item struct prevs parents)
+                                  (org-list-get-list-type item struct prevs))))
+                        (org-list-get-all-items (point-min) struct prevs))
+                       (org-element-map (org-element-parse-buffer)
+                           '(headline item table table-row table-cell)
+                         (lambda (el)
+                           (list (org-element-type el)
+                                 (org-element-property :begin el)
+                                 (org-element-property :end el)
+                                 (org-element-property :checkbox el)
+                                 (org-element-property :todo-keyword el)
+                                 (org-element-property :raw-value el))))
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (list needle
+                                  (line-number-at-pos)
+                                  (invisible-p (point))
+                                  (org-element-type
+                                   (org-element-at-point)))))
+                        '("Sprint" "Implement API" "schema" "endpoint"
+                          "Review docs" "intro" "examples" "Ship release"
+                          "Task" "Sum"))
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward "| Task")
+                         (org-table-to-lisp)))))))
+        (let (states)
+          (push (funcall snapshot 'initial) states)
+          (goto-char (point-min))
+          (search-forward "Implement API")
+          (org-toggle-checkbox)
+          (goto-char (point-min))
+          (search-forward "endpoint")
+          (org-toggle-checkbox)
+          (goto-char (point-min))
+          (search-forward "examples")
+          (org-toggle-checkbox)
+          (goto-char (point-min))
+          (org-update-checkbox-count t)
+          (push (funcall snapshot 'after-checkboxes) states)
+          (goto-char (point-min))
+          (search-forward "Review docs")
+          (beginning-of-line)
+          (org-move-item-up)
+          (push (funcall snapshot 'after-move-docs) states)
+          (goto-char (point-min))
+          (search-forward "Ship release")
+          (beginning-of-line)
+          (org-indent-item-tree)
+          (push (funcall snapshot 'after-indent-ship) states)
+          (org-outdent-item-tree)
+          (org-list-repair)
+          (org-update-checkbox-count t)
+          (push (funcall snapshot 'after-repair) states)
+          (goto-char (point-min))
+          (search-forward "| Task")
+          (org-table-recalculate 'all)
+          (push (funcall snapshot 'after-table) states)
+          (goto-char (point-min))
+          (search-forward "Sprint")
+          (beginning-of-line)
+          (dotimes (_ 3)
+            (org-cycle)
+            (push (funcall snapshot 'headline-cycle) states))
+          (goto-char (point-min))
+          (search-forward "examples")
+          (org-fold-show-context 'default)
+          (push (funcall snapshot 'context-examples) states)
+          (org-fold-show-all)
+          (push (funcall snapshot 'final) states)
+          (list (nreverse states)
+                (org-list-to-lisp)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_list_nested_counter_checkbox_repair_cycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
