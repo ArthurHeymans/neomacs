@@ -200,3 +200,86 @@ fn org_inlinetask_fontify_edit_export_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_inlinetask_cycle_hook_odd_levels_error_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-inlinetask)
+  (with-temp-buffer
+    (let ((org-inlinetask-min-level 3)
+          (org-odd-levels-only t)
+          (org-cycle-hook '(org-inlinetask-hide-tasks))
+          (org-adapt-indentation t))
+      (org-mode)
+      (insert "* Parent\n")
+      (insert "Intro\n")
+      (insert "***** TODO Inline odd :tag:\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert "Body one\n")
+      (insert "***** END\n")
+      (insert "** Child\n")
+      (insert "Child body\n")
+      (insert "***** TODO Inline no end\n")
+      (insert "Single line\n")
+      (font-lock-ensure (point-min) (point-max))
+      (cl-labels
+          ((inline-snapshot
+            (label)
+            (save-excursion
+              (goto-char (point-min))
+              (let (rows)
+                (while (re-search-forward "^\\*\\{5,\\} " nil t)
+                  (beginning-of-line)
+                  (push (list label
+                              (buffer-substring-no-properties
+                               (line-beginning-position)
+                               (line-end-position))
+                              (org-inlinetask-at-task-p)
+                              (org-inlinetask-in-task-p)
+                              (org-inlinetask-get-task-level)
+                              (org-fold-folded-p
+                               (line-end-position) 'headline)
+                              (get-text-property (point) 'face))
+                        rows)
+                  (forward-line 1))
+                (nreverse rows)))))
+        (let ((initial (inline-snapshot 'initial))
+              contents children promote-error after-demote after-promote)
+          (goto-char (point-min))
+          (search-forward "Parent")
+          (beginning-of-line)
+          (org-cycle)
+          (setq contents (inline-snapshot 'contents))
+          (org-cycle)
+          (setq children (inline-snapshot 'children))
+          (goto-char (point-min))
+          (search-forward "Inline odd")
+          (beginning-of-line)
+          (setq promote-error
+                (condition-case err
+                    (progn (org-inlinetask-promote) 'no-error)
+                  (error (cons (car err) (cdr err)))))
+          (org-inlinetask-demote)
+          (setq after-demote
+                (list (org-inlinetask-get-task-level)
+                      (buffer-substring-no-properties
+                       (line-beginning-position) (line-end-position))))
+          (org-inlinetask-promote)
+          (setq after-promote
+                (list (org-inlinetask-get-task-level)
+                      (buffer-substring-no-properties
+                       (line-beginning-position) (line-end-position))))
+          (list initial
+                contents
+                children
+                promote-error
+                after-demote
+                after-promote
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
