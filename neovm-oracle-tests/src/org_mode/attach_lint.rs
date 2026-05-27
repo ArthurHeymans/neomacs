@@ -530,3 +530,84 @@ fn org_attach_new_delete_all_id_lifecycle_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_lint_include_macro_planning_percent_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-lint)
+  (let* ((root (make-temp-file "org-lint-combo" t))
+         (inc (expand-file-name "inc.org" root))
+         (setup (expand-file-name "missing-setup.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file inc
+            (insert "* Included\nBody\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+SETUPFILE: \"" setup "\"\n")
+            (insert "#+OPTIONS: toc: bad-option: missing:\n")
+            (insert "#+INCLUDE: \"" inc "::* Missing\" :lines \"bad\"\n")
+            (insert "#+INCLUDE: \"" inc "\" HTML\n")
+            (insert "#+MACRO:\n")
+            (insert "#+MACRO: empty\n")
+            (insert "#+MACRO: pair $1 $3\n")
+            (insert "* TODO Task\n")
+            (insert "SCHEDULED: <2026-05-27 Wed +1w> DEADLINE: <2026-05-28 Thu ++2d>\n")
+            (insert "[[https://example.org/a%2Fb][bad percent]]\n")
+            (insert "  %%(diary-date 5 27 2026)\n")
+            (insert "#+BEGIN_bad\n")
+            (insert "unfinished block\n")
+            (insert "#+END_bad trailing\n")
+            (insert "{{{pair(one,two,three,four)}}} {{{unknown()}}}\n")
+            (let* ((reports
+                    (org-lint
+                     '(non-existent-setupfile-parameter
+                       wrong-include-link-parameter
+                       obsolete-include-markup
+                       unknown-options-item
+                       invalid-macro-argument-and-template
+                       mismatched-planning-repeaters
+                       misplaced-planning-info
+                       indented-diary-sexp
+                       invalid-block
+                       invalid-keyword-syntax
+                       percent-encoding-link-escape)))
+                   (summary
+                    (mapcar
+                     (lambda (entry)
+                       (let* ((row (cadr entry))
+                              (line (substring-no-properties
+                                     (aref row 0)))
+                              (message (aref row 2))
+                              (checker (aref row 3))
+                              (marker (get-text-property
+                                       0 'org-lint-marker
+                                       (aref row 0))))
+                         (list line
+                               (aref row 1)
+                               (replace-regexp-in-string
+                                (regexp-quote root) "<root>" message)
+                               (org-lint-checker-name checker)
+                               (and marker
+                                    (- (marker-position marker)
+                                       (point-min))))))
+                     reports)))
+              (list summary
+                    (length reports)
+                    (mapcar #'org-element-type
+                            (org-element-map
+                                (org-element-parse-buffer)
+                                '(keyword planning link macro src-block)
+                              #'identity))
+                    (replace-regexp-in-string
+                     (regexp-quote root)
+                     "<root>"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))))
+      (delete-directory root t))))"##,
+    );
+}
