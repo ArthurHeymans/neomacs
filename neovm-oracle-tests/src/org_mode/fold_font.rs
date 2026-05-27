@@ -685,6 +685,73 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_cycle_cut_paste_subtree_expand_integrity_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert "Alpha body.\n")
+    (insert "** Beta\n")
+    (insert "Beta body.\n")
+    (insert "*** Gamma\n")
+    (insert "Gamma body.\n")
+    (insert "* Delta\n")
+    (insert "Delta body.\n")
+    (font-lock-ensure (point-min) (point-max))
+    ;; Cycle Beta
+    (goto-char (point-min))
+    (search-forward "Beta")
+    (beginning-of-line)
+    (org-cycle)
+    (org-cycle)
+    ;; Show all
+    (org-fold-show-all)
+    ;; Cut Gamma subtree
+    (goto-char (point-min))
+    (search-forward "Gamma")
+    (beginning-of-line)
+    (org-cut-subtree)
+    ;; Paste under Delta
+    (goto-char (point-min))
+    (search-forward "Delta")
+    (beginning-of-line)
+    (org-paste-subtree 2)
+    ;; Cycle overview
+    (org-cycle-overview)
+    (org-fold-show-all)
+    (font-lock-ensure (point-min) (point-max))
+    ;; Check state
+    (let ((headings nil)
+          (merged nil))
+      (goto-char (point-min))
+      (while (re-search-forward "^\\(\\*+\\) \\(.*\\)$" nil t)
+        (let ((beg (line-beginning-position)))
+          (push (list (match-string 2)
+                      (length (match-string 1))
+                      (org-outline-level)
+                      (invisible-p beg)
+                      (get-text-property beg 'face))
+                headings)))
+      (dolist (line (split-string
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))
+                     "\n" t))
+        (when (string-match-p "^\\*+ .*\\*+ " line)
+          (push line merged)))
+      (list (nreverse headings)
+            (nreverse merged)
+            (buffer-substring-no-properties
+             (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_font_lock_deep_heading_face_after_demote_promote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
