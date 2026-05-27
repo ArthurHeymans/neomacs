@@ -168,3 +168,89 @@ fn org_schedule_deadline_timestamp_range_shift_combo() {
                     (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_todo_auto_repeat_planning_logbook_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO" "NEXT" "|" "DONE")))
+          (org-log-repeat 'time)
+          (org-log-into-drawer t)
+          (org-log-done nil)
+          (org-todo-repeat-hook
+           (list (lambda ()
+                   (push (list (org-get-heading t t t t)
+                               (org-get-todo-state)
+                               (org-entry-get nil "SCHEDULED")
+                               (org-entry-get nil "DEADLINE")
+                               (org-entry-get nil "LAST_REPEAT"))
+                         events))))
+          events)
+      (org-mode)
+      (insert "* TODO Repeating task\n")
+      (insert ":PROPERTIES:\n")
+      (insert ":REPEAT_TO_STATE: NEXT\n")
+      (insert ":END:\n")
+      (insert "SCHEDULED: <2026-05-20 Wed .+2d> ")
+      (insert "DEADLINE: <2026-05-20 Wed +1w -2d>\n")
+      (insert "Body timestamp <2026-05-20 Wed +1m>\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-26 Tue 09:00]--[2026-05-26 Tue 10:15] =>  1:15\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (cl-letf (((symbol-function 'org-current-time)
+                 (lambda (&rest _)
+                   (encode-time 0 0 12 27 5 2026))))
+        (org-todo "DONE"))
+      (let ((after-done
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (state-after (org-get-todo-state))
+            (repeat-after (org-get-repeat))
+            (last-repeat (org-entry-get nil "LAST_REPEAT")))
+        (goto-char (point-min))
+        (search-forward "+1m")
+        (org-cancel-repeater)
+        (list state-after
+              repeat-after
+              last-repeat
+              (nreverse events)
+              after-done
+              (buffer-substring-no-properties
+               (point-min) (point-max))
+              (org-element-map (org-element-parse-buffer)
+                  '(headline planning timestamp node-property)
+                (lambda (el)
+                  (pcase (org-element-type el)
+                    ('headline
+                     (list 'headline
+                           (org-element-property :todo-keyword el)
+                           (org-element-property :raw-value el)))
+                    ('planning
+                     (list 'planning
+                           (and (org-element-property :scheduled el)
+                                (org-element-property
+                                 :raw-value
+                                 (org-element-property :scheduled el)))
+                           (and (org-element-property :deadline el)
+                                (org-element-property
+                                 :raw-value
+                                 (org-element-property :deadline el)))))
+                    ('timestamp
+                     (list 'timestamp
+                           (org-element-property :raw-value el)
+                           (org-element-property :repeater-type el)
+                           (org-element-property :repeater-value el)
+                           (org-element-property :repeater-unit el)
+                           (org-element-property :warning-type el)
+                           (org-element-property :warning-value el)))
+                    ('node-property
+                     (list 'property
+                           (org-element-property :key el)
+                           (org-element-property :value el))))))))))"##,
+    );
+}
