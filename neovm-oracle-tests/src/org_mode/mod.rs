@@ -44,6 +44,7 @@ mod element_upstream_2;
 mod entities_markup;
 mod epsilon2_operations;
 mod epsilon_elements;
+mod eta2_deep;
 mod eta_operations;
 mod exa_strict;
 mod export_backends;
