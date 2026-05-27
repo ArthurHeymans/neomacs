@@ -354,3 +354,93 @@ fn org_id_open_option_and_colon_id_fallback_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_id_get_force_copy_marker_override_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (let* ((root (make-temp-file "org-id-get" t))
+         (file (expand-file-name "ids.org" root))
+         (override (expand-file-name "override.org" root))
+         (org-id-locations-file (expand-file-name "ids.el" root))
+         (org-id-track-globally t)
+         (org-id-method 'org)
+         (org-id-prefix "Org")
+         (org-id-locations (make-hash-table :test 'equal)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n")
+            (insert "** Child\nBody\n")
+            (insert "* Numeric\n:PROPERTIES:\n:ID: 123\n:END:\n"))
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (org-id-update-id-locations (list file) t)
+            (goto-char (point-min))
+            (search-forward "Parent")
+            (beginning-of-line)
+            (let* ((parent-marker (copy-marker (point)))
+                   (parent-element (org-element-at-point))
+                   (parent-by-marker (org-id-get parent-marker))
+                   (parent-by-element (org-id-get parent-element))
+                   child-created forced copied lookup-symbol lookup-number
+                   override-id override-location)
+              (search-forward "Child")
+              (beginning-of-line)
+              (let ((own-before (org-id-get))
+                    (inherit-before (org-id-get nil nil nil t)))
+                (setq child-created (org-id-get nil 'create "child"))
+                (org-id-copy)
+                (setq copied (current-kill 0 t))
+                (setq forced (org-id-get-create 'force))
+                (setq lookup-symbol (org-id-find 'parent-id t))
+                (setq lookup-number (org-id-find 123 t))
+                (with-temp-buffer
+                  (org-mode)
+                  (insert "* Temp\n")
+                  (goto-char (point-min))
+                  (let ((org-id-overriding-file-name override))
+                    (setq override-id (org-id-get nil 'create "tmp")))
+                  (setq override-location
+                        (file-relative-name
+                         (gethash override-id org-id-locations)
+                         root)))
+                (move-marker parent-marker nil)
+                (list parent-by-marker
+                      parent-by-element
+                      own-before
+                      inherit-before
+                      (string-prefix-p "child:" child-created)
+                      (equal copied child-created)
+                      (not (equal forced child-created))
+                      (string-match-p "\\`Org:" forced)
+                      (and lookup-symbol
+                           (with-current-buffer (marker-buffer lookup-symbol)
+                             (org-get-heading t t t t)))
+                      (and lookup-number
+                           (with-current-buffer (marker-buffer lookup-number)
+                             (org-get-heading t t t t)))
+                      (string-prefix-p "tmp:" override-id)
+                      override-location
+                      (sort (mapcar
+                             (lambda (path)
+                               (file-relative-name path root))
+                             (mapcar #'car
+                                     (org-id-hash-to-alist org-id-locations)))
+                            #'string<)
+                      (replace-regexp-in-string
+                       (regexp-quote forced)
+                       "<forced-id>"
+                       (replace-regexp-in-string
+                        (regexp-quote child-created)
+                        "<child-id>"
+                        (buffer-substring-no-properties
+                         (point-min) (point-max)))))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
