@@ -489,3 +489,125 @@ fn org_feed_atom_formatter_filter_status_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_feed_rss_incremental_status_element_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (require 'org-element)
+  (require 'org-fold)
+  (let* ((root (make-temp-file "org-feed-incremental" t))
+         (file (expand-file-name "feeds.org" root))
+         (phase 0)
+         (events nil)
+         (org-feed-save-after-adding nil)
+         (org-feed-before-adding-hook
+          (list (lambda ()
+                  (push (list 'before
+                              (line-number-at-pos)
+                              (buffer-substring-no-properties
+                               (line-beginning-position)
+                               (line-end-position)))
+                        events))))
+         (org-feed-after-adding-hook
+          (list (lambda ()
+                  (push (list 'after
+                              (line-number-at-pos)
+                              (count-matches "^\\*+ "
+                                             (point-min) (point-max)))
+                        events))))
+         (feed-xml
+          (lambda ()
+            (concat "<?xml version=\"1.0\"?><rss><channel>"
+                    "<item><guid>stable</guid><title>Stable Keep</title>"
+                    "<link>https://example.org/stable</link>"
+                    "<description>"
+                    (if (= phase 0) "stable old" "stable changed")
+                    "</description><pubDate>2026-05-27</pubDate></item>"
+                    "<item><guid>drop</guid><title>Drop Me</title>"
+                    "<link>https://example.org/drop</link>"
+                    "<description>drop body</description></item>"
+                    (if (= phase 0)
+                        ""
+                      "<item><guid>fresh</guid><title>Fresh Keep</title><link>https://example.org/fresh</link><description>fresh body</description><pubDate>2026-05-28</pubDate></item>")
+                    "</channel></rss>")))
+         (retriever
+          (lambda (_url)
+            (let ((buf (get-buffer-create " *incremental-feed*")))
+              (with-current-buffer buf
+                (erase-buffer)
+                (insert (funcall feed-xml)))
+              buf)))
+         (feed (list "Incremental" "mock://incremental" file "Inbox"
+                     :drawer "RSSSTATUS"
+                     :filter (lambda (entry)
+                               (and (string-match-p
+                                     "Keep"
+                                     (plist-get entry :title))
+                                    entry))
+                     :template
+                     "\n** TODO %h\n:PROPERTIES:\n:GUID: %guid\n:END:\n%u\n%description\n%a\n")))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: Feeds\n")
+            (insert "* Inbox\n")
+            (insert "Intro line\n")
+            (insert ":RSSSTATUS:\n")
+            (insert "nil\n")
+            (insert ":END:\n")
+            (insert "* Archive\nold\n"))
+          (let ((org-feed-retrieve-method retriever))
+            (let ((first (org-feed-update feed)))
+              (setq phase 1)
+              (let ((second (org-feed-update feed)))
+                (with-current-buffer (find-file-noselect file)
+                  (org-mode)
+                  (goto-char (point-min))
+                  (org-fold-hide-drawer-all)
+                  (let ((hidden
+                         (mapcar
+                          (lambda (needle)
+                            (save-excursion
+                              (goto-char (point-min))
+                              (search-forward needle)
+                              (list needle
+                                    (line-number-at-pos)
+                                    (invisible-p (point)))))
+                          '("RSSSTATUS" "stable changed" "Fresh Keep"
+                            "Archive")))
+                        (ast
+                         (org-element-map
+                             (org-element-parse-buffer)
+                             '(headline drawer property-drawer node-property link)
+                           (lambda (el)
+                             (list (org-element-type el)
+                                   (org-element-property :raw-value el)
+                                   (org-element-property :key el)
+                                   (org-element-property :value el)
+                                   (org-element-property :begin el)
+                                   (org-element-property :end el)))))
+                        (status
+                         (org-feed-read-previous-status
+                          (point-min) "RSSSTATUS")))
+                    (org-fold-show-all)
+                    (list first
+                          second
+                          (nreverse events)
+                          status
+                          hidden
+                          ast
+                          (count-matches "^\\*+ "
+                                         (point-min) (point-max))
+                          (buffer-substring-no-properties
+                           (point-min) (point-max)))))))))
+      (when (get-buffer " *incremental-feed*")
+        (kill-buffer " *incremental-feed*"))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
