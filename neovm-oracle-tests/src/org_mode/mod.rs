@@ -54,6 +54,7 @@ mod macro_include;
 mod misc_upstream;
 mod misc_upstream_2;
 mod mobile_workflow;
+mod mouse_workflow;
 mod navigation_edit;
 mod num_workflow;
 mod ox_org_native;
