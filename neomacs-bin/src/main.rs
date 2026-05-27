@@ -61,7 +61,7 @@ use neovm_core::emacs_core::terminal::pure::{
 use neovm_core::emacs_core::{
     Context, CursorEffectArg, DisplayHost, GuiFrameHostRequest, PopupMenuRequest,
 };
-use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth};
+use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth, LFaceAttr};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameId, Window};
 
@@ -2781,12 +2781,12 @@ fn bootstrap_buffers(
     } else {
         eval.set_face_attribute(
             "default",
-            ":foreground",
+            LFaceAttr::Foreground,
             neovm_core::face::FaceAttrValue::Unspecified,
         );
         eval.set_face_attribute(
             "default",
-            ":background",
+            LFaceAttr::Background,
             neovm_core::face::FaceAttrValue::Unspecified,
         );
     }

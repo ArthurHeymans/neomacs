@@ -8607,6 +8607,11 @@ Switch to *doctor* buffer and start giving psychotherapy." t)
 (register-definition-prefixes "dom" '("dom-"))
 
 
+;;; Generated autoloads from dos-w32.el
+
+(register-definition-prefixes "dos-w32" '("file-name-buffer-file-type-alist" "find-" "w32-"))
+
+
 ;;; Generated autoloads from double.el
 
 (autoload 'double-mode "double" "\
@@ -38530,6 +38535,16 @@ Visual-Wrap-Prefix mode.
 ;;; Generated autoloads from emacs-lisp/vtable.el
 
 (register-definition-prefixes "vtable" '("vtable"))
+
+
+;;; Generated autoloads from w32-fns.el
+
+(register-definition-prefixes "w32-fns" '("w32-"))
+
+
+;;; Generated autoloads from w32-vars.el
+
+(register-definition-prefixes "w32-vars" '("w32-"))
 
 
 ;;; Generated autoloads from image/wallpaper.el
