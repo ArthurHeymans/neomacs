@@ -34,6 +34,109 @@ fn org_insert_structure_template_region_src_export_combo() {
 }
 
 #[test]
+fn org_structure_template_menu_error_escape_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((transient-mark-mode t)
+          (warnings nil)
+          (org-structure-template-alist
+           '(("a" . "src emacs-lisp")
+             ("aa" . "example")
+             ("ab" . "comment")
+             ("Q" . "QUOTE")
+             ("old" "#+BEGIN_SRC ?\n#+END_SRC"))))
+      (org-mode)
+      (insert "* Templates\n")
+      (insert "#+begin_src shell\n")
+      (insert "echo already block\n")
+      (insert "#+end_src\n")
+      (insert "(message \"needs escaping\")\n")
+      (insert "*not a headline inside code*\n")
+      (insert "#+begin_example\n")
+      (insert "example marker inside code\n")
+      (insert "#+end_example\n")
+      (let ((keys-ok (org--insert-structure-template-unique-keys
+                      '("a" "aa" "ab" "abc" "b" "ba")))
+            (keys-error
+             (condition-case err
+                 (org--insert-structure-template-unique-keys
+                  '("aa" "aa"))
+               (error (cons (car err) (cdr err)))))
+            (invalid-error
+             (condition-case err
+                 (org-insert-structure-template nil)
+               (error (cons (car err) (cdr err))))))
+        (cl-letf (((symbol-function 'org-display-warning)
+                   (lambda (message &rest args)
+                     (push (list message args) warnings))))
+          (org--check-org-structure-template-alist))
+        (goto-char (point-min))
+        (search-forward "(message")
+        (push-mark (match-beginning 0) nil t)
+        (goto-char (point-max))
+        (cl-letf (((symbol-function 'org--insert-structure-template-mks)
+                   (lambda () (cons "a" "src emacs-lisp :results output"))))
+          (call-interactively 'org-insert-structure-template))
+        (let ((after-src
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-max))
+          (insert "\nComment <inside> region\n#+not keyword\n")
+          (push-mark (save-excursion
+                       (search-backward "Comment <inside>")
+                       (point))
+                     nil t)
+          (goto-char (point-max))
+          (cl-letf (((symbol-function 'org--insert-structure-template-mks)
+                     (lambda () (cons "ab" "comment"))))
+            (call-interactively 'org-insert-structure-template))
+          (let ((after-comment
+                 (buffer-substring-no-properties (point-min) (point-max))))
+            (goto-char (point-max))
+            (insert "\nRaw export body\n")
+            (push-mark (line-beginning-position) nil t)
+            (goto-char (point-max))
+            (cl-letf (((symbol-function 'org--insert-structure-template-mks)
+                       (lambda () (cons "Q" "EXPORT html"))))
+              (call-interactively 'org-insert-structure-template))
+            (let ((empty-error
+                   (cl-letf (((symbol-function
+                               'org--insert-structure-template-mks)
+                              (lambda ()
+                                (cons "\t"
+                                      "Press TAB, RET or SPC to write block name")))
+                             ((symbol-function 'read-string)
+                              (lambda (&rest _) "")))
+                     (condition-case err
+                         (call-interactively 'org-insert-structure-template)
+                       (error (cons (car err) (cdr err)))))))
+              (list keys-ok
+                    keys-error
+                    invalid-error
+                    (nreverse warnings)
+                    after-src
+                    after-comment
+                    empty-error
+                    (org-element-map
+                        (org-element-parse-buffer)
+                        '(headline src-block example-block comment-block
+                          export-block)
+                      (lambda (el)
+                        (list (org-element-type el)
+                              (org-element-property :language el)
+                              (org-element-property :type el)
+                              (org-element-property :value el)
+                              (org-element-property :begin el)
+                              (org-element-property :end el))))
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
 fn org_tempo_custom_blocks_keywords_include_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
