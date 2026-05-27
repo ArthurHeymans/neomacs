@@ -685,6 +685,62 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_indirect_buffer_decouple_font_level_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'org-fold-core)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "** DONE Alpha\n")
+      (insert "*** TODO Beta\n")
+      (insert "**** WAIT Gamma\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide to level 1
+      (org-fold-hide-sublevels 1)
+      ;; Create indirect buffer
+      (let ((clone (condition-case nil
+                       (clone-indirect-buffer nil nil)
+                     (error nil))))
+        (if (not clone)
+            (list 'clone-failed
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))
+            (condition-case err
+                (with-current-buffer clone
+                  (org-fold-core-decouple-indirect-buffer-folds)
+                  (goto-char (point-min))
+                  (search-forward "Alpha")
+                  (beginning-of-line)
+                  (org-fold-show-subtree)
+                  (let ((clone-state
+                         (mapcar
+                          (lambda (needle)
+                            (save-excursion
+                              (goto-char (point-min))
+                              (if (search-forward needle nil t)
+                                  (list needle
+                                        (invisible-p (point))
+                                        (org-outline-level))
+                                  (list needle 'not-found nil nil))))
+                          '("Root" "Alpha" "Beta" "Gamma" "Sibling"))))
+                    (kill-buffer clone)
+                    (list 'ok clone-state)))
+              (error (list 'divergence (car err) (cdr err))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_deep_level_cycle_hidden_edit_show_all_font_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
