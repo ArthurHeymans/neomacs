@@ -16,6 +16,7 @@ mod attach_git;
 mod attach_lint;
 mod babel_export;
 mod babel_library;
+mod beta2_operations;
 mod beta_interpreter;
 mod capture_workflow;
 mod chi_deep;
