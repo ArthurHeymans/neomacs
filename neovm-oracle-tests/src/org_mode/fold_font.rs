@@ -679,8 +679,108 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
                     active-after-local
                     after-global
                     (funcall snapshot)
-                    (buffer-substring-no-properties
-                     (point-min) (point-max)))))))))"##,
+                   (buffer-substring-no-properties
+                    (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_fold_font_face_level_visibility_deep_state_capture_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-hide-leading-stars nil))
+      (org-mode)
+      (insert "* TODO Root :root:\n")
+      (insert "Root body.\n")
+      (insert "** DONE Child :work:\n")
+      (insert "Child body.\n")
+      (insert "*** TODO Grand\n")
+      (insert "Grand body.\n")
+      (insert "**** WAIT Fourth\n")
+      (insert "Fourth body.\n")
+      (insert "***** DONE Fifth\n")
+      (insert "Fifth body.\n")
+      (insert "** NEXT Sibling\n")
+      (insert "Sibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((deep-state
+             (lambda ()
+               (font-lock-ensure (point-min) (point-max))
+               (let (out)
+                 (goto-char (point-min))
+                 (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                   (let ((beg (line-beginning-position))
+                         (stars (length (match-string 1)))
+                         (heading (substring-no-properties (match-string 2))))
+                     (push (list heading
+                                 stars
+                                 (org-outline-level)
+                                 (invisible-p beg)
+                                 (get-text-property beg 'face)
+                                 (get-text-property (match-beginning 2) 'face)
+                                 (get-text-property beg 'invisible)
+                                 (org-fold-folded-p beg 'headline))
+                           out)))
+                 (nreverse out)))))
+        ;; Initial state
+        (let ((initial (funcall deep-state)))
+          ;; Hide all to level 1
+          (org-fold-hide-sublevels 1)
+          (let ((after-hide-1 (funcall deep-state)))
+            ;; Show children of Root
+            (goto-char (point-min))
+            (search-forward "Root")
+            (beginning-of-line)
+            (org-cycle)
+            (let ((after-root-cycle (funcall deep-state)))
+              ;; Show subtree of Child
+              (goto-char (point-min))
+              (search-forward "Child")
+              (beginning-of-line)
+              (org-fold-show-subtree)
+              (let ((after-child-show (funcall deep-state)))
+                ;; Hide subtree of Fourth
+                (goto-char (point-min))
+                (search-forward "Fourth")
+                (beginning-of-line)
+                (org-fold-hide-subtree)
+                (let ((after-fourth-hide (funcall deep-state)))
+                  ;; Global cycle
+                  (goto-char (point-min))
+                  (dotimes (_ 3) (org-cycle-global))
+                  (let ((after-global (funcall deep-state)))
+                    ;; Show all
+                    (org-fold-show-all)
+                    (let ((after-show-all (funcall deep-state)))
+                      ;; Check for merged headings
+                      (let ((merged nil))
+                        (dolist (line (split-string
+                                       (buffer-substring-no-properties
+                                        (point-min) (point-max))
+                                       "\n" t))
+                          (when (string-match-p "^\\*+ .*\\*+ " line)
+                            (push line merged)))
+                        (list initial
+                              after-hide-1
+                              after-root-cycle
+                              after-child-show
+                              after-fourth-hide
+                              after-global
+                              after-show-all
+                              (nreverse merged)
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))))))))))))"##,
     );
 }
 
