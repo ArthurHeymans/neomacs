@@ -1488,7 +1488,7 @@ fn strong_colview_format_roundtrip() {
 // ═══════════════════════════════════════════════════════════════════════
 
 #[test]
-fn strong_protocol_parse_roundtrip() {
+fn strong_protocol_parse_roundtrip_comprehensive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     assert_oracle_parity(
         r##"(progn

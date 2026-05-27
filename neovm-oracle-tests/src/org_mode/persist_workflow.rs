@@ -262,10 +262,59 @@ fn org_persist_shared_hooks_loadall_gc_combo() {
                       (org-persist-read
                        '(version "shared-v1") '(:key "shared")
                        nil nil :read-related t)
-                      (mapcar
-                       (lambda (event)
-                         (list (car event) (cadr event)))
-                       (reverse events)))))))
+                       (mapcar
+                        (lambda (event)
+                          (list (car event) (cadr event)))
+                        (reverse events)))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_persist_write_read_gc_unregister_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-persist)
+  (let* ((root (make-temp-file "org-persist-lc" t))
+         (org-persist-directory (expand-file-name "persist-data" root))
+         (org-persist--index nil)
+         (events nil))
+    (unwind-protect
+        (progn
+          ;; Write entries
+          (org-persist-write :version '(version "lc-v1")
+                             :value '(:data "hello" :num 42)
+                             :key "lc-key")
+          (org-persist-write :version '(version "lc-v2")
+                             :value '(:data "world" :num 99)
+                             :key "lc-key-2")
+          (let ((index-after-write (length org-persist--index)))
+            ;; Read back
+            (let ((read-v1 (org-persist-read '(version "lc-v1")
+                                             '(:key "lc-key")))
+                  (read-v2 (org-persist-read '(version "lc-v2")
+                                             '(:key "lc-key-2")))
+                  (read-missing (org-persist-read '(version "no-such")
+                                                  '(:key "missing"))))
+              ;; GC
+              (org-persist-gc)
+              (let ((index-after-gc (length org-persist--index)))
+                ;; Unregister
+                (org-persist-unregister '(version "lc-v1") 'all)
+                (let ((index-after-unreg (length org-persist--index))
+                      (read-after-unreg (org-persist-read
+                                         '(version "lc-v1")
+                                         '(:key "lc-key"))))
+                  (list index-after-write
+                        read-v1
+                        read-v2
+                        read-missing
+                        index-after-gc
+                        index-after-unreg
+                        read-after-unreg
+                        (file-exists-p org-persist-directory)))))))
       (delete-directory root t))))"##,
     );
 }
