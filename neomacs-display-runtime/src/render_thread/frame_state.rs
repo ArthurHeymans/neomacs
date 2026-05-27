@@ -67,12 +67,19 @@ impl RenderApp {
     }
 
     fn apply_visual_cursor_animations(&mut self) {
-        if self.visual_cursors.is_empty() {
+        if self
+            .primary_frame
+            .as_ref()
+            .is_none_or(|frame| frame.visual_cursors.is_empty())
+        {
             return;
         }
         let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
-            .visual_cursors
-            .iter()
+            .primary_frame
+            .as_ref()
+            .map(|frame| frame.visual_cursors.iter())
+            .into_iter()
+            .flatten()
             .map(|(id, state)| {
                 (
                     *id,

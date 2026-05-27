@@ -148,6 +148,7 @@ impl RenderApp {
         {
             primary_frame.frame_dirty = true;
         }
+        primary_frame.cursor.copy_config_from(&self.cursor_defaults);
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",

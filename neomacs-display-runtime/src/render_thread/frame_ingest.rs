@@ -252,7 +252,7 @@ impl RenderApp {
                         gui_menu_bar,
                         gui_tool_bar,
                         gui_compact_bar,
-                        &self.cursor,
+                        &self.cursor_defaults,
                     );
                     if let Some(target) = window_state.render.cursor.target_cloned() {
                         Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
@@ -263,7 +263,7 @@ impl RenderApp {
             if parent_id != 0 {
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
                     window_state.render.child_frames.update_frame(frame);
-                    Self::sync_frame_window_cursor(window_state, &self.cursor);
+                    Self::sync_frame_window_cursor(window_state, &self.cursor_defaults);
                     window_state.render.frame_dirty = true;
                     if let Some(target) = window_state.render.cursor.target_cloned() {
                         Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
@@ -315,7 +315,9 @@ impl RenderApp {
                 if self.tab_bar.is_none() {
                     self.chrome_interaction.clear_tab_bar();
                 }
-                self.cursor.reset_blink();
+                if let Some(cursor) = self.primary_cursor_mut() {
+                    cursor.reset_blink();
+                }
             }
             self.mark_primary_dirty();
         }
@@ -353,7 +355,19 @@ impl RenderApp {
         }
 
         if let Some(new_target) = active_cursor {
-            let (had_target, target_moved) = self.cursor.set_target(new_target.clone());
+            let (had_target, target_moved, old_cursor_rect) =
+                if let Some(cursor) = self.primary_cursor_mut() {
+                    let old_cursor_rect = (
+                        cursor.current_x,
+                        cursor.current_y,
+                        cursor.current_w,
+                        cursor.current_h,
+                    );
+                    let (had_target, target_moved) = cursor.set_target(new_target.clone());
+                    (had_target, target_moved, old_cursor_rect)
+                } else {
+                    (false, false, (0.0, 0.0, 0.0, 0.0))
+                };
 
             if target_moved && had_target && self.effects.typing_ripple.enabled {
                 if let Some(renderer) = self.renderer.as_ref() {
@@ -367,17 +381,19 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_ref() {
                     renderer.record_transient_cursor_trail(
                         &mut self.renderer_effects,
-                        self.cursor.current_x,
-                        self.cursor.current_y,
-                        self.cursor.current_w,
-                        self.cursor.current_h,
+                        old_cursor_rect.0,
+                        old_cursor_rect.1,
+                        old_cursor_rect.2,
+                        old_cursor_rect.3,
                     );
                 }
             }
 
             self.update_ime_cursor_area_if_needed(&new_target);
         } else {
-            self.cursor.clear_target();
+            if let Some(cursor) = self.primary_cursor_mut() {
+                cursor.clear_target();
+            }
             self.last_ime_cursor_area = None;
             self.ime_preedit_active = false;
             self.ime_preedit_text.clear();
@@ -409,20 +425,29 @@ impl RenderApp {
                 color: cursor.color,
                 frame_id: 0,
             };
-            let state = self.visual_cursors.entry(cursor.window_id).or_default();
-            state.anim_enabled = self.cursor.anim_enabled;
-            state.anim_speed = self.cursor.anim_speed;
-            state.anim_style = self.cursor.anim_style;
-            state.anim_duration = self.cursor.anim_duration;
-            state.trail_size = self.cursor.trail_size;
-            state.size_transition_enabled = self.cursor.size_transition_enabled;
-            state.size_transition_duration = self.cursor.size_transition_duration;
+            let Some(primary_frame) = self.primary_frame.as_mut() else {
+                continue;
+            };
+            let state = primary_frame
+                .visual_cursors
+                .entry(cursor.window_id)
+                .or_default();
+            state.anim_enabled = self.cursor_defaults.anim_enabled;
+            state.anim_speed = self.cursor_defaults.anim_speed;
+            state.anim_style = self.cursor_defaults.anim_style;
+            state.anim_duration = self.cursor_defaults.anim_duration;
+            state.trail_size = self.cursor_defaults.trail_size;
+            state.size_transition_enabled = self.cursor_defaults.size_transition_enabled;
+            state.size_transition_duration = self.cursor_defaults.size_transition_duration;
             let (_had_target, target_moved) = state.set_target(target);
             if target_moved {
                 self.mark_primary_dirty();
             }
         }
-        self.visual_cursors
-            .retain(|id, _| live_visual_cursor_ids.contains(id));
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame
+                .visual_cursors
+                .retain(|id, _| live_visual_cursor_ids.contains(id));
+        }
     }
 }

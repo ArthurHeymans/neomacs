@@ -408,7 +408,7 @@ impl RenderApp {
                     if self.frame_windows.is_primary_winit(window_id) {
                         self.ime_enabled = true;
                         self.last_ime_cursor_area = None;
-                        if let Some(target) = self.cursor.target_cloned() {
+                        if let Some(target) = self.primary_cursor().target_cloned() {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
                     } else if let Some(window_state) =
@@ -475,7 +475,7 @@ impl RenderApp {
                     if self.frame_windows.is_primary_winit(window_id) {
                         self.ime_preedit_active = !text.is_empty();
                         self.ime_preedit_text = text.clone();
-                        if let Some(target) = self.cursor.target_cloned() {
+                        if let Some(target) = self.primary_cursor().target_cloned() {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
                         self.mark_primary_dirty();

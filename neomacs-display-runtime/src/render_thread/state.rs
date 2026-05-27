@@ -295,10 +295,8 @@ pub(super) struct RenderApp {
     // Shared image dimensions (written here, read from main thread)
     pub(super) image_dimensions: SharedImageDimensions,
 
-    // Cursor state (blink, animation, size transition)
-    pub(super) cursor: CursorState,
-    // Render-only visual cursors keyed by their stable visual cursor id.
-    pub(super) visual_cursors: HashMap<i64, CursorState>,
+    // Cursor defaults applied to primary and secondary frame runtime cursors.
+    pub(super) cursor_defaults: CursorState,
 
     // All visual effect configurations
     pub(super) effects: EffectsConfig,
@@ -418,8 +416,7 @@ impl RenderApp {
             modifiers: 0,
             mouse_hidden_for_typing: false,
             image_dimensions,
-            cursor: CursorState::default(),
-            visual_cursors: HashMap::new(),
+            cursor_defaults: CursorState::default(),
             effects: EffectsConfig::default(),
             transitions: TransitionState::default(),
             renderer_effects: RendererFrameEffects::default(),
@@ -574,6 +571,37 @@ impl RenderApp {
     pub(super) fn set_primary_mouse_pos(&mut self, mouse_pos: (f32, f32)) {
         if let Some(primary_frame) = self.primary_frame.as_mut() {
             primary_frame.mouse_pos = mouse_pos;
+        }
+    }
+
+    pub(super) fn primary_cursor(&self) -> &CursorState {
+        self.primary_frame
+            .as_ref()
+            .map_or(&self.cursor_defaults, |frame| &frame.cursor)
+    }
+
+    pub(super) fn primary_cursor_mut(&mut self) -> Option<&mut CursorState> {
+        self.primary_frame.as_mut().map(|frame| &mut frame.cursor)
+    }
+
+    pub(super) fn sync_primary_cursor_config_from_defaults(&mut self) {
+        let defaults = &self.cursor_defaults;
+        let values = (
+            defaults.blink_enabled,
+            defaults.blink_interval,
+            defaults.anim_enabled,
+            defaults.anim_speed,
+            defaults.anim_style,
+            defaults.anim_duration,
+            defaults.trail_size,
+            defaults.size_transition_enabled,
+            defaults.size_transition_duration,
+        );
+        if let Some(cursor) = self.primary_cursor_mut() {
+            cursor.copy_config_from_values(
+                values.0, values.1, values.2, values.3, values.4, values.5, values.6, values.7,
+                values.8,
+            );
         }
     }
 }

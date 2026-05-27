@@ -195,8 +195,10 @@ impl RenderApp {
         }
 
         // Tick cursor animation
-        if self.cursor.tick_animation() {
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if primary_frame.cursor.tick_animation() {
+                primary_frame.frame_dirty = true;
+            }
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if window_state.render.cursor.tick_animation() {
@@ -204,16 +206,20 @@ impl RenderApp {
             }
         }
         let mut visual_cursor_dirty = false;
-        for cursor in self.visual_cursors.values_mut() {
-            visual_cursor_dirty |= cursor.tick_animation();
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            for cursor in primary_frame.visual_cursors.values_mut() {
+                visual_cursor_dirty |= cursor.tick_animation();
+            }
         }
         if visual_cursor_dirty {
             self.mark_primary_dirty();
         }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
-        if self.cursor.tick_size_animation() {
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            if primary_frame.cursor.tick_size_animation() {
+                primary_frame.frame_dirty = true;
+            }
         }
         for window_state in self.frame_windows.windows.values_mut() {
             if window_state.render.cursor.tick_size_animation() {
@@ -221,8 +227,10 @@ impl RenderApp {
             }
         }
         let mut visual_cursor_size_dirty = false;
-        for cursor in self.visual_cursors.values_mut() {
-            visual_cursor_size_dirty |= cursor.tick_size_animation();
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            for cursor in primary_frame.visual_cursors.values_mut() {
+                visual_cursor_size_dirty |= cursor.tick_size_animation();
+            }
         }
         if visual_cursor_size_dirty {
             self.mark_primary_dirty();
@@ -298,8 +306,8 @@ impl RenderApp {
                 frame_dirty = self.primary_dirty(),
                 has_active_content,
                 renderer_effects_need_redraw = self.renderer_effects.needs_redraw(),
-                cursor_animating = self.cursor.animating,
-                cursor_size_animating = self.cursor.size_animating,
+                cursor_animating = self.primary_cursor().animating,
+                cursor_size_animating = self.primary_cursor().size_animating,
                 idle_dim_active = self
                     .primary_frame
                     .as_ref()
@@ -318,8 +326,8 @@ impl RenderApp {
         let next_wake = if self.primary_dirty()
             || has_active_content
             || self.frame_windows.any_dirty()
-            || self.cursor.animating
-            || self.cursor.size_animating
+            || self.primary_cursor().animating
+            || self.primary_cursor().size_animating
             || self.renderer_effects.needs_redraw()
             || self
                 .frame_windows

@@ -117,15 +117,19 @@ impl RenderApp {
 
     /// Update cursor blink state, returns true if blink toggled.
     pub(super) fn tick_cursor_blink(&mut self) -> bool {
-        if !self.cursor.blink_enabled || self.cursor.target_cloned().is_none() {
+        let Some(primary_frame) = self.primary_frame.as_mut() else {
+            return false;
+        };
+        let cursor = &mut primary_frame.cursor;
+        if !cursor.blink_enabled || cursor.target_cloned().is_none() {
             return false;
         }
         let now = std::time::Instant::now();
-        if now.duration_since(self.cursor.last_blink_toggle) >= self.cursor.blink_interval {
-            let was_off = !self.cursor.blink_on;
-            self.cursor.blink_on = !self.cursor.blink_on;
-            self.cursor.last_blink_toggle = now;
-            if was_off && self.cursor.blink_on && self.effects.cursor_wake.enabled {
+        if now.duration_since(cursor.last_blink_toggle) >= cursor.blink_interval {
+            let was_off = !cursor.blink_on;
+            cursor.blink_on = !cursor.blink_on;
+            cursor.last_blink_toggle = now;
+            if was_off && cursor.blink_on && self.effects.cursor_wake.enabled {
                 if let Some(renderer) = self.renderer.as_ref() {
                     renderer.trigger_transient_cursor_wake(&mut self.renderer_effects, now);
                 }
@@ -137,7 +141,7 @@ impl RenderApp {
     }
 
     pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
-        let mut next = self.cursor.next_blink_deadline();
+        let mut next = self.primary_cursor().next_blink_deadline();
         for window_state in self.frame_windows.windows.values() {
             if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {
                 next = Some(next.map_or(deadline, |current| current.min(deadline)));

@@ -80,14 +80,22 @@ impl RenderApp {
                     enabled,
                     interval_ms
                 );
-                self.cursor.blink_enabled = enabled;
-                self.cursor.blink_interval = std::time::Duration::from_millis(interval_ms as u64);
+                self.cursor_defaults.blink_enabled = enabled;
+                self.cursor_defaults.blink_interval =
+                    std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
-                    self.cursor.blink_on = true;
+                    self.cursor_defaults.blink_on = true;
+                    if let Some(cursor) = self.primary_cursor_mut() {
+                        cursor.blink_on = true;
+                    }
                     self.mark_primary_dirty();
                 }
+                self.sync_primary_cursor_config_from_defaults();
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state
+                        .render
+                        .cursor
+                        .copy_config_from(&self.cursor_defaults);
                     if !enabled {
                         window_state.render.cursor.blink_on = true;
                         window_state.render.frame_dirty = true;
@@ -97,13 +105,20 @@ impl RenderApp {
             }
             RenderCommand::SetCursorAnimation { enabled, speed } => {
                 tracing::debug!("Cursor animation: enabled={}, speed={}", enabled, speed);
-                self.cursor.anim_enabled = enabled;
-                self.cursor.anim_speed = speed;
+                self.cursor_defaults.anim_enabled = enabled;
+                self.cursor_defaults.anim_speed = speed;
                 if !enabled {
-                    self.cursor.animating = false;
+                    self.cursor_defaults.animating = false;
+                    if let Some(cursor) = self.primary_cursor_mut() {
+                        cursor.animating = false;
+                    }
                 }
+                self.sync_primary_cursor_config_from_defaults();
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state
+                        .render
+                        .cursor
+                        .copy_config_from(&self.cursor_defaults);
                     window_state.render.frame_dirty = true;
                 }
                 Ok(())
@@ -132,17 +147,24 @@ impl RenderApp {
                     transition_policy.scroll_effect,
                     transition_policy.scroll_easing
                 );
-                self.cursor.anim_enabled = cursor_enabled;
-                self.cursor.anim_speed = cursor_speed;
-                self.cursor.anim_style = cursor_style;
-                self.cursor.anim_duration = cursor_duration_ms as f32 / 1000.0;
-                self.cursor.trail_size = trail_size.clamp(0.0, 1.0);
+                self.cursor_defaults.anim_enabled = cursor_enabled;
+                self.cursor_defaults.anim_speed = cursor_speed;
+                self.cursor_defaults.anim_style = cursor_style;
+                self.cursor_defaults.anim_duration = cursor_duration_ms as f32 / 1000.0;
+                self.cursor_defaults.trail_size = trail_size.clamp(0.0, 1.0);
                 self.transitions.policy = transition_policy;
                 if !cursor_enabled {
-                    self.cursor.animating = false;
+                    self.cursor_defaults.animating = false;
+                    if let Some(cursor) = self.primary_cursor_mut() {
+                        cursor.animating = false;
+                    }
                 }
+                self.sync_primary_cursor_config_from_defaults();
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state
+                        .render
+                        .cursor
+                        .copy_config_from(&self.cursor_defaults);
                     window_state.render.transitions.policy = transition_policy;
                     window_state.render.frame_dirty = true;
                 }
@@ -497,13 +519,20 @@ impl RenderApp {
                 enabled,
                 duration_ms,
             } => {
-                self.cursor.size_transition_enabled = enabled;
-                self.cursor.size_transition_duration = duration_ms as f32 / 1000.0;
+                self.cursor_defaults.size_transition_enabled = enabled;
+                self.cursor_defaults.size_transition_duration = duration_ms as f32 / 1000.0;
                 if !enabled {
-                    self.cursor.size_animating = false;
+                    self.cursor_defaults.size_animating = false;
+                    if let Some(cursor) = self.primary_cursor_mut() {
+                        cursor.size_animating = false;
+                    }
                 }
+                self.sync_primary_cursor_config_from_defaults();
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state
+                        .render
+                        .cursor
+                        .copy_config_from(&self.cursor_defaults);
                     window_state.render.frame_dirty = true;
                 }
                 self.mark_primary_dirty();
@@ -517,11 +546,13 @@ impl RenderApp {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
                 self.child_frames.remove_frame(frame_id);
                 if self
-                    .cursor
+                    .primary_cursor()
                     .target_cloned()
                     .is_some_and(|target| target.frame_id == frame_id)
                 {
-                    self.cursor.clear_target();
+                    if let Some(cursor) = self.primary_cursor_mut() {
+                        cursor.clear_target();
+                    }
                     self.last_ime_cursor_area = None;
                     self.ime_preedit_active = false;
                     self.ime_preedit_text.clear();

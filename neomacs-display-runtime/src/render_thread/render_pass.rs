@@ -886,7 +886,7 @@ impl RenderApp {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // Build animated cursor override if applicable
-        let animated_cursor = self.cursor.animated_cursor();
+        let animated_cursor = self.primary_cursor().animated_cursor();
         let root_animated_cursor = animated_cursor.filter(|cursor| cursor.frame_id == 0);
 
         // Build background gradient option
@@ -932,7 +932,7 @@ impl RenderApp {
                         &self.faces,
                         self.width,
                         self.height,
-                        self.cursor.blink_on,
+                        primary_frame.cursor.blink_on,
                         root_animated_cursor,
                         mouse_pos,
                         bg_gradient,
@@ -999,7 +999,7 @@ impl RenderApp {
                     &self.faces,
                     self.width,
                     self.height,
-                    self.cursor.blink_on,
+                    primary_frame.cursor.blink_on,
                     root_animated_cursor,
                     mouse_pos,
                     bg_gradient,
@@ -1029,7 +1029,7 @@ impl RenderApp {
                                 &self.faces,
                                 self.width,
                                 self.height,
-                                self.cursor.blink_on,
+                                primary_frame.cursor.blink_on,
                                 child_anim,
                                 self.child_frame_corner_radius,
                                 self.child_frame_shadow_enabled,
@@ -1085,7 +1085,7 @@ impl RenderApp {
         let ime_preedit = Self::frame_ime_preedit_overlay(
             self.ime_preedit_active,
             &self.ime_preedit_text,
-            self.cursor.target_cloned(),
+            self.primary_cursor().target_cloned(),
             0,
             &self.child_frames,
         );

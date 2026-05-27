@@ -131,7 +131,11 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
         color: Color::WHITE,
         frame_id: 0,
     });
-    app.visual_cursors.insert(-1, state);
+    app.primary_frame
+        .as_mut()
+        .expect("primary frame")
+        .visual_cursors
+        .insert(-1, state);
 
     app.apply_visual_cursor_animations();
 

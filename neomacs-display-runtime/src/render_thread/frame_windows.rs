@@ -63,6 +63,8 @@ pub(crate) struct GuiFrameRenderState {
     pub mouse_pos: (f32, f32),
     /// Text cursor animation and blink state for this frame window.
     pub(super) cursor: CursorState,
+    /// Render-only visual cursors keyed by their stable visual cursor id.
+    pub(super) visual_cursors: HashMap<i64, CursorState>,
     /// GUI menu bar snapshot for this frame, if visible.
     pub menu_bar: Option<GuiMenuBarState>,
     /// GUI tool bar snapshot for this frame, if visible.
@@ -117,6 +119,7 @@ impl GuiFrameRenderState {
             frame_dirty: false,
             mouse_pos: (0.0, 0.0),
             cursor: CursorState::default(),
+            visual_cursors: HashMap::new(),
             menu_bar: None,
             tool_bar: None,
             compact_bar: None,
