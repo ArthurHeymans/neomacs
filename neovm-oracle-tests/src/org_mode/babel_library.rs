@@ -797,6 +797,61 @@ fn org_babel_execute_buffer_inline_call_remove_deep_state_combo() {
                   inline-result
                   elements
                   after-remove
-                  after-remove-block)))))))))"##,
+                   after-remove-block)))))))))"##,
+    );
+}
+
+#[test]
+fn org_babel_execute_var_table_output_header_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      (insert "#+NAME: data\n")
+      (insert "| X | Y |\n|---+---|\n| 1 | 10 |\n| 2 | 20 |\n| 3 | 30 |\n\n")
+      (insert "#+NAME: compute\n")
+      (insert "#+begin_src emacs-lisp :var tbl=data factor=2 :results value table replace\n")
+      (insert "(cons '(\"X\" \"Y\" \"Product\")\n")
+      (insert "      (cons 'hline\n")
+      (insert "            (mapcar (lambda (row)\n")
+      (insert "                      (list (car row) (cadr row) (* (cadr row) factor)))\n")
+      (insert "                    tbl)))\n")
+      (insert ")\n")
+      (insert "#+end_src\n\n")
+      (insert "#+begin_src emacs-lisp :results output replace\n")
+      (insert "(dotimes (i 3)\n  (princ (format \"line %d\\n\" i)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute compute
+      (goto-char (point-min))
+      (search-forward "compute")
+      (org-babel-execute-src-block)
+      (let ((compute-result (org-babel-read-result))
+            (after-compute (buffer-substring-no-properties
+                            (point-min) (point-max))))
+        ;; Execute output
+        (goto-char (point-min))
+        (search-forward "dotimes")
+        (org-babel-execute-src-block)
+        (let ((output-result (org-babel-read-result))
+              (after-output (buffer-substring-no-properties
+                             (point-min) (point-max)))
+              ;; Parse results
+              (results-els
+               (org-element-map (org-element-parse-buffer)
+                   '(fixed-width src-block)
+                 (lambda (el)
+                   (list (org-element-type el)
+                         (org-element-property :value el))))))
+          (list compute-result
+                after-compute
+                output-result
+                after-output
+                results-els)))))))"##,
     );
 }
