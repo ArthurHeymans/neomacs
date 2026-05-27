@@ -234,6 +234,127 @@ fn org_link_navigation_toggle_context_combo() {
 }
 
 #[test]
+fn org_link_id_custom_fuzzy_radio_runtime_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'ol)
+  (require 'ox-ascii)
+  (let* ((root (make-temp-file "org-link-mixed" t))
+         (file (expand-file-name "mixed.org" root))
+         (org-id-locations-file (expand-file-name "ids.el" root))
+         (org-id-track-globally t)
+         (org-id-link-to-org-use-id 'use-existing)
+         (org-link-context-for-files t)
+         (org-link-descriptive t)
+         (org-stored-links nil)
+         (org-store-link-plist nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: Mixed Links\n")
+            (insert "* Alpha Target\n")
+            (insert ":PROPERTIES:\n:ID: alpha-id\n:END:\n")
+            (insert "Alpha body with <<radio target>>.\n")
+            (insert "* Beta Target\n")
+            (insert ":PROPERTIES:\n:CUSTOM_ID: custom-beta\n:END:\n")
+            (insert "Beta body.\n")
+            (insert "* Plain Target\nPlain body.\n")
+            (insert "* Links\n"))
+          (org-id-update-id-locations (list file) t)
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (goto-char (point-min))
+            (search-forward "Alpha Target")
+            (beginning-of-line)
+            (let ((stored-alpha (org-store-link nil nil))
+                  (stored-plist org-store-link-plist))
+              (goto-char (point-min))
+              (search-forward "* Links")
+              (end-of-line)
+              (insert "\n")
+              (insert "[[id:alpha-id][Alpha ID]] ")
+              (insert "[[#custom-beta][Beta Custom]] ")
+              (insert "[[*Plain Target][Plain Fuzzy]] ")
+              (insert "[[radio target][Radio Target]]\n")
+              (font-lock-ensure (point-min) (point-max))
+              (let ((snap
+                     (lambda (label)
+                       (let ((ctx (org-element-context)))
+                         (list label
+                               (- (point) (point-min))
+                               (org-element-type ctx)
+                               (org-element-property :type ctx)
+                               (org-element-property :path ctx)
+                               (org-element-property :raw-link ctx)
+                               (get-text-property (point) 'invisible)
+                               (get-text-property (point) 'display)
+                               (get-text-property (point) 'face)))))
+                    link-snaps open-snaps)
+                (goto-char (point-min))
+                (dotimes (i 4)
+                  (org-next-link)
+                  (push (funcall snap (intern (format "link-%d" i)))
+                        link-snaps))
+                (org-toggle-link-display)
+                (font-lock-ensure (point-min) (point-max))
+                (goto-char (point-min))
+                (dotimes (i 4)
+                  (org-next-link)
+                  (push (funcall snap (intern (format "raw-%d" i)))
+                        link-snaps))
+                (dolist (needle '("Alpha ID" "Beta Custom" "Plain Fuzzy"
+                                  "Radio Target"))
+                  (goto-char (point-min))
+                  (search-forward needle)
+                  (push (save-excursion
+                          (org-open-at-point)
+                          (list needle
+                                (org-get-heading t t t t)
+                                (- (point) (point-min))
+                                (buffer-substring-no-properties
+                                 (line-beginning-position)
+                                 (line-end-position))))
+                        open-snaps))
+                (let* ((tree (org-element-parse-buffer))
+                       (links
+                        (org-element-map tree 'link
+                          (lambda (link)
+                            (list (org-element-property :type link)
+                                  (org-element-property :path link)
+                                  (org-element-property :raw-link link)
+                                  (and (org-element-contents-begin link)
+                                       (buffer-substring-no-properties
+                                        (org-element-contents-begin link)
+                                        (org-element-contents-end link)))))))
+                       (ascii
+                        (org-export-string-as
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         'ascii t '(:with-toc nil))))
+                  (list stored-alpha
+                        stored-plist
+                        (nreverse link-snaps)
+                        (nreverse open-snaps)
+                        links
+                        (replace-regexp-in-string
+                         (regexp-quote root)
+                         "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))
+                        (replace-regexp-in-string
+                         (regexp-quote root)
+                         "<root>"
+                         ascii)))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_link_abbrev_expand_open_from_string_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
