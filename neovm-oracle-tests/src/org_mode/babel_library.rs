@@ -1080,6 +1080,69 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_named_result_header_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Named table
+      (insert "#+NAME: scores\n")
+      (insert "| Name | Score |\n")
+      (insert "|------+-------|\n")
+      (insert "| Alice | 95 |\n")
+      (insert "| Bob | 87 |\n")
+      (insert "| Carol | 92 |\n\n")
+      ;; Use table as var
+      (insert "#+NAME: analysis\n")
+      (insert "#+begin_src emacs-lisp :var tbl=scores :results value replace\n")
+      (insert "(let ((scores (mapcar #'cadr tbl)))\n")
+      (insert "  (list :count (length scores)\n")
+      (insert "        :sum (apply #'+ scores)\n")
+      (insert "        :avg (/ (apply #'+ scores) (length scores))\n")
+      (insert "        :max (apply #'max scores)\n")
+      (insert "        :min (apply #'min scores)))\n")
+      (insert "#+end_src\n\n")
+      ;; Output from analysis
+      (insert "#+NAME: report\n")
+      (insert "#+begin_src emacs-lisp :var stats=analysis :results output replace\n")
+      (insert "(princ (format \"n=%d sum=%d avg=%d max=%d min=%d\"\n")
+      (insert "               (plist-get stats :count)\n")
+      (insert "               (plist-get stats :sum)\n")
+      (insert "               (plist-get stats :avg)\n")
+      (insert "               (plist-get stats :max)\n")
+      (insert "               (plist-get stats :min)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("analysis" "report"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        ;; Parse table
+        (let ((table-lisp
+               (progn
+                 (goto-char (point-min))
+                 (search-forward "| Name")
+                 (org-table-to-lisp))))
+          (list (nreverse results)
+                table-lisp
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_result_insert_update_replace_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
