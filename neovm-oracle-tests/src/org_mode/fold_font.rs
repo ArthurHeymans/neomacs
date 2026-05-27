@@ -1778,9 +1778,173 @@ fn org_fold_repeated_deep_heading_merge_font_regression_combo() {
                        (goto-char (point-min))
                        (search-forward needle nil t)))
                    '("Fourth A1 inserted while ancestor hidden."
-                     "****** DONE Sixth A1"
-                     "***** TODO Fifth B1"))
+                      "****** DONE Sixth A1"
+                      "***** TODO Fifth B1"))
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_deep_level_aggressive_cycle_hidden_edit_font_regression_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-global-at-bob t)
+          (org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-cycle-separator-lines 0))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "Root body.\n")
+      (insert "** TODO L2\n")
+      (insert "L2 body.\n")
+      (insert "*** TODO L3\n")
+      (insert "L3 body.\n")
+      (insert "**** TODO L4\n")
+      (insert "L4 body.\n")
+      (insert "***** TODO L5\n")
+      (insert "L5 body.\n")
+      (insert "****** DONE L6\n")
+      (insert "L6 body.\n")
+      (insert "******* WAIT L7\n")
+      (insert "L7 body.\n")
+      (insert "******** TODO L8\n")
+      (insert "L8 body.\n")
+      (insert "********* DONE L9\n")
+      (insert "L9 body.\n")
+      (insert "** NEXT Sibling\n")
+      (insert "Sibling body.\n")
+      (insert "*** TODO Sibling child\n")
+      (insert "Sibling child body.\n")
+      (insert "* Tail\n")
+      (insert "Tail body.\n")
+      (let ((headings
+             '("Root" "L2" "L3" "L4" "L5" "L6" "L7" "L8" "L9"
+               "Sibling" "Sibling child" "Tail"))
+            (bodies
+             '("Root body" "L2 body" "L3 body" "L4 body" "L5 body"
+               "L6 body" "L7 body" "L8 body" "L9 body"
+               "Sibling body" "Sibling child body" "Tail body"))
+            states)
+        (let ((snapshot
+               (lambda (label)
+                 (font-lock-ensure (point-min) (point-max))
+                 (list label
+                       org-cycle-global-status
+                       org-cycle-subtree-status
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (let ((pos (match-beginning 0)))
+                              (list needle
+                                    (line-number-at-pos pos)
+                                    (invisible-p pos)
+                                    (get-text-property
+                                     (line-beginning-position) 'face)
+                                    (get-text-property pos 'face)))))
+                        headings)
+                       (mapcar
+                        (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (search-forward needle)
+                            (let ((pos (match-beginning 0)))
+                              (list needle
+                                    (line-number-at-pos pos)
+                                    (invisible-p pos)))))
+                        bodies)
+                       (count-matches "^\\*+ " (point-min) (point-max))
+                       (count-lines (point-min) (point-max))
+                       (split-string
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))
+                        "\n" t)))))
+          (push (funcall snapshot 'initial) states)
+          ;; Aggressive cycle on L4
+          (goto-char (point-min))
+          (search-forward "L4")
+          (beginning-of-line)
+          (dotimes (_ 6)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-l4) states))
+          ;; Aggressive cycle on L7
+          (goto-char (point-min))
+          (search-forward "L7")
+          (beginning-of-line)
+          (dotimes (_ 5)
+            (org-cycle)
+            (push (funcall snapshot 'cycle-l7) states))
+          ;; Hide L5 subtree, edit while hidden
+          (goto-char (point-min))
+          (search-forward "L5")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (push (funcall snapshot 'hide-l5) states)
+          (end-of-line)
+          (insert "\n***** TODO Inserted under hidden L5\nInserted L5 body.\n")
+          (push (funcall snapshot 'hidden-insert) states)
+          ;; Show L5 subtree back
+          (goto-char (point-min))
+          (search-forward "L5")
+          (beginning-of-line)
+          (org-fold-show-subtree)
+          (push (funcall snapshot 'show-l5) states)
+          ;; Hide L8 subtree, edit while hidden
+          (goto-char (point-min))
+          (search-forward "L8")
+          (beginning-of-line)
+          (org-fold-hide-subtree)
+          (end-of-line)
+          (insert "\n******** TODO Inserted under hidden L8\nInserted L8 body.\n")
+          (push (funcall snapshot 'hide-l8-insert) states)
+          ;; Global cycles
+          (goto-char (point-min))
+          (dotimes (_ 6)
+            (org-cycle-global)
+            (push (funcall snapshot 'global-cycle) states))
+          ;; Show all and check
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((merged nil)
+                (bad-levels nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (goto-char (point-min))
+            (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+              (let ((stars (length (match-string 1)))
+                    (level (org-outline-level)))
+                (unless (= stars level)
+                  (push (list (match-string 0) stars level)
+                        bad-levels))))
+            (push (funcall snapshot 'final) states)
+            (list (nreverse states)
+                  (nreverse merged)
+                  (nreverse bad-levels)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward needle nil t)))
+                   '("***** TODO Inserted under hidden L5"
+                     "Inserted L5 body."
+                     "******** TODO Inserted under hidden L8"
+                     "Inserted L8 body."
+                     "********* DONE L9"))
                   (buffer-substring-no-properties
-                   (point-min) (point-max))))))))"##,
+                   (point-min) (point-max)))))))))"##,
     );
 }
