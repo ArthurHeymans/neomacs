@@ -672,3 +672,71 @@ fn org_clocktable_agenda_custom_formatter_regenerate_combo() {
       (when (file-directory-p root) (delete-directory root t)))))"##,
     );
 }
+
+#[test]
+fn org_clock_get_table_data_multi_file_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-deep" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Project A :proj:\n")
+            (insert "** Task A1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n")
+            (insert ":END:\n")
+            (insert "** Task A2 :proj:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 14:00] =>  1:00\n")
+            (insert ":END:\n"))
+          (with-temp-file file-b
+            (insert "* Project B\n")
+            (insert "** Task B1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 15:00]--[2026-05-27 Wed 16:00] =>  1:00\n")
+            (insert ":END:\n"))
+          (let* ((scope (list file-a file-b))
+                 (table-a (org-clock-get-table-data
+                           file-a '(:maxlevel 2 :scope file)))
+                 (table-b (org-clock-get-table-data
+                           file-b '(:maxlevel 2 :scope file)))
+                 (rows-a (mapcar (lambda (row)
+                                   (list (nth 0 row)
+                                         (substring-no-properties (nth 1 row))
+                                         (nth 4 row)))
+                                 (nth 2 table-a)))
+                 (rows-b (mapcar (lambda (row)
+                                   (list (nth 0 row)
+                                         (substring-no-properties (nth 1 row))
+                                         (nth 4 row)))
+                                 (nth 2 table-b)))
+                 ;; Block clocktable
+                 (block-tbl
+                  (with-temp-buffer
+                    (org-mode)
+                    (insert "#+BEGIN: clocktable :maxlevel 3 :scope "
+                            (if (> (length scope) 1) "agenda" "file")
+                            "\n#+END:\n")
+                    (goto-char (point-min))
+                    (org-dblock-update)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))
+            (list (nth 1 table-a)
+                  rows-a
+                  (nth 1 table-b)
+                  rows-b
+                  (replace-regexp-in-string
+                   (regexp-quote root) "<root>" block-tbl))))
+      (dolist (f (list file-a file-b))
+        (when (get-file-buffer f) (kill-buffer (get-file-buffer f))))
+      (delete-directory root t))))"##,
+    );
+}
