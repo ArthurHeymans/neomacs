@@ -100,3 +100,130 @@ fn org_list_to_generic_html_org_delete_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_indent_outdent_checkbox_repair_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "- [ ] Parent [0/3]\n")
+    (insert "- [X] A\n")
+    (insert "- [ ] B\n")
+    (insert "  - [ ] B child\n")
+    (insert "- [ ] C\n")
+    (goto-char (point-min))
+    (search-forward "B")
+    (beginning-of-line)
+    (org-indent-item-tree)
+    (let ((after-indent
+           (buffer-substring-no-properties (point-min) (point-max))))
+      (org-toggle-checkbox)
+      (org-outdent-item-tree)
+      (goto-char (point-min))
+      (org-update-checkbox-count t)
+      (org-list-repair)
+      (let* ((struct (org-list-struct))
+             (parents (org-list-parents-alist struct))
+             (prevs (org-list-prevs-alist struct))
+             (items (mapcar
+                     (lambda (item)
+                       (list (- item (point-min))
+                             (org-list-get-parent item struct parents)
+                             (org-list-get-item-number item struct prevs parents)
+                             (org-list-get-children item struct parents)
+                             (org-list-get-item-end item struct)))
+                     (org-list-get-all-items (point-min) struct prevs))))
+        (list after-indent
+              items
+              (org-list-to-lisp)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_insert_delete_move_description_items_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "- term A :: first\n")
+    (insert "  continuation A\n")
+    (insert "- term B :: second\n")
+    (insert "- term C :: third\n")
+    (goto-char (point-min))
+    (search-forward "term B")
+    (beginning-of-line)
+    (org-insert-item)
+    (insert "term inserted :: new")
+    (let ((after-insert
+           (buffer-substring-no-properties (point-min) (point-max))))
+      (org-move-item-down)
+      (let ((after-move
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (goto-char (point-min))
+        (search-forward "term C")
+        (beginning-of-line)
+        (let* ((struct (org-list-struct))
+               (item (point)))
+          (org-list-delete-item item struct))
+        (list after-insert
+              after-move
+              (org-list-to-lisp)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_ordered_alpha_list_sort_renumber_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "a. Gamma\n")
+    (insert "b. Alpha\n")
+    (insert "   a. child two\n")
+    (insert "   b. child one\n")
+    (insert "c. Beta\n")
+    (goto-char (point-min))
+    (search-forward "Alpha")
+    (beginning-of-line)
+    (org-sort-list nil ?a)
+    (let ((after-sort
+           (buffer-substring-no-properties (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "child one")
+      (beginning-of-line)
+      (org-move-item-up)
+      (let* ((struct (org-list-struct))
+             (prevs (org-list-prevs-alist struct))
+             (parents (org-list-parents-alist struct))
+             (summary
+              (mapcar
+               (lambda (item)
+                 (list (buffer-substring-no-properties
+                        item (line-end-position))
+                       (org-list-get-item-number item struct prevs parents)
+                       (org-list-get-list-type item struct prevs)))
+               (org-list-get-all-items (point-min) struct prevs))))
+        (list after-sort
+              summary
+              (org-list-to-lisp)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
