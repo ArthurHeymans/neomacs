@@ -33,6 +33,7 @@ mod property_log;
 mod publish_workflow;
 mod source_block;
 mod sparse_tree;
+mod structure_template;
 mod support;
 mod table_agenda;
 mod table_formula;
