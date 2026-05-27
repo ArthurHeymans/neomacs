@@ -1083,9 +1083,14 @@ impl RenderApp {
             self.chrome.titlebar_height
         );
         let toolbar_y_origin = self.toolbar_y_origin();
+        let primary_ime_preedit_text = self
+            .primary_frame
+            .as_ref()
+            .map(|frame| frame.ime_preedit_text.clone())
+            .unwrap_or_default();
         let ime_preedit = Self::frame_ime_preedit_overlay(
-            self.ime_preedit_active,
-            &self.ime_preedit_text,
+            self.primary_ime_preedit_active(),
+            &primary_ime_preedit_text,
             self.primary_cursor().target_cloned(),
             0,
             self.primary_child_frames(),

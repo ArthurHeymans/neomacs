@@ -395,8 +395,7 @@ impl RenderApp {
                 cursor.clear_target();
             }
             self.last_ime_cursor_area = None;
-            self.ime_preedit_active = false;
-            self.ime_preedit_text.clear();
+            self.clear_primary_ime_preedit();
             if let Some(window) = self.window.as_ref() {
                 window.set_ime_cursor_area(
                     PhysicalPosition::new(0.0, 0.0),

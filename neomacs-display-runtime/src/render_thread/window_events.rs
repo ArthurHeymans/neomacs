@@ -138,7 +138,7 @@ impl RenderApp {
                         physical_key,
                         text,
                         self.modifiers,
-                        self.ime_preedit_active
+                        self.primary_ime_preedit_active()
                     );
                 }
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
@@ -229,7 +229,7 @@ impl RenderApp {
                         }
                         _ => {}
                     }
-                } else if (is_primary && self.ime_preedit_active)
+                } else if (is_primary && self.primary_ime_preedit_active())
                     || (!is_primary && secondary_ime_preedit_active)
                 {
                     tracing::debug!(
@@ -428,10 +428,8 @@ impl RenderApp {
                 winit::event::Ime::Disabled => {
                     if self.frame_windows.is_primary_winit(window_id) {
                         self.ime_enabled = false;
-                        self.ime_preedit_active = false;
-                        self.ime_preedit_text.clear();
+                        self.clear_primary_ime_preedit();
                         self.last_ime_cursor_area = None;
-                        self.mark_primary_dirty();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -446,9 +444,7 @@ impl RenderApp {
                 winit::event::Ime::Commit(text) => {
                     tracing::debug!("IME Commit: '{}'", text);
                     if self.frame_windows.is_primary_winit(window_id) {
-                        self.ime_preedit_active = false;
-                        self.ime_preedit_text.clear();
-                        self.mark_primary_dirty();
+                        self.clear_primary_ime_preedit();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -473,12 +469,10 @@ impl RenderApp {
                 winit::event::Ime::Preedit(text, cursor_range) => {
                     tracing::debug!("IME Preedit: '{}' cursor: {:?}", text, cursor_range);
                     if self.frame_windows.is_primary_winit(window_id) {
-                        self.ime_preedit_active = !text.is_empty();
-                        self.ime_preedit_text = text.clone();
+                        self.set_primary_ime_preedit(text.clone());
                         if let Some(target) = self.primary_cursor().target_cloned() {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
-                        self.mark_primary_dirty();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {

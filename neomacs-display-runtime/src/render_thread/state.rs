@@ -353,10 +353,8 @@ pub(super) struct RenderApp {
     pub(super) compact_bar: Option<GuiCompactBarState>,
     pub(super) chrome_interaction: GuiChromeInteractionState,
 
-    // IME state
+    // Primary native IME state; preedit text/active state lives on primary_frame.
     pub(super) ime_enabled: bool,
-    pub(super) ime_preedit_active: bool,
-    pub(super) ime_preedit_text: String,
     pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
 
     // UI overlay state
@@ -448,8 +446,6 @@ impl RenderApp {
             compact_bar: None,
             chrome_interaction: GuiChromeInteractionState::default(),
             ime_enabled: false,
-            ime_preedit_active: false,
-            ime_preedit_text: String::new(),
             last_ime_cursor_area: None,
             scroll_indicators_enabled: false,
             primary_fps_enabled: false,
@@ -597,6 +593,28 @@ impl RenderApp {
             &mut primary_frame.child_frames
         } else {
             &mut self.pending_primary_child_frames
+        }
+    }
+
+    pub(super) fn primary_ime_preedit_active(&self) -> bool {
+        self.primary_frame
+            .as_ref()
+            .is_some_and(|frame| frame.ime_preedit_active)
+    }
+
+    pub(super) fn set_primary_ime_preedit(&mut self, text: String) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.ime_preedit_active = !text.is_empty();
+            primary_frame.ime_preedit_text = text;
+            primary_frame.frame_dirty = true;
+        }
+    }
+
+    pub(super) fn clear_primary_ime_preedit(&mut self) {
+        if let Some(primary_frame) = self.primary_frame.as_mut() {
+            primary_frame.ime_preedit_active = false;
+            primary_frame.ime_preedit_text.clear();
+            primary_frame.frame_dirty = true;
         }
     }
 
