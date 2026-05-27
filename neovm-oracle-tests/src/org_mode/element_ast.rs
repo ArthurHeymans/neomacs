@@ -288,6 +288,106 @@ fn org_element_visible_only_lineage_inherited_combo() {
             context-summary
             granularity
             interpreted
+             (buffer-substring-no-properties
+              (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_element_full_ast_dump_with_properties_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: AST Probe\n")
+    (insert "#+AUTHOR: Tester\n\n")
+    (insert "* TODO Alpha :work:urgent:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed 09:00>\n")
+    (insert "DEADLINE: <2026-05-29 Fri>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id-1\n:END:\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-26 Mon 10:00]--[2026-05-26 Mon 11:30] =>  1:30\n:END:\n")
+    (insert "Alpha body with *bold* and /italic/.\n\n")
+    (insert "** DONE Sub A1 :deep:\n")
+    (insert "CLOSED: [2026-05-26 Mon 15:00]\n")
+    (insert "Sub A1 body.\n")
+    (insert "*** WAIT Sub A1a\n")
+    (insert "SCHEDULED: <2026-05-28 Thu>\n")
+    (insert "Sub A1a body.\n\n")
+    (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n")
+    (insert "| Name | Val |\n|------+-----|\n| foo | 1 |\n| bar | 2 |\n\n")
+    (insert "** TODO Sub A2\n")
+    (insert "[[https://example.org][Example Link]]\n\n")
+    (insert "* Beta :home:\n")
+    (insert "Beta body with footnote[fn:1].\n\n")
+    (insert "[fn:1] Footnote definition.\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (h)
+                (list (org-element-property :level h)
+                      (org-element-property :todo-keyword h)
+                      (org-element-property :raw-value h)
+                      (org-element-property :tags h)
+                      (org-element-property :priority h)))))
+           (planning
+            (org-element-map tree 'planning
+              (lambda (p)
+                (list (and (org-element-property :scheduled p)
+                           (org-element-property :raw-value
+                            (org-element-property :scheduled p)))
+                      (and (org-element-property :deadline p)
+                           (org-element-property :raw-value
+                            (org-element-property :deadline p)))
+                      (and (org-element-property :closed p)
+                           (org-element-property :raw-value
+                            (org-element-property :closed p)))))))
+           (properties
+            (org-element-map tree 'node-property
+              (lambda (np)
+                (list (org-element-property :key np)
+                      (org-element-property :value np)))))
+           (clocks
+            (org-element-map tree 'clock
+              (lambda (c)
+                (list (org-element-property :duration c)
+                      (org-element-property :status c)))))
+           (blocks
+            (org-element-map tree 'src-block
+              (lambda (sb)
+                (list (org-element-property :language sb)
+                      (org-element-property :value sb)))))
+           (tables
+            (org-element-map tree 'table
+              (lambda (tb)
+                (list (org-element-property :type tb)
+                      (org-element-property :tblfm tb)))))
+           (links
+            (org-element-map tree 'link
+              (lambda (lk)
+                (list (org-element-property :type lk)
+                      (org-element-property :path lk)
+                      (org-element-property :raw-link lk)))))
+           (footnotes
+            (org-element-map tree 'footnote-definition
+              (lambda (fn)
+                (list (org-element-property :label fn)))))
+           (all-types
+            (org-element-map tree t
+              (lambda (el) (org-element-type el)))))
+      (list headlines
+            planning
+            properties
+            clocks
+            blocks
+            tables
+            links
+            footnotes
+            all-types
+            (org-element-property :title tree)
+            (org-element-property :author tree)
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
     );
