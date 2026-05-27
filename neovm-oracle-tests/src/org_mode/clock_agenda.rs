@@ -400,3 +400,145 @@ fn org_clock_shift_display_overlay_cleanup_combo() {
                   (funcall snapshot 'after-cleanup)))))))"##,
     );
 }
+
+#[test]
+fn org_clock_interrupt_resume_state_history_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
+          (org-clock-into-drawer "LOGBOOK")
+          (org-clock-history-length 4)
+          (org-clock-persist nil)
+          (org-clock-continuously nil)
+          (org-clock-clocked-in-display 'both)
+          (org-clock-frame-title-format '(org-mode-line-string))
+          (org-clock-string-limit 40)
+          (org-clock-in-switch-to-state
+           (lambda (state)
+             (cond ((member state '("TODO" "WAIT")) "NEXT")
+                   (t nil))))
+          (org-clock-out-switch-to-state
+           (lambda (state)
+             (cond ((string= state "NEXT") "WAIT")
+                   (t nil))))
+          (org-log-done nil)
+          (global-mode-string nil)
+          (frame-title-format '("base"))
+          (fake-timers nil)
+          (cancelled nil)
+          (events nil))
+      (cl-labels
+          ((clock-time (hour minute)
+             (encode-time 0 minute hour 27 5 2026))
+           (marker-heading (marker)
+             (and (markerp marker)
+                  (marker-buffer marker)
+                  (with-current-buffer (marker-buffer marker)
+                    (save-excursion
+                      (goto-char marker)
+                      (org-get-heading t t t t)))))
+           (snapshot
+            (label)
+            (list label
+                  (org-clocking-p)
+                  org-clock-current-task
+                  (and org-mode-line-string
+                       (substring-no-properties org-mode-line-string))
+                  global-mode-string
+                  frame-title-format
+                  (marker-heading org-clock-marker)
+                  (marker-heading org-clock-hd-marker)
+                  (marker-heading org-clock-interrupted-task)
+                  (mapcar #'marker-heading org-clock-history)
+                  (mapcar
+                   (lambda (title)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward title)
+                       (beginning-of-line)
+                       (list title
+                             (org-get-todo-state)
+                             (org-entry-get nil "Effort")
+                             (org-clock-sum-current-item "2026-05-27")
+                             (buffer-substring-no-properties
+                              (point)
+                              (save-excursion
+                                (org-end-of-subtree t t)
+                                (point)))))))
+                   '("Alpha" "Beta" "Gamma"))
+                  (nreverse (copy-sequence events))
+                  (nreverse (copy-sequence cancelled))
+                  (nreverse (copy-sequence fake-timers)))))
+        (cl-letf (((symbol-function 'run-with-timer)
+                   (lambda (secs repeat function &rest args)
+                     (let ((timer (list :timer secs repeat function args)))
+                       (push timer fake-timers)
+                       timer)))
+                  ((symbol-function 'timerp)
+                   (lambda (object)
+                     (and (consp object) (eq (car object) :timer))))
+                  ((symbol-function 'cancel-timer)
+                   (lambda (timer) (push timer cancelled) nil))
+                  ((symbol-function 'force-mode-line-update)
+                   (lambda (&rest _) (push 'force-mode-line events)))
+                  ((symbol-function 'org-current-time)
+                   (lambda (&rest _) (clock-time 9 20))))
+          (org-mode)
+          (insert "* TODO Alpha\n")
+          (insert ":PROPERTIES:\n:Effort: 0:45\n:END:\n")
+          (insert "* TODO Beta\n")
+          (insert ":PROPERTIES:\n:Effort: 1:00\n:END:\n")
+          (insert "* WAIT Gamma\n")
+          (insert ":PROPERTIES:\n:Effort: 0:15\n:END:\n")
+          (add-hook 'org-clock-in-hook
+                    (lambda () (push (list 'in org-clock-current-task)
+                                     events))
+                    nil t)
+          (add-hook 'org-clock-out-hook
+                    (lambda () (push (list 'out
+                                           org-clock-current-task
+                                           org-clock-out-removed-last-clock)
+                                     events))
+                    nil t)
+          (add-hook 'org-clock-cancel-hook
+                    (lambda () (push 'cancel events)) nil t)
+          (let (states)
+            (goto-char (point-min))
+            (search-forward "Alpha")
+            (beginning-of-line)
+            (org-clock-in nil (clock-time 9 0))
+            (push (snapshot 'alpha-in) states)
+            (goto-char (point-min))
+            (search-forward "Beta")
+            (beginning-of-line)
+            (org-clock-in nil (clock-time 9 20))
+            (push (snapshot 'beta-interrupts-alpha) states)
+            (org-clock-out nil t (clock-time 10 0))
+            (push (snapshot 'beta-out) states)
+            (org-clock-in-last '(16))
+            (push (snapshot 'clock-in-last-from-out-time) states)
+            (org-clock-modify-effort-estimate "+0:30")
+            (push (snapshot 'effort-modified) states)
+            (org-clock-out nil t (clock-time 10 15))
+            (push (snapshot 'resumed-out) states)
+            (goto-char (point-min))
+            (search-forward "Gamma")
+            (beginning-of-line)
+            (org-clock-in nil (clock-time 11 0))
+            (push (snapshot 'gamma-in) states)
+            (org-clock-cancel)
+            (org-clock-remove-empty-clock-drawer)
+            (push (snapshot 'gamma-cancel-cleanup) states)
+            (list (nreverse states)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))
+                  org-clock-out-time
+                  org-clock-leftover-time
+                  org-clock-has-been-used))))))"##,
+    );
+}
