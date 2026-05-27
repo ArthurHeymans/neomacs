@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 mod archive_refile;
 mod attach_lint;
 mod babel_export;
+mod babel_library;
 mod capture_workflow;
 mod citation;
 mod clock_agenda;
