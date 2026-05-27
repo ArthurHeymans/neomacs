@@ -85,6 +85,7 @@ mod publish_workflow;
 mod sort_workflow;
 mod source_block;
 mod sparse_tree;
+mod strong_tests;
 mod structure_template;
 mod support;
 mod table_agenda;
