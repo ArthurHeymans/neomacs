@@ -178,3 +178,63 @@ fn org_tags_group_inheritance_todo_property_combo() {
          level-two-hits)))))"##,
     );
 }
+
+#[test]
+fn org_tags_matcher_map_entries_inherited_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-tag-inheritance t)
+          (org-use-property-inheritance t))
+      (org-mode)
+      (insert "* Alpha :work:\n")
+      (insert ":PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:CATEGORY: proj\n:END:\n")
+      (insert "** TODO Sub A1 :urgent:\n")
+      (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+      (insert "** DONE Sub A2\n")
+      (insert "* Beta :home:\n")
+      (insert ":PROPERTIES:\n:Effort: 1:00\n:Owner: Bob\n:END:\n")
+      (insert "** TODO Sub B1 :work:\n")
+      (insert "* Gamma :work:urgent:\n")
+      (insert "** WAIT Sub G1\n")
+      (insert ":PROPERTIES:\n:Effort: 1:30\n:END:\n")
+      (let* ((matcher (org-make-tags-matcher "+work"))
+             (fn (car matcher))
+             (match-fn (cdr matcher))
+             (hits (org-map-entries
+                    (lambda ()
+                      (list (org-get-heading t t t t)
+                            (org-get-tags nil t)
+                            (org-entry-get nil "Effort")
+                            (org-entry-get nil "Owner" t)
+                            (org-entry-get nil "CATEGORY" t)
+                            (substring-no-properties
+                             (or (org-get-todo-state) ""))))
+                    "+work" nil))
+             (todo-hits (org-map-entries
+                         (lambda ()
+                           (list (org-get-heading t t t t)
+                                 (org-get-tags nil t)))
+                         "+work+TODO" nil))
+             (prop-hits (org-map-entries
+                         (lambda ()
+                           (list (org-get-heading t t t t)
+                                 (org-entry-get nil "Effort")))
+                         "Effort>=\"1:00\"" nil))
+             (tag-groups (org-make-tags-matcher "+urgent"))
+             (urgent-hits (org-map-entries
+                           (lambda ()
+                             (list (org-get-heading t t t t)
+                                   (org-get-tags nil t)))
+                           "+urgent" nil)))
+        (list fn
+              hits
+              todo-hits
+              prop-hits
+              (car tag-groups)
+              urgent-hits)))))"##,
+    );
+}
