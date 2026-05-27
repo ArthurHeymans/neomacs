@@ -78,6 +78,7 @@ mod table_upstream;
 mod tag_match;
 mod timer_workflow;
 mod todo_dependencies;
+mod ultra_strict;
 mod yank_dnd;
 
 #[test]
