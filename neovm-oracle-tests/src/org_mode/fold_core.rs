@@ -304,3 +304,63 @@ fn org_fold_core_region_spec_visibility_deep_state_combo() {
                      (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_fold_reveal_context_narrow_widen_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fold-show-context-detail '((default . lineage)
+                                          (isearch . lineage)
+                                          (agenda . local))))
+      (org-mode)
+      (insert "* Root\nroot body\n")
+      (insert "** Alpha\nalpha body\n")
+      (insert "*** Beta\nbeta body\n")
+      (insert "**** Gamma\ngamma body\n")
+      (insert "***** Delta\ndelta body\n")
+      (insert "** Sibling\nsibling body\n")
+      (let ((probe (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-fold-folded-p (point) 'headline))
+                         (list needle 'not-found nil nil))))))
+        ;; Hide all to level 1
+        (org-fold-hide-sublevels 1)
+        (let ((after-hide-1 (mapcar probe '("Root" "root body" "Alpha" "Beta" "Delta" "Sibling"))))
+          ;; Reveal with isearch context
+          (goto-char (point-min))
+          (search-forward "delta body")
+          (org-fold-show-context 'isearch)
+          (let ((after-isearch (mapcar probe '("Root" "root body" "Alpha" "alpha body" "Beta" "beta body" "Gamma" "delta body" "Sibling"))))
+            ;; Hide again
+            (org-fold-hide-sublevels 1)
+            ;; Reveal with agenda context
+            (goto-char (point-min))
+            (search-forward "beta body")
+            (org-fold-show-context 'agenda)
+            (let ((after-agenda (mapcar probe '("Root" "Alpha" "Beta" "beta body" "Gamma" "Sibling"))))
+              ;; Narrow to subtree
+              (goto-char (point-min))
+              (search-forward "Alpha")
+              (beginning-of-line)
+              (save-restriction
+                (org-narrow-to-subtree)
+                (org-fold-hide-sublevels 1)
+                (let ((narrowed-vis (mapcar probe '("Alpha" "alpha body" "Beta" "gamma body" "Sibling"))))
+                  (list after-hide-1
+                        after-isearch
+                        after-agenda
+                        narrowed-vis
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))"##,
+    );
+}
