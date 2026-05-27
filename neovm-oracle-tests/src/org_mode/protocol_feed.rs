@@ -125,6 +125,73 @@ fn org_protocol_custom_handler_dispatch_combo() {
 }
 
 #[test]
+fn org_protocol_capture_template_finalize_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-protocol)
+  (require 'org-capture)
+  (let* ((file (make-temp-file "org-protocol-capture" nil ".org"
+                               "* Inbox\n* Archive\n"))
+         (org-stored-links nil)
+         (org-protocol-default-template-key "p")
+         (org-capture-templates
+          `(("p" "Protocol" entry
+             (file+headline ,file "Inbox")
+             "* TODO %:description\nURL: %:link\nType: %:type\nAnnotation: %a\nBody:\n%i\nQuery: %(prin1-to-string (plist-get org-store-link-plist :query))\n"
+             :empty-lines 0)
+            ("q" "Quoted" entry
+             (file+headline ,file "Archive")
+             "* QUOTE %:description\n%a\n%i\n"
+             :empty-lines 0))))
+         capture-state)
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'raise-frame) (lambda (&rest _) nil)))
+            (org-protocol-capture
+             '(:template "p"
+               :url "https://example.org/path?q=1#frag"
+               :title "Example Title"
+               :body "Line one\nLine two"))
+            (setq capture-state
+                  (list (buffer-name)
+                        org-stored-links
+                        org-store-link-plist
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))
+            (org-capture-finalize)
+            (org-protocol-capture
+             '(:template "q"
+               :url "mailto:ada@example.org"
+               :title "Mail Title"
+               :body "> quoted\n> body"))
+            (let ((second-state
+                   (list (buffer-name)
+                         org-stored-links
+                         org-store-link-plist
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+              (org-capture-finalize)
+              (with-temp-buffer
+                (insert-file-contents file)
+                (list capture-state
+                      second-state
+                      org-stored-links
+                      (replace-regexp-in-string
+                       (regexp-quote file)
+                       "<file>"
+                       (buffer-string)))))))
+      (dolist (buf '("CAPTURE-org-protocol-capture"
+                     "CAPTURE-org-protocol-capture.org"))
+        (when (get-buffer buf) (kill-buffer buf)))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
+
+#[test]
 fn org_feed_parse_format_status_add_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
