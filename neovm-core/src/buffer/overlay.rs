@@ -93,6 +93,12 @@ impl Itree {
         }
     }
 
+    fn compare(start: usize, overlay: Value, node: &ItreeNode) -> Ordering {
+        start
+            .cmp(&node.start)
+            .then_with(|| overlay.bits().cmp(&node.overlay.bits()))
+    }
+
     /// Insert an interval.  Returns false if already present.
     fn insert(&mut self, start: usize, end: usize, overlay: Value) -> bool {
         let inserted = Self::insert_node(&mut self.root, start, end, overlay);
@@ -110,61 +116,67 @@ impl Itree {
                 *node = Some(Box::new(ItreeNode::new(start, end, overlay)));
                 true
             }
-            Some(n) => {
-                if eq_value(&n.overlay, &overlay) {
-                    // Already present — update endpoints
+            Some(n) => match Self::compare(start, overlay, n) {
+                Ordering::Equal => {
                     n.start = start;
                     n.end = end;
                     n.update_max_end();
                     false
-                } else if start < n.start {
+                }
+                Ordering::Less => {
                     let inserted = Self::insert_node(&mut n.left, start, end, overlay);
                     if inserted {
                         n.update_max_end();
                     }
                     inserted
-                } else {
+                }
+                Ordering::Greater => {
                     let inserted = Self::insert_node(&mut n.right, start, end, overlay);
                     if inserted {
                         n.update_max_end();
                     }
                     inserted
                 }
-            }
+            },
         }
     }
 
     /// Remove an overlay from the tree.
     fn remove(&mut self, overlay: Value) -> bool {
-        Self::remove_node(&mut self.root, overlay)
+        let Some((start, _)) = overlay_range(overlay) else {
+            return false;
+        };
+        self.remove_at(start, overlay)
     }
 
-    fn remove_node(node: &mut Option<Box<ItreeNode>>, overlay: Value) -> bool {
+    fn remove_at(&mut self, start: usize, overlay: Value) -> bool {
+        Self::remove_node(&mut self.root, start, overlay)
+    }
+
+    fn remove_node(node: &mut Option<Box<ItreeNode>>, start: usize, overlay: Value) -> bool {
         // Take ownership of the node, operate on it, put back
         let Some(mut boxed) = node.take() else {
             return false;
         };
-        if eq_value(&boxed.overlay, &overlay) {
-            // Remove this node, replace with merged children
-            let left = boxed.left.take();
-            let right = boxed.right.take();
-            *node = match (left, right) {
-                (None, None) => None,
-                (Some(child), None) | (None, Some(child)) => Some(child),
-                (Some(left), Some(right)) => {
-                    let mut merged = left;
-                    Self::attach_rightmost(&mut merged, right);
-                    Some(merged)
-                }
-            };
-            return true;
-        }
-        // Recurse into child
-        let go_left = overlay.bits() < boxed.overlay.bits();
-        let found = if go_left {
-            Self::remove_node(&mut boxed.left, overlay)
-        } else {
-            Self::remove_node(&mut boxed.right, overlay)
+
+        let found = match Self::compare(start, overlay, &boxed) {
+            Ordering::Equal => {
+                // Remove this node, replace with merged children.
+                let left = boxed.left.take();
+                let right = boxed.right.take();
+                *node = match (left, right) {
+                    (None, None) => None,
+                    (Some(child), None) | (None, Some(child)) => Some(child),
+                    (Some(left), Some(right)) => {
+                        let mut merged = left;
+                        Self::attach_rightmost(&mut merged, right);
+                        Some(merged)
+                    }
+                };
+                return true;
+            }
+            Ordering::Less => Self::remove_node(&mut boxed.left, start, overlay),
+            Ordering::Greater => Self::remove_node(&mut boxed.right, start, overlay),
         };
         if found {
             boxed.update_max_end();
@@ -290,15 +302,15 @@ impl OverlayList {
         let Some((old_start, old_end)) = overlay_range(overlay) else {
             return;
         };
-        let _ = overlay.with_overlay_data_mut(|data| {
-            data.start = start;
-            data.end = end;
-        });
         Self::remove_index_entry(&mut self.by_start, old_start, overlay);
         Self::remove_index_entry(&mut self.by_end, old_end, overlay);
         Self::insert_index_entry(&mut self.by_start, start, overlay);
         Self::insert_index_entry(&mut self.by_end, end, overlay);
-        self.itree.remove(overlay);
+        self.itree.remove_at(old_start, overlay);
+        let _ = overlay.with_overlay_data_mut(|data| {
+            data.start = start;
+            data.end = end;
+        });
         self.itree.insert(start, end, overlay);
         // GNU Emacs drops empty overlays created by move-overlay when
         // `evaporate' is non-nil. Minibuffer shadow overlays depend on this

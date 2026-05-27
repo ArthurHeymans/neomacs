@@ -45,6 +45,22 @@ fn same_range_overlays_remain_distinct_objects() {
 }
 
 #[test]
+fn delete_overlay_removes_non_root_interval_entry() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let root = alloc_overlay(20, 30);
+    let earlier = alloc_overlay(2, 10);
+    list.insert_overlay(root);
+    list.insert_overlay(earlier);
+
+    assert_eq!(list.overlays_at(5), vec![earlier]);
+    assert!(list.delete_overlay(earlier));
+    assert!(list.overlays_at(5).is_empty());
+    assert_eq!(list.overlays_at(25), vec![root]);
+    assert!(overlay_live_buffer(earlier).is_none());
+}
+
+#[test]
 fn overlay_put_preserves_existing_property_position() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -75,6 +91,23 @@ fn move_overlay_updates_boundaries() {
     assert_eq!(list.overlay_start(overlay), Some(4));
     assert_eq!(list.overlay_end(overlay), Some(7));
     assert_eq!(list.overlays_at(5), vec![overlay]);
+}
+
+#[test]
+fn move_overlay_removes_old_non_root_interval_entry() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let root = alloc_overlay(20, 30);
+    let earlier = alloc_overlay(2, 10);
+    list.insert_overlay(root);
+    list.insert_overlay(earlier);
+
+    list.move_overlay(earlier, 40, 45);
+    assert!(list.overlays_at(5).is_empty());
+    assert_eq!(list.overlays_at(25), vec![root]);
+    assert_eq!(list.overlays_at(42), vec![earlier]);
+    assert_eq!(list.overlay_start(earlier), Some(40));
+    assert_eq!(list.overlay_end(earlier), Some(45));
 }
 
 #[test]
