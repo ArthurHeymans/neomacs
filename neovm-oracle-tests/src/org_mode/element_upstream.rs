@@ -3608,3 +3608,43 @@ fn org_element_parse_context_parent_lineage_deep_state_combo() {
                     (org-element-map tree t #'identity))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_headline_planning_property_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha :work:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed 09:00>\n")
+    (insert "DEADLINE: <2026-05-29 Fri>\n")
+    (insert ":PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id\n:END:\n")
+    (insert "Alpha body.\n\n")
+    (insert "** DONE Beta\n")
+    (insert "CLOSED: [2026-05-26 Mon 15:00]\n")
+    (insert ":PROPERTIES:\n:Effort: 1:00\n:END:\n")
+    (insert "Beta body.\n\n")
+    (insert "*** WAIT Gamma\n")
+    (insert "SCHEDULED: <2026-05-28 Thu>\n")
+    (insert "Gamma body.\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (h)
+                (list (org-element-property :level h)
+                      (org-element-property :todo-keyword h)
+                      (org-element-property :raw-value h)
+                      (org-element-property :tags h)))))
+           (properties
+            (org-element-map tree 'node-property
+              (lambda (np)
+                (list (org-element-property :key np)
+                      (org-element-property :value np))))))
+      (list headlines properties
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
