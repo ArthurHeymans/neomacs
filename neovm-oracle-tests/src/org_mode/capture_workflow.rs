@@ -319,3 +319,66 @@ fn org_capture_kill_finalize_goto_marker_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_capture_prompt_placeholders_history_tags_props_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (with-temp-buffer
+    (let ((buffer-file-name "/tmp/capture-target.org")
+          (org-capture--prompt-history-table
+           (make-hash-table :test #'equal))
+          prompts)
+      (org-mode)
+      (insert "#+TAGS: work urgent home\n")
+      (insert "* Target\n")
+      (insert ":PROPERTIES:\n:Owner_ALL: Ada Bea Cy\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "Target")
+      (beginning-of-line)
+      (let ((org-capture-plist
+             (list :template
+                   "* TODO %^{Title|Default|Alpha|Beta} :%^g:\nSCHEDULED: %^{When}t\nCLOSED: %^{Closed}U\n:PROPERTIES:\n:Owner: %^{Owner|Ada}p\n:END:\nRepeated: %\\1\nElisp: %(concat \"ok-\" \"%^{Title|Default|Alpha|Beta}\")\n"
+                   :default-time (encode-time 0 0 9 27 5 2026)
+                   :buffer (current-buffer)
+                   :pos (point-marker))))
+        (cl-letf (((symbol-function 'org-completing-read)
+                   (lambda (prompt collection &rest _)
+                     (push (list 'string prompt collection) prompts)
+                     "Beta"))
+                  ((symbol-function 'completing-read-multiple)
+                   (lambda (prompt collection &rest _)
+                     (push (list 'tags prompt
+                                 (sort
+                                  (mapcar (lambda (entry)
+                                            (if (consp entry)
+                                                (car entry)
+                                              entry))
+                                          collection)
+                                  #'string<))
+                           prompts)
+                     '("work" "urgent")))
+                  ((symbol-function 'org-read-date)
+                   (lambda (with-time to-time from-string prompt &rest _)
+                     (push (list 'date with-time to-time from-string prompt)
+                           prompts)
+                     (encode-time 0 45 10 27 5 2026)))
+                  ((symbol-function 'org-read-property-value)
+                   (lambda (property pom default &rest _)
+                     (push (list 'property
+                                 property
+                                 (marker-position pom)
+                                 default)
+                           prompts)
+                     "Bea")))
+          (list (org-capture-fill-template)
+                (nreverse prompts)
+                (gethash "Title" org-capture--prompt-history-table)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
