@@ -211,3 +211,109 @@ fn org_sort_dispatch_table_list_entries_combo() {
                           (org-element-property :begin h))))))))"##,
     );
 }
+
+#[test]
+fn org_sort_entries_priority_clock_region_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (let ((org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
+          (org-priority-highest ?A)
+          (org-priority-default ?B)
+          (org-priority-lowest ?D)
+          (org-priority-start-cycle-with-default nil)
+          (events nil)
+          (org-after-sorting-entries-or-items-hook
+           (list (lambda ()
+                   (push (mapcar (lambda (h) (org-link-display-format h))
+                                 (org-map-entries
+                                  (lambda () (org-get-heading t t t t))
+                                  nil 'tree))
+                         events)))))
+      (org-mode)
+      (insert "* Project\n")
+      (insert "** WAIT 20 Gamma [#C]\n")
+      (insert "DEADLINE: <2026-06-03 Wed>\n")
+      (insert "[2026-05-24 Sun]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 08:00]--[2026-05-27 Wed 10:30] =>  2:30\n")
+      (insert ":END:\n")
+      (insert "** TODO 10 Alpha [#A]\n")
+      (insert "DEADLINE: <2026-06-01 Mon>\n")
+      (insert "[2026-05-22 Fri]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:45] =>  0:45\n")
+      (insert ":END:\n")
+      (insert "** DONE 30 Beta [#D]\n")
+      (insert "DEADLINE: <2026-06-02 Tue>\n")
+      (insert "[2026-05-23 Sat]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:15] =>  1:15\n")
+      (insert ":END:\n")
+      (insert "** NEXT 40 Delta\n")
+      (insert "DEADLINE: <2026-06-04 Thu>\n")
+      (insert "[2026-05-21 Thu]\n")
+      (insert ":LOGBOOK:\n")
+      (insert "CLOCK: [2026-05-27 Wed 13:00]--[2026-05-27 Wed 13:20] =>  0:20\n")
+      (insert ":END:\n")
+      (goto-char (point-min))
+      (search-forward "Delta")
+      (beginning-of-line)
+      (let ((priority-cycle
+             (list
+              (progn (org-priority 'up) (org-get-heading t t t t))
+              (progn (org-priority 'down) (org-get-heading t t t t))
+              (progn (org-priority ?D) (org-get-heading t t t t))
+              (org-get-priority (thing-at-point 'line t)))))
+        (goto-char (point-min))
+        (org-sort-entries nil ?o)
+        (let ((by-todo (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-min))
+          (org-sort-entries nil ?P)
+          (let ((by-priority-desc
+                 (buffer-substring-no-properties (point-min) (point-max))))
+            (goto-char (point-min))
+            (org-sort-entries nil ?k)
+            (let ((by-clock (buffer-substring-no-properties (point-min) (point-max))))
+              (goto-char (point-min))
+              (org-sort-entries nil ?d)
+              (let ((by-deadline
+                     (buffer-substring-no-properties (point-min) (point-max))))
+                (goto-char (point-min))
+                (org-sort-entries nil ?C)
+                (let ((by-created-desc
+                       (buffer-substring-no-properties (point-min) (point-max))))
+                  (goto-char (point-min))
+                  (search-forward "** TODO")
+                  (beginning-of-line)
+                  (let ((region-start (point)))
+                    (search-forward "** WAIT")
+                    (beginning-of-line)
+                    (org-end-of-subtree t t)
+                    (let ((region-end (point)))
+                      (goto-char region-start)
+                      (let ((transient-mark-mode t)
+                            (mark-active t))
+                        (set-mark region-end)
+                        (org-sort-entries nil ?n))
+                      (list priority-cycle
+                            by-todo
+                            by-priority-desc
+                            by-clock
+                            by-deadline
+                            by-created-desc
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))
+                            (nreverse events)
+                            (org-element-map
+                                (org-element-parse-buffer) 'headline
+                              (lambda (h)
+                                (list (org-element-property :todo-keyword h)
+                                      (org-element-property :priority h)
+                                      (org-element-property :raw-value h))))))))))))))))"##,
+    );
+}
