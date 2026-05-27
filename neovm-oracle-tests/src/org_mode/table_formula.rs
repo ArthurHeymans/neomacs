@@ -1091,3 +1091,80 @@ fn org_table_navigation_copydown_formula_edit_combo() {
               final-summary)))))"##,
     );
 }
+
+#[test]
+fn org_table_cross_ref_edit_recalc_lisp_dump_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+NAME: prices\n")
+    (insert "| Item | Unit | Qty | Subtotal |\n")
+    (insert "|------+------+-----+----------|\n")
+    (insert "| Apples | 2.5 | 4 | |\n")
+    (insert "| Bananas | 1.8 | 6 | |\n")
+    (insert "| Cherries | 5.0 | 2 | |\n")
+    (insert "|------+------+-----+----------|\n")
+    (insert "| Total | | | |\n")
+    (insert "#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\n")
+    (insert "#+NAME: summary\n")
+    (insert "| Category | Amount |\n")
+    (insert "|----------+--------|\n")
+    (insert "| Fruit | |\n")
+    (insert "| Tax | |\n")
+    (insert "| Grand | |\n")
+    (insert "#+TBLFM: @2$2=remote(prices,@>$4)::@3$2=@2$2*0.1;%.2f::@4$2=@2$2+@3$2;%.2f\n")
+    (goto-char (point-min))
+    (org-table-recalculate-buffer-tables)
+    (let ((prices-after-recalc
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (prices-lisp
+           (progn
+             (goto-char (point-min))
+             (search-forward "prices")
+             (org-table-to-lisp)))
+          (summary-lisp
+           (progn
+             (goto-char (point-min))
+             (search-forward "summary")
+             (org-table-to-lisp))))
+      ;; Edit a cell and recalculate
+      (goto-char (point-min))
+      (search-forward "Bananas")
+      (org-table-goto-column 3)
+      (org-table-get-field nil "10")
+      (org-table-recalculate-buffer-tables)
+      (let ((after-edit
+             (buffer-substring-no-properties (point-min) (point-max)))
+            (prices-after-edit-lisp
+             (progn
+               (goto-char (point-min))
+               (search-forward "prices")
+               (org-table-to-lisp)))
+            (summary-after-edit-lisp
+             (progn
+               (goto-char (point-min))
+               (search-forward "summary")
+               (org-table-to-lisp)))
+            (stored-formulas
+             (progn
+               (goto-char (point-min))
+               (search-forward "prices")
+               (list (org-table-get-stored-formulas)
+                     (progn
+                       (goto-char (point-min))
+                       (search-forward "summary")
+                       (org-table-get-stored-formulas))))))
+        (list prices-after-recalc
+              prices-lisp
+              summary-lisp
+              after-edit
+              prices-after-edit-lisp
+              summary-after-edit-lisp
+              stored-formulas)))))"##,
+    );
+}
