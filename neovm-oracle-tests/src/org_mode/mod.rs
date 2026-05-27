@@ -1469,5 +1469,6 @@ mod strong_workflow_combos;
 mod strong_xenna_combos;
 mod strong_xero_combos;
 mod strong_xi_combos;
+mod strong_xii_combos;
 mod strong_yotta_combos;
 mod strong_zetta_combos;
