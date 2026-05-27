@@ -169,3 +169,70 @@ fn org_xds_direct_save_attach_and_file_link_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_yank_adjusted_folded_subtree_visibility_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((kill-ring nil)
+          (kill-ring-yank-pointer nil)
+          (org-yank-adjusted-subtrees t)
+          (org-yank-folded-subtrees t))
+      (org-mode)
+      (insert "* Target\n")
+      (insert "** Existing\nExisting body\n")
+      (insert "* Source\n")
+      (insert "** TODO Child\n")
+      (insert "Child body\n")
+      (insert "*** Grand\nGrand body\n")
+      (goto-char (point-min))
+      (search-forward "Child")
+      (beginning-of-line)
+      (org-copy-subtree 1)
+      (let ((copied (current-kill 0 t)))
+        (goto-char (point-min))
+        (search-forward "Existing body")
+        (end-of-line)
+        (insert "\n")
+        (org-yank nil)
+        (let ((after-yank
+               (buffer-substring-no-properties (point-min) (point-max)))
+              (visibility
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward needle)
+                    (list needle
+                          (org-outline-level)
+                          (invisible-p (point))
+                          (get-text-property (point) 'invisible))))
+                '("Target" "Existing" "Child body" "Grand" "Grand body"
+                  "Source")))
+              (swallow
+               (save-excursion
+                 (goto-char (point-min))
+                 (search-forward "Existing body")
+                 (let ((beg (line-beginning-position)))
+                   (search-forward "Grand body")
+                   (org-yank-folding-would-swallow-text beg (point))))))
+          (org-fold-show-all)
+          (list copied
+                after-yank
+                visibility
+                swallow
+                (org-element-map (org-element-parse-buffer) 'headline
+                  (lambda (h)
+                    (list (org-element-property :level h)
+                          (org-element-property :todo-keyword h)
+                          (org-element-property :raw-value h))))
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))"##,
+    );
+}
