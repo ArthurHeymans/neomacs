@@ -439,3 +439,107 @@ fn org_cite_insert_processor_affix_boundaries_combo() {
       (setq org-cite--processors original-processors))))"##,
     );
 }
+
+#[test]
+fn org_cite_basic_activation_follow_completion_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (require 'oc-basic)
+  (let* ((root (make-temp-file "org-cite-activate" t))
+         (bib (expand-file-name "refs.bib" root))
+         (org-cite-global-bibliography nil)
+         (org-cite-activate-processor 'basic)
+         (org-cite-follow-processor 'basic))
+    (unwind-protect
+        (progn
+          (with-temp-file bib
+            (insert "@article{alpha2020,\n")
+            (insert "  author = {Alpha, Ann},\n")
+            (insert "  title = {Known Alpha},\n")
+            (insert "  journal = {J},\n")
+            (insert "  year = {2020}}\n\n")
+            (insert "@book{beta2021,\n")
+            (insert "  author = {Beta, Bob},\n")
+            (insert "  title = {Known Beta},\n")
+            (insert "  publisher = {Press},\n")
+            (insert "  year = {2021}}\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+bibliography: " bib "\n")
+            (insert "Known [cite:see @alpha2020 p. 4; @beta2021] ")
+            (insert "Missing [cite:@alpah2020; @missing].\n")
+            (font-lock-ensure (point-min) (point-max))
+            (let* ((tree (org-element-parse-buffer))
+                   (citations (org-element-map tree 'citation #'identity))
+                   (refs (org-element-map tree 'citation-reference
+                           #'identity))
+                   (info (org-export-get-environment 'org nil))
+                   (completion-table
+                    (org-cite-basic--key-completion-table))
+                   (props
+                    (mapcar
+                     (lambda (key)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (search-forward (concat "@" key))
+                         (let ((pos (1- (point))))
+                           (list key
+                                 (get-text-property pos 'face)
+                                 (get-text-property pos 'mouse-face)
+                                 (get-text-property pos 'help-echo)
+                                 (keymapp
+                                  (get-text-property pos 'keymap))))))
+                     '("alpha2020" "alpah2020" "missing"))))
+              (let ((follow-alpha
+                     (save-excursion
+                       (org-cite-basic-goto (car refs) nil)
+                       (list (file-name-nondirectory
+                              (or (buffer-file-name) ""))
+                             (buffer-substring-no-properties
+                              (line-beginning-position)
+                              (line-end-position)))))
+                    (follow-missing
+                     (condition-case err
+                         (save-excursion
+                           (org-cite-basic-goto (nth 2 refs) nil)
+                           'ok)
+                       (error (cons (car err) (cdr err))))))
+                (list (mapcar (lambda (path)
+                                (replace-regexp-in-string
+                                 (regexp-quote root) "<root>" path))
+                              (org-cite-list-bibliography-files))
+                      (org-cite-basic--all-keys)
+                      (sort (all-completions "a" completion-table) #'string<)
+                      (org-cite-basic--close-keys
+                       "alpah2020" (org-cite-basic--all-keys))
+                      (mapcar (lambda (key)
+                                (list key
+                                      (org-cite-basic--get-author
+                                       key info 'raw)
+                                      (org-cite-basic--get-year
+                                       key info 'no-suffix)
+                                      (org-cite-basic--get-field
+                                       'title key info 'raw)))
+                              '("alpha2020" "beta2021"))
+                      (mapcar (lambda (citation)
+                                (list (org-cite-get-references citation t)
+                                      (org-cite-main-affixes citation)
+                                      (org-cite-boundaries citation)))
+                              citations)
+                      props
+                      follow-alpha
+                      follow-missing
+                      (replace-regexp-in-string
+                       (regexp-quote root)
+                       "<root>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))))))))
+      (dolist (buf (list (get-file-buffer bib)))
+        (when buf (kill-buffer buf)))
+      (delete-directory root t))))"##,
+    );
+}
