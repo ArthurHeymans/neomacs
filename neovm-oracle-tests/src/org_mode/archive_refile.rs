@@ -632,7 +632,79 @@ fn org_refile_completion_new_parent_verify_history_combo() {
                           (buffer-substring-no-properties
                            (point-min) (point-max)))))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
-      (delete-directory root t))))"##,
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
+
+#[test]
+fn org_refile_targets_outline_path_markers_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let* ((file (make-temp-file "org-refile-deep" nil ".org"
+                               "* Inbox\n** TODO Task one\nbody one\n** TODO Task two\nbody two\n* Project\n** Active\n*** Sub A\n*** Sub B\n* Archive\n")))
+    (unwind-protect
+        (with-current-buffer (find-file-noselect file)
+          (org-mode)
+          (let* ((org-refile-targets `((,file :maxlevel . 3)))
+                 (org-refile-use-outline-path t)
+                 (org-outline-path-complete-in-steps nil)
+                 ;; Get refile targets with deep state
+                 (targets
+                  (org-refile-get-targets))
+                 ;; Get outline paths
+                 (outline-paths
+                  (mapcar (lambda (tgt)
+                            (list (car tgt)
+                                  (cadr tgt)
+                                  (caddr tgt)))
+                          targets))
+                 ;; Snapshot before refile
+                 (before (buffer-substring-no-properties
+                          (point-min) (point-max)))
+                 (headings-before
+                  (org-element-map (org-element-parse-buffer) 'headline
+                    (lambda (h)
+                      (list (org-element-property :level h)
+                            (org-element-property :raw-value h)
+                            (org-element-property :todo-keyword h)))))
+                 ;; Refile Task one to Sub A
+                 (target-pos
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward "Sub A")
+                    (line-beginning-position))))
+            (goto-char (point-min))
+            (search-forward "Task one")
+            (beginning-of-line)
+            (org-refile nil nil (list "Sub A" file nil target-pos))
+            (save-buffer)
+            (let ((after-refile (buffer-substring-no-properties
+                                 (point-min) (point-max)))
+                  (headings-after
+                   (org-element-map (org-element-parse-buffer) 'headline
+                     (lambda (h)
+                       (list (org-element-property :level h)
+                             (org-element-property :raw-value h)
+                             (org-element-property :todo-keyword h)))))
+                  (sub-a-content
+                   (save-excursion
+                     (goto-char (point-min))
+                     (search-forward "Sub A")
+                     (let ((beg (point)))
+                       (org-end-of-subtree)
+                       (buffer-substring-no-properties beg (point))))))
+              (list outline-paths
+                    headings-before
+                    before
+                    headings-after
+                    sub-a-content
+                    after-refile)))
+          (kill-buffer))
+      (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
 
