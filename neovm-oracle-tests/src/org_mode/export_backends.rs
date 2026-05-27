@@ -131,3 +131,73 @@ fn org_icalendar_export_deadline_schedule_repeater_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_icalendar_combine_agenda_files_filter_hook_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-icalendar)
+  (let* ((root (make-temp-file "org-ical-combine" t))
+         (one (expand-file-name "one.org" root))
+         (two (expand-file-name "two.org" root))
+         (combined (expand-file-name "combined.ics" root))
+         (org-agenda-files (list one two))
+         (org-icalendar-combined-agenda-file combined)
+         (org-icalendar-combined-name "Combined Name")
+         (org-icalendar-combined-description "Combined Description")
+         (org-icalendar-ttl "PT2H")
+         (org-icalendar-timezone "UTC")
+         (org-icalendar-include-todo 'all)
+         (org-icalendar-use-scheduled '(todo-start event-if-todo))
+         (org-icalendar-use-deadline '(todo-due event-if-not-todo))
+         (org-icalendar-with-timestamps t)
+         (org-icalendar-exclude-tags '("noexport"))
+         (saved nil)
+         (org-icalendar-after-save-hook
+          (list (lambda (file)
+                  (push (file-relative-name file root) saved)))))
+    (unwind-protect
+        (progn
+          (with-temp-file one
+            (insert "#+TITLE: One\n#+CATEGORY: Alpha\n")
+            (insert "* TODO Task one :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed 10:00>\n")
+            (insert "DEADLINE: <2026-05-28 Thu>\n")
+            (insert "* Hidden :noexport:\n<2026-05-30 Sat 12:00>\n"))
+          (with-temp-file two
+            (insert "#+TITLE: Two\n#+CATEGORY: Beta\n")
+            (insert "* Event two :event:\n")
+            (insert "[2026-06-01 Mon 13:00-14:00]\n")
+            (insert "* TODO Task two\n")
+            (insert "DEADLINE: <2026-06-02 Tue 09:00>\n"))
+          (org-icalendar-combine-agenda-files nil)
+          (let* ((ics (with-temp-buffer
+                        (insert-file-contents combined)
+                        (buffer-string)))
+                 (normalized
+                  (replace-regexp-in-string
+                   "PRODID:-//[^/\n]+//"
+                   "PRODID:-//user//"
+                   (replace-regexp-in-string
+                    "DTSTAMP:[0-9TZ]+"
+                    "DTSTAMP:<stamp>"
+                    (replace-regexp-in-string
+                     "UID:[^\n]+"
+                     "UID:<uid>"
+                     ics)))))
+            (list (sort saved #'string<)
+                  (not (null (string-match-p "X-WR-CALNAME:Combined Name" ics)))
+                  (not (null (string-match-p "X-WR-CALDESC:Combined Description" ics)))
+                  (not (null (string-match-p "X-PUBLISHED-TTL:PT2H" ics)))
+                  (not (null (string-match-p "Task one" ics)))
+                  (not (null (string-match-p "Task two" ics)))
+                  (not (null (string-match-p "Event two" ics)))
+                  (null (string-match-p "Hidden" ics))
+                  normalized)))
+      (dolist (file (list one two))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
+      (delete-directory root t))))"##,
+    );
+}
