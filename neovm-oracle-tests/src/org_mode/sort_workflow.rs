@@ -139,3 +139,75 @@ fn org_table_sort_region_time_numeric_function_combo() {
               (org-table-to-lisp))))))"##,
     );
 }
+
+#[test]
+fn org_sort_dispatch_table_list_entries_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (require 'org-table)
+  (with-temp-buffer
+    (let ((events nil)
+          (org-after-sorting-entries-or-items-hook
+           (list (lambda ()
+                   (push (list (line-number-at-pos)
+                               (thing-at-point 'line t)
+                               (org-at-table-p)
+                               (org-at-item-p)
+                               (org-at-heading-p))
+                         events)))))
+      (org-mode)
+      (insert "* Data\n")
+      (insert "| Name | Score |\n")
+      (insert "|------+-------|\n")
+      (insert "| beta | 3 |\n")
+      (insert "| alpha | 10 |\n")
+      (insert "\n- zeta <2026-05-29 Fri>\n- alpha <2026-05-27 Wed>\n- beta <2026-05-28 Thu>\n")
+      (insert "** WAIT Later\n")
+      (insert "SCHEDULED: <2026-05-29 Fri>\n")
+      (insert ":PROPERTIES:\n:Rank: 20\n:END:\n")
+      (insert "** TODO First\n")
+      (insert "SCHEDULED: <2026-05-27 Wed>\n")
+      (insert ":PROPERTIES:\n:Rank: 3\n:END:\n")
+      (insert "** DONE Middle\n")
+      (insert "SCHEDULED: <2026-05-28 Thu>\n")
+      (insert ":PROPERTIES:\n:Rank: 11\n:END:\n")
+      (goto-char (point-min))
+      (search-forward "Score")
+      (cl-letf (((symbol-function 'read-char-exclusive)
+                 (lambda (&rest _) ?N)))
+        (org-sort nil))
+      (let ((after-table
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (goto-char (point-min))
+        (search-forward "- zeta")
+        (cl-letf (((symbol-function 'read-char-exclusive)
+                   (lambda (&rest _) ?t)))
+          (org-sort nil))
+        (let ((after-list
+               (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-min))
+          (search-forward "** WAIT")
+          (beginning-of-line)
+          (cl-letf (((symbol-function 'read-char-exclusive)
+                     (lambda (&rest _) ?r))
+                    ((symbol-function 'read-string)
+                     (lambda (&rest _) "Rank")))
+            (org-sort nil))
+          (list after-table
+                after-list
+                (buffer-substring-no-properties (point-min) (point-max))
+                (nreverse events)
+                (org-table-to-lisp)
+                (org-list-to-lisp)
+                (org-element-map (org-element-parse-buffer) 'headline
+                  (lambda (h)
+                    (list (org-element-property :level h)
+                          (org-element-property :todo-keyword h)
+                          (org-element-property :raw-value h)
+                          (org-element-property :begin h))))))))"##,
+    );
+}
