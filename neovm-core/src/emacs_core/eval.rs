@@ -7508,19 +7508,18 @@ impl Context {
                     _ => return Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
                 }
             }
-        } else if original_fun.is_cons() {
-            // GNU eval_sub runs non-symbol function position through
-            // Ffunction.  Literal `(lambda ...)` becomes an interpreted
-            // closure, preserving lexical environments for nested closures;
-            // malformed arglists remain in the closure and are rejected by
-            // funcall_lambda during call binding.
-            if cons_head_symbol_id(&original_fun) == Some(lambda_symbol()) {
+        } else {
+            // GNU eval_sub runs every non-symbol function position through
+            // Ffunction(list1(fun)).  `function` only transforms literal
+            // `(lambda ...)` forms; byte-code objects, subrs, and malformed
+            // values are quoted through to the normal callable validation
+            // below.
+            if original_fun.is_cons() && cons_head_symbol_id(&original_fun) == Some(lambda_symbol())
+            {
                 self.instantiate_callable_cons_form(original_fun)?
             } else {
                 original_fun
             }
-        } else {
-            return Err(signal("invalid-function", vec![original_fun]));
         };
 
         if let Some(surface_sym_id) = sym_id

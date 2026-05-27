@@ -7210,6 +7210,18 @@ fn compiled_literal_reader_form_is_callable_like_gnu() {
 }
 
 #[test]
+fn byte_code_object_function_position_is_callable_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU eval_sub sends non-symbol function positions through `function`.
+    // That quotes byte-code objects through to normal function dispatch, so a
+    // form whose car is a byte-code object is callable.
+    let result = eval_one(
+        "(eval (list (car (read-from-string \"#[nil \\\"\\\\300\\\\207\\\" [42] 1]\"))) t)",
+    );
+    assert_eq!(result, "OK 42");
+}
+
+#[test]
 fn byte_code_function_prints_readable_gnu_literal() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
