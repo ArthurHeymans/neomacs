@@ -75,8 +75,8 @@ fn integer_binary_hash() {
 #[test]
 fn float_simple() {
     crate::test_utils::init_test_tracing();
-    let v = read1("3.14");
-    assert_eq!(v.as_number_f64(), Some(3.14));
+    let v = read1("3.125");
+    assert_eq!(v.as_number_f64(), Some(3.125));
 }
 
 #[test]

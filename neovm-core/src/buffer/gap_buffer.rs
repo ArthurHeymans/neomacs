@@ -385,11 +385,6 @@ impl GapBuffer {
         None
     }
 
-    /// Return the full buffer contents as a `String`.
-    pub fn to_string(&self) -> String {
-        self.text_range(0, self.len())
-    }
-
     // -----------------------------------------------------------------------
     // Mutation
     // -----------------------------------------------------------------------
@@ -785,7 +780,7 @@ impl Default for GapBuffer {
 
 impl fmt::Display for GapBuffer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.to_string())
+        f.write_str(&self.text_range(0, self.len()))
     }
 }
 

@@ -239,9 +239,9 @@ fn float_allocation() {
     crate::test_utils::init_test_tracing();
     let mut heap = super::gc::TaggedHeap::new();
 
-    let f = heap.alloc_float(3.14);
+    let f = heap.alloc_float(3.125);
     assert!(f.is_float());
-    assert!((f.xfloat() - 3.14).abs() < f64::EPSILON);
+    assert!((f.xfloat() - 3.125).abs() < f64::EPSILON);
 }
 
 #[test]

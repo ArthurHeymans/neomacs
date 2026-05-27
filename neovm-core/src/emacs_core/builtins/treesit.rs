@@ -1180,7 +1180,7 @@ fn search_forward_impl<'tree>(
 ) -> Result<Option<tree_sitter::Node<'tree>>, Flow> {
     let mut current = start;
     loop {
-        while let Some(sibling) = sibling_for_search(current, forward, named_only) {
+        if let Some(sibling) = sibling_for_search(current, forward, named_only) {
             let candidate = descend_to_leaf(sibling, forward);
             if predicate_matches_node(
                 eval,
@@ -1194,7 +1194,6 @@ fn search_forward_impl<'tree>(
                 return Ok(Some(candidate));
             }
             current = candidate;
-            break;
         }
         if sibling_for_search(current, forward, named_only).is_some() {
             continue;

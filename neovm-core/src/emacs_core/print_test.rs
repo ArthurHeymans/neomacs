@@ -12,7 +12,7 @@ fn print_basic_values() {
     assert_eq!(print_value(&Value::NIL), "nil");
     assert_eq!(print_value(&Value::T), "t");
     assert_eq!(print_value(&Value::fixnum(42)), "42");
-    assert_eq!(print_value(&Value::make_float(3.14)), "3.14");
+    assert_eq!(print_value(&Value::make_float(3.125)), "3.125");
     assert_eq!(print_value(&Value::make_float(1.0)), "1.0");
     assert_eq!(print_value(&Value::symbol("foo")), "foo");
     assert_eq!(print_value(&Value::symbol(".foo")), ".foo");

@@ -298,14 +298,14 @@ fn read_from_string_with_start() {
 fn read_from_string_float() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_read_from_string(&mut ev, vec![Value::string("3.14")]).unwrap();
+    let result = builtin_read_from_string(&mut ev, vec![Value::string("3.125")]).unwrap();
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
             let pair_cdr = result.cons_cdr();
             assert!(
                 pair_car.as_float().is_some()
-                    && (pair_car.as_float().unwrap() - 3.14).abs() < 1e-10
+                    && (pair_car.as_float().unwrap() - 3.125).abs() < 1e-10
             );
         }
         _ => panic!("Expected cons"),

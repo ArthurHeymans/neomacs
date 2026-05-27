@@ -9736,7 +9736,7 @@ fn set_case_syntax_preserves_outer_lexical_c_after_charprop() {
              (set-case-syntax ?« "." tbl)
              (set-case-syntax ?» "." tbl)
              (set-case-syntax ?¬ "_" tbl)
-             (set-case-syntax ?­ "_" tbl)
+             (set-case-syntax #x00AD "_" tbl)
              (set-case-syntax ?® "_" tbl)
              (set-case-syntax ?° "_" tbl)
              (set-case-syntax ?± "_" tbl)

@@ -86,7 +86,7 @@ fn test_type_dispatch() {
         TaggedValue::fixnum(42),
         TaggedValue::char('A'),
         heap.alloc_cons(TaggedValue::fixnum(1), TaggedValue::NIL),
-        heap.alloc_float(3.14),
+        heap.alloc_float(3.125),
         heap.alloc_vector(vec![TaggedValue::fixnum(10)]),
     ];
 
@@ -164,8 +164,8 @@ fn test_eq_semantics() {
     assert_eq!(TaggedValue::NIL.bits(), TaggedValue::NIL.bits());
 
     // Float eq: different allocations = not eq (pointer identity)
-    let f1 = heap.alloc_float(3.14);
-    let f2 = heap.alloc_float(3.14);
+    let f1 = heap.alloc_float(3.125);
+    let f2 = heap.alloc_float(3.125);
     assert_ne!(f1.bits(), f2.bits()); // Different allocations
 }
 
@@ -270,7 +270,7 @@ fn test_gc_mixed_types() {
     // Allocate various types
     let root_cons = heap.alloc_cons(TaggedValue::fixnum(1), TaggedValue::NIL);
     let _garbage_cons = heap.alloc_cons(TaggedValue::fixnum(999), TaggedValue::NIL);
-    let root_float = heap.alloc_float(2.718);
+    let root_float = heap.alloc_float(2.625);
     let _garbage_float = heap.alloc_float(0.0);
 
     assert_eq!(heap.allocated_count, 4);
@@ -280,7 +280,7 @@ fn test_gc_mixed_types() {
 
     assert_eq!(heap.allocated_count, 2);
     assert_eq!(root_cons.cons_car().as_fixnum(), Some(1));
-    assert!((root_float.xfloat() - 2.718).abs() < f64::EPSILON);
+    assert!((root_float.xfloat() - 2.625).abs() < f64::EPSILON);
 }
 
 // -----------------------------------------------------------------------

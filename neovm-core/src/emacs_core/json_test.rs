@@ -68,8 +68,8 @@ fn serialize_negative_integer() {
 #[test]
 fn serialize_float() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_json_serialize(vec![Value::make_float(3.14)]);
-    assert_eq!(result.unwrap().as_utf8_str(), Some("3.14"));
+    let result = builtin_json_serialize(vec![Value::make_float(3.125)]);
+    assert_eq!(result.unwrap().as_utf8_str(), Some("3.125"));
 }
 
 #[test]
@@ -403,9 +403,9 @@ fn parse_negative_integer() {
 #[test]
 fn parse_float() {
     crate::test_utils::init_test_tracing();
-    let val = builtin_json_parse_string(vec![Value::string("3.14")]).unwrap();
+    let val = builtin_json_parse_string(vec![Value::string("3.125")]).unwrap();
     match val.kind() {
-        ValueKind::Float => assert!((val.as_float().unwrap() - 3.14).abs() < 1e-10),
+        ValueKind::Float => assert!((val.as_float().unwrap() - 3.125).abs() < 1e-10),
         _ => panic!("expected float, got {:?}", val),
     }
 }

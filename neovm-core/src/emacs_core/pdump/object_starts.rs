@@ -395,7 +395,7 @@ mod tests {
                     car: DumpValue::Int(1),
                     cdr: DumpValue::Nil,
                 },
-                DumpHeapObject::Float(3.14),
+                DumpHeapObject::Float(3.125),
                 DumpHeapObject::Free,
                 DumpHeapObject::Vector(vec![DumpValue::Nil, DumpValue::True]),
                 DumpHeapObject::Str {

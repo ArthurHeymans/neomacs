@@ -24,6 +24,7 @@
 use malachite::integer::Integer;
 use std::cell::RefCell;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 use crate::emacs_core::intern::{
     SymId, UNBOUND_SYM_ID, canonical_symbol_for_name, is_canonical_id, resolve_name, resolve_sym,
@@ -103,9 +104,9 @@ pub(crate) fn update_static_subr_object_entry(
 
 /// A Lisp value encoded as a tagged pointer in a single machine word.
 ///
-/// This is `Copy`, `Eq`, `Hash` — can be freely duplicated and compared.
+/// This is `Copy` and `Eq` — can be freely duplicated and compared.
 /// Heap access is via direct pointer dereference (no ObjId indirection).
-#[derive(Clone, Copy, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct TaggedValue(pub(crate) usize);
 
@@ -114,9 +115,9 @@ pub struct TaggedValue(pub(crate) usize);
 /// naturally.  For Emacs `eq` (pointer identity), use `eq_value()` or
 /// `a.bits() == b.bits()`.
 ///
-/// NOTE: This intentionally violates the `Hash`/`Eq` contract for heap types
-/// (two structurally-equal objects may have different hashes). Do NOT use
-/// `TaggedValue` as a `HashMap` key — use `HashKey` instead.
+/// NOTE: This is `equal`-style structural equality. Code that needs Lisp
+/// hash-table semantics for a specific test (`eq`, `eql`, or `equal`) should
+/// convert through `HashKey` with the selected `HashTableTest`.
 impl PartialEq for TaggedValue {
     fn eq(&self, other: &Self) -> bool {
         if self.0 == other.0 {
@@ -127,6 +128,13 @@ impl PartialEq for TaggedValue {
 }
 
 impl Eq for TaggedValue {}
+
+impl Hash for TaggedValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_hash_key(&crate::emacs_core::value::HashTableTest::Equal)
+            .hash(state);
+    }
+}
 
 fn canonical_subr_object(sym_id: SymId) -> TaggedValue {
     STATIC_SUBR_OBJECTS.with(|objects| {

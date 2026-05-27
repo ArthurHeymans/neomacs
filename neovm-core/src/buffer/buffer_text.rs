@@ -241,10 +241,6 @@ impl BufferText {
             .with_contiguous_emacs_bytes(start, end, f)
     }
 
-    pub fn to_string(&self) -> String {
-        self.storage.borrow().gap.to_string()
-    }
-
     pub fn insert_str(&mut self, pos: usize, text: &str) {
         if text.is_empty() {
             return;
@@ -757,7 +753,7 @@ impl BufferText {
     /// marker is not currently on any chain. Callers re-binding a marker
     /// must `chain_unlink` from the old buffer first; the
     /// `debug_assert!` in `chain_splice_at_head` catches violations.
-    pub fn register_marker(
+    pub(crate) fn register_marker(
         &self,
         marker_ptr: *mut crate::tagged::header::MarkerObj,
         buffer_id: BufferId,
@@ -1190,7 +1186,7 @@ impl BufferText {
     /// **Precondition:** `marker.next_marker` must be null (marker is not
     /// currently on any chain). Violating this silently truncates the
     /// other chain. `debug_assert!` enforces it in debug builds.
-    pub fn chain_splice_at_head(&self, marker: *mut crate::tagged::header::MarkerObj) {
+    pub(crate) fn chain_splice_at_head(&self, marker: *mut crate::tagged::header::MarkerObj) {
         let mut storage = self.storage.borrow_mut();
         let old_head = storage.markers_head;
         unsafe {
@@ -1215,7 +1211,7 @@ impl BufferText {
     /// the marker is in the chain, we tolerate absent markers. This is
     /// defensive: callers currently include code paths that may be
     /// double-invoked during GC sweep and kill-buffer cleanup in T8/T9.
-    pub fn chain_unlink(&self, marker: *mut crate::tagged::header::MarkerObj) {
+    pub(crate) fn chain_unlink(&self, marker: *mut crate::tagged::header::MarkerObj) {
         let mut storage = self.storage.borrow_mut();
         let mut prev_slot: *mut *mut crate::tagged::header::MarkerObj = &mut storage.markers_head;
         // SAFETY: `prev_slot` walks the intrusive chain starting at

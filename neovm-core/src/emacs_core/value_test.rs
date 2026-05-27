@@ -21,7 +21,7 @@ fn value_constructors() {
         assert!(Value::NIL.is_nil());
         assert!(Value::T.is_truthy());
         assert!(Value::fixnum(42).is_integer());
-        assert!(Value::make_float(3.14).is_float());
+        assert!(Value::make_float(3.125).is_float());
         assert!(Value::string("hello").is_string());
         assert!(Value::char('a').is_char());
         assert!(Value::symbol("foo").is_symbol());
@@ -573,8 +573,8 @@ fn list_length_circular() {
 fn as_int_as_float() {
     crate::test_utils::init_test_tracing();
     assert_eq!(Value::fixnum(42).as_int(), Some(42));
-    assert_eq!(Value::make_float(3.14).as_int(), None);
-    assert_eq!(Value::make_float(3.14).as_float(), Some(3.14));
+    assert_eq!(Value::make_float(3.125).as_int(), None);
+    assert_eq!(Value::make_float(3.125).as_float(), Some(3.125));
     assert_eq!(Value::fixnum(42).as_float(), None);
     // as_number_f64 coerces both
     assert_eq!(Value::fixnum(7).as_number_f64(), Some(7.0));
