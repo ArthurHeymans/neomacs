@@ -444,3 +444,160 @@ fn org_id_get_force_copy_marker_override_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_id_link_move_reload_visibility_navigation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'ol)
+  (let* ((root (make-temp-file "org-id-link-nav" t))
+         (file (expand-file-name "links.org" root))
+         (org-id-locations-file (expand-file-name "ids.el" root))
+         (org-id-track-globally t)
+         (org-id-link-to-org-use-id 'use-existing)
+         (org-id-link-use-context t)
+         (org-link-descriptive t)
+         (org-link-context-for-files t)
+         (org-stored-links nil)
+         (org-store-link-plist nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+TITLE: ID Link Nav\n")
+            (insert "* Project\n:PROPERTIES:\n:ID: project-id\n:END:\n")
+            (insert "** Alpha\n:PROPERTIES:\n:ID: alpha-id\n:END:\n")
+            (insert "*** Deep Target\n:PROPERTIES:\n:ID: deep-id\n:CUSTOM_ID: deep-custom\n:END:\n")
+            (insert "Deep body with <<radio-deep>> and [[https://example.test][web]].\n")
+            (insert "** Beta\nBeta body.\n")
+            (insert "* Links\n")
+            (insert "[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\n"))
+          (org-id-update-id-locations (list file) t)
+          (org-id-locations-save)
+          (clrhash org-id-locations)
+          (org-id-locations-load)
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (let (stored stored-plist before-nav after-toggle opened-id
+                  opened-custom moved-open search-open link-summary final-nav)
+              (goto-char (point-min))
+              (search-forward "Deep Target")
+              (beginning-of-line)
+              (setq stored (org-id-store-link)
+                    stored-plist (copy-sequence org-store-link-plist))
+              (org-fold-hide-sublevels 1)
+              (goto-char (point-min))
+              (search-forward "* Links")
+              (beginning-of-line)
+              (setq before-nav
+                    (let (rows)
+                      (dotimes (_ 4)
+                        (org-next-link)
+                        (let ((link (org-element-context)))
+                          (push (list
+                                 (org-element-property :type link)
+                                 (org-element-property :path link)
+                                 (org-element-property :raw-link link)
+                                 (buffer-substring-no-properties
+                                  (org-element-begin link)
+                                  (org-element-end link))
+                                 (line-number-at-pos)
+                                 (not (null (org-invisible-p (point)))))
+                                rows)))
+                      (nreverse rows)))
+              (goto-char (point-min))
+              (search-forward "Deep ID")
+              (org-toggle-link-display)
+              (font-lock-ensure (point-min) (point-max))
+              (setq after-toggle
+                    (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position)))
+              (org-toggle-link-display)
+              (goto-char (point-min))
+              (search-forward "Deep ID")
+              (org-open-at-point)
+              (setq opened-id
+                    (list (org-get-heading t t t t)
+                          (line-number-at-pos)
+                          (not (null
+                                (org-invisible-p
+                                 (line-beginning-position))))))
+              (goto-char (point-min))
+              (search-forward "Deep Custom")
+              (org-open-at-point)
+              (setq opened-custom
+                    (list (org-get-heading t t t t)
+                          (line-number-at-pos)
+                          (org-entry-get nil "CUSTOM_ID")))
+              (goto-char (point-min))
+              (search-forward "Deep Target")
+              (beginning-of-line)
+              (org-cut-subtree)
+              (goto-char (point-min))
+              (search-forward "Beta")
+              (beginning-of-line)
+              (org-paste-subtree 3)
+              (org-fold-hide-sublevels 1)
+              (org-id-open "deep-id" nil)
+              (setq moved-open
+                    (list (org-get-heading t t t t)
+                          (org-outline-level)
+                          (line-number-at-pos)
+                          (not (null
+                                (org-invisible-p
+                                 (line-beginning-position))))))
+              (goto-char (point-min))
+              (search-forward "Links")
+              (org-link-search "*Deep Target" nil t)
+              (setq search-open
+                    (list (org-get-heading t t t t)
+                          (org-outline-level)
+                          (line-number-at-pos)))
+              (setq link-summary
+                    (org-element-map (org-element-parse-buffer) 'link
+                      (lambda (link)
+                        (list (org-element-property :type link)
+                              (org-element-property :path link)
+                              (org-element-property :raw-link link)
+                              (and (org-element-contents-begin link)
+                                   (buffer-substring-no-properties
+                                    (org-element-contents-begin link)
+                                    (org-element-contents-end link)))))))
+              (goto-char (point-min))
+              (search-forward "* Links")
+              (beginning-of-line)
+              (setq final-nav
+                    (let (rows)
+                      (dotimes (_ 5)
+                        (org-next-link)
+                        (push (list (line-number-at-pos)
+                                    (buffer-substring-no-properties
+                                     (line-beginning-position)
+                                     (line-end-position)))
+                              rows))
+                      (nreverse rows)))
+              (list stored
+                    stored-plist
+                    (hash-table-count org-id-locations)
+                    before-nav
+                    after-toggle
+                    opened-id
+                    opened-custom
+                    moved-open
+                    search-open
+                    link-summary
+                    final-nav
+                    (replace-regexp-in-string
+                     (regexp-quote root)
+                     "<root>"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
