@@ -118,6 +118,7 @@ mod xenna_strict;
 mod xi_combos;
 mod yank_dnd;
 mod yotta_strict;
+mod zeta2_combos;
 mod zeta_export;
 mod zetta_strict;
 
