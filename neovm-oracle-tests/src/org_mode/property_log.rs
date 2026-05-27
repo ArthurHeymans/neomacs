@@ -728,6 +728,72 @@ fn org_todo_tag_property_clock_state_mutation_deep_combo() {
                               "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
                               (buffer-substring-no-properties
                                (point-min) (point-max)))))
-                    (list p1 p2 p3 p4 p5 p6 buf)))))))))))"##,
+                     (list p1 p2 p3 p4 p5 p6 buf)))))))))))"##,
+    );
+}
+
+#[test]
+fn org_property_inherit_set_delete_globally_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance t))
+      (org-mode)
+      (insert "* Root\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:CATEGORY: main\n:Effort: 5:00\n:END:\n")
+      (insert "** Child A\n")
+      (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+      (insert "*** Grandchild\n")
+      (insert "** Child B\n")
+      (insert "* Other\n")
+      (insert ":PROPERTIES:\n:Owner: Bob\n:END:\n")
+      ;; Get inherited properties
+      (let ((snap (lambda (pos)
+                    (goto-char pos)
+                    (list (org-entry-get nil "Owner")
+                          (org-entry-get nil "Owner" 'inherit)
+                          (org-entry-get nil "CATEGORY")
+                          (org-entry-get nil "CATEGORY" 'inherit)
+                          (org-entry-get nil "Effort")
+                          (org-entry-get nil "Effort" 'inherit)))))
+        (goto-char (point-min))
+        (search-forward "Root")
+        (let ((root-props (funcall snap (line-beginning-position))))
+          (search-forward "Child A")
+          (let ((child-a (funcall snap (line-beginning-position))))
+            (search-forward "Grandchild")
+            (let ((grandchild (funcall snap (line-beginning-position))))
+              (goto-char (point-min))
+              (search-forward "Child B")
+              (let ((child-b (funcall snap (line-beginning-position))))
+                (goto-char (point-min))
+                (search-forward "Other")
+                (let ((other (funcall snap (line-beginning-position))))
+                  ;; Set a new property
+                  (goto-char (point-min))
+                  (search-forward "Child A")
+                  (beginning-of-line)
+                  (org-set-property "Status" "active")
+                  ;; Get all properties
+                  (let ((all-a (org-entry-properties nil 'standard)))
+                    ;; Delete globally
+                    (org-delete-property-globally "Owner")
+                    ;; Check after delete
+                    (goto-char (point-min))
+                    (search-forward "Grandchild")
+                    (let ((owner-after-delete (org-entry-get nil "Owner" 'inherit))
+                          (full-buf (buffer-substring-no-properties
+                                     (point-min) (point-max))))
+                      (list root-props
+                            child-a
+                            grandchild
+                            child-b
+                            other
+                            all-a
+                            owner-after-delete
+                            full-buf))))))))))))"##,
     );
 }
