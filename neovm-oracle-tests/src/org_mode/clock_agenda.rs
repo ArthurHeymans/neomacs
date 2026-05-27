@@ -542,3 +542,133 @@ fn org_clock_interrupt_resume_state_history_combo() {
                   org-clock-has-been-used))))))"##,
     );
 }
+
+#[test]
+fn org_clocktable_agenda_custom_formatter_regenerate_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-clocktable-agenda" t))
+         (file-a (expand-file-name "alpha.org" root))
+         (file-b (expand-file-name "beta.org" root))
+         (org-agenda-files (list file-a file-b))
+         (formatter-calls nil))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "#+CATEGORY: AlphaFile\n")
+            (insert "* Client :billable:\n")
+            (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+            (insert "** TODO Build :dev:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "** TODO Review :review:\n")
+            (insert "CLOCK: [2026-05-27 Wed 10:45]--[2026-05-27 Wed 11:15] =>  0:30\n"))
+          (with-temp-file file-b
+            (insert "#+CATEGORY: BetaFile\n")
+            (insert "* Internal :internal:\n")
+            (insert "** TODO Planning :admin:\n")
+            (insert "CLOCK: [2026-05-27 Wed 08:00]--[2026-05-27 Wed 08:20] =>  0:20\n")
+            (insert "* Client :billable:\n")
+            (insert ":PROPERTIES:\n:Owner: Bea\n:END:\n")
+            (insert "** TODO Test :qa:\n")
+            (insert "CLOCK: [2026-05-27 Wed 12:00]--[2026-05-27 Wed 12:40] =>  0:40\n"))
+          (with-temp-buffer
+            (org-mode)
+            (insert "#+TITLE: Clock Rollup\n")
+            (insert "#+BEGIN: clocktable :scope agenda :block 2026-05-27 :maxlevel 4 :link nil :tags t :timestamp t :match \"+billable\" :formatter probe-clock-formatter\n")
+            (insert "#+END:\n")
+            (cl-letf (((symbol-function 'probe-clock-formatter)
+                       (lambda (ipos tables params)
+                         (push
+                          (list ipos
+                                (plist-get params :scope)
+                                (plist-get params :block)
+                                (plist-get params :maxlevel)
+                                (plist-get params :match)
+                                (plist-get params :tags)
+                                (mapcar
+                                 (lambda (table)
+                                   (list (nth 0 table)
+                                         (nth 1 table)
+                                         (length (nth 2 table))
+                                         (mapcar
+                                          (lambda (row)
+                                            (list (nth 0 row)
+                                                  (substring-no-properties
+                                                   (nth 1 row))
+                                                  (mapcar
+                                                   #'substring-no-properties
+                                                   (nth 2 row))
+                                                  (nth 3 row)
+                                                  (nth 4 row)
+                                                  (nth 5 row)))
+                                          (nth 2 table))))
+                                 tables))
+                          formatter-calls)
+                         (org-clocktable-write-default ipos tables params))))
+              (goto-char (point-min))
+              (search-forward "#+BEGIN")
+              (beginning-of-line)
+              (org-update-dblock)
+              (let ((first
+                     (replace-regexp-in-string
+                      (regexp-quote root)
+                      "<root>"
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))
+                    (first-calls (copy-tree formatter-calls)))
+                (with-current-buffer (find-file-noselect file-b)
+                  (goto-char (point-min))
+                  (search-forward "12:40")
+                  (replace-match "13:10" t t)
+                  (save-buffer))
+                (setq formatter-calls nil)
+                (goto-char (point-min))
+                (search-forward "#+BEGIN")
+                (beginning-of-line)
+                (org-update-dblock)
+                    (let ((second
+                           (replace-regexp-in-string
+                            (regexp-quote root)
+                            "<root>"
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))))
+                          (direct
+                           (let ((table
+                                  (org-clock-get-table-data
+                                   file-a
+                                   '(:block "2026-05-27" :match "+billable"
+                                     :maxlevel 4 :tags t :timestamp t))))
+                             (list (nth 0 table)
+                                   (nth 1 table)
+                                   (length (nth 2 table))))))
+                      (cl-labels
+                          ((clean
+                            (value)
+                            (cond
+                             ((stringp value)
+                              (replace-regexp-in-string
+                               (regexp-quote root) "<root>" value))
+                             ((consp value)
+                              (cons (clean (car value))
+                                    (clean (cdr value))))
+                             ((vectorp value)
+                              (apply #'vector
+                                     (mapcar #'clean
+                                             (append value nil))))
+                             (t value))))
+                        (clean
+                         (list (nreverse first-calls)
+                               (nreverse formatter-calls)
+                               first
+                               second
+                               direct))))))))))
+      (dolist (file (list file-a file-b))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
+      (when (file-directory-p root) (delete-directory root t)))))"##,
+    );
+}
