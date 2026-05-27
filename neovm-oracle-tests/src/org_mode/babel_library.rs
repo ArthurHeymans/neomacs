@@ -1080,6 +1080,60 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_map_accumulate_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Seed block
+      (insert "#+NAME: seed\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'(1 2 3 4 5)\n")
+      (insert "#+end_src\n\n")
+      ;; Map block
+      (insert "#+NAME: mapper\n")
+      (insert "#+begin_src emacs-lisp :var data=seed :results value replace\n")
+      (insert "(mapcar (lambda (x) (list x (* x x) (* x x x))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Accumulate block
+      (insert "#+NAME: accumulator\n")
+      (insert "#+begin_src emacs-lisp :var data=mapper :results value replace\n")
+      (insert "(list :total-squares (apply #'+ (mapcar #'cadr data))\n")
+      (insert "      :total-cubes (apply #'+ (mapcar #'caddr data))\n")
+      (insert "      :count (length data))\n")
+      (insert "#+end_src\n\n")
+      ;; Output block
+      (insert "#+NAME: displayer\n")
+      (insert "#+begin_src emacs-lisp :var acc=accumulator :results output replace\n")
+      (insert "(princ (format \"squares=%d cubes=%d n=%d\"\n")
+      (insert "               (plist-get acc :total-squares)\n")
+      (insert "               (plist-get acc :total-cubes)\n")
+      (insert "               (plist-get acc :count)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("seed" "mapper" "accumulator" "displayer"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_complex_list_structure_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
