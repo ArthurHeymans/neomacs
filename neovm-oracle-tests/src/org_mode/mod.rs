@@ -42,6 +42,7 @@ mod element_ast;
 mod element_upstream;
 mod element_upstream_2;
 mod entities_markup;
+mod epsilon2_operations;
 mod epsilon_elements;
 mod eta_operations;
 mod exa_strict;
