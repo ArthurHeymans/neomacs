@@ -449,3 +449,78 @@ Body <2026-05-27 Wed 11:00-12:15>
       (delete-file file))))"##,
     );
 }
+
+#[test]
+fn org_timestamp_parse_shift_range_element_extract_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-27 Wed 10:00-11:30 +1w -3d>\n")
+    (insert "DEADLINE: <2026-05-29 Fri>\n")
+    (insert "CLOSED: [2026-05-26 Mon 15:30]\n\n")
+    (insert "* WAIT Beta\n")
+    (insert "SCHEDULED: <2026-05-28 Thu .+2d/5d>\n")
+    (insert "DEADLINE: <2026-06-01 Mon 09:00>\n\n")
+    (insert "* Meeting\n")
+    (insert "<2026-05-30 Fri 14:00-15:00>\n")
+    (insert "[2026-05-27 Wed]\n")
+    (let ((parsed
+           (org-element-map (org-element-parse-buffer)
+               '(planning timestamp headline)
+             (lambda (el)
+               (pcase (org-element-type el)
+                 ('headline
+                  (list 'headline
+                        (org-element-property :raw-value el)
+                        (substring-no-properties
+                         (or (org-element-property :todo-keyword el) ""))))
+                 ('planning
+                  (list 'planning
+                        (org-element-property :raw-value
+                         (org-element-property :scheduled el))
+                        (org-element-property :raw-value
+                         (org-element-property :deadline el))
+                        (org-element-property :raw-value
+                         (org-element-property :closed el))))
+                 ('timestamp
+                  (list 'timestamp
+                        (org-element-property :type el)
+                        (org-element-property :raw-value el)
+                        (org-element-property :year-start el)
+                        (org-element-property :month-start el)
+                        (org-element-property :day-start el)
+                        (org-element-property :hour-start el)
+                        (org-element-property :minute-start el)
+                        (org-element-property :hour-end el)
+                        (org-element-property :minute-end el)
+                        (org-element-property :repeater-type el)
+                        (org-element-property :repeater-value el)
+                        (org-element-property :repeater-unit el)
+                        (org-element-property :warning-type el)
+                        (org-element-property :warning-value el)))))))
+      ;; Shift timestamp
+      (goto-char (point-min))
+      (search-forward "Meeting")
+      (forward-line 1)
+      (beginning-of-line)
+      (org-timestamp-change 1 'day)
+      (let ((after-shift (buffer-substring-no-properties
+                          (point-min) (point-max))))
+        ;; Parse after shift
+        (goto-char (point-min))
+        (let ((shifted-ts
+               (org-element-map (org-element-parse-buffer) 'timestamp
+                 (lambda (ts)
+                   (list (org-element-property :raw-value ts)
+                         (org-element-property :day-start ts)
+                         (org-element-property :month-start ts))))))
+          (list parsed
+                after-shift
+                shifted-ts))))))"##,
+    );
+}
