@@ -342,3 +342,164 @@ fn org_reveal_hidden_deep_heading_context_combo() {
               (buffer-substring-no-properties (point-min) (point-max))))))"#,
     );
 }
+
+#[test]
+fn org_mixed_cycle_deep_siblings_no_line_merge_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Root\n")
+    (insert "** A\nA body\n*** A1\nA1 body\n**** A1a\nA1a body\n")
+    (insert "***** A1a-i\nA1a-i body\n")
+    (insert "** B\nB body\n*** B1\nB1 body\n**** B1a\nB1a body\n")
+    (insert "***** B1a-i\nB1a-i body\n")
+    (insert "** C\nC body\n* Tail\nTail body\n")
+    (let ((snapshot
+           (lambda (label)
+             (list label
+                   (mapcar
+                    (lambda (needle)
+                      (let ((pos (save-excursion
+                                   (goto-char (point-min))
+                                   (search-forward needle)
+                                   (point))))
+                        (list needle (not (null (org-invisible-p pos))))))
+                    '("A body" "A1" "A1a" "A1a-i body"
+                      "B body" "B1" "B1a" "B1a-i body"
+                      "C body" "Tail" "Tail body"))
+                   (split-string
+                    (buffer-substring-no-properties (point-min) (point-max))
+                    "\n" t)))))
+          states)
+      (goto-char (point-min))
+      (search-forward "B")
+      (beginning-of-line)
+      (dotimes (_ 4) (org-cycle) (push (funcall snapshot 'local-b) states))
+      (goto-char (point-min))
+      (search-forward "A1a")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (push (funcall snapshot 'hide-a1a) states)
+      (org-fold-show-subtree)
+      (push (funcall snapshot 'show-a1a) states)
+      (dotimes (_ 5) (org-cycle-global) (push (funcall snapshot 'global) states))
+      (org-fold-show-all)
+      (push (funcall snapshot 'all) states)
+      (list (nreverse states)
+            (count-matches "^\\*+ " (point-min) (point-max))
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_fold_region_boundaries_after_hidden_edit_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\nA body\n** B\nB body\n*** C\nC body\n**** D\nD body\n")
+    (insert "** E\nE body\n* F\nF body\n")
+    (let ((probe
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (search-forward needle)
+               (let ((region (org-fold-get-region-at-point '(headline drawer))))
+                 (list needle
+                       (not (null (org-fold-folded-p (point) 'headline)))
+                       (and region
+                            (buffer-substring-no-properties
+                             (car region) (min (cdr region) (point-max))))
+                       (org-fold-next-visibility-change (point) nil t)
+                       (org-fold-previous-visibility-change (point) nil t)))))))
+          before after)
+      (goto-char (point-min))
+      (search-forward "B")
+      (beginning-of-line)
+      (org-cycle)
+      (setq before (mapcar probe '("B body" "C" "D body" "E body" "F body")))
+      (org-fold-show-subtree)
+      (org-end-of-subtree)
+      (insert "** Inserted\nInserted body\n*** Inserted child\nChild body\n")
+      (goto-char (point-min))
+      (search-forward "Inserted child")
+      (beginning-of-line)
+      (org-demote-subtree)
+      (org-fold-hide-sublevels 2)
+      (setq after (mapcar probe
+                          '("B body" "D body" "Inserted" "Child body"
+                            "E body" "F body")))
+      (org-fold-show-all)
+      (list before
+            after
+            (mapcar probe '("B body" "D body" "Inserted" "Child body"))
+            (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
+
+#[test]
+fn org_font_lock_deep_headings_after_cycle_and_edits_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO [#A] L1 :work:\n")
+      (insert "** NEXT L2 :tag:\n")
+      (insert "*** WAIT L3\n")
+      (insert "**** TODO L4 :deep:\n")
+      (insert "***** DONE L5\n")
+      (insert "****** TODO L6\n")
+      (insert "******* TODO L7\n")
+      (insert "******** TODO L8\n")
+      (insert "body with /italic/ and =code=\n")
+      (goto-char (point-min))
+      (search-forward "L4")
+      (beginning-of-line)
+      (org-demote-subtree)
+      (goto-char (point-min))
+      (search-forward "L7")
+      (beginning-of-line)
+      (org-promote-subtree)
+      (dotimes (_ 3) (org-cycle-global))
+      (font-lock-ensure (point-min) (point-max))
+      (let (out)
+        (goto-char (point-min))
+        (while (re-search-forward
+                "^\\(\\*+\\) \\([A-Z]+\\)?\\(?: \\(\\[#[A-Z]\\]\\)\\)? \\([^:\n]+\\)\\(?: \\(:[[:alnum:]_@#%:]+:\\)\\)?"
+                nil t)
+          (push (list (match-string 1)
+                      (match-string 2)
+                      (match-string 3)
+                      (substring-no-properties (match-string 4))
+                      (match-string 5)
+                      (org-outline-level)
+                      (get-text-property (match-beginning 1) 'face)
+                      (and (match-beginning 2)
+                           (get-text-property (match-beginning 2) 'face))
+                      (get-text-property (match-beginning 4) 'face)
+                      (get-text-property (line-beginning-position)
+                                         'font-lock-fontified))
+                out))
+        (list (nreverse out)
+              (buffer-substring-no-properties (point-min) (point-max))))))"#,
+    );
+}
