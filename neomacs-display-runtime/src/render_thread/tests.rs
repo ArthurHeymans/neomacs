@@ -20,6 +20,24 @@ fn make_test_app() -> RenderApp {
     )
 }
 
+fn make_test_device() -> Option<wgpu::Device> {
+    let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance_descriptor.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .ok()?;
+    let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("render-thread test device"),
+        ..Default::default()
+    }))
+    .ok()?;
+    Some(device)
+}
+
 #[test]
 fn test_translate_key_named() {
     assert_eq!(
@@ -126,9 +144,34 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     assert!(app.window.is_none());
     assert!(app.surface.is_none());
     assert!(app.surface_config.is_none());
-    assert!(app.glyph_atlas.is_none());
+    assert!(app.primary_frame.is_none());
     assert!(app.current_frame.is_none());
     assert!(!app.frame_dirty);
     assert!(app.primary_window_destroyed);
     assert_eq!(app.frame_windows.primary_frame_id(), None);
+}
+
+#[test]
+fn adopt_primary_window_command_updates_existing_primary_render_state_identity() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.primary_frame = Some(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.scale_factor,
+        app.fps.enabled,
+    ));
+
+    app.handle_window_command(RenderCommand::AdoptPrimaryFrame {
+        emacs_frame_id: 0x1000,
+    })
+    .expect("adopt primary frame");
+
+    assert_eq!(app.frame_windows.primary_frame_id(), Some(0x1000));
+    assert_eq!(
+        app.primary_frame.as_ref().map(|frame| frame.emacs_frame_id),
+        Some(0x1000)
+    );
 }

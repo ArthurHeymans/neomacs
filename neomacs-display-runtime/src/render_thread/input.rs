@@ -180,11 +180,10 @@ impl RenderApp {
 
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
         let padding_x = 8.0_f32;
-        let char_width = if let Some(ref atlas) = self.glyph_atlas {
-            atlas.default_char_width()
-        } else {
-            8.0
-        };
+        let char_width = self
+            .primary_frame
+            .as_ref()
+            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
         let menu_width = self
             .compact_bar
             .as_ref()
@@ -207,11 +206,10 @@ impl RenderApp {
             return None;
         }
         let padding_x = 8.0_f32;
-        let char_width = if let Some(ref atlas) = self.glyph_atlas {
-            atlas.default_char_width()
-        } else {
-            8.0
-        };
+        let char_width = self
+            .primary_frame
+            .as_ref()
+            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
         let mut item_x = padding_x;
         for item in &compact_bar.menu_items {
             let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
@@ -268,11 +266,10 @@ impl RenderApp {
         }
         let padding_x = 8.0_f32;
         let tab_padding = 12.0_f32;
-        let char_width = if let Some(ref atlas) = self.glyph_atlas {
-            atlas.default_char_width()
-        } else {
-            8.0
-        };
+        let char_width = self
+            .primary_frame
+            .as_ref()
+            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
 
         let mut tab_x = padding_x;
         for item in &tab_bar.items {
@@ -298,11 +295,10 @@ impl RenderApp {
             return None;
         }
         let padding_x = 8.0_f32;
-        let char_width = if let Some(ref atlas) = self.glyph_atlas {
-            atlas.default_char_width()
-        } else {
-            8.0
-        };
+        let char_width = self
+            .primary_frame
+            .as_ref()
+            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
 
         let mut item_x = padding_x;
         for item in &menu_bar.items {

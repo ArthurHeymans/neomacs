@@ -52,13 +52,13 @@ impl RenderApp {
         }
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
-            if let Some(ref mut atlas) = self.glyph_atlas {
+            if let Some(primary_frame) = self.primary_frame.as_mut() {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),
                     self.faces.len()
                 );
-                atlas.clear();
+                primary_frame.glyph_atlas.clear();
             }
             for window_state in self.frame_windows.windows.values_mut() {
                 window_state.render.glyph_atlas.clear();

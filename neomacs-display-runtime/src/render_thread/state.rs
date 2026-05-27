@@ -14,14 +14,12 @@ use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-use neomacs_renderer_wgpu::{
-    PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
-};
+use neomacs_renderer_wgpu::{PopupMenuState, RendererFrameEffects, TooltipState, WgpuRenderer};
 use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
-use super::frame_windows::GuiFrameWindowManager;
+use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowManager};
 use super::transitions::TransitionState;
 
 #[cfg(feature = "wpe-webkit")]
@@ -280,7 +278,8 @@ pub(super) struct RenderApp {
     pub(super) renderer: Option<WgpuRenderer>,
     pub(super) surface: Option<wgpu::Surface<'static>>,
     pub(super) surface_config: Option<wgpu::SurfaceConfiguration>,
-    pub(super) glyph_atlas: Option<WgpuGlyphAtlas>,
+    /// Frame-owned render state for the adopted primary GUI frame.
+    pub(super) primary_frame: Option<GuiFrameRenderState>,
 
     // Face cache built from frame data
     pub(super) faces: HashMap<u32, Face>,
@@ -430,7 +429,7 @@ impl RenderApp {
             renderer: None,
             surface: None,
             surface_config: None,
-            glyph_atlas: None,
+            primary_frame: None,
             faces: HashMap::new(),
             modifiers: 0,
             mouse_pos: (0.0, 0.0),

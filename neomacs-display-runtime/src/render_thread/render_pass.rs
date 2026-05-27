@@ -849,7 +849,7 @@ impl RenderApp {
         if self.current_frame.is_none()
             || self.surface.is_none()
             || self.renderer.is_none()
-            || self.glyph_atlas.is_none()
+            || self.primary_frame.is_none()
         {
             return;
         }
@@ -914,7 +914,11 @@ impl RenderApp {
             {
                 let frame = self.current_frame.as_ref().expect("checked in render");
                 let renderer = self.renderer.as_mut().expect("checked in render");
-                let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
+                let glyph_atlas = &mut self
+                    .primary_frame
+                    .as_mut()
+                    .expect("checked in render")
+                    .glyph_atlas;
 
                 renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                     renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
@@ -971,7 +975,11 @@ impl RenderApp {
             // Simple path: render directly to surface
             let frame = self.current_frame.as_ref().expect("checked in render");
             let renderer = self.renderer.as_mut().expect("checked in render");
-            let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
+            let glyph_atlas = &mut self
+                .primary_frame
+                .as_mut()
+                .expect("checked in render")
+                .glyph_atlas;
 
             renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
                 renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
@@ -997,8 +1005,8 @@ impl RenderApp {
         if !self.child_frames.is_empty() {
             for &child_id in self.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = self.child_frames.frames.get(&child_id) {
-                    if let (Some(renderer), Some(glyph_atlas)) =
-                        (&mut self.renderer, &mut self.glyph_atlas)
+                    if let (Some(renderer), Some(primary_frame)) =
+                        (&mut self.renderer, &mut self.primary_frame)
                     {
                         // Pass animated cursor only if it belongs to this child frame
                         let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
@@ -1008,7 +1016,7 @@ impl RenderApp {
                                 &child_entry.frame,
                                 child_entry.abs_x,
                                 child_entry.abs_y,
-                                glyph_atlas,
+                                &mut primary_frame.glyph_atlas,
                                 &self.faces,
                                 self.width,
                                 self.height,
@@ -1039,7 +1047,9 @@ impl RenderApp {
 
         if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
             &mut self.renderer,
-            &mut self.glyph_atlas,
+            self.primary_frame
+                .as_mut()
+                .map(|primary_frame| &mut primary_frame.glyph_atlas),
             &self.current_frame,
         ) {
             renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
@@ -1072,7 +1082,12 @@ impl RenderApp {
             0,
             &self.child_frames,
         );
-        if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {
+        if let (Some(renderer), Some(glyph_atlas)) = (
+            &self.renderer,
+            self.primary_frame
+                .as_mut()
+                .map(|primary_frame| &mut primary_frame.glyph_atlas),
+        ) {
             Self::render_frame_chrome_overlays(
                 renderer,
                 &surface_view,
@@ -1140,7 +1155,12 @@ impl RenderApp {
             );
         }
 
-        if let (Some(renderer), Some(glyph_atlas)) = (&self.renderer, &mut self.glyph_atlas) {
+        if let (Some(renderer), Some(glyph_atlas)) = (
+            &self.renderer,
+            self.primary_frame
+                .as_mut()
+                .map(|primary_frame| &mut primary_frame.glyph_atlas),
+        ) {
             Self::render_frame_fps_overlay(
                 renderer,
                 &surface_view,
@@ -1157,9 +1177,13 @@ impl RenderApp {
         }
 
         if self.effects.typing_speed.enabled {
-            if let (Some(renderer), Some(glyph_atlas), Some(frame)) =
-                (&self.renderer, &mut self.glyph_atlas, &self.current_frame)
-            {
+            if let (Some(renderer), Some(glyph_atlas), Some(frame)) = (
+                &self.renderer,
+                self.primary_frame
+                    .as_mut()
+                    .map(|primary_frame| &mut primary_frame.glyph_atlas),
+                &self.current_frame,
+            ) {
                 Self::render_frame_typing_speed_overlay(
                     renderer,
                     &surface_view,

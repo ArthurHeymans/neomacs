@@ -1,9 +1,10 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
+use crate::render_thread::frame_windows::GuiFrameRenderState;
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
-use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
+use neomacs_renderer_wgpu::WgpuRenderer;
 use std::sync::Arc;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(target_os = "linux")]
@@ -130,8 +131,14 @@ impl RenderApp {
             self.scale_factor as f32,
         );
 
-        // Create glyph atlas with scale factor for crisp HiDPI text
-        let glyph_atlas = WgpuGlyphAtlas::new_with_scale(&device, self.scale_factor as f32);
+        // Create adopted-primary frame render state with its own glyph atlas.
+        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
+        let primary_frame = GuiFrameRenderState::new(
+            primary_frame_id,
+            &device,
+            self.scale_factor,
+            self.fps.enabled,
+        );
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",
@@ -149,7 +156,7 @@ impl RenderApp {
         self.surface = Some(surface);
         self.surface_config = Some(config);
         self.renderer = Some(renderer);
-        self.glyph_atlas = Some(glyph_atlas);
+        self.primary_frame = Some(primary_frame);
 
         // Initialize WPE backend for WebKit
         #[cfg(feature = "wpe-webkit")]

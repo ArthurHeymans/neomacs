@@ -527,8 +527,10 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.set_scale_factor(effective_scale as f32);
                 }
-                if let Some(ref mut atlas) = self.glyph_atlas {
-                    atlas.set_scale_factor(effective_scale as f32);
+                if let Some(primary_frame) = self.primary_frame.as_mut() {
+                    primary_frame
+                        .glyph_atlas
+                        .set_scale_factor(effective_scale as f32);
                 }
                 self.frame_dirty = true;
             }

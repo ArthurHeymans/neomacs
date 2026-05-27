@@ -177,13 +177,14 @@ impl RenderApp {
                     items.len()
                 );
                 let (fs, lh, cw) = if emacs_frame_id == 0 {
-                    self.glyph_atlas
+                    self.primary_frame
                         .as_ref()
                         .map(|a| {
+                            let atlas = &a.glyph_atlas;
                             (
-                                a.default_font_size(),
-                                a.default_line_height(),
-                                a.default_char_width(),
+                                atlas.default_font_size(),
+                                atlas.default_line_height(),
+                                atlas.default_char_width(),
                             )
                         })
                         .unwrap_or((13.0, 17.0, 13.0 * 0.6))
@@ -245,13 +246,14 @@ impl RenderApp {
                 tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
                 let (fs, lh, cw, screen_w, screen_h) = if emacs_frame_id == 0 {
                     let (fs, lh, cw) = self
-                        .glyph_atlas
+                        .primary_frame
                         .as_ref()
-                        .map(|a| {
+                        .map(|primary_frame| {
+                            let atlas = &primary_frame.glyph_atlas;
                             (
-                                a.default_font_size(),
-                                a.default_line_height(),
-                                a.default_char_width(),
+                                atlas.default_font_size(),
+                                atlas.default_line_height(),
+                                atlas.default_char_width(),
                             )
                         })
                         .unwrap_or((13.0, 17.0, 13.0 * 0.6));

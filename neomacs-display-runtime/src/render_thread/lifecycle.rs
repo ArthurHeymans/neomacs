@@ -358,7 +358,7 @@ impl RenderApp {
         // Drop renderer (holds device/queue references, textures, pipelines)
         drop(self.renderer.take());
         // Drop glyph atlas (holds device reference)
-        drop(self.glyph_atlas.take());
+        drop(self.primary_frame.take());
         // Drop surface (holds wl_surface proxy if on Wayland)
         drop(self.surface.take());
         self.surface_config = None;

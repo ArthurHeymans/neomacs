@@ -65,8 +65,8 @@ use crate::thread_comm::{
 };
 use cursor::{CornerSpring, CursorState, CursorTarget};
 use neomacs_display_protocol::EffectsConfig;
+use neomacs_renderer_wgpu::WgpuRenderer;
 pub(crate) use neomacs_renderer_wgpu::{MenuPanel, PopupMenuState, TooltipState};
-use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 use transitions::{CrossfadeTransition, ScrollTransition, TransitionState};
 
 #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]

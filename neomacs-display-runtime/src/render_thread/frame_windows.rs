@@ -103,6 +103,42 @@ pub(crate) struct GuiFrameWindowState {
 }
 
 impl GuiFrameRenderState {
+    pub(super) fn new(
+        emacs_frame_id: u64,
+        device: &wgpu::Device,
+        scale_factor: f64,
+        fps_enabled: bool,
+    ) -> Self {
+        Self {
+            emacs_frame_id,
+            current_frame: None,
+            child_frames: ChildFrameManager::new(),
+            glyph_atlas: WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32),
+            frame_dirty: false,
+            mouse_pos: (0.0, 0.0),
+            cursor: CursorState::default(),
+            menu_bar: None,
+            tool_bar: None,
+            compact_bar: None,
+            chrome_interaction: GuiChromeInteractionState::default(),
+            popup_menu: None,
+            tooltip: None,
+            visual_bell_start: None,
+            fps: FpsCounter {
+                enabled: fps_enabled,
+                ..FpsCounter::default()
+            },
+            typing_speed: TypingSpeedState::default(),
+            idle_dim: IdleDimState::default(),
+            ime_preedit_active: false,
+            ime_preedit_text: String::new(),
+            transitions: TransitionState::default(),
+            renderer_effects: RendererFrameEffects::default(),
+            #[cfg(feature = "wpe-webkit")]
+            floating_webkits: Vec::new(),
+        }
+    }
+
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
         self.current_frame.clone()
     }
@@ -379,37 +415,12 @@ impl GuiFrameWindowManager {
                                     ..self.chrome_defaults.clone()
                                 },
                             },
-                            render: GuiFrameRenderState {
-                                emacs_frame_id: req.emacs_frame_id,
-                                current_frame: None,
-                                child_frames: ChildFrameManager::new(),
-                                glyph_atlas: WgpuGlyphAtlas::new_with_scale(
-                                    device,
-                                    scale_factor as f32,
-                                ),
-                                frame_dirty: false,
-                                mouse_pos: (0.0, 0.0),
-                                cursor: CursorState::default(),
-                                menu_bar: None,
-                                tool_bar: None,
-                                compact_bar: None,
-                                chrome_interaction: GuiChromeInteractionState::default(),
-                                popup_menu: None,
-                                tooltip: None,
-                                visual_bell_start: None,
-                                fps: FpsCounter {
-                                    enabled: self.fps_enabled,
-                                    ..FpsCounter::default()
-                                },
-                                typing_speed: TypingSpeedState::default(),
-                                idle_dim: IdleDimState::default(),
-                                ime_preedit_active: false,
-                                ime_preedit_text: String::new(),
-                                transitions: TransitionState::default(),
-                                renderer_effects: RendererFrameEffects::default(),
-                                #[cfg(feature = "wpe-webkit")]
-                                floating_webkits: Vec::new(),
-                            },
+                            render: GuiFrameRenderState::new(
+                                req.emacs_frame_id,
+                                device,
+                                scale_factor,
+                                self.fps_enabled,
+                            ),
                         },
                     );
                 }
