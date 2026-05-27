@@ -272,10 +272,64 @@ fn org_indent_incremental_refresh_property_cleanup_combo() {
               (org-indent-mode 1)
               (org-indent-indent-buffer)
               (push (snapshot 'after-reenable) states)
-              (list (nreverse states)
-                    before-disable
-                    copy-before-props
-                    after-disable
+               (list (nreverse states)
+                     before-disable
+                     copy-before-props
+                     after-disable
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
+fn org_indent_deep_heading_cycle_visibility_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-indent)
+  (require 'org-cycle)
+  (with-temp-buffer
+    (let ((org-startup-indented t)
+          (org-hide-leading-stars t))
+      (org-mode)
+      (org-indent-mode 1)
+      (insert "* L1\nbody 1\n")
+      (insert "** L2\nbody 2\n")
+      (insert "*** L3\nbody 3\n")
+      (insert "**** L4\nbody 4\n")
+      (insert "***** L5\nbody 5\n")
+      (insert "** L2b\nbody 2b\n")
+      ;; Per-heading indent state
+      (let ((heading-state
+             (lambda ()
+               (font-lock-ensure (point-min) (point-max))
+               (let (out)
+                 (goto-char (point-min))
+                 (while (re-search-forward "^\\(\\*+\\) \\(.*\\)$" nil t)
+                   (let ((beg (line-beginning-position)))
+                     (push (list (match-string 2)
+                                 (length (match-string 1))
+                                 (org-outline-level)
+                                 (get-text-property beg 'line-prefix)
+                                 (get-text-property beg 'wrap-prefix)
+                                 (get-text-property beg 'face)
+                                 (invisible-p beg))
+                           out)))
+                 (nreverse out)))))
+        ;; Global cycle
+        (dotimes (_ 3) (org-cycle-global))
+        (let ((after-cycle (funcall heading-state)))
+          ;; Show all
+          (org-fold-show-all)
+          (let ((after-show (funcall heading-state)))
+            ;; Indent buffer
+            (org-indent-indent-buffer)
+            (let ((after-indent (funcall heading-state)))
+              (list after-cycle
+                    after-show
+                    after-indent
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
     );
