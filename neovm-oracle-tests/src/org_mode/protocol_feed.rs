@@ -125,6 +125,127 @@ fn org_protocol_custom_handler_dispatch_combo() {
 }
 
 #[test]
+fn org_protocol_rewrite_greedy_sanitize_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-protocol)
+  (let* ((root (make-temp-file "org-protocol-matrix" t))
+         (work (expand-file-name "work" root))
+         (posts (expand-file-name "posts" work))
+         (calls nil)
+         (messages nil)
+         (killed nil)
+         (org-protocol-reverse-list-of-files nil)
+         (org-protocol-project-alist
+          `(("site"
+             :base-url "https://example.org/"
+             :working-directory ,(file-name-as-directory work)
+             :online-suffix ".html"
+             :working-suffix ".org"
+             :rewrites (("https://example\\.org/redirect/\\(.*\\)" . "posts/rewritten.org")
+                        ("https://example\\.org/?$" . "index.org")))))
+         (org-protocol-protocol-alist
+          `(("capture"
+             :protocol "cap-old"
+             :function ,(lambda (data)
+                          (push (list 'cap-old data) calls)
+                          (concat "old:" data)))
+            ("new"
+             :protocol "new"
+             :function ,(lambda (plist)
+                          (push (list 'new plist) calls)
+                          (plist-get plist :file)))
+            ("greedy"
+             :protocol "grab"
+             :greedy t
+             :kill-client t
+             :function ,(lambda (files)
+                          (push (list 'greedy
+                                      (org-protocol-flatten-greedy
+                                       files t "<cwd>/"))
+                                calls))))))
+    (unwind-protect
+        (progn
+          (make-directory posts t)
+          (with-temp-file (expand-file-name "index.org" work)
+            (insert "* Index\n"))
+          (with-temp-file (expand-file-name "posts/one.org" work)
+            (insert "* One\n"))
+          (with-temp-file (expand-file-name "posts/rewritten.org" work)
+            (insert "* Rewritten\n"))
+          (cl-letf (((symbol-function 'message)
+                     (lambda (fmt &rest args)
+                       (push (apply #'format fmt args) messages)))
+                    ((symbol-function 'server-edit)
+                     (lambda (&rest _) (push 'server-edit killed))))
+            (let* ((sanitized
+                    (mapcar #'org-protocol-sanitize-uri
+                            '("https:/example.org/a"
+                              "file:/tmp/a"
+                              "mailto:ada@example.org"
+                              "org-protocol://capture?x=1")))
+                   (split-custom
+                    (org-protocol-split-data
+                     "one%2Ftwo--three+four??five"
+                     (lambda (s) (upcase (org-link-decode s)))
+                     "--\\|\\?\\?"))
+                   (assign-short
+                    (org-protocol-assign-parameters
+                     '("u" "t" "body" "extra" "value")
+                     '(:url :title :body)))
+                   (open-one
+                    (org-protocol-open-source
+                     '(:url "https:/example.org/posts/one.html?utm=1")))
+                   (open-index
+                    (org-protocol-open-source
+                     '(:url "https://example.org/")))
+                   (open-rewrite
+                    (org-protocol-open-source
+                     '(:url "https://example.org/redirect/deep.html")))
+                   (open-missing
+                    (org-protocol-open-source
+                     '(:url "https://example.org/missing.html")))
+                   (new-dispatch
+                    (org-protocol-check-filename-for-protocol
+                     "org-protocol://new?file=/tmp/from-new.org&url=https%3A%2F%2Fexample.org%2Fa&title=A+B"
+                     nil nil))
+                   (old-dispatch
+                    (org-protocol-check-filename-for-protocol
+                     "org-protocol://cap-old://https%3A%2F%2Fexample.org%2Fold/Old+Title"
+                     nil nil))
+                   (greedy
+                    (org-protocol-check-filename-for-protocol
+                     "/cwd/org-protocol://grab:/first"
+                     '(("/cwd/org-protocol://grab:/first" . 1)
+                       ("/cwd/second" . 2)
+                       (("/cwd/third" . 3)))
+                     nil))
+                   (unknown
+                    (org-protocol-check-filename-for-protocol
+                     "/cwd/org-protocol://unknown?x=1" nil nil)))
+              (list sanitized
+                    split-custom
+                    assign-short
+                    (mapcar (lambda (file)
+                              (and file
+                                   (file-relative-name file root)))
+                            (list open-one open-index open-rewrite
+                                  open-missing))
+                    new-dispatch
+                    old-dispatch
+                    greedy
+                    unknown
+                    (nreverse calls)
+                    (nreverse killed)
+                    (nreverse messages)))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_protocol_capture_template_finalize_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
