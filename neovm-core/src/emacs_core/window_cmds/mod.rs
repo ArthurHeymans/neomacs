@@ -13,8 +13,9 @@ use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager};
 use crate::window::{
-    FrameId, FrameManager, Rect, SplitDirection, Window, WindowBufferDisplayDefaults, WindowId,
-    window_first_child_id, window_next_sibling_id, window_parent_id, window_prev_sibling_id,
+    FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection, Window,
+    WindowBufferDisplayDefaults, WindowId, window_first_child_id, window_next_sibling_id,
+    window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
 
@@ -377,9 +378,9 @@ fn resolve_window_id_in_state(
     resolve_window_id_with_pred_in_state(frames, buffers, arg, "window-live-p")
 }
 
-fn frame_divider_width(frame: &crate::window::Frame, parameter: &str) -> i64 {
+fn frame_divider_width(frame: &crate::window::Frame, parameter: FrameParam) -> i64 {
     frame
-        .parameter(parameter)
+        .known_parameter(parameter)
         .and_then(|value| value.as_int())
         .unwrap_or(0)
         .max(0)
@@ -6574,7 +6575,11 @@ fn make_frame_plain(
                 frame.minibuffer_window = Some(shared_minibuffer);
             }
             for (key, value) in all_params {
-                frame.set_parameter(key, value);
+                if let Some(param_key) = FrameParamKey::from_symbol_value(key) {
+                    frame.set_parameter_key(param_key, value);
+                } else {
+                    frame.set_parameter(key, value);
+                }
             }
             frame.set_parameter(Value::symbol("width"), Value::fixnum(i64::from(width)));
             frame.set_parameter(Value::symbol("height"), Value::fixnum(i64::from(height)));
@@ -6584,7 +6589,7 @@ fn make_frame_plain(
                     Value::make_window(shared_minibuffer.0),
                 );
             }
-            frame.set_parameter(Value::symbol("parent-frame"), parent_frame);
+            frame.set_known_parameter(FrameParam::ParentFrame, parent_frame);
             frame.set_parameter(Value::symbol("left"), Value::fixnum(left));
             frame.set_parameter(Value::symbol("top"), Value::fixnum(top));
             frame.sync_tab_bar_height_from_parameters();
@@ -6967,12 +6972,12 @@ pub(crate) fn x_create_frame_impl(
         )));
         frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
         frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
-        frame.set_parameter(Value::symbol("foreground-color"), Value::string("black"));
-        frame.set_parameter(Value::symbol("background-color"), Value::string("white"));
+        frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("black"));
+        frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("white"));
         for (key, value) in parsed.all {
-            frame.set_parameter(Value::from_sym_id(key), value);
+            frame.set_parameter_key(FrameParamKey::from_symbol_id(key), value);
         }
-        frame.set_parameter(Value::symbol("parent-frame"), parent_frame_value);
+        frame.set_known_parameter(FrameParam::ParentFrame, parent_frame_value);
         frame.set_parameter(Value::symbol("left"), Value::fixnum(frame.left_pos));
         frame.set_parameter(Value::symbol("top"), Value::fixnum(frame.top_pos));
         if let Some(shared_minibuffer) = shared_minibuffer {
@@ -7241,9 +7246,8 @@ pub(crate) fn builtin_frame_parameter(
     expect_min_args("frame-parameter", &args, 2)?;
     expect_max_args("frame-parameter", &args, 2)?;
     let fid = resolve_frame_id(eval, Some(&args[0]), "framep")?;
-    let param_name = match args[1].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        _ => return Ok(Value::NIL),
+    let Some(param_key) = FrameParamKey::from_symbol_value(args[1]) else {
+        return Ok(Value::NIL);
     };
     let frame = eval
         .frames
@@ -7251,11 +7255,21 @@ pub(crate) fn builtin_frame_parameter(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
 
     // Check built-in properties first.
-    match param_name.as_str() {
-        "name" => return Ok(frame.name_value()),
-        "title" => return Ok(frame.title_value()),
+    match param_key {
+        FrameParamKey::Known(FrameParam::Name) => return Ok(frame.name_value()),
+        FrameParamKey::Known(FrameParam::Title) => return Ok(frame.title_value()),
+        FrameParamKey::Known(FrameParam::IconName) => return Ok(frame.icon_name_value()),
+        FrameParamKey::Known(FrameParam::Visibility) => {
+            return Ok(if frame.visible { Value::T } else { Value::NIL });
+        }
+        FrameParamKey::Known(FrameParam::Font) if frame.effective_window_system().is_none() => {
+            return Ok(Value::string("tty"));
+        }
+        _ => {}
+    }
+
+    match param_key.name() {
         "explicit-name" => return Ok(frame.explicit_name_value()),
-        "icon-name" => return Ok(frame.icon_name_value()),
         // In Emacs, frame parameter width/height are text columns/lines.
         // For the bootstrap batch frame, explicit parameter overrides preserve
         // the 80x25 report shape.
@@ -7268,12 +7282,6 @@ pub(crate) fn builtin_frame_parameter(
             return Ok(frame
                 .parameter("height")
                 .unwrap_or(Value::fixnum(frame.lines() as i64)));
-        }
-        "visibility" => {
-            return Ok(if frame.visible { Value::T } else { Value::NIL });
-        }
-        "font" if frame.effective_window_system().is_none() => {
-            return Ok(Value::string("tty"));
         }
         // GNU frame.c:4117 — buffer-list frame parameter stored
         // directly from f->buffer_list (most-recently-shown first).
@@ -7298,7 +7306,7 @@ pub(crate) fn builtin_frame_parameter(
         _ => {}
     }
     // User-set parameters.
-    Ok(frame.parameter(&param_name).unwrap_or(Value::NIL))
+    Ok(frame.parameter_key(param_key).unwrap_or(Value::NIL))
 }
 /// `(frame-parameters &optional FRAME)` -> alist.
 pub(crate) fn builtin_frame_parameters(
@@ -7313,12 +7321,12 @@ pub(crate) fn builtin_frame_parameters(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     let mut pairs: Vec<Value> = Vec::new();
     // Built-in parameters.
-    pairs.push(Value::cons(Value::symbol("name"), frame.name_value()));
+    pairs.push(Value::cons(FrameParam::Name.symbol(), frame.name_value()));
     pairs.push(Value::cons(
-        Value::symbol("icon-name"),
+        FrameParam::IconName.symbol(),
         frame.icon_name_value(),
     ));
-    pairs.push(Value::cons(Value::symbol("title"), frame.title_value()));
+    pairs.push(Value::cons(FrameParam::Title.symbol(), frame.title_value()));
     pairs.push(Value::cons(
         Value::symbol("explicit-name"),
         frame.explicit_name_value(),
@@ -7332,11 +7340,11 @@ pub(crate) fn builtin_frame_parameters(
     pairs.push(Value::cons(Value::symbol("width"), width));
     pairs.push(Value::cons(Value::symbol("height"), height));
     pairs.push(Value::cons(
-        Value::symbol("visibility"),
+        FrameParam::Visibility.symbol(),
         Value::bool_val(frame.visible),
     ));
     if frame.effective_window_system().is_none() {
-        pairs.push(Value::cons(Value::symbol("font"), Value::string("tty")));
+        pairs.push(Value::cons(FrameParam::Font.symbol(), Value::string("tty")));
     }
     // GNU frame.c:4117-4118 — buffer-list and buried-buffer-list are
     // stored as frame parameters.
@@ -7365,7 +7373,9 @@ pub(crate) fn builtin_frame_parameters(
     // User parameters.
     for (k, v) in &frame.parameters {
         if frame.effective_window_system().is_none()
-            && k.as_symbol_name().is_some_and(|name| name == "font")
+            && k.as_symbol_id()
+                .and_then(FrameParam::from_symbol_id)
+                .is_some_and(|param| param == FrameParam::Font)
         {
             continue;
         }
@@ -7387,7 +7397,7 @@ pub(crate) fn builtin_frame_bottom_divider_width(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     Ok(Value::fixnum(frame_divider_width(
         frame,
-        "bottom-divider-width",
+        FrameParam::BottomDividerWidth,
     )))
 }
 
@@ -7432,7 +7442,7 @@ pub(crate) fn builtin_frame_right_divider_width(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     Ok(Value::fixnum(frame_divider_width(
         frame,
-        "right-divider-width",
+        FrameParam::RightDividerWidth,
     )))
 }
 
@@ -7449,7 +7459,7 @@ pub(crate) fn builtin_window_bottom_divider_width(
     let width = if window_is_bottommost(frame, wid) {
         0
     } else {
-        frame_divider_width(frame, "bottom-divider-width")
+        frame_divider_width(frame, FrameParam::BottomDividerWidth)
     };
     Ok(Value::fixnum(width))
 }
@@ -7467,7 +7477,7 @@ pub(crate) fn builtin_window_right_divider_width(
     let width = if window_is_rightmost(frame, wid) {
         0
     } else {
-        frame_divider_width(frame, "right-divider-width")
+        frame_divider_width(frame, FrameParam::RightDividerWidth)
     };
     Ok(Value::fixnum(width))
 }
@@ -7501,29 +7511,8 @@ pub(crate) fn builtin_modify_frame_parameters(
             let pair_car = item.cons_car();
             let pair_cdr = item.cons_cdr();
             if let Some(key) = pair_car.as_symbol_id() {
-                let key_name = resolve_sym(key).to_owned();
-                match key_name.as_str() {
-                    "name" => {
-                        if let Some(name) = frame_name_parameter_value(&pair_cdr) {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.set_name_parameter_value(name);
-                            }
-                        }
-                    }
-                    "title" => {
-                        if let Some(title) = frame_title_parameter_value(&pair_cdr) {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.title = title;
-                            }
-                        }
-                    }
-                    "icon-name" => {
-                        if let Some(icon_name) = frame_icon_name_parameter_value(&pair_cdr) {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.icon_name = icon_name;
-                            }
-                        }
-                    }
+                let key_name = resolve_sym(key);
+                match key_name {
                     "width" => {
                         if let Some(size) = parse_frame_size_param(pair_cdr) {
                             requested_width = Some(size);
@@ -7570,26 +7559,6 @@ pub(crate) fn builtin_modify_frame_parameters(
                             requested_top = Some(n);
                         }
                     }
-                    "parent-frame" => {
-                        let parent = if pair_cdr
-                            .as_frame_id()
-                            .map(|id| eval.frames.get(FrameId(id)).is_some())
-                            .unwrap_or(false)
-                        {
-                            pair_cdr
-                        } else {
-                            Value::NIL
-                        };
-                        let parent_id = parent.as_frame_id().map(FrameId);
-                        let z_order = parent_id.map(|id| 1 + eval.frames.max_child_z_order(id));
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.parent_frame = parent;
-                            if let Some(z_order) = z_order {
-                                frame.z_order = z_order;
-                            }
-                            frame.set_parameter(Value::symbol("parent-frame"), parent);
-                        }
-                    }
                     "buffer-list" => {
                         let ids = live_frame_buffer_parameter_ids(&eval.buffers, pair_cdr);
                         if let Some(frame) = eval.frames.get_mut(fid) {
@@ -7607,40 +7576,88 @@ pub(crate) fn builtin_modify_frame_parameters(
                             frame.remove_parameter(Value::symbol("buried-buffer-list"));
                         }
                     }
-                    "visibility" => {
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.visible = pair_cdr.is_truthy();
-                            frame.set_parameter(Value::symbol("visibility"), pair_cdr);
+                    _ => match FrameParamKey::from_symbol_id(key) {
+                        FrameParamKey::Known(FrameParam::Name) => {
+                            if let Some(name) = frame_name_parameter_value(&pair_cdr) {
+                                if let Some(frame) = eval.frames.get_mut(fid) {
+                                    frame.set_name_parameter_value(name);
+                                }
+                            }
                         }
-                    }
-                    "undecorated" => {
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.undecorated = pair_cdr.is_truthy();
-                            frame.set_parameter(Value::symbol("undecorated"), pair_cdr);
+                        FrameParamKey::Known(FrameParam::Title) => {
+                            if let Some(title) = frame_title_parameter_value(&pair_cdr) {
+                                if let Some(frame) = eval.frames.get_mut(fid) {
+                                    frame.title = title;
+                                }
+                            }
                         }
-                    }
-                    "no-accept-focus" => {
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.no_accept_focus = pair_cdr.is_truthy();
-                            frame.set_parameter(Value::symbol("no-accept-focus"), pair_cdr);
+                        FrameParamKey::Known(FrameParam::IconName) => {
+                            if let Some(icon_name) = frame_icon_name_parameter_value(&pair_cdr) {
+                                if let Some(frame) = eval.frames.get_mut(fid) {
+                                    frame.icon_name = icon_name;
+                                }
+                            }
                         }
-                    }
-                    "unsplittable" => {
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.no_split = pair_cdr.is_truthy();
-                            frame.set_parameter(Value::symbol("unsplittable"), pair_cdr);
+                        FrameParamKey::Known(FrameParam::ParentFrame) => {
+                            let parent = if pair_cdr
+                                .as_frame_id()
+                                .map(|id| eval.frames.get(FrameId(id)).is_some())
+                                .unwrap_or(false)
+                            {
+                                pair_cdr
+                            } else {
+                                Value::NIL
+                            };
+                            let parent_id = parent.as_frame_id().map(FrameId);
+                            let z_order = parent_id.map(|id| 1 + eval.frames.max_child_z_order(id));
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.parent_frame = parent;
+                                if let Some(z_order) = z_order {
+                                    frame.z_order = z_order;
+                                }
+                                frame.set_known_parameter(FrameParam::ParentFrame, parent);
+                            }
                         }
-                    }
-                    _ => {
-                        if let Some(frame) = eval.frames.get_mut(fid) {
-                            frame.set_parameter(pair_car, pair_cdr);
+                        FrameParamKey::Known(FrameParam::Visibility) => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.visible = pair_cdr.is_truthy();
+                                frame.set_known_parameter(FrameParam::Visibility, pair_cdr);
+                            }
                         }
-                        if matches!(key_name.as_str(), "foreground-color" | "background-color") {
+                        FrameParamKey::Known(FrameParam::Undecorated) => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.undecorated = pair_cdr.is_truthy();
+                                frame.set_known_parameter(FrameParam::Undecorated, pair_cdr);
+                            }
+                        }
+                        FrameParamKey::Known(FrameParam::NoAcceptFocus) => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.no_accept_focus = pair_cdr.is_truthy();
+                                frame.set_known_parameter(FrameParam::NoAcceptFocus, pair_cdr);
+                            }
+                        }
+                        FrameParamKey::Known(FrameParam::Unsplittable) => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.no_split = pair_cdr.is_truthy();
+                                frame.set_known_parameter(FrameParam::Unsplittable, pair_cdr);
+                            }
+                        }
+                        FrameParamKey::Known(
+                            param @ (FrameParam::ForegroundColor | FrameParam::BackgroundColor),
+                        ) => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.set_known_parameter(param, pair_cdr);
+                            }
                             super::font::update_face_from_frame_parameter(
-                                eval, fid, &key_name, pair_cdr,
+                                eval, fid, param, pair_cdr,
                             )?;
                         }
-                    }
+                        key => {
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.set_parameter_key(key, pair_cdr);
+                            }
+                        }
+                    },
                 }
             }
         }

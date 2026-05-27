@@ -14,12 +14,14 @@ use crate::gc_trace::GcTrace;
 use std::collections::{HashMap, HashSet};
 
 mod display;
+mod frame_params;
 mod history;
 mod parameters;
 
 pub use display::{
     WindowBufferDisplayDefaults, WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
 };
+pub use frame_params::{FrameParam, FrameParamKey, GNU_FRAME_PARAM_COUNT, GNU_FRAME_PARAMS};
 
 // ---------------------------------------------------------------------------
 // IDs
@@ -1525,18 +1527,18 @@ impl Frame {
             parameters: {
                 let mut params = HashMap::new();
                 params.insert(
-                    Value::symbol("foreground-color"),
+                    FrameParam::ForegroundColor.symbol(),
                     Value::string("unspecified-fg"),
                 );
                 params.insert(
-                    Value::symbol("background-color"),
+                    FrameParam::BackgroundColor.symbol(),
                     Value::string("unspecified-bg"),
                 );
-                params.insert(Value::symbol("cursor-color"), Value::string("white"));
+                params.insert(FrameParam::CursorColor.symbol(), Value::string("white"));
                 // GNU terminal frames expose a numeric tab-bar-lines frame
                 // parameter even when the tab bar is disabled. Lisp window
                 // deletion code compares it with `>`, so nil is not compatible.
-                params.insert(Value::symbol("tab-bar-lines"), Value::fixnum(0));
+                params.insert(FrameParam::TabBarLines.symbol(), Value::fixnum(0));
                 params.insert(Value::symbol("minibuffer"), Value::T);
                 params
             },
@@ -1707,12 +1709,17 @@ impl Frame {
         self.parameter(key).and_then(|v| v.as_int())
     }
 
-    fn nonnegative_frame_parameter_int(&self, key: &str) -> Option<i64> {
-        self.frame_parameter_int(key).map(|value| value.max(0))
+    pub fn known_frame_parameter_int(&self, key: FrameParam) -> Option<i64> {
+        self.known_parameter(key).and_then(|v| v.as_int())
+    }
+
+    fn nonnegative_frame_parameter_int(&self, key: FrameParam) -> Option<i64> {
+        self.known_frame_parameter_int(key)
+            .map(|value| value.max(0))
     }
 
     pub fn child_frame_border_width_raw(&self) -> Option<i64> {
-        self.nonnegative_frame_parameter_int("child-frame-border-width")
+        self.nonnegative_frame_parameter_int(FrameParam::ChildFrameBorderWidth)
     }
 
     pub fn internal_border_width(&self) -> i64 {
@@ -1724,7 +1731,7 @@ impl Frame {
         {
             return width;
         }
-        self.nonnegative_frame_parameter_int("internal-border-width")
+        self.nonnegative_frame_parameter_int(FrameParam::InternalBorderWidth)
             .unwrap_or(0)
     }
 
@@ -1740,12 +1747,36 @@ impl Frame {
         self.parameters.get(&Value::symbol(key)).copied()
     }
 
+    pub fn known_parameter(&self, key: FrameParam) -> Option<Value> {
+        self.parameters.get(&key.symbol()).copied()
+    }
+
+    pub fn parameter_key(&self, key: FrameParamKey) -> Option<Value> {
+        self.parameters.get(&key.symbol()).copied()
+    }
+
     pub fn set_parameter(&mut self, key: Value, value: Value) -> Option<Value> {
         self.parameters.insert(key, value)
     }
 
+    pub fn set_known_parameter(&mut self, key: FrameParam, value: Value) -> Option<Value> {
+        self.set_parameter(key.symbol(), value)
+    }
+
+    pub fn set_parameter_key(&mut self, key: FrameParamKey, value: Value) -> Option<Value> {
+        self.set_parameter(key.symbol(), value)
+    }
+
     pub fn remove_parameter(&mut self, key: Value) -> Option<Value> {
         self.parameters.remove(&key)
+    }
+
+    pub fn remove_known_parameter(&mut self, key: FrameParam) -> Option<Value> {
+        self.remove_parameter(key.symbol())
+    }
+
+    pub fn remove_parameter_key(&mut self, key: FrameParamKey) -> Option<Value> {
+        self.remove_parameter(key.symbol())
     }
 
     pub fn realized_face(&self, name: &str) -> Option<&RuntimeFace> {
@@ -1836,27 +1867,29 @@ impl Frame {
     }
 
     fn default_left_fringe_width(&self) -> i64 {
-        self.parameter("left-fringe")
+        self.known_parameter(FrameParam::LeftFringe)
             .and_then(|v| v.as_int())
             .unwrap_or(8)
             .max(0)
     }
 
     fn default_right_fringe_width(&self) -> i64 {
-        self.parameter("right-fringe")
+        self.known_parameter(FrameParam::RightFringe)
             .and_then(|v| v.as_int())
             .unwrap_or(8)
             .max(0)
     }
 
     fn default_vertical_scroll_bar_side(&self) -> Option<&'static str> {
-        let raw = self.parameter("vertical-scroll-bars").unwrap_or_else(|| {
-            if self.effective_window_system().is_some() {
-                Value::symbol("right")
-            } else {
-                Value::NIL
-            }
-        });
+        let raw = self
+            .known_parameter(FrameParam::VerticalScrollBars)
+            .unwrap_or_else(|| {
+                if self.effective_window_system().is_some() {
+                    Value::symbol("right")
+                } else {
+                    Value::NIL
+                }
+            });
         match raw.as_symbol_name() {
             Some("left") => Some("left"),
             Some("right") => Some("right"),
@@ -1867,7 +1900,7 @@ impl Frame {
     }
 
     fn default_vertical_scroll_bar_width(&self) -> i64 {
-        self.parameter("scroll-bar-width")
+        self.known_parameter(FrameParam::ScrollBarWidth)
             .and_then(|v| v.as_int())
             .filter(|value| *value > 0)
             .unwrap_or_else(|| self.char_width.max(1.0).round() as i64)
@@ -1945,7 +1978,7 @@ impl Frame {
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
         let lines = self
-            .frame_parameter_int("tab-bar-lines")
+            .known_frame_parameter_int(FrameParam::TabBarLines)
             .unwrap_or(0)
             .max(0) as u32;
         let char_height = self.char_height.max(1.0).round() as u32;
@@ -1967,7 +2000,7 @@ impl Frame {
     /// (and its mode line / minibuffer) down to make room.
     pub fn sync_menu_bar_height_from_parameters(&mut self) {
         let lines = self
-            .frame_parameter_int("menu-bar-lines")
+            .known_frame_parameter_int(FrameParam::MenuBarLines)
             .unwrap_or(0)
             .max(0) as u32;
         let char_height = self.char_height.max(1.0).round() as u32;
@@ -1983,7 +2016,7 @@ impl Frame {
     /// pixels because our renderer works in physical frame pixels.
     pub fn sync_tool_bar_height_from_parameters(&mut self) {
         let lines = self
-            .frame_parameter_int("tool-bar-lines")
+            .known_frame_parameter_int(FrameParam::ToolBarLines)
             .unwrap_or(0)
             .max(0) as u32;
         let line_height = if self.effective_window_system().is_some() {

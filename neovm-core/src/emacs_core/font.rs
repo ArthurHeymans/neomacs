@@ -28,7 +28,7 @@ use crate::face::{
     FontWidth, LFaceAttr, UnderlineStyle,
 };
 use crate::heap_types::LispString;
-use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, WindowId};
+use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, FrameParam, WindowId};
 
 type AlternativeFontFamilyAlist = Vec<(SymId, Vec<SymId>)>;
 type AlternativeFontRegistryAlist = Vec<(LispString, Vec<LispString>)>;
@@ -381,7 +381,7 @@ fn sync_live_frame_font_state(
         font_name_value(&resolution.font_value).unwrap_or(*requested)
     };
 
-    frame.set_parameter(Value::symbol("font"), public_font_name);
+    frame.set_known_parameter(FrameParam::Font, public_font_name);
     frame.set_parameter(Value::symbol("font-parameter"), resolution.font_value);
 
     let mut geometry_hints = None;
@@ -497,11 +497,11 @@ fn set_runtime_face_color_from_frame_parameter(
 pub(crate) fn update_face_from_frame_parameter(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
-    param_name: &str,
+    param: FrameParam,
     new_value: Value,
 ) -> Result<(), crate::emacs_core::error::Flow> {
-    match param_name {
-        "foreground-color" => {
+    match param {
+        FrameParam::ForegroundColor => {
             set_runtime_face_color_from_frame_parameter(
                 eval,
                 frame_id,
@@ -510,7 +510,7 @@ pub(crate) fn update_face_from_frame_parameter(
                 new_value,
             )?;
         }
-        "background-color" => {
+        FrameParam::BackgroundColor => {
             if let Some(function) = eval.obarray().symbol_function("frame-set-background-mode") {
                 let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
             }
@@ -1642,7 +1642,7 @@ fn font_value_matches_frame_font_parameter(
     frame: &crate::window::Frame,
     requested: &Value,
 ) -> bool {
-    let Some(frame_font) = frame.parameter("font") else {
+    let Some(frame_font) = frame.known_parameter(FrameParam::Font) else {
         return false;
     };
     match (frame_font.kind(), requested.kind()) {
@@ -3126,13 +3126,13 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             if let Some(frame_id) = live_frame_id {
                 if face_name == "default" {
                     let frame_param = match attr_name_str {
-                        ":foreground" => Some("foreground-color"),
-                        ":background" => Some("background-color"),
+                        ":foreground" => Some(FrameParam::ForegroundColor),
+                        ":background" => Some(FrameParam::BackgroundColor),
                         _ => None,
                     };
-                    if let Some(param_name) = frame_param {
+                    if let Some(param) = frame_param {
                         if let Some(frame) = eval.frames.get_mut(frame_id) {
-                            frame.set_parameter(Value::symbol(param_name), public_effective_value);
+                            frame.set_known_parameter(param, public_effective_value);
                         }
                         if attr_name_str == ":background"
                             && let Some(function) =

@@ -63,7 +63,7 @@ use neovm_core::emacs_core::{
 };
 use neovm_core::face::{FaceHeight, FontSlant, FontWeight, FontWidth, LFaceAttr};
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{FrameId, Window};
+use neovm_core::window::{FrameId, FrameParam, Window};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum EarlyCliAction {
@@ -1716,7 +1716,7 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
             return;
         }
         frame.set_parameter(
-            Value::symbol("menu-bar-lines"),
+            FrameParam::MenuBarLines.symbol(),
             Value::fixnum(if menu_items.is_empty() || compact_bar_enabled {
                 0
             } else {
@@ -1724,7 +1724,7 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
             }),
         );
         frame.set_parameter(
-            Value::symbol("tool-bar-lines"),
+            FrameParam::ToolBarLines.symbol(),
             Value::fixnum(if tool_items.is_empty() || compact_bar_enabled {
                 0
             } else {
@@ -2706,8 +2706,8 @@ fn bootstrap_buffers(
         frame.visible = true;
         if let Some(window_system) = display.window_system_symbol() {
             frame.set_window_system(Some(Value::symbol(window_system)));
-            frame.set_parameter(Value::symbol("foreground-color"), Value::string("black"));
-            frame.set_parameter(Value::symbol("background-color"), Value::string("white"));
+            frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("black"));
+            frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("white"));
         } else {
             frame.set_window_system(None);
         }
@@ -2724,7 +2724,7 @@ fn bootstrap_buffers(
             frame.remove_parameter(Value::symbol("display-type"));
             frame.remove_parameter(Value::symbol("background-mode"));
         }
-        frame.set_parameter(Value::symbol("font"), default_font_name);
+        frame.set_known_parameter(FrameParam::Font, default_font_name);
         frame.set_parameter(Value::symbol("font-parameter"), default_font);
         // GNU frame.c: initial frame title is NULL (unset). The %F
         // mode-line construct falls through to frame->name ("F1") when
@@ -2758,7 +2758,7 @@ fn bootstrap_buffers(
         // so we only need to set the parameter for `FrontendKind::Tty`.
         if display.frontend == FrontendKind::Tty {
             frame.set_parameter(
-                neovm_core::emacs_core::Value::symbol("menu-bar-lines"),
+                FrameParam::MenuBarLines.symbol(),
                 neovm_core::emacs_core::Value::fixnum(1),
             );
         }

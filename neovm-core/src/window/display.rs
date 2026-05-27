@@ -1,4 +1,4 @@
-use super::{Frame, FrameManager, Window, WindowDisplayState, WindowId};
+use super::{Frame, FrameManager, FrameParam, Window, WindowDisplayState, WindowId};
 use crate::buffer::BufferId;
 use crate::emacs_core::value::{Value, next_float_id};
 
@@ -43,7 +43,7 @@ fn canon_y_from_pixel_y(frame: &Frame, y: i64) -> Value {
 
 fn frame_default_left_fringe_width(frame: &Frame) -> i32 {
     frame
-        .parameter("left-fringe")
+        .known_parameter(FrameParam::LeftFringe)
         .and_then(|v| v.as_int())
         .and_then(|value| i32::try_from(value).ok())
         .unwrap_or(8)
@@ -51,20 +51,22 @@ fn frame_default_left_fringe_width(frame: &Frame) -> i32 {
 
 fn frame_default_right_fringe_width(frame: &Frame) -> i32 {
     frame
-        .parameter("right-fringe")
+        .known_parameter(FrameParam::RightFringe)
         .and_then(|v| v.as_int())
         .and_then(|value| i32::try_from(value).ok())
         .unwrap_or(8)
 }
 
 fn frame_vertical_scroll_bar_side(frame: &Frame) -> Option<Value> {
-    let raw = frame.parameter("vertical-scroll-bars").unwrap_or_else(|| {
-        if frame.effective_window_system().is_some() {
-            Value::symbol("right")
-        } else {
-            Value::NIL
-        }
-    });
+    let raw = frame
+        .known_parameter(FrameParam::VerticalScrollBars)
+        .unwrap_or_else(|| {
+            if frame.effective_window_system().is_some() {
+                Value::symbol("right")
+            } else {
+                Value::NIL
+            }
+        });
     match symbol_name(&raw) {
         Some("left") => Some(Value::symbol("left")),
         Some("right") => Some(Value::symbol("right")),
@@ -76,14 +78,14 @@ fn frame_vertical_scroll_bar_side(frame: &Frame) -> Option<Value> {
 
 fn frame_has_horizontal_scroll_bar(frame: &Frame) -> bool {
     let raw = frame
-        .parameter("horizontal-scroll-bars")
+        .known_parameter(FrameParam::HorizontalScrollBars)
         .unwrap_or(Value::NIL);
     matches!(symbol_name(&raw), Some("bottom")) || raw.is_truthy()
 }
 
 fn frame_config_scroll_bar_width(frame: &Frame) -> i32 {
     frame
-        .parameter("scroll-bar-width")
+        .known_parameter(FrameParam::ScrollBarWidth)
         .and_then(|v| v.as_int())
         .and_then(|value| i32::try_from(value).ok())
         .filter(|value| *value > 0)
@@ -92,7 +94,7 @@ fn frame_config_scroll_bar_width(frame: &Frame) -> i32 {
 
 fn frame_config_scroll_bar_height(frame: &Frame) -> i32 {
     frame
-        .parameter("scroll-bar-height")
+        .known_parameter(FrameParam::ScrollBarHeight)
         .and_then(|v| v.as_int())
         .and_then(|value| i32::try_from(value).ok())
         .filter(|value| *value > 0)
