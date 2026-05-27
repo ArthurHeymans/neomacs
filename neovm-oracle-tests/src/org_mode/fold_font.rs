@@ -685,6 +685,60 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_subtree_show_all_font_level_state_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "** DONE Child\n")
+      (insert "*** TODO Grand\n")
+      (insert "**** WAIT Fourth\n")
+      (insert "***** DONE Fifth\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide subtree, then show-all
+      (goto-char (point-min))
+      (search-forward "Child")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check state
+      (let (headings merged)
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+          (let ((beg (line-beginning-position)))
+            (push (list (match-string 2)
+                        (length (match-string 1))
+                        (org-outline-level)
+                        (invisible-p beg)
+                        (get-text-property beg 'face)
+                        (get-text-property (match-beginning 2) 'face))
+                  headings)))
+        ;; Check merged
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (list (nreverse headings)
+              (nreverse merged)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_sublevels_show_context_font_level_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
