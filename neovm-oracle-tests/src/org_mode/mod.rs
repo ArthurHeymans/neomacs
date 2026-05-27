@@ -19,6 +19,7 @@ mod clock_agenda;
 mod columns_duration;
 mod combo_strict;
 mod combo_strict_2;
+mod combo_strict_3;
 mod context_blocks;
 mod core_upstream;
 mod core_upstream_2;
