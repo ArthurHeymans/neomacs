@@ -382,3 +382,138 @@ fn org_capture_prompt_placeholders_history_tags_props_combo() {
                  (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (let* ((file (make-temp-file "org-capture-hooks" nil ".org"
+                               "* Project [0/1]\n** Inbox\n- [ ] Existing\n** Archive\n"))
+         (events nil)
+         (answers '("Hooked Title"))
+         (org-overriding-default-time (encode-time 0 15 11 27 5 2026))
+         (org-capture--prompt-history-table (make-hash-table :test #'equal))
+         (org-capture-templates
+          `(("e" "Entry hooks" entry
+             (file+olp ,file "Project" "Inbox")
+             "* TODO %^{Title|Default}\nSCHEDULED: %t\nFrom: %a\n%i\n"
+             :prepend t
+             :empty-lines 1
+             :prepare-finalize
+             ,(lambda ()
+                (push (list 'prepare
+                            (buffer-name)
+                            (buffer-narrowed-p)
+                            (point-min)
+                            (point-max))
+                      events)
+                (goto-char (point-max))
+                (insert "Prepared line\n"))
+             :before-finalize
+             ,(lambda ()
+                (push (list 'before
+                            (buffer-name)
+                            (marker-position
+                             (org-capture-get :begin-marker 'local))
+                            (marker-position
+                             (org-capture-get :end-marker 'local)))
+                      events))
+             :after-finalize
+             ,(lambda ()
+                (push (list 'after
+                            (plist-get org-capture-plist :key)
+                            (plist-get org-capture-plist
+                                       :captured-entry-size)
+                            (marker-position
+                             org-capture-last-stored-marker))
+                      events)))
+            ("c" "Check stats" checkitem
+             (file+olp ,file "Project" "Inbox")
+             "%i"
+             :empty-lines 0
+             :after-finalize
+             ,(lambda ()
+                (push (list 'check-after
+                            (plist-get org-capture-plist :key)
+                            (marker-position
+                             org-capture-last-stored-marker))
+                      events))))))
+    (unwind-protect
+        (progn
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (goto-char (point-min))
+            (search-forward "Inbox")
+            (org-narrow-to-subtree)
+            (let ((narrow-before (list (point-min)
+                                       (point-max)
+                                       (buffer-narrowed-p))))
+              (cl-letf (((symbol-function 'org-completing-read)
+                         (lambda (prompt collection &rest _)
+                           (push (list 'prompt
+                                       prompt
+                                       (sort
+                                        (mapcar (lambda (entry)
+                                                  (if (consp entry)
+                                                      (car entry)
+                                                    entry))
+                                                collection)
+                                        #'string<))
+                                 events)
+                           (pop answers))))
+                (org-capture-string
+                 "Initial body"
+                 "e"))
+              (let ((capture-before
+                     (list (buffer-name)
+                           (buffer-narrowed-p)
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           (marker-position
+                            org-capture-last-stored-marker))))
+                (org-capture-finalize)
+                (let ((target-after-entry
+                       (with-current-buffer (find-file-noselect file)
+                         (list (buffer-narrowed-p)
+                               (point-min)
+                               (point-max)
+                               (buffer-substring-no-properties
+                                (point-min) (point-max))))))
+                  (org-capture-string "Captured checkbox" "c")
+                  (let ((check-before
+                         (list (buffer-name)
+                               (buffer-substring-no-properties
+                                (point-min) (point-max))
+                               (marker-position
+                                org-capture-last-stored-marker))))
+                    (org-capture-finalize)
+                    (with-current-buffer (find-file-noselect file)
+                      (widen)
+                      (goto-char (point-min))
+                      (org-update-statistics-cookies t)
+                      (save-buffer)
+                      (list narrow-before
+                            capture-before
+                            target-after-entry
+                            check-before
+                            (nreverse events)
+                            (gethash "Title"
+                                     org-capture--prompt-history-table)
+                            (marker-position
+                             org-capture-last-stored-marker)
+                            (replace-regexp-in-string
+                             "\\[[0-9][^]\n]+\\]"
+                             "[stamp]"
+                             (buffer-substring-no-properties
+                              (point-min) (point-max)))))))))))
+      (dolist (buf '("CAPTURE-org-capture-hooks"
+                     "CAPTURE-org-capture-hooks.org"))
+        (when (get-buffer buf) (kill-buffer buf)))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
