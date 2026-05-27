@@ -682,3 +682,50 @@ fn org_babel_execute_result_value_insertion_deep_state_combo() {
                     tabler-buf))))))))))"##,
     );
 }
+
+#[test]
+fn org_babel_dir_default_dir_header_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-babel-dir" t))
+         (probe (expand-file-name "probe.txt" root))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert "#+begin_src emacs-lisp :dir " root " :results value replace\n")
+          (insert "(expand-file-name \"probe.txt\")\n")
+          (insert "#+end_src\n\n")
+          (insert "#+begin_src emacs-lisp :results output replace\n")
+          (insert "(princ (format \"default-dir=%s\" default-directory))\n")
+          (insert "#+end_src\n\n")
+          ;; Execute dir block
+          (goto-char (point-min))
+          (search-forward "expand-file-name")
+          (org-babel-execute-src-block)
+          (let ((dir-result (org-babel-read-result))
+                (after-dir (buffer-substring-no-properties
+                            (point-min) (point-max))))
+            ;; Execute default-dir block
+            (goto-char (point-min))
+            (search-forward "default-dir=")
+            (org-babel-execute-src-block)
+            (let ((default-result (org-babel-read-result))
+                  (after-default (buffer-substring-no-properties
+                                  (point-min) (point-max))))
+              (list (replace-regexp-in-string
+                     (regexp-quote root) "<root>" dir-result)
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>" default-result)
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>" after-dir)
+                    (replace-regexp-in-string
+                     (regexp-quote root) "<root>" after-default)))))
+      (delete-directory root t))))"##,
+    );
+}
