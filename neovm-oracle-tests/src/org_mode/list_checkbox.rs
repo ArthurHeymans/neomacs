@@ -486,3 +486,78 @@ fn org_list_struct_write_visibility_apply_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_list_make_subtree_checkbox_counter_roundtrip_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (let ((org-list-allow-alphabetical t)
+          (org-adapt-indentation t))
+      (org-mode)
+      (insert "* Parent [0/2]\n")
+      (insert "Intro paragraph\n")
+      (insert "a. [@c] [X] Alpha :: first line\n")
+      (insert "   continuation alpha\n")
+      (insert "   - [ ] Alpha child :: child def\n")
+      (insert "     child body\n")
+      (insert "d. [-] Beta [1/2] :: second line\n")
+      (insert "   1) [X] Beta done\n")
+      (insert "   2) [ ] Beta todo\n")
+      (insert "* Tail\n")
+      (let ((before-list (save-excursion
+                           (goto-char (point-min))
+                           (search-forward "Alpha")
+                           (beginning-of-line)
+                           (org-list-to-lisp)))
+            (before-buffer
+             (buffer-substring-no-properties (point-min) (point-max))))
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-list-make-subtree)
+        (goto-char (point-min))
+        (org-update-checkbox-count t)
+        (let* ((tree (org-element-parse-buffer))
+               (heads
+                (org-element-map tree 'headline
+                  (lambda (h)
+                    (list (org-element-property :level h)
+                          (org-element-property :todo-keyword h)
+                          (org-element-property :raw-value h)
+                          (org-element-property :priority h)
+                          (org-element-property :begin h)
+                          (org-element-property :end h)))))
+               (items
+                (org-element-map tree 'item
+                  (lambda (item)
+                    (list (org-element-property :checkbox item)
+                          (org-element-property :counter item)
+                          (org-element-property :tag item)))))
+               (converted
+                (buffer-substring-no-properties (point-min) (point-max))))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (org-demote-subtree)
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (org-promote-subtree)
+          (org-update-checkbox-count t)
+          (let ((after-level-edits
+                 (buffer-substring-no-properties (point-min) (point-max)))
+                (roundtrip-list
+                 (org-list-to-subtree before-list 3
+                                      '(:raw t :istart "" :iend ""))))
+            (list before-list
+                  before-buffer
+                  heads
+                  items
+                  converted
+                  roundtrip-list
+                  after-level-edits))))))"##,
+    );
+}
