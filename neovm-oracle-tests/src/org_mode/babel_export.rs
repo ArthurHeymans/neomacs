@@ -91,3 +91,74 @@ fn org_export_environment_and_string_html_combo() {
              html)))))"##,
     );
 }
+
+#[test]
+fn org_babel_header_result_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+PROPERTY: header-args:emacs-lisp :exports both :results value replace\n")
+    (insert "#+HEADER: :var x=3 :var label=\"row\"\n")
+    (insert "#+NAME: table-block\n")
+    (insert "#+begin_src emacs-lisp :results value table replace\n")
+    (insert "(list (list \"label\" \"n\" \"square\") 'hline (list label x (* x x)) (list \"next\" (+ x 1) (* (+ x 1) (+ x 1))))\n")
+    (insert "#+end_src\n\n")
+    (insert "#+NAME: list-block\n")
+    (insert "#+begin_src emacs-lisp :results value list replace\n")
+    (insert "(list \"alpha\" \"beta\" (format \"n=%s\" 4))\n")
+    (insert "#+end_src\n")
+    (let* ((org-confirm-babel-evaluate nil)
+           (parsed (org-babel-parse-header-arguments
+                    ":results output drawer replace :exports results :var x=1 :var x=2 :cache yes"))
+           (merged (org-babel-merge-params
+                    '((:results . "value replace") (:exports . "code")
+                      (:var . "x=1") (:var . "label=\"old\""))
+                    parsed
+                    '((:results . "table replace") (:exports . "both")
+                      (:var . "label=\"new\""))))
+           table-info table-expanded table-result table-pos table-read
+           list-info list-result list-pos list-read)
+      (goto-char (point-min))
+      (search-forward "table-block")
+      (search-forward "begin_src")
+      (setq table-info (org-babel-get-src-block-info))
+      (setq table-expanded (org-babel-expand-src-block))
+      (setq table-result (org-babel-execute-src-block nil table-info))
+      (setq table-pos (org-babel-where-is-src-block-result nil table-info))
+      (goto-char table-pos)
+      (forward-line 1)
+      (setq table-read (org-babel-read-result))
+      (goto-char (point-min))
+      (search-forward "list-block")
+      (search-forward "begin_src")
+      (setq list-info (org-babel-get-src-block-info))
+      (setq list-result (org-babel-execute-src-block nil list-info))
+      (setq list-pos (org-babel-where-is-src-block-result nil list-info))
+      (goto-char list-pos)
+      (forward-line 1)
+      (setq list-read (org-babel-read-result))
+      (list parsed
+            merged
+            (nth 0 table-info)
+            (cdr (assq :exports (nth 2 table-info)))
+            (cdr (assq :results (nth 2 table-info)))
+            (assq :var (nth 2 table-info))
+            table-expanded
+            table-result
+            table-read
+            (nth 0 list-info)
+            (cdr (assq :results (nth 2 list-info)))
+            list-result
+            list-read
+            (list (line-number-at-pos table-pos)
+                  (line-number-at-pos list-pos))
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
