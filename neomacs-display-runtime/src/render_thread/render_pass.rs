@@ -845,6 +845,7 @@ impl RenderApp {
     }
 
     pub(super) fn render(&mut self) {
+        let (primary_width, primary_height) = self.primary_native_size();
         // Early return checks
         if self.primary_current_frame().is_none()
             || self.primary_surface().is_none()
@@ -868,7 +869,7 @@ impl RenderApp {
             | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
             wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
                 // Reconfigure surface
-                let (w, h) = (self.width, self.height);
+                let (w, h) = (primary_width, primary_height);
                 self.handle_resize(w, h);
                 return;
             }
@@ -935,8 +936,8 @@ impl RenderApp {
                         frame,
                         glyph_atlas,
                         &self.faces,
-                        self.width,
-                        self.height,
+                        primary_width,
+                        primary_height,
                         primary_frame.cursor.blink_on,
                         root_animated_cursor,
                         mouse_pos,
@@ -959,8 +960,8 @@ impl RenderApp {
                             .as_mut()
                             .expect("checked in render"),
                         &mut primary_frame.frame_dirty,
-                        self.width,
-                        self.height,
+                        primary_width,
+                        primary_height,
                     );
                 });
             }
@@ -979,8 +980,8 @@ impl RenderApp {
                 renderer.blit_texture_to_view(
                     unsafe { &*current_bg },
                     &surface_view,
-                    self.width,
-                    self.height,
+                    primary_width,
+                    primary_height,
                 );
             }
 
@@ -1004,8 +1005,8 @@ impl RenderApp {
                     frame,
                     glyph_atlas,
                     &self.faces,
-                    self.width,
-                    self.height,
+                    primary_width,
+                    primary_height,
                     primary_frame.cursor.blink_on,
                     root_animated_cursor,
                     mouse_pos,
@@ -1038,8 +1039,8 @@ impl RenderApp {
                             child_entry.abs_y,
                             &mut primary_frame.glyph_atlas,
                             &self.faces,
-                            self.width,
-                            self.height,
+                            primary_width,
+                            primary_height,
                             cursor_blink_on,
                             child_anim,
                             self.child_frame_corner_radius,
@@ -1078,8 +1079,8 @@ impl RenderApp {
                         &surface_view,
                         frame,
                         &mut primary_frame.glyph_atlas,
-                        self.width,
-                        self.height,
+                        primary_width,
+                        primary_height,
                         self.scroll_indicators_enabled,
                     );
                 });
@@ -1093,9 +1094,9 @@ impl RenderApp {
 
         tracing::trace!(
             "CSD state: decorations_enabled={} is_fullscreen={} titlebar_height={}",
-            self.chrome.decorations_enabled,
-            self.chrome.is_fullscreen,
-            self.chrome.titlebar_height
+            self.primary_chrome().decorations_enabled,
+            self.primary_chrome().is_fullscreen,
+            self.primary_chrome().titlebar_height
         );
         let toolbar_y_origin = self.toolbar_y_origin();
         let primary_ime_preedit_text = self
@@ -1113,6 +1114,7 @@ impl RenderApp {
         let titlebar_background = self
             .primary_current_frame()
             .map(|f| (f.background.r, f.background.g, f.background.b));
+        let primary_chrome = self.primary_chrome().clone();
         if let (Some(renderer), Some(primary_frame)) = (&self.renderer, self.primary_frame.as_mut())
         {
             Self::render_frame_chrome_overlays(
@@ -1120,7 +1122,7 @@ impl RenderApp {
                 &surface_view,
                 &mut primary_frame.glyph_atlas,
                 GuiFrameChromeOverlays {
-                    native_chrome: &self.chrome,
+                    native_chrome: &primary_chrome,
                     titlebar_background,
                     chrome_interaction: primary_frame.chrome_interaction,
                     menu_bar: primary_frame.menu_bar.as_ref().map(|menu_bar| {
@@ -1161,8 +1163,8 @@ impl RenderApp {
                     tooltip: primary_frame.tooltip.as_ref(),
                     ime_preedit,
                 },
-                self.width,
-                self.height,
+                primary_width,
+                primary_height,
             );
         }
 
@@ -1173,8 +1175,8 @@ impl RenderApp {
                     &surface_view,
                     &mut primary_frame.visual_bell_start,
                     &mut primary_frame.frame_dirty,
-                    self.width,
-                    self.height,
+                    primary_width,
+                    primary_height,
                 );
             }
         }
@@ -1194,8 +1196,8 @@ impl RenderApp {
                 fps_window_count,
                 primary_frame.transitions.crossfades.len()
                     + primary_frame.transitions.scroll_slides.len(),
-                self.width,
-                self.height,
+                primary_width,
+                primary_height,
             );
         }
 
@@ -1220,9 +1222,9 @@ impl RenderApp {
             Self::render_frame_corner_mask(
                 renderer,
                 &surface_view,
-                &self.chrome,
-                self.width,
-                self.height,
+                self.primary_chrome(),
+                primary_width,
+                primary_height,
             );
         }
 
@@ -1233,16 +1235,16 @@ impl RenderApp {
                 &output.texture,
                 renderer,
                 frame,
-                self.width,
-                self.height,
+                primary_width,
+                primary_height,
             );
             surface_readback::maybe_log_debug_surface_readback(
                 &mut self.debug_surface_readback_frames_remaining,
                 &output.texture,
                 renderer,
                 frame,
-                self.width,
-                self.height,
+                primary_width,
+                primary_height,
             );
         }
 

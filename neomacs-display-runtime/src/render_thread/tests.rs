@@ -141,9 +141,7 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     app.handle_window_command(RenderCommand::DestroyWindow { emacs_frame_id: 0 })
         .expect("destroy primary window");
 
-    assert!(app.window.is_none());
-    assert!(app.surface.is_none());
-    assert!(app.surface_config.is_none());
+    assert!(app.primary_native.is_none());
     assert!(app.primary_frame.is_none());
     assert!(app.primary_current_frame().is_none());
     assert!(!app.primary_dirty());

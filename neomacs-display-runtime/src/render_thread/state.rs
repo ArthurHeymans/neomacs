@@ -19,7 +19,7 @@ use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
-use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowManager};
+use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowManager};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::{WpeBackend, WpeWebView};
@@ -264,7 +264,8 @@ pub(super) struct RenderGpuContext {
 
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
-    pub(super) window: Option<Arc<Window>>,
+    /// Native state for the adopted primary GUI frame window.
+    pub(super) primary_native: Option<GuiFrameNativeWindowState>,
     pub(super) primary_window_destroyed: bool,
     pub(super) width: u32,
     pub(super) height: u32,
@@ -274,8 +275,6 @@ pub(super) struct RenderApp {
     // Shared wgpu context used by the primary surface and secondary windows.
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
-    pub(super) surface: Option<wgpu::Surface<'static>>,
-    pub(super) surface_config: Option<wgpu::SurfaceConfiguration>,
     /// Frame-owned render state for the adopted primary GUI frame.
     pub(super) primary_frame: Option<GuiFrameRenderState>,
 
@@ -384,7 +383,7 @@ impl RenderApp {
 
         Self {
             comms,
-            window: None,
+            primary_native: None,
             primary_window_destroyed: false,
             width,
             height,
@@ -393,8 +392,6 @@ impl RenderApp {
             scale_factor: 1.0,
             gpu: None,
             renderer: None,
-            surface: None,
-            surface_config: None,
             primary_frame: None,
             faces: HashMap::new(),
             modifiers: 0,
@@ -621,48 +618,93 @@ impl RenderApp {
     }
 
     pub(super) fn primary_window(&self) -> Option<&Arc<Window>> {
-        self.window.as_ref()
+        self.primary_native.as_ref().map(|native| &native.window)
     }
 
     pub(super) fn primary_surface(&self) -> Option<&wgpu::Surface<'static>> {
-        self.surface.as_ref()
+        self.primary_native.as_ref().map(|native| &native.surface)
     }
 
     pub(super) fn primary_surface_config_mut(&mut self) -> Option<&mut wgpu::SurfaceConfiguration> {
-        self.surface_config.as_mut()
+        self.primary_native
+            .as_mut()
+            .map(|native| &mut native.surface_config)
     }
 
     pub(super) fn configure_primary_surface(&mut self, width: u32, height: u32) {
-        if let (Some(surface), Some(config), Some(gpu)) =
-            (&self.surface, &mut self.surface_config, &self.gpu)
-        {
-            config.width = width;
-            config.height = height;
-            surface.configure(&gpu.device, config);
+        if let (Some(native), Some(gpu)) = (self.primary_native.as_mut(), &self.gpu) {
+            native.width = width;
+            native.height = height;
+            native.surface_config.width = width;
+            native.surface_config.height = height;
+            native
+                .surface
+                .configure(&gpu.device, &native.surface_config);
         }
     }
 
     pub(super) fn primary_native_size(&self) -> (u32, u32) {
-        (self.width, self.height)
+        self.primary_native
+            .as_ref()
+            .map_or((self.width, self.height), |native| {
+                (native.width, native.height)
+            })
     }
 
     pub(super) fn primary_logical_size(&self) -> (f32, f32) {
-        (
-            self.width as f32 / self.scale_factor as f32,
-            self.height as f32 / self.scale_factor as f32,
-        )
+        let (width, height) = self.primary_native_size();
+        let scale_factor = self.primary_scale_factor() as f32;
+        (width as f32 / scale_factor, height as f32 / scale_factor)
     }
 
     pub(super) fn primary_scale_factor(&self) -> f64 {
-        self.scale_factor
+        self.primary_native
+            .as_ref()
+            .map_or(self.scale_factor, |native| native.scale_factor)
     }
 
     pub(super) fn primary_chrome(&self) -> &WindowChrome {
-        &self.chrome
+        self.primary_native
+            .as_ref()
+            .map_or(&self.chrome, |native| &native.chrome)
     }
 
     pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
-        &mut self.chrome
+        self.primary_native
+            .as_mut()
+            .map_or(&mut self.chrome, |native| &mut native.chrome)
+    }
+
+    pub(super) fn primary_mouse_hidden_for_typing(&self) -> bool {
+        self.primary_native
+            .as_ref()
+            .map_or(self.mouse_hidden_for_typing, |native| {
+                native.mouse_hidden_for_typing
+            })
+    }
+
+    pub(super) fn set_primary_mouse_hidden_for_typing(&mut self, hidden: bool) {
+        if let Some(native) = self.primary_native.as_mut() {
+            native.mouse_hidden_for_typing = hidden;
+        } else {
+            self.mouse_hidden_for_typing = hidden;
+        }
+    }
+
+    pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
+        if let Some(native) = self.primary_native.as_mut() {
+            native.ime_enabled = enabled;
+        } else {
+            self.ime_enabled = enabled;
+        }
+    }
+
+    pub(super) fn reset_primary_ime_cursor_area(&mut self) {
+        if let Some(native) = self.primary_native.as_mut() {
+            native.last_ime_cursor_area = None;
+        } else {
+            self.last_ime_cursor_area = None;
+        }
     }
 
     pub(super) fn primary_chrome_interaction(&self) -> GuiChromeInteractionState {

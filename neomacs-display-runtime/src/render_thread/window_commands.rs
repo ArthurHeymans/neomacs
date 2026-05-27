@@ -14,7 +14,7 @@ impl RenderApp {
     ) -> Result<(), RenderCommand> {
         match cmd {
             RenderCommand::SetMouseCursor { cursor_type } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     if cursor_type == 0 {
                         window.set_cursor_visible(false);
                     } else {
@@ -38,18 +38,18 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::WarpMouse { x, y } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     let pos = PhysicalPosition::new(x as f64, y as f64);
                     let _ = window.set_cursor_position(pos);
                 }
                 Ok(())
             }
             RenderCommand::SetWindowTitle { title } => {
-                self.chrome.title = title.clone();
-                if let Some(ref window) = self.window {
+                self.primary_chrome_mut().title = title.clone();
+                if let Some(window) = self.primary_window() {
                     window.set_title(&title);
                 }
-                if !self.chrome.decorations_enabled {
+                if !self.primary_chrome().decorations_enabled {
                     self.mark_primary_dirty();
                 }
                 Ok(())
@@ -59,11 +59,11 @@ impl RenderApp {
                 title,
             } => {
                 if emacs_frame_id == 0 {
-                    self.chrome.title = title.clone();
-                    if let Some(ref window) = self.window {
+                    self.primary_chrome_mut().title = title.clone();
+                    if let Some(window) = self.primary_window() {
                         window.set_title(&title);
                     }
-                    if !self.chrome.decorations_enabled {
+                    if !self.primary_chrome().decorations_enabled {
                         self.mark_primary_dirty();
                     }
                 } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
@@ -81,20 +81,20 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowFullscreen { mode } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window().cloned() {
                     match mode {
                         3 => {
                             window.set_fullscreen(Some(Fullscreen::Borderless(None)));
-                            self.chrome.is_fullscreen = true;
+                            self.primary_chrome_mut().is_fullscreen = true;
                         }
                         4 => {
                             window.set_maximized(true);
-                            self.chrome.is_fullscreen = false;
+                            self.primary_chrome_mut().is_fullscreen = false;
                         }
                         _ => {
                             window.set_fullscreen(None);
                             window.set_maximized(false);
-                            self.chrome.is_fullscreen = false;
+                            self.primary_chrome_mut().is_fullscreen = false;
                         }
                     }
                     self.mark_primary_dirty();
@@ -102,20 +102,20 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowMinimized { minimized } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     window.set_minimized(minimized);
                 }
                 Ok(())
             }
             RenderCommand::SetWindowPosition { x, y } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     window.set_outer_position(PhysicalPosition::new(x, y));
                 }
                 Ok(())
             }
             RenderCommand::SetWindowSize { width, height } => {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     let size = window_size_from_emacs_pixels(width, height);
                     let _ = window.request_inner_size(size);
                 }
@@ -136,7 +136,7 @@ impl RenderApp {
                 let size = window_size_from_emacs_pixels(width, height);
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(ref window) = self.window {
+                    if let Some(window) = self.primary_window() {
                         apply_window_geometry_hints(window, geometry_hints);
                         let _ = window.request_inner_size(size);
                     }
@@ -165,7 +165,7 @@ impl RenderApp {
                 );
                 if emacs_frame_id == 0 {
                     self.primary_geometry_hints = Some(geometry_hints);
-                    if let Some(ref window) = self.window {
+                    if let Some(window) = self.primary_window() {
                         apply_window_geometry_hints(window, geometry_hints);
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
@@ -180,8 +180,9 @@ impl RenderApp {
             }
             RenderCommand::SetWindowDecorated { decorated } => {
                 self.chrome.decorations_enabled = decorated;
+                self.primary_chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.chrome_defaults.decorations_enabled = decorated;
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     window.set_decorations(decorated);
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
@@ -193,7 +194,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::RequestAttention { urgent } => {
-                if let Some(ref window) = self.window {
+                if let Some(window) = self.primary_window() {
                     let attention = if urgent {
                         Some(UserAttentionType::Critical)
                     } else {
@@ -230,9 +231,7 @@ impl RenderApp {
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
                 if emacs_frame_id == 0 {
                     self.frame_windows.clear_primary_mapping();
-                    self.window = None;
-                    self.surface = None;
-                    self.surface_config = None;
+                    self.primary_native = None;
                     self.primary_frame = None;
                     self.primary_window_destroyed = true;
                 } else {

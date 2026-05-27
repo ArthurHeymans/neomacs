@@ -454,6 +454,7 @@ pub(super) fn render_frame_transitions(
 impl RenderApp {
     /// Ensure offscreen textures exist (lazily created)
     pub(super) fn ensure_offscreen_textures(&mut self) {
+        let (w, h) = self.primary_native_size();
         let Some(primary_frame) = self.primary_frame.as_mut() else {
             return;
         };
@@ -466,9 +467,6 @@ impl RenderApp {
             Some(r) => r,
             None => return,
         };
-        let w = self.width;
-        let h = self.height;
-
         if primary_frame.transitions.offscreen_a.is_none() {
             let (tex, view) = renderer.create_offscreen_texture(w, h);
             let bg = renderer.create_texture_bind_group(&view);
@@ -502,8 +500,7 @@ impl RenderApp {
             None => return,
         };
 
-        let width = self.width;
-        let height = self.height;
+        let (width, height) = self.primary_native_size();
         let Some(primary_frame) = self.primary_frame.as_mut() else {
             return;
         };

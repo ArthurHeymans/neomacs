@@ -56,23 +56,27 @@ impl RenderApp {
 
     /// Update IME cursor area only when IME is active and the rectangle changed.
     pub(super) fn update_ime_cursor_area_if_needed(&mut self, target: &CursorTarget) {
-        if !self.ime_enabled && !self.primary_ime_preedit_active() {
+        if !self
+            .primary_native
+            .as_ref()
+            .map_or(self.ime_enabled, |native| native.ime_enabled)
+            && !self.primary_ime_preedit_active()
+        {
             return;
         }
-        let Some(window) = self.primary_window() else {
+        let area = self.ime_cursor_area_for_target(target);
+        let Some(native) = self.primary_native.as_mut() else {
             return;
         };
-
-        let area = self.ime_cursor_area_for_target(target);
-        if self.last_ime_cursor_area == Some(area) {
+        if native.last_ime_cursor_area == Some(area) {
             return;
         }
 
-        window.set_ime_cursor_area(
+        native.window.set_ime_cursor_area(
             PhysicalPosition::new(area.x as f64, area.y as f64),
             PhysicalSize::new(area.width as f64, area.height as f64),
         );
-        self.last_ime_cursor_area = Some(area);
+        native.last_ime_cursor_area = Some(area);
     }
 
     /// Update a secondary frame window's IME cursor area when composition is active.

@@ -82,8 +82,11 @@ impl RenderApp {
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 if is_primary {
                     self.handle_resize(size.width, size.height);
-                    let (emacs_w, emacs_h) =
-                        emacs_pixels_from_window_size(size.width, size.height, self.scale_factor);
+                    let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
+                        size.width,
+                        size.height,
+                        self.primary_scale_factor(),
+                    );
                     tracing::info!(
                         "Sending WindowResize event to Emacs: {}x{}",
                         emacs_w,
@@ -315,11 +318,11 @@ impl RenderApp {
                             );
                             if state == ElementState::Pressed {
                                 if is_primary {
-                                    if !self.mouse_hidden_for_typing
-                                        && let Some(ref window) = self.window
+                                    if !self.primary_mouse_hidden_for_typing()
+                                        && let Some(window) = self.primary_window()
                                     {
                                         window.set_cursor_visible(false);
-                                        self.mouse_hidden_for_typing = true;
+                                        self.set_primary_mouse_hidden_for_typing(true);
                                     }
                                 } else if let Some(window_state) =
                                     self.frame_windows.get_by_winit_mut(window_id)
@@ -412,8 +415,8 @@ impl RenderApp {
             WindowEvent::Ime(ime_event) => match ime_event {
                 winit::event::Ime::Enabled => {
                     if self.frame_windows.is_primary_winit(window_id) {
-                        self.ime_enabled = true;
-                        self.last_ime_cursor_area = None;
+                        self.set_primary_ime_enabled(true);
+                        self.reset_primary_ime_cursor_area();
                         if let Some(target) = self.primary_cursor().target_cloned() {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
@@ -433,9 +436,9 @@ impl RenderApp {
                 }
                 winit::event::Ime::Disabled => {
                     if self.frame_windows.is_primary_winit(window_id) {
-                        self.ime_enabled = false;
+                        self.set_primary_ime_enabled(false);
                         self.clear_primary_ime_preedit();
-                        self.last_ime_cursor_area = None;
+                        self.reset_primary_ime_cursor_area();
                     } else if let Some(window_state) =
                         self.frame_windows.get_by_winit_mut(window_id)
                     {
@@ -530,11 +533,14 @@ impl RenderApp {
                 }
                 tracing::info!(
                     "Scale factor changed: previous_effective={} raw={} effective={}",
-                    self.scale_factor,
+                    self.primary_scale_factor(),
                     scale_factor,
                     effective_scale
                 );
                 self.scale_factor = effective_scale;
+                if let Some(native) = self.primary_native.as_mut() {
+                    native.scale_factor = effective_scale;
+                }
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.set_scale_factor(effective_scale as f32);
                 }

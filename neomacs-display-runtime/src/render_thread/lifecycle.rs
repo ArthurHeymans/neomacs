@@ -87,14 +87,14 @@ impl RenderApp {
         if !self.resumed_seen {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
-                self.window.is_some(),
+                self.primary_window().is_some(),
                 self.width,
                 self.height,
                 self.title
             );
             self.resumed_seen = true;
         }
-        if self.window.is_none() && !self.primary_window_destroyed {
+        if self.primary_window().is_none() && !self.primary_window_destroyed {
             let attrs = Window::default_attributes()
                 .with_title(&self.title)
                 .with_inner_size(window_size_from_emacs_pixels(self.width, self.height))
@@ -139,8 +139,6 @@ impl RenderApp {
 
                     // Set window icon from project SVG.
                     crate::window_icon::apply_window_icon(&window);
-
-                    self.window = Some(window);
                 }
                 Err(e) => {
                     tracing::error!("Failed to create window: {:?}", e);
@@ -155,7 +153,7 @@ impl RenderApp {
         if !self.about_to_wait_seen {
             tracing::info!(
                 "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
-                self.window.is_some(),
+                self.primary_window().is_some(),
                 self.frame_windows.count()
             );
             self.about_to_wait_seen = true;
@@ -315,7 +313,7 @@ impl RenderApp {
                 transitions_active = self.primary_transitions_active(),
                 "requesting redraw"
             );
-            if let Some(ref window) = self.window {
+            if let Some(window) = self.primary_window() {
                 window.request_redraw();
             }
         }
@@ -378,9 +376,8 @@ impl RenderApp {
         drop(self.renderer.take());
         // Drop glyph atlas (holds device reference)
         drop(self.primary_frame.take());
-        // Drop surface (holds wl_surface proxy if on Wayland)
-        drop(self.surface.take());
-        self.surface_config = None;
+        // Drop primary native state (surface holds wl_surface proxy if on Wayland)
+        drop(self.primary_native.take());
         // Drop multi-window state (secondary surfaces)
         self.frame_windows.destroy_all();
         // Leak the adapter to prevent eglTerminate crash on Wayland.

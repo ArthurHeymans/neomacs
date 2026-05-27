@@ -859,9 +859,11 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.chrome.resize_edge.is_some()
+            && self.primary_chrome().resize_edge.is_some()
         {
-            if let (Some(dir), Some(ref window)) = (self.chrome.resize_edge, self.window.as_ref()) {
+            if let (Some(dir), Some(window)) =
+                (self.primary_chrome().resize_edge, self.primary_window())
+            {
                 let _ = window.drag_resize_window(dir);
             }
             return;
@@ -875,17 +877,17 @@ impl RenderApp {
                 1 => {
                     let now = std::time::Instant::now();
                     if now
-                        .duration_since(self.chrome.last_titlebar_click)
+                        .duration_since(self.primary_chrome().last_titlebar_click)
                         .as_millis()
                         < 400
                     {
-                        if let Some(ref window) = self.window {
+                        if let Some(window) = self.primary_window() {
                             window.set_maximized(!window.is_maximized());
                         }
-                    } else if let Some(ref window) = self.window {
+                    } else if let Some(window) = self.primary_window() {
                         let _ = window.drag_window();
                     }
-                    self.chrome.last_titlebar_click = now;
+                    self.primary_chrome_mut().last_titlebar_click = now;
                 }
                 2 => {
                     self.comms.send_input(InputEvent::WindowClose {
@@ -893,7 +895,7 @@ impl RenderApp {
                     });
                 }
                 3 => {
-                    if let Some(ref window) = self.window {
+                    if let Some(window) = self.primary_window() {
                         if window.is_maximized() {
                             window.set_maximized(false);
                         } else {
@@ -902,7 +904,7 @@ impl RenderApp {
                     }
                 }
                 4 => {
-                    if let Some(ref window) = self.window {
+                    if let Some(window) = self.primary_window() {
                         window.set_minimized(true);
                     }
                 }
@@ -913,10 +915,10 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && !self.chrome.decorations_enabled
+            && !self.primary_chrome().decorations_enabled
             && (self.modifiers & NEOMACS_SUPER_MASK) != 0
         {
-            if let Some(ref window) = self.window {
+            if let Some(window) = self.primary_window() {
                 let _ = window.drag_window();
             }
             return;
@@ -1356,22 +1358,22 @@ impl RenderApp {
             return;
         }
 
-        let lx = (position.x / self.scale_factor) as f32;
-        let ly = (position.y / self.scale_factor) as f32;
+        let lx = (position.x / self.primary_scale_factor()) as f32;
+        let ly = (position.y / self.primary_scale_factor()) as f32;
         self.set_primary_mouse_pos((lx, ly));
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
-        if self.mouse_hidden_for_typing {
-            if let Some(ref window) = self.window {
+        if self.primary_mouse_hidden_for_typing() {
+            if let Some(window) = self.primary_window() {
                 window.set_cursor_visible(true);
             }
-            self.mouse_hidden_for_typing = false;
+            self.set_primary_mouse_hidden_for_typing(false);
         }
 
         let edge = self.detect_resize_edge(lx, ly);
-        if edge != self.chrome.resize_edge {
-            self.chrome.resize_edge = edge;
-            if let Some(ref window) = self.window {
+        if edge != self.primary_chrome().resize_edge {
+            self.primary_chrome_mut().resize_edge = edge;
+            if let Some(window) = self.primary_window() {
                 use winit::window::CursorIcon;
                 let icon = match edge {
                     Some(dir) => CursorIcon::from(dir),
@@ -1381,13 +1383,13 @@ impl RenderApp {
             }
         }
 
-        if !self.chrome.decorations_enabled {
+        if !self.primary_chrome().decorations_enabled {
             let new_hover = self.titlebar_hit_test(lx, ly);
-            if new_hover != self.chrome.titlebar_hover {
-                self.chrome.titlebar_hover = new_hover;
+            if new_hover != self.primary_chrome().titlebar_hover {
+                self.primary_chrome_mut().titlebar_hover = new_hover;
                 self.mark_primary_dirty();
-                if self.chrome.resize_edge.is_none() {
-                    if let Some(ref window) = self.window {
+                if self.primary_chrome().resize_edge.is_none() {
+                    if let Some(window) = self.primary_window() {
                         use winit::window::CursorIcon;
                         let icon = match new_hover {
                             2 | 3 | 4 => CursorIcon::Pointer,
@@ -1584,8 +1586,8 @@ impl RenderApp {
         let (dx, dy, pixel_precise) = match delta {
             MouseScrollDelta::LineDelta(x, y) => (x, y, false),
             MouseScrollDelta::PixelDelta(pos) => (
-                (pos.x / self.scale_factor) as f32,
-                (pos.y / self.scale_factor) as f32,
+                (pos.x / self.primary_scale_factor()) as f32,
+                (pos.y / self.primary_scale_factor()) as f32,
                 true,
             ),
         };

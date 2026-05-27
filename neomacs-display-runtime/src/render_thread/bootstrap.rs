@@ -1,7 +1,7 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
-use crate::render_thread::frame_windows::GuiFrameRenderState;
+use crate::render_thread::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::WgpuRenderer;
@@ -185,9 +185,19 @@ impl RenderApp {
             device: device.clone(),
             queue: queue.clone(),
         });
-        self.surface = Some(surface);
-        self.surface_config = Some(config);
         self.renderer = Some(renderer);
+        self.primary_native = Some(GuiFrameNativeWindowState {
+            window,
+            surface,
+            surface_config: config,
+            width: self.width,
+            height: self.height,
+            scale_factor: self.scale_factor,
+            mouse_hidden_for_typing: self.mouse_hidden_for_typing,
+            ime_enabled: self.ime_enabled,
+            last_ime_cursor_area: self.last_ime_cursor_area,
+            chrome: self.chrome.clone(),
+        });
         self.primary_frame = Some(primary_frame);
         let pending_tool_items = self
             .primary_frame

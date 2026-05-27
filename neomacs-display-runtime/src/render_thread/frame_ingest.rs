@@ -397,9 +397,9 @@ impl RenderApp {
             if let Some(cursor) = self.primary_cursor_mut() {
                 cursor.clear_target();
             }
-            self.last_ime_cursor_area = None;
+            self.reset_primary_ime_cursor_area();
             self.clear_primary_ime_preedit();
-            if let Some(window) = self.window.as_ref() {
+            if let Some(window) = self.primary_window() {
                 window.set_ime_cursor_area(
                     PhysicalPosition::new(0.0, 0.0),
                     PhysicalSize::new(1.0, 1.0),

@@ -285,13 +285,8 @@ impl RenderApp {
                             )
                         })
                         .unwrap_or((13.0, 17.0, 13.0 * 0.6));
-                    (
-                        fs,
-                        lh,
-                        cw,
-                        self.width as f32 / self.scale_factor as f32,
-                        self.height as f32 / self.scale_factor as f32,
-                    )
+                    let (screen_w, screen_h) = self.primary_logical_size();
+                    (fs, lh, cw, screen_w, screen_h)
                 } else {
                     self.frame_windows
                         .get(emacs_frame_id)
@@ -469,6 +464,7 @@ impl RenderApp {
             }
             RenderCommand::SetTitlebarHeight { height } => {
                 self.chrome.titlebar_height = height;
+                self.primary_chrome_mut().titlebar_height = height;
                 self.frame_windows.chrome_defaults.titlebar_height = height;
                 for window_state in self.frame_windows.windows.values_mut() {
                     window_state.native.chrome.titlebar_height = height;
@@ -492,6 +488,7 @@ impl RenderApp {
             }
             RenderCommand::SetCornerRadius { radius } => {
                 self.chrome.corner_radius = radius;
+                self.primary_chrome_mut().corner_radius = radius;
                 self.frame_windows.chrome_defaults.corner_radius = radius;
                 for window_state in self.frame_windows.windows.values_mut() {
                     window_state.native.chrome.corner_radius = radius;
@@ -563,9 +560,9 @@ impl RenderApp {
                     if let Some(cursor) = self.primary_cursor_mut() {
                         cursor.clear_target();
                     }
-                    self.last_ime_cursor_area = None;
+                    self.reset_primary_ime_cursor_area();
                     self.clear_primary_ime_preedit();
-                    if let Some(window) = self.window.as_ref() {
+                    if let Some(window) = self.primary_window() {
                         window.set_ime_cursor_area(
                             PhysicalPosition::new(0.0, 0.0),
                             PhysicalSize::new(1.0, 1.0),
