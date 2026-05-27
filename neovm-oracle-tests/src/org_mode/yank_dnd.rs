@@ -236,3 +236,115 @@ fn org_yank_adjusted_folded_subtree_visibility_combo() {
                  (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_dnd_ask_private_image_xds_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-attach)
+  (require 'dnd)
+  (let* ((root (make-temp-file "org-dnd-ask" t))
+         (org-file (expand-file-name "notes.org" root))
+         (plain (expand-file-name "plain.txt" root))
+         (image (expand-file-name "image.png" root))
+         (missing (expand-file-name "missing.txt" root))
+         (image-dir (expand-file-name "images" root))
+         (org-attach-id-dir (expand-file-name "data" root))
+         (org-attach-store-link-p nil)
+         (org-attach-method 'cp)
+         (org-yank-dnd-default-attach-method 'cp)
+         (answers '(file-link attach attach file-link open))
+         choice-log open-log messages)
+    (unwind-protect
+        (progn
+          (with-temp-file plain (insert "PLAIN\n"))
+          (with-temp-file image (insert "PNG\n"))
+          (with-temp-file org-file
+            (insert "* Task\n:PROPERTIES:\n:ID: ask-dnd-id\n:END:\n"))
+          (with-current-buffer (find-file-noselect org-file)
+            (org-mode)
+            (goto-char (point-max))
+            (cl-letf (((symbol-function 'org--dnd-rmc)
+                       (lambda (prompt choices)
+                         (let ((answer (pop answers)))
+                           (push (list prompt
+                                       (mapcar (lambda (choice)
+                                                 (list (nth 0 choice)
+                                                       (nth 1 choice)
+                                                       (nth 2 choice)))
+                                               choices)
+                                       answer)
+                                 choice-log)
+                           answer)))
+                      ((symbol-function 'dnd-open-local-file)
+                       (lambda (uri action)
+                         (push (list uri action) open-log)
+                         'opened))
+                      ((symbol-function 'message)
+                       (lambda (fmt &rest args)
+                         (push (apply #'format fmt args) messages))))
+              (let ((org-yank-dnd-method 'ask))
+                (org--copied-files-yank-media-handler
+                 "x/special-gnome-files"
+                 (concat "copy\nfile://" plain "\nfile://" missing "\0"))
+                (insert "\n")
+                (org--dnd-local-file-handler (concat "file://" plain)
+                                             'copy "|")
+                (insert "\n"))
+              (let ((org-yank-dnd-method 'attach)
+                    (org-yank-image-save-method image-dir))
+                (org--dnd-local-file-handler (concat "file://" image)
+                                             'copy "\n"))
+              (let ((org-yank-dnd-method 'attach))
+                (org--dnd-local-file-handler (concat "file://" plain)
+                                             'private "\n"))
+              (let ((org-yank-dnd-method 'ask))
+                (let ((xds-name (org--dnd-xds-function t "xds.txt")))
+                  (with-temp-file xds-name (insert "XDS\n"))
+                  (org--dnd-xds-function nil xds-name))
+                (insert "\n")
+                (let ((open-name (org--dnd-xds-function t "open.txt")))
+                  (with-temp-file open-name (insert "OPEN\n"))
+                  (org--dnd-xds-function nil open-name)))
+              (let* ((attach-dir (org-attach-dir))
+                     (attach-files
+                      (and (file-directory-p attach-dir)
+                           (sort (org-attach-file-list attach-dir)
+                                 #'string<)))
+                     (image-files
+                      (and (file-directory-p image-dir)
+                           (sort (directory-files image-dir nil
+                                                  "\\`image\\.png\\'")
+                                 #'string<))))
+                (list (nreverse choice-log)
+                      (nreverse open-log)
+                      (mapcar (lambda (message)
+                                (replace-regexp-in-string
+                                 (regexp-quote root) "<root>" message))
+                              (nreverse messages))
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))
+                      (file-relative-name attach-dir root)
+                      attach-files
+                      image-files
+                      org--dnd-xds-method
+                      (and image-files
+                           (with-temp-buffer
+                             (insert-file-contents-literally
+                              (expand-file-name (car image-files)
+                                                image-dir))
+                             (buffer-string)))
+                      (and (member "plain.txt" attach-files)
+                           (with-temp-buffer
+                             (insert-file-contents-literally
+                              (expand-file-name "plain.txt" attach-dir))
+                             (buffer-string))))))))
+      (when (get-file-buffer org-file) (kill-buffer (get-file-buffer org-file)))
+      (delete-directory root t))))"##,
+    );
+}
