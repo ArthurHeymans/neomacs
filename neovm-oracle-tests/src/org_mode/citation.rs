@@ -211,3 +211,119 @@ fn org_cite_delete_reference_and_citation_combo() {
                (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_cite_custom_processor_note_adjust_wrap_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'oc)
+  (let ((original-processors org-cite--processors)
+        (calls nil))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (org-cite-register-processor
+           'probe
+           :cite-styles '((nil "plain" "Plain")
+                          ("n" "note" "Note")
+                          ("author" "author" "Author"))
+           :export-citation
+           (lambda (citation style _ backend info)
+             (push (list 'export
+                         style
+                         backend
+                         (org-cite-get-references citation t)
+                         (org-cite-main-affixes citation))
+                   calls)
+             (format "<%s:%s>"
+                     (or style "plain")
+                     (mapconcat #'identity
+                                (org-cite-get-references citation t)
+                                ",")))
+           :export-bibliography
+           (lambda (keys files style props backend info)
+             (push (list 'bibliography keys files style props backend
+                         (plist-get info :cite-export))
+                   calls)
+             (format "BIB:%s:%s"
+                     style
+                     (mapconcat #'identity keys ",")))
+           :activate (lambda (citation)
+                       (push (list 'activate
+                                   (org-cite-get-references citation t))
+                             calls))
+           :follow (lambda (datum arg)
+                     (push (list 'follow
+                                 (org-cite-get-references datum t)
+                                 arg)
+                           calls))
+           :insert (lambda (&optional arg)
+                     (push (list 'insert arg) calls)))
+          (insert "#+cite_export: probe n :alpha beta\n")
+          (insert "Sentence [cite:@alpha] then note.[cite/n:@beta p. 4] next\n")
+          (insert "Tail [cite/author:see @gamma; compare @delta].\n")
+          (let* ((org-cite-export-processors '((org probe)))
+                 (org-cite-note-rules '((t . ((t . before)))))
+                 (info (org-export-get-environment 'org nil))
+                 (citations (org-cite-list-citations info))
+                 (before
+                  (mapcar (lambda (citation)
+                            (list (org-element-property :style citation)
+                                  (org-cite-get-references citation t)
+                                  (org-cite-main-affixes citation)
+                                  (org-cite-citation-style citation info)
+                                  (org-cite-inside-footnote-p citation)
+                                  (let ((bounds
+                                         (org-cite-boundaries citation)))
+                                    (cons (- (car bounds) (point-min))
+                                          (- (cdr bounds) (point-min))))))
+                          citations)))
+            (org-cite-adjust-note (nth 1 citations) info)
+            (setq citations
+                  (org-cite-list-citations
+                   (org-export-get-environment 'org nil)))
+            (org-cite-wrap-citation (nth 1 citations) info)
+            (let* ((info-after (org-export-get-environment 'org nil))
+                   (after
+                    (mapcar (lambda (citation)
+                              (list (org-element-property :style citation)
+                                    (org-cite-get-references citation t)
+                                    (org-cite-inside-footnote-p citation t)))
+                            (org-cite-list-citations info-after)))
+                   (exported-citations
+                    (mapcar (lambda (citation)
+                              (funcall
+                               (org-cite-processor-export-citation
+                                (org-cite-get-processor 'probe))
+                               citation
+                               (org-cite-citation-style citation info-after)
+                               nil 'org info-after))
+                            (org-cite-list-citations info-after)))
+                   (bibliography
+                    (funcall
+                     (org-cite-processor-export-bibliography
+                      (org-cite-get-processor 'probe))
+                     (org-cite-list-keys info-after)
+                     (org-cite-list-bibliography-files)
+                     (org-cite-bibliography-style info-after)
+                     (org-cite-bibliography-properties
+                      (car (plist-get info-after :print-bibliography)))
+                     'org info-after)))
+              (list before
+                    after
+                    exported-citations
+                    bibliography
+                    (org-cite-supported-styles '(probe))
+                    (mapcar (lambda (cap)
+                              (org-cite-processor-has-capability-p
+                               'probe cap))
+                            '(activate export follow insert))
+                    (nreverse calls)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))
+      (setq org-cite--processors original-processors))))"##,
+    );
+}
