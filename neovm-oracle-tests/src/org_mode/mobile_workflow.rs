@@ -256,3 +256,96 @@ fn org_mobile_escape_compare_timestamp_checksum_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_mobile_push_agenda_index_checksums_hooks_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-mobile)
+  (let* ((root (make-temp-file "org-mobile-push" t))
+         (org-directory (expand-file-name "org" root))
+         (stage (expand-file-name "stage" root))
+         (tasks (expand-file-name "tasks.org" org-directory))
+         (inbox (expand-file-name "from-mobile.org" org-directory))
+         (events nil)
+         (org-mobile-directory stage)
+         (org-mobile-inbox-for-pull inbox)
+         (org-mobile-index-file "index.org")
+         (org-mobile-files '(org-agenda-files))
+         (org-agenda-files (list tasks))
+         (org-mobile-agendas '("t"))
+         (org-mobile-force-id-on-agenda-items nil)
+         (org-mobile-checksum-binary "md5sum")
+         (org-mobile-use-encryption nil)
+         (org-mobile-pre-push-hook
+          (list (lambda ()
+                  (push (list 'pre
+                              (file-exists-p org-mobile-directory)
+                              org-agenda-files)
+                        events))))
+         (org-mobile-post-push-hook
+          (list (lambda ()
+                  (push (list 'post
+                              (sort (directory-files org-mobile-directory
+                                                     nil "^[^.]" nil)
+                                    #'string<)
+                              org-mobile-checksum-files)
+                        events)))))
+    (unwind-protect
+        (progn
+          (make-directory org-directory t)
+          (make-directory stage t)
+          (with-temp-file inbox (insert "* Existing mobile inbox\n"))
+          (with-temp-file tasks
+            (insert "#+TITLE: Mobile Tasks\n")
+            (insert "#+TAGS: work(w) home(h)\n")
+            (insert "#+TODO: TODO NEXT WAIT | DONE\n")
+            (insert "* TODO Alpha :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+            (insert "Body alpha\n")
+            (insert "* NEXT Beta :home:\n")
+            (insert "DEADLINE: <2026-05-28 Thu>\n"))
+          (let ((org-agenda-start-day "2026-05-27")
+                (org-agenda-span 3)
+                (org-agenda-use-time-grid nil)
+                (org-agenda-show-all-dates nil)
+                (org-agenda-prefix-format "%-8:c%?-12t% s")
+                (org-agenda-window-setup 'current-window)
+                (messages nil))
+            (cl-letf (((symbol-function 'message)
+                       (lambda (fmt &rest args)
+                         (push (apply #'format fmt args) messages))))
+              (org-mobile-push)
+              (let ((stage-files
+                     (sort (directory-files stage nil "^[^.]" nil)
+                           #'string<))
+                    (read-stage
+                     (lambda (file)
+                       (with-temp-buffer
+                         (insert-file-contents
+                          (expand-file-name file stage))
+                         (buffer-string)))))
+                (list (nreverse events)
+                      (nreverse messages)
+                      stage-files
+                      (funcall read-stage "index.org")
+                      (replace-regexp-in-string
+                       "\\[[0-9][^]\n]+\\]"
+                       "[stamp]"
+                       (funcall read-stage "agendas.org"))
+                      (funcall read-stage "tasks.org")
+                      (funcall read-stage "mobileorg.org")
+                      (sort
+                       (split-string
+                        (funcall read-stage "checksums.dat") "\n" t)
+                       #'string<)))))))
+      (dolist (file (list tasks inbox))
+        (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
+      (when (get-buffer "*SUMO*") (kill-buffer "*SUMO*"))
+      (delete-directory root t))))"##,
+    );
+}
