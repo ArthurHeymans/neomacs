@@ -58,6 +58,7 @@ mod structure_template;
 mod support;
 mod table_agenda;
 mod table_formula;
+mod table_upstream;
 mod tag_match;
 mod timer_workflow;
 mod todo_dependencies;
