@@ -1463,6 +1463,7 @@ mod strong_divergence_hunt_15;
 mod strong_divergence_hunt_16;
 mod strong_divergence_hunt_17;
 mod strong_divergence_hunt_18;
+mod strong_divergence_hunt_19;
 mod strong_divergence_hunt_2;
 mod strong_divergence_hunt_3;
 mod strong_divergence_hunt_4;
