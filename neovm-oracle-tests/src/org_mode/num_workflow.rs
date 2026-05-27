@@ -316,3 +316,109 @@ fn org_num_face_skip_cleanup_archive_footnotes_combo() {
                (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_num_folded_subtree_cut_paste_renumber_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (require 'org-num)
+  (with-temp-buffer
+    (let ((org-num-max-level 5)
+          (org-num-skip-commented t)
+          (org-num-skip-tags '("skip"))
+          (org-num-skip-unnumbered t)
+          (org-num-format-function
+           (lambda (numbers)
+             (format "[%s] " (mapconcat #'number-to-string numbers ".")))))
+      (org-mode)
+      (insert "* Alpha\n")
+      (insert "** A1\n")
+      (insert "*** A1a\n")
+      (insert "**** A1a-i\n")
+      (insert "** A2 :skip:\n")
+      (insert "*** A2a\n")
+      (insert "* Beta\n")
+      (insert "** B1\n")
+      (insert "*** B1a\n")
+      (insert "* Gamma\n")
+      (insert "** G1\n")
+      (let ((snapshot
+             (lambda (label)
+               (list label
+                     org-num--invalid-flag
+                     org-num--missing-overlay
+                     (mapcar
+                      (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (search-forward needle)
+                          (beginning-of-line)
+                          (let ((ov (cl-find-if
+                                     (lambda (overlay)
+                                       (= (overlay-start overlay) (point)))
+                                     org-num--overlays)))
+                            (list needle
+                                  (line-number-at-pos)
+                                  (org-outline-level)
+                                  (invisible-p (line-end-position))
+                                  (and ov (overlay-get ov 'level))
+                                  (and ov (overlay-get ov 'skip))
+                                  (and ov
+                                       (substring-no-properties
+                                        (or (overlay-get ov 'after-string)
+                                            "")))))))
+                      '("Alpha" "A1" "A1a" "A1a-i" "A2" "A2a"
+                        "Beta" "B1" "B1a" "Gamma" "G1"))
+                     (mapcar
+                      (lambda (ov)
+                        (list (buffer-substring-no-properties
+                               (overlay-start ov) (line-end-position))
+                              (overlay-get ov 'level)
+                              (overlay-get ov 'skip)
+                              (substring-no-properties
+                               (or (overlay-get ov 'after-string) ""))))
+                      (sort (copy-sequence org-num--overlays)
+                            (lambda (a b)
+                              (< (overlay-start a) (overlay-start b)))))
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+            states)
+        (org-num-mode 1)
+        (push (funcall snapshot 'initial) states)
+        (goto-char (point-min))
+        (search-forward "A1")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (push (funcall snapshot 'fold-a1) states)
+        (org-cut-subtree)
+        (org-num--verify (point-min) (point-max) 0)
+        (push (funcall snapshot 'after-cut-a1) states)
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (beginning-of-line)
+        (org-paste-subtree 2)
+        (org-num--verify (point-min) (point-max) 0)
+        (push (funcall snapshot 'after-paste-under-gamma) states)
+        (goto-char (point-min))
+        (search-forward "A2")
+        (org-toggle-tag "skip" 'off)
+        (org-num--verify (line-beginning-position) (line-end-position) 0)
+        (push (funcall snapshot 'after-unskip-a2) states)
+        (goto-char (point-min))
+        (search-forward "B1a")
+        (beginning-of-line)
+        (org-promote-subtree)
+        (org-num--verify (line-beginning-position) (line-end-position) 0)
+        (push (funcall snapshot 'after-promote-b1a) states)
+        (org-fold-show-all)
+        (org-num--update)
+        (push (funcall snapshot 'final-show-all) states)
+        (list (nreverse states)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))"##,
+    );
+}
