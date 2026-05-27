@@ -1,6 +1,9 @@
 use super::*;
-use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer};
+use crate::core::frame_glyphs::{
+    CursorStyle, FrameGlyphBuffer, WindowEffectHint, WindowTransitionHint, WindowTransitionKind,
+};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::{ScrollEasing, ScrollEffect};
 use neovm_core::window::GuiFrameGeometryHints;
 
 // =======================================================================
@@ -73,6 +76,32 @@ fn secondary_frame_cursor_state_clears_when_no_target_remains() {
 
     assert!(state.target_cloned().is_none());
     assert!(!state.is_animating());
+}
+
+#[test]
+fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
+    let mut frame = make_frame(0x42, 0);
+    frame.add_transition_hint(WindowTransitionHint {
+        window_id: 7,
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
+        kind: WindowTransitionKind::Crossfade,
+        effect: Some(ScrollEffect::Crossfade),
+        easing: Some(ScrollEasing::Linear),
+    });
+    frame.add_effect_hint(WindowEffectHint::WindowSwitchFade {
+        window_id: 7,
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 80.0, 80.0),
+    });
+
+    let first = GuiFrameRenderState::take_frame_for_render(&mut frame);
+    assert_eq!(first.transition_hints.len(), 1);
+    assert_eq!(first.effect_hints.len(), 1);
+
+    let second = GuiFrameRenderState::take_frame_for_render(&mut frame);
+    assert!(second.transition_hints.is_empty());
+    assert!(second.effect_hints.is_empty());
+    assert!(frame.transition_hints.is_empty());
+    assert!(frame.effect_hints.is_empty());
 }
 
 // =======================================================================

@@ -272,16 +272,117 @@ pub(super) struct ClickHaloEntry {
     pub(super) duration: std::time::Duration,
 }
 
-/// Frame-local transient effect queues that are rendered through `WgpuRenderer`.
+/// Frame-local renderer effect queues that are rendered through `WgpuRenderer`.
 #[derive(Default)]
-pub struct RendererTransientEffects {
+pub struct RendererFrameEffects {
+    needs_continuous_redraw: bool,
+    has_animated_borders: bool,
+    per_window_dim: std::collections::HashMap<i64, f32>,
+    last_dim_tick: Option<std::time::Instant>,
+    active_ripples: Vec<(f32, f32, std::time::Instant)>,
+    active_line_anims: Vec<LineAnimEntry>,
+    active_window_fades: Vec<WindowFadeEntry>,
+    active_title_fades: Vec<TitleFadeEntry>,
+    prev_breadcrumb_text: std::collections::HashMap<i64, String>,
+    border_transitions: Vec<(i64, bool, std::time::Instant)>,
+    prev_border_selected: i64,
+    active_mode_line_fades: Vec<ModeLineFadeEntry>,
+    prev_mode_line_hashes: std::collections::HashMap<i64, u64>,
+    active_text_fades: Vec<TextFadeEntry>,
+    active_scroll_spacings: Vec<ScrollSpacingEntry>,
+    cursor_trail_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
+    cursor_trail_last_pos: (f32, f32),
+    cursor_wake_started: Option<std::time::Instant>,
+    cursor_magnetism_entries: Vec<(f32, f32, std::time::Instant)>,
+    cursor_comet_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
+    cursor_particles: Vec<CursorParticle>,
+    cursor_particles_prev_pos: Option<(f32, f32)>,
+    typing_heatmap_entries: Vec<HeatMapEntry>,
+    typing_heatmap_prev_cursor: Option<(f32, f32)>,
+    scroll_velocity_fades: Vec<ScrollVelocityFadeEntry>,
+    resize_padding_started: Option<std::time::Instant>,
+    active_scroll_momentums: Vec<ScrollMomentumEntry>,
+    matrix_rain_columns: Vec<MatrixColumn>,
+    cursor_ghost_entries: Vec<CursorGhostEntry>,
+    cursor_sonar_ping_entries: Vec<SonarPingEntry>,
+    lightning_bolt_last: Option<std::time::Instant>,
+    lightning_bolt_segments: Vec<(f32, f32, f32, f32)>,
+    lightning_bolt_age: f32,
+    cursor_pendulum_last_x: f32,
+    cursor_pendulum_last_y: f32,
+    cursor_pendulum_swing_start: Option<std::time::Instant>,
+    cursor_sparkle_burst_entries: Vec<SparkleBurstEntry>,
+    cursor_metronome_last_x: f32,
+    cursor_metronome_last_y: f32,
+    cursor_metronome_tick_start: Option<std::time::Instant>,
+    cursor_ripple_ring_start: Option<std::time::Instant>,
+    cursor_ripple_ring_last_x: f32,
+    cursor_ripple_ring_last_y: f32,
+    cursor_shockwave_start: Option<std::time::Instant>,
+    cursor_shockwave_last_x: f32,
+    cursor_shockwave_last_y: f32,
+    cursor_bubble_spawn_time: Option<std::time::Instant>,
+    cursor_bubble_last_x: f32,
+    cursor_bubble_last_y: f32,
+    cursor_firework_start: Option<std::time::Instant>,
+    cursor_firework_last_x: f32,
+    cursor_firework_last_y: f32,
+    cursor_lightning_start: Option<std::time::Instant>,
+    cursor_lightning_last_x: f32,
+    cursor_lightning_last_y: f32,
+    cursor_snowflake_start: Option<std::time::Instant>,
+    cursor_snowflake_last_x: f32,
+    cursor_snowflake_last_y: f32,
+    edge_glow_entries: Vec<EdgeGlowEntry>,
+    rain_drops: Vec<RainDrop>,
+    rain_last_spawn: Option<std::time::Instant>,
+    cursor_ripple_waves: Vec<RippleWaveEntry>,
     click_halos: Vec<ClickHaloEntry>,
     edge_snaps: Vec<EdgeSnapEntry>,
     cursor_error_pulse_started: Option<std::time::Instant>,
 }
 
-impl RendererTransientEffects {
+impl RendererFrameEffects {
     pub fn is_active(&self) -> bool {
+        self.needs_continuous_redraw
+            || self.has_animated_borders
+            || !self.active_ripples.is_empty()
+            || !self.active_line_anims.is_empty()
+            || !self.active_window_fades.is_empty()
+            || !self.active_title_fades.is_empty()
+            || !self.border_transitions.is_empty()
+            || !self.active_mode_line_fades.is_empty()
+            || !self.active_text_fades.is_empty()
+            || !self.active_scroll_spacings.is_empty()
+            || self.cursor_wake_started.is_some()
+            || !self.cursor_trail_positions.is_empty()
+            || !self.cursor_magnetism_entries.is_empty()
+            || !self.cursor_comet_positions.is_empty()
+            || !self.cursor_particles.is_empty()
+            || !self.typing_heatmap_entries.is_empty()
+            || !self.scroll_velocity_fades.is_empty()
+            || self.resize_padding_started.is_some()
+            || !self.active_scroll_momentums.is_empty()
+            || !self.matrix_rain_columns.is_empty()
+            || !self.cursor_ghost_entries.is_empty()
+            || !self.cursor_sonar_ping_entries.is_empty()
+            || !self.lightning_bolt_segments.is_empty()
+            || self.cursor_pendulum_swing_start.is_some()
+            || !self.cursor_sparkle_burst_entries.is_empty()
+            || self.cursor_metronome_tick_start.is_some()
+            || self.cursor_ripple_ring_start.is_some()
+            || self.cursor_shockwave_start.is_some()
+            || self.cursor_bubble_spawn_time.is_some()
+            || self.cursor_firework_start.is_some()
+            || self.cursor_lightning_start.is_some()
+            || self.cursor_snowflake_start.is_some()
+            || !self.edge_glow_entries.is_empty()
+            || !self.rain_drops.is_empty()
+            || !self.cursor_ripple_waves.is_empty()
+            || self.has_transient_effects()
+    }
+
+    pub fn has_transient_effects(&self) -> bool {
         !self.click_halos.is_empty()
             || !self.edge_snaps.is_empty()
             || self.cursor_error_pulse_started.is_some()

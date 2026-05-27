@@ -18,6 +18,7 @@ use super::state::{
     GuiChromeInteractionState, ImeCursorArea, effective_window_scale_factor,
     window_size_from_emacs_pixels,
 };
+use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::glyph_matrix::{
@@ -25,9 +26,7 @@ use neomacs_display_protocol::glyph_matrix::{
 };
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
-use neomacs_renderer_wgpu::{
-    PopupMenuState, RendererTransientEffects, TooltipState, WgpuGlyphAtlas,
-};
+use neomacs_renderer_wgpu::{PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Native window/surface state for a top-level GUI frame.
@@ -80,8 +79,10 @@ pub(crate) struct GuiFrameRenderState {
     pub ime_preedit_active: bool,
     /// Current IME preedit text for this frame window.
     pub ime_preedit_text: String,
-    /// Renderer transient effects owned by this frame window.
-    pub transient_effects: RendererTransientEffects,
+    /// Window transition state owned by this frame window.
+    pub transitions: TransitionState,
+    /// Renderer runtime effects owned by this frame window.
+    pub renderer_effects: RendererFrameEffects,
     /// Floating WebKit overlays rendered on this frame window.
     #[cfg(feature = "wpe-webkit")]
     pub floating_webkits: Vec<FloatingWebKit>,
@@ -91,6 +92,24 @@ pub(crate) struct GuiFrameRenderState {
 pub(crate) struct GuiFrameWindowState {
     pub native: GuiFrameNativeWindowState,
     pub render: GuiFrameRenderState,
+}
+
+impl GuiFrameRenderState {
+    pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
+        self.current_frame.clone()
+    }
+
+    pub(super) fn take_current_frame_for_render(&mut self) -> Option<FrameGlyphBuffer> {
+        self.current_frame.as_mut().map(Self::take_frame_for_render)
+    }
+
+    pub(super) fn take_frame_for_render(current_frame: &mut FrameGlyphBuffer) -> FrameGlyphBuffer {
+        let (transition_hints, effect_hints) = current_frame.take_runtime_hints();
+        let mut frame = current_frame.clone();
+        frame.transition_hints = transition_hints;
+        frame.effect_hints = effect_hints;
+        frame
+    }
 }
 
 impl GuiFrameWindowState {
@@ -106,6 +125,7 @@ impl GuiFrameWindowState {
         self.native
             .surface
             .configure(device, &self.native.surface_config);
+        clear_frame_transition_textures(&mut self.render.transitions);
         self.render.frame_dirty = true;
     }
 
@@ -357,7 +377,8 @@ impl GuiFrameWindowManager {
                                 visual_bell_start: None,
                                 ime_preedit_active: false,
                                 ime_preedit_text: String::new(),
-                                transient_effects: RendererTransientEffects::default(),
+                                transitions: TransitionState::default(),
+                                renderer_effects: RendererFrameEffects::default(),
                                 #[cfg(feature = "wpe-webkit")]
                                 floating_webkits: Vec::new(),
                             },

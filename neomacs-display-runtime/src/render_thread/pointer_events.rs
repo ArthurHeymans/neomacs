@@ -655,7 +655,7 @@ impl RenderApp {
                 && let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id)
             {
                 let (x, y) = window_state.render.mouse_pos;
-                window_state.render.transient_effects.trigger_click_halo(
+                window_state.render.renderer_effects.trigger_click_halo(
                     x,
                     y,
                     std::time::Instant::now(),

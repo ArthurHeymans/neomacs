@@ -6,7 +6,7 @@ use super::{
     ClickHaloEntry, EdgeGlowEntry, EdgeSnapEntry, LineAnimEntry, ScrollMomentumEntry,
     ScrollSpacingEntry, ScrollVelocityFadeEntry, SonarPingEntry, TextFadeEntry, WindowFadeEntry,
 };
-use super::{RendererTransientEffects, WgpuRenderer};
+use super::{RendererFrameEffects, WgpuRenderer};
 use neomacs_display_protocol::types::{Color, Rect};
 
 impl WgpuRenderer {
@@ -97,7 +97,7 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         let duration_ms = self.effects.edge_snap.duration_ms;
-        self.primary_transient_effects_mut().trigger_edge_snap(
+        self.primary_frame_effects_mut().trigger_edge_snap(
             bounds,
             mode_line_height,
             at_top,
@@ -128,7 +128,7 @@ impl WgpuRenderer {
     /// Trigger click halo at position
     pub fn trigger_click_halo(&mut self, x: f32, y: f32, now: std::time::Instant) {
         let duration_ms = self.effects.click_halo.duration_ms;
-        self.primary_transient_effects_mut()
+        self.primary_frame_effects_mut()
             .trigger_click_halo(x, y, now, duration_ms);
     }
 
@@ -175,13 +175,13 @@ impl WgpuRenderer {
 
     /// Trigger a cursor error pulse
     pub fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
-        self.primary_transient_effects_mut()
+        self.primary_frame_effects_mut()
             .trigger_cursor_error_pulse(now);
     }
 
     pub fn trigger_transient_click_halo(
         &self,
-        effects: &mut RendererTransientEffects,
+        effects: &mut RendererFrameEffects,
         x: f32,
         y: f32,
         now: std::time::Instant,
@@ -191,7 +191,7 @@ impl WgpuRenderer {
 
     pub fn trigger_transient_edge_snap(
         &self,
-        effects: &mut RendererTransientEffects,
+        effects: &mut RendererFrameEffects,
         bounds: Rect,
         mode_line_height: f32,
         at_top: bool,
@@ -210,38 +210,168 @@ impl WgpuRenderer {
 
     pub fn trigger_transient_cursor_error_pulse(
         &self,
-        effects: &mut RendererTransientEffects,
+        effects: &mut RendererFrameEffects,
         now: std::time::Instant,
     ) {
         effects.trigger_cursor_error_pulse(now);
     }
 
-    pub fn render_with_transient_effects<R>(
+    pub fn with_frame_effects<R>(
         &mut self,
-        effects: &mut RendererTransientEffects,
-        render: impl FnOnce(&mut Self) -> R,
+        effects: &mut RendererFrameEffects,
+        f: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let primary = self.take_primary_transient_effects();
-        self.apply_transient_effects(std::mem::take(effects));
-        let result = render(self);
-        *effects = self.take_primary_transient_effects();
-        self.apply_transient_effects(primary);
+        let primary = self.take_frame_effects();
+        self.apply_frame_effects(std::mem::take(effects));
+        let result = f(self);
+        *effects = self.take_frame_effects();
+        self.apply_frame_effects(primary);
         result
     }
 
-    fn primary_transient_effects_mut(&mut self) -> RendererTransientEffectsRef<'_> {
-        RendererTransientEffectsRef { renderer: self }
+    fn primary_frame_effects_mut(&mut self) -> RendererFrameEffectsRef<'_> {
+        RendererFrameEffectsRef { renderer: self }
     }
 
-    fn take_primary_transient_effects(&mut self) -> RendererTransientEffects {
-        RendererTransientEffects {
+    fn take_frame_effects(&mut self) -> RendererFrameEffects {
+        RendererFrameEffects {
+            needs_continuous_redraw: self.needs_continuous_redraw,
+            has_animated_borders: self.has_animated_borders,
+            per_window_dim: std::mem::take(&mut self.per_window_dim),
+            last_dim_tick: Some(self.last_dim_tick),
+            active_ripples: std::mem::take(&mut self.active_ripples),
+            active_line_anims: std::mem::take(&mut self.active_line_anims),
+            active_window_fades: std::mem::take(&mut self.active_window_fades),
+            active_title_fades: std::mem::take(&mut self.active_title_fades),
+            prev_breadcrumb_text: std::mem::take(&mut self.prev_breadcrumb_text),
+            border_transitions: std::mem::take(&mut self.border_transitions),
+            prev_border_selected: self.prev_border_selected,
+            active_mode_line_fades: std::mem::take(&mut self.active_mode_line_fades),
+            prev_mode_line_hashes: std::mem::take(&mut self.prev_mode_line_hashes),
+            active_text_fades: std::mem::take(&mut self.active_text_fades),
+            active_scroll_spacings: std::mem::take(&mut self.active_scroll_spacings),
+            cursor_trail_positions: std::mem::take(&mut self.cursor_trail_positions),
+            cursor_trail_last_pos: self.cursor_trail_last_pos,
+            cursor_wake_started: self.cursor_wake_started.take(),
+            cursor_magnetism_entries: std::mem::take(&mut self.cursor_magnetism_entries),
+            cursor_comet_positions: std::mem::take(&mut self.cursor_comet_positions),
+            cursor_particles: std::mem::take(&mut self.cursor_particles),
+            cursor_particles_prev_pos: self.cursor_particles_prev_pos.take(),
+            typing_heatmap_entries: std::mem::take(&mut self.typing_heatmap_entries),
+            typing_heatmap_prev_cursor: self.typing_heatmap_prev_cursor.take(),
+            scroll_velocity_fades: std::mem::take(&mut self.scroll_velocity_fades),
+            resize_padding_started: self.resize_padding_started.take(),
+            active_scroll_momentums: std::mem::take(&mut self.active_scroll_momentums),
+            matrix_rain_columns: std::mem::take(&mut self.matrix_rain_columns),
+            cursor_ghost_entries: std::mem::take(&mut self.cursor_ghost_entries),
+            cursor_sonar_ping_entries: std::mem::take(&mut self.cursor_sonar_ping_entries),
+            lightning_bolt_last: Some(self.lightning_bolt_last),
+            lightning_bolt_segments: std::mem::take(&mut self.lightning_bolt_segments),
+            lightning_bolt_age: self.lightning_bolt_age,
+            cursor_pendulum_last_x: self.cursor_pendulum_last_x,
+            cursor_pendulum_last_y: self.cursor_pendulum_last_y,
+            cursor_pendulum_swing_start: self.cursor_pendulum_swing_start.take(),
+            cursor_sparkle_burst_entries: std::mem::take(&mut self.cursor_sparkle_burst_entries),
+            cursor_metronome_last_x: self.cursor_metronome_last_x,
+            cursor_metronome_last_y: self.cursor_metronome_last_y,
+            cursor_metronome_tick_start: self.cursor_metronome_tick_start.take(),
+            cursor_ripple_ring_start: self.cursor_ripple_ring_start.take(),
+            cursor_ripple_ring_last_x: self.cursor_ripple_ring_last_x,
+            cursor_ripple_ring_last_y: self.cursor_ripple_ring_last_y,
+            cursor_shockwave_start: self.cursor_shockwave_start.take(),
+            cursor_shockwave_last_x: self.cursor_shockwave_last_x,
+            cursor_shockwave_last_y: self.cursor_shockwave_last_y,
+            cursor_bubble_spawn_time: self.cursor_bubble_spawn_time.take(),
+            cursor_bubble_last_x: self.cursor_bubble_last_x,
+            cursor_bubble_last_y: self.cursor_bubble_last_y,
+            cursor_firework_start: self.cursor_firework_start.take(),
+            cursor_firework_last_x: self.cursor_firework_last_x,
+            cursor_firework_last_y: self.cursor_firework_last_y,
+            cursor_lightning_start: self.cursor_lightning_start.take(),
+            cursor_lightning_last_x: self.cursor_lightning_last_x,
+            cursor_lightning_last_y: self.cursor_lightning_last_y,
+            cursor_snowflake_start: self.cursor_snowflake_start.take(),
+            cursor_snowflake_last_x: self.cursor_snowflake_last_x,
+            cursor_snowflake_last_y: self.cursor_snowflake_last_y,
+            edge_glow_entries: std::mem::take(&mut self.edge_glow_entries),
+            rain_drops: std::mem::take(&mut self.rain_drops),
+            rain_last_spawn: Some(self.rain_last_spawn),
+            cursor_ripple_waves: std::mem::take(&mut self.cursor_ripple_waves),
             click_halos: std::mem::take(&mut self.click_halos),
             edge_snaps: std::mem::take(&mut self.edge_snaps),
             cursor_error_pulse_started: self.cursor_error_pulse_started.take(),
         }
     }
 
-    fn apply_transient_effects(&mut self, effects: RendererTransientEffects) {
+    fn apply_frame_effects(&mut self, effects: RendererFrameEffects) {
+        self.needs_continuous_redraw = effects.needs_continuous_redraw;
+        self.has_animated_borders = effects.has_animated_borders;
+        self.per_window_dim = effects.per_window_dim;
+        if let Some(last_dim_tick) = effects.last_dim_tick {
+            self.last_dim_tick = last_dim_tick;
+        }
+        self.active_ripples = effects.active_ripples;
+        self.active_line_anims = effects.active_line_anims;
+        self.active_window_fades = effects.active_window_fades;
+        self.active_title_fades = effects.active_title_fades;
+        self.prev_breadcrumb_text = effects.prev_breadcrumb_text;
+        self.border_transitions = effects.border_transitions;
+        self.prev_border_selected = effects.prev_border_selected;
+        self.active_mode_line_fades = effects.active_mode_line_fades;
+        self.prev_mode_line_hashes = effects.prev_mode_line_hashes;
+        self.active_text_fades = effects.active_text_fades;
+        self.active_scroll_spacings = effects.active_scroll_spacings;
+        self.cursor_trail_positions = effects.cursor_trail_positions;
+        self.cursor_trail_last_pos = effects.cursor_trail_last_pos;
+        self.cursor_wake_started = effects.cursor_wake_started;
+        self.cursor_magnetism_entries = effects.cursor_magnetism_entries;
+        self.cursor_comet_positions = effects.cursor_comet_positions;
+        self.cursor_particles = effects.cursor_particles;
+        self.cursor_particles_prev_pos = effects.cursor_particles_prev_pos;
+        self.typing_heatmap_entries = effects.typing_heatmap_entries;
+        self.typing_heatmap_prev_cursor = effects.typing_heatmap_prev_cursor;
+        self.scroll_velocity_fades = effects.scroll_velocity_fades;
+        self.resize_padding_started = effects.resize_padding_started;
+        self.active_scroll_momentums = effects.active_scroll_momentums;
+        self.matrix_rain_columns = effects.matrix_rain_columns;
+        self.cursor_ghost_entries = effects.cursor_ghost_entries;
+        self.cursor_sonar_ping_entries = effects.cursor_sonar_ping_entries;
+        if let Some(last) = effects.lightning_bolt_last {
+            self.lightning_bolt_last = last;
+        }
+        self.lightning_bolt_segments = effects.lightning_bolt_segments;
+        self.lightning_bolt_age = effects.lightning_bolt_age;
+        self.cursor_pendulum_last_x = effects.cursor_pendulum_last_x;
+        self.cursor_pendulum_last_y = effects.cursor_pendulum_last_y;
+        self.cursor_pendulum_swing_start = effects.cursor_pendulum_swing_start;
+        self.cursor_sparkle_burst_entries = effects.cursor_sparkle_burst_entries;
+        self.cursor_metronome_last_x = effects.cursor_metronome_last_x;
+        self.cursor_metronome_last_y = effects.cursor_metronome_last_y;
+        self.cursor_metronome_tick_start = effects.cursor_metronome_tick_start;
+        self.cursor_ripple_ring_start = effects.cursor_ripple_ring_start;
+        self.cursor_ripple_ring_last_x = effects.cursor_ripple_ring_last_x;
+        self.cursor_ripple_ring_last_y = effects.cursor_ripple_ring_last_y;
+        self.cursor_shockwave_start = effects.cursor_shockwave_start;
+        self.cursor_shockwave_last_x = effects.cursor_shockwave_last_x;
+        self.cursor_shockwave_last_y = effects.cursor_shockwave_last_y;
+        self.cursor_bubble_spawn_time = effects.cursor_bubble_spawn_time;
+        self.cursor_bubble_last_x = effects.cursor_bubble_last_x;
+        self.cursor_bubble_last_y = effects.cursor_bubble_last_y;
+        self.cursor_firework_start = effects.cursor_firework_start;
+        self.cursor_firework_last_x = effects.cursor_firework_last_x;
+        self.cursor_firework_last_y = effects.cursor_firework_last_y;
+        self.cursor_lightning_start = effects.cursor_lightning_start;
+        self.cursor_lightning_last_x = effects.cursor_lightning_last_x;
+        self.cursor_lightning_last_y = effects.cursor_lightning_last_y;
+        self.cursor_snowflake_start = effects.cursor_snowflake_start;
+        self.cursor_snowflake_last_x = effects.cursor_snowflake_last_x;
+        self.cursor_snowflake_last_y = effects.cursor_snowflake_last_y;
+        self.edge_glow_entries = effects.edge_glow_entries;
+        self.rain_drops = effects.rain_drops;
+        if let Some(last_spawn) = effects.rain_last_spawn {
+            self.rain_last_spawn = last_spawn;
+        }
+        self.cursor_ripple_waves = effects.cursor_ripple_waves;
         self.click_halos = effects.click_halos;
         self.edge_snaps = effects.edge_snaps;
         self.cursor_error_pulse_started = effects.cursor_error_pulse_started;
@@ -530,11 +660,11 @@ impl WgpuRenderer {
     }
 }
 
-struct RendererTransientEffectsRef<'a> {
+struct RendererFrameEffectsRef<'a> {
     renderer: &'a mut WgpuRenderer,
 }
 
-impl RendererTransientEffectsRef<'_> {
+impl RendererFrameEffectsRef<'_> {
     fn trigger_click_halo(&mut self, x: f32, y: f32, now: std::time::Instant, duration_ms: u32) {
         self.renderer.click_halos.push(ClickHaloEntry {
             x,

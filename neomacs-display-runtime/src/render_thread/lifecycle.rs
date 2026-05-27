@@ -282,6 +282,15 @@ impl RenderApp {
         // Determine if continuous rendering is needed
         let has_active_content = self.has_webkit_needing_redraw() || self.has_playing_videos();
 
+        #[cfg(feature = "wpe-webkit")]
+        if self.has_webkit_needing_redraw() {
+            for window_state in self.frame_windows.windows.values_mut() {
+                if !window_state.render.floating_webkits.is_empty() {
+                    window_state.render.frame_dirty = true;
+                }
+            }
+        }
+
         // Request redraw when we have new frame data, cursor blink toggled,
         // or webkit/video content changed
         for frame_id in self.frame_windows.dirty_windows() {

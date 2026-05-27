@@ -30,7 +30,7 @@ pub use external_buffer::{BufferFormat, ExternalBuffer, PlatformBuffer, SharedMe
 pub use glyph_atlas::{CachedGlyph, ComposedGlyphKey, GlyphKey, RasterizeResult, WgpuGlyphAtlas};
 pub use image_cache::{CachedImage, ImageCache, ImageDimensions, ImageState};
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
-pub use renderer::{RendererTransientEffects, WgpuRenderer};
+pub use renderer::{RendererFrameEffects, WgpuRenderer};
 pub use vertex::{GlyphVertex, RectVertex, RoundedRectVertex, TextureVertex, Uniforms};
 #[cfg(feature = "video")]
 pub use video_cache::{CachedVideo, DecodedFrame, VideoCache, VideoState};

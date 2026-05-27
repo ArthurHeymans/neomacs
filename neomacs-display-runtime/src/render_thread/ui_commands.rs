@@ -136,13 +136,20 @@ impl RenderApp {
                 }
                 for window_state in self.frame_windows.windows.values_mut() {
                     window_state.render.cursor.copy_config_from(&self.cursor);
+                    window_state.render.transitions.policy = transition_policy;
                     window_state.render.frame_dirty = true;
                 }
                 if !self.transitions.policy.crossfade_enabled {
                     self.transitions.crossfades.clear();
+                    for window_state in self.frame_windows.windows.values_mut() {
+                        window_state.render.transitions.crossfades.clear();
+                    }
                 }
                 if !self.transitions.policy.scroll_enabled {
                     self.transitions.scroll_slides.clear();
+                    for window_state in self.frame_windows.windows.values_mut() {
+                        window_state.render.transitions.scroll_slides.clear();
+                    }
                 }
                 Ok(())
             }
@@ -348,7 +355,7 @@ impl RenderApp {
                     if self.effects.cursor_error_pulse.enabled {
                         window_state
                             .render
-                            .transient_effects
+                            .renderer_effects
                             .trigger_cursor_error_pulse(now);
                     }
                     if self.effects.edge_snap.enabled {
@@ -369,7 +376,7 @@ impl RenderApp {
                                 let at_top = info.window_start <= 1;
                                 let at_bottom = info.window_end >= info.buffer_size;
                                 if at_top || at_bottom {
-                                    window_state.render.transient_effects.trigger_edge_snap(
+                                    window_state.render.renderer_effects.trigger_edge_snap(
                                         info.bounds,
                                         info.mode_line_height,
                                         at_top,

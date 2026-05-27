@@ -1,4 +1,7 @@
 use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
+use super::transitions::{
+    detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
+};
 use super::{RenderApp, surface_readback};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
@@ -15,9 +18,10 @@ impl RenderApp {
         child_frame_shadow_opacity: f32,
     ) {
         let GuiFrameWindowState { native, render } = window_state;
-        let Some(mut frame) = render.current_frame.clone() else {
+        let Some(frame_for_decision) = render.current_frame_clone() else {
             return;
         };
+        let mut frame = frame_for_decision.clone();
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor =
             animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
@@ -29,6 +33,14 @@ impl RenderApp {
             cursor.width = render.cursor.current_w;
             cursor.height = render.cursor.current_h;
         }
+
+        let need_offscreen = render.transitions.policy.needs_offscreen()
+            || frame_for_decision.effect_hints.iter().any(|hint| {
+                matches!(
+                    hint,
+                    crate::core::frame_glyphs::WindowEffectHint::ThemeTransition { .. }
+                )
+            });
 
         let output = match native.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(output)
@@ -51,6 +63,11 @@ impl RenderApp {
             }
         };
 
+        let Some(drained_frame) = render.take_current_frame_for_render() else {
+            return;
+        };
+        frame = drained_frame;
+
         let surface_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -60,76 +77,43 @@ impl RenderApp {
         renderer.set_scale_factor(native.scale_factor as f32);
         renderer.resize(native.width, native.height);
         let cursor_visible = render.cursor.blink_on;
-        Self::render_secondary_frame_contents(
-            renderer,
-            faces,
-            native,
-            render,
-            &surface_view,
-            &frame,
-            cursor_visible,
-            root_animated_cursor,
-            animated_cursor,
-            bg_gradient,
-            child_frame_corner_radius,
-            child_frame_shadow_enabled,
-            child_frame_shadow_layers,
-            child_frame_shadow_offset,
-            child_frame_shadow_opacity,
-        );
 
-        output.present();
-        renderer.set_scale_factor(old_scale_factor);
-        renderer.resize(old_width, old_height);
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn render_secondary_frame_contents(
-        renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
-        native: &GuiFrameNativeWindowState,
-        render: &mut GuiFrameRenderState,
-        surface_view: &wgpu::TextureView,
-        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
-        cursor_visible: bool,
-        root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
-    ) {
-        renderer.render_with_transient_effects(&mut render.transient_effects, |renderer| {
-            renderer.render_frame_glyphs(
-                surface_view,
-                frame,
-                &mut render.glyph_atlas,
-                faces,
+        if need_offscreen {
+            render.transitions.current_is_a = !render.transitions.current_is_a;
+            ensure_frame_offscreen_textures(
+                renderer,
+                &mut render.transitions,
                 native.width,
                 native.height,
-                cursor_visible,
-                root_animated_cursor,
-                render.mouse_pos,
-                bg_gradient,
             );
-        });
-        let transient_still_active = render.transient_effects.is_active();
 
-        for &child_id in render.child_frames.sorted_for_rendering() {
-            if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
-                renderer.render_child_frame(
-                    surface_view,
-                    &child_entry.frame,
-                    child_entry.abs_x,
-                    child_entry.abs_y,
-                    &mut render.glyph_atlas,
+            let current_view = if render.transitions.current_is_a {
+                render
+                    .transitions
+                    .offscreen_a
+                    .as_ref()
+                    .map(|(_, view, _)| view as *const wgpu::TextureView)
+            } else {
+                render
+                    .transitions
+                    .offscreen_b
+                    .as_ref()
+                    .map(|(_, view, _)| view as *const wgpu::TextureView)
+            };
+
+            if let Some(current_view) = current_view {
+                Self::render_secondary_frame_contents(
+                    renderer,
                     faces,
-                    native.width,
-                    native.height,
+                    native,
+                    render,
+                    unsafe { &*current_view },
+                    &frame,
                     cursor_visible,
-                    animated_cursor.filter(|ac| ac.frame_id == child_id),
+                    root_animated_cursor,
+                    animated_cursor,
+                    bg_gradient,
+                    false,
                     child_frame_corner_radius,
                     child_frame_shadow_enabled,
                     child_frame_shadow_layers,
@@ -137,6 +121,152 @@ impl RenderApp {
                     child_frame_shadow_opacity,
                 );
             }
+
+            let current_bg = if render.transitions.current_is_a {
+                render
+                    .transitions
+                    .offscreen_a
+                    .as_ref()
+                    .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
+            } else {
+                render
+                    .transitions
+                    .offscreen_b
+                    .as_ref()
+                    .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
+            };
+
+            renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+                detect_frame_transitions(
+                    renderer,
+                    &mut render.transitions,
+                    &renderer.effects.clone(),
+                    &mut frame,
+                    &mut render.frame_dirty,
+                    native.width,
+                    native.height,
+                );
+            });
+            if render.renderer_effects.is_active() {
+                render.frame_dirty = true;
+            }
+
+            if let Some(current_bg) = current_bg {
+                renderer.blit_texture_to_view(
+                    unsafe { &*current_bg },
+                    &surface_view,
+                    native.width,
+                    native.height,
+                );
+            }
+            render_frame_transitions(
+                renderer,
+                &mut render.transitions,
+                &surface_view,
+                native.width,
+                native.height,
+            );
+            if render.transitions.has_active() {
+                render.frame_dirty = true;
+            }
+            Self::render_secondary_frame_overlays(
+                renderer,
+                faces,
+                native,
+                render,
+                &surface_view,
+                &frame,
+                cursor_visible,
+                animated_cursor,
+                child_frame_corner_radius,
+                child_frame_shadow_enabled,
+                child_frame_shadow_layers,
+                child_frame_shadow_offset,
+                child_frame_shadow_opacity,
+            );
+        } else {
+            Self::render_secondary_frame_contents(
+                renderer,
+                faces,
+                native,
+                render,
+                &surface_view,
+                &frame,
+                cursor_visible,
+                root_animated_cursor,
+                animated_cursor,
+                bg_gradient,
+                true,
+                child_frame_corner_radius,
+                child_frame_shadow_enabled,
+                child_frame_shadow_layers,
+                child_frame_shadow_offset,
+                child_frame_shadow_opacity,
+            );
+            renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+                detect_frame_transitions(
+                    renderer,
+                    &mut render.transitions,
+                    &renderer.effects.clone(),
+                    &mut frame,
+                    &mut render.frame_dirty,
+                    native.width,
+                    native.height,
+                );
+            });
+            if render.renderer_effects.is_active() {
+                render.frame_dirty = true;
+            }
+            if render.transitions.has_active() {
+                render.frame_dirty = true;
+            }
+        }
+
+        output.present();
+        renderer.set_scale_factor(old_scale_factor);
+        renderer.resize(old_width, old_height);
+    }
+
+    fn render_secondary_frame_overlays(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+    ) {
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            for &child_id in render.child_frames.sorted_for_rendering() {
+                if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
+                    renderer.render_child_frame(
+                        surface_view,
+                        &child_entry.frame,
+                        child_entry.abs_x,
+                        child_entry.abs_y,
+                        &mut render.glyph_atlas,
+                        faces,
+                        native.width,
+                        native.height,
+                        cursor_visible,
+                        animated_cursor.filter(|ac| ac.frame_id == child_id),
+                        child_frame_corner_radius,
+                        child_frame_shadow_enabled,
+                        child_frame_shadow_layers,
+                        child_frame_shadow_offset,
+                        child_frame_shadow_opacity,
+                    );
+                }
+            }
+        });
+        if render.renderer_effects.is_active() {
+            render.frame_dirty = true;
         }
 
         #[cfg(feature = "wpe-webkit")]
@@ -279,8 +409,69 @@ impl RenderApp {
                 render.visual_bell_start = None;
             }
         }
-        let visual_bell_still_active = render.visual_bell_start.is_some();
-        render.frame_dirty = transient_still_active || visual_bell_still_active;
+        if render.visual_bell_start.is_some() {
+            render.frame_dirty = true;
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_secondary_frame_contents(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        include_overlays: bool,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+    ) {
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            renderer.render_frame_glyphs(
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
+                faces,
+                native.width,
+                native.height,
+                cursor_visible,
+                root_animated_cursor,
+                render.mouse_pos,
+                bg_gradient,
+            );
+        });
+        let renderer_effects_still_active = render.renderer_effects.is_active();
+
+        if !include_overlays {
+            render.frame_dirty = renderer_effects_still_active;
+            return;
+        }
+
+        Self::render_secondary_frame_overlays(
+            renderer,
+            faces,
+            native,
+            render,
+            surface_view,
+            frame,
+            cursor_visible,
+            animated_cursor,
+            child_frame_corner_radius,
+            child_frame_shadow_enabled,
+            child_frame_shadow_layers,
+            child_frame_shadow_offset,
+            child_frame_shadow_opacity,
+        );
+        if renderer_effects_still_active {
+            render.frame_dirty = true;
+        }
     }
 
     pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) {
@@ -301,6 +492,7 @@ impl RenderApp {
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
             return;
         };
+        window_state.render.transitions.policy = self.transitions.policy;
 
         Self::render_secondary_frame_window(
             renderer,

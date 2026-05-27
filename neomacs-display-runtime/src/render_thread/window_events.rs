@@ -330,6 +330,9 @@ impl RenderApp {
                     self.frame_dirty = false;
                 } else if let Some(emacs_fid) = self.frame_windows.emacs_frame_for_winit(window_id)
                 {
+                    if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
+                        window_state.render.frame_dirty = false;
+                    }
                     self.render_frame_window(emacs_fid);
                 }
             }
