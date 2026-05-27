@@ -318,6 +318,96 @@ fn org_agenda_bulk_mark_toggle_regexp_combo() {
 }
 
 #[test]
+fn org_agenda_filter_matcher_visibility_matrix_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((file (make-temp-file
+                "org-agenda-filter-matrix" nil ".org"
+                "#+CATEGORY: Matrix
+* TODO Alpha :work:billable:
+:PROPERTIES:
+:Effort: 0:30
+:Owner: Ada
+:END:
+* WAIT Beta :work:internal:
+:PROPERTIES:
+:Effort: 2:00
+:Owner: Bea
+:END:
+* TODO Home :home:
+:PROPERTIES:
+:Effort: 0:15
+:Owner: Cy
+:END:
+"))
+         (org-agenda-files (list file))
+         (org-agenda-prefix-format "%-8:c%5e %s")
+         (org-agenda-show-all-dates nil)
+         (org-agenda-hide-tags-regexp nil))
+    (unwind-protect
+        (progn
+          (org-tags-view t "+TODO")
+          (with-current-buffer org-agenda-buffer-name
+            (let ((all (buffer-substring-no-properties
+                        (point-min) (point-max)))
+                  (tag-matcher
+                   (org-agenda-filter-make-matcher-tag-exp
+                    '("+work" "-internal") 'and))
+                  (effort-form
+                   (org-agenda-filter-effort-form "<1:00")))
+              (org-agenda-filter-by-regexp nil)
+              (let ((after-regexp-filter org-agenda-regexp-filter))
+                (org-agenda-filter-apply '("+work" "-internal") 'tag t)
+                (let ((work-billable
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))
+                      (tag-filter org-agenda-tag-filter))
+                  (org-agenda-filter-apply '("<1:00") 'effort)
+                  (let ((effort-filtered
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))
+                        (effort-filter org-agenda-effort-filter)
+                        (line-states nil))
+                    (goto-char (point-min))
+                    (while (re-search-forward "^[ \t]*Matrix" nil t)
+                      (push (list
+                             (buffer-substring-no-properties
+                              (line-beginning-position)
+                              (line-end-position))
+                             (get-text-property (line-beginning-position)
+                                                'invisible))
+                            line-states))
+                    (org-agenda-filter-remove-all)
+                    (list (mapcar (lambda (needle)
+                                    (not (null (string-match-p needle all))))
+                                  '("Alpha" "Beta" "Home"))
+                          tag-matcher
+                          effort-form
+                          after-regexp-filter
+                          tag-filter
+                          effort-filter
+                          (mapcar (lambda (needle)
+                                    (not (null (string-match-p
+                                                needle work-billable))))
+                                  '("Alpha" "Beta" "Home"))
+                          (mapcar (lambda (needle)
+                                    (not (null (string-match-p
+                                                needle effort-filtered))))
+                                  '("Alpha" "Beta" "Home"))
+                          (nreverse line-states)
+                          org-agenda-tag-filter
+                          org-agenda-effort-filter))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
+
+#[test]
 fn org_agenda_clockreport_archives_mode_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
