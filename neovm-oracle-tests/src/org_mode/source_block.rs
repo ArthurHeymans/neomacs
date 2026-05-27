@@ -1265,7 +1265,72 @@ fn org_babel_tangle_noweb_header_deep_state_combo() {
                       (replace-regexp-in-string
                        (regexp-quote root) "<root>"
                        (or tangled-content "no-file"))
-                      src-blocks)))))
+                       src-blocks)))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_babel_tangle_header_args_noweb_comments_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-tangle-hdr" t))
+         (src (expand-file-name "project.org" root))
+         (out-a (expand-file-name "a.el" root))
+         (out-b (expand-file-name "b.el" root))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (progn
+          (with-temp-file src
+            (insert "#+PROPERTY: header-args:emacs-lisp :comments both\n\n")
+            (insert "#+NAME: shared\n")
+            (insert "#+begin_src emacs-lisp\n")
+            (insert "(defconst shared-val 42)\n")
+            (insert "#+end_src\n\n")
+            (insert "#+begin_src emacs-lisp :tangle " out-a " :noweb yes\n")
+            (insert ";;; a.el --- A file\n")
+            (insert "<<shared>>\n")
+            (insert "(defun func-a () shared-val)\n")
+            (insert ";;; a.el ends here\n")
+            (insert "#+end_src\n\n")
+            (insert "#+begin_src emacs-lisp :tangle " out-b "\n")
+            (insert ";;; b.el --- B file\n")
+            (insert "(defun func-b () 99)\n")
+            (insert ";;; b.el ends here\n")
+            (insert "#+end_src\n"))
+          (with-current-buffer (find-file-noselect src)
+            (org-mode)
+            (let ((tangle-result (org-babel-tangle)))
+              (let ((content-a
+                     (when (file-exists-p out-a)
+                       (with-temp-buffer
+                         (insert-file-contents out-a)
+                         (buffer-string))))
+                    (content-b
+                     (when (file-exists-p out-b)
+                       (with-temp-buffer
+                         (insert-file-contents out-b)
+                         (buffer-string)))))
+                (kill-buffer)
+                (list (mapcar #'file-name-nondirectory tangle-result)
+                      (sort (mapcar #'file-name-nondirectory tangle-result)
+                            #'string<)
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or content-a "no-a"))
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or content-b "no-b"))
+                      ;; Check noweb expansion happened
+                      (and content-a
+                           (string-match-p "shared-val" content-a))
+                      (and content-a
+                           (not (string-match-p "<<shared>>" content-a)))))))))
       (delete-directory root t))))"##,
     );
 }
