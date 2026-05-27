@@ -157,7 +157,64 @@ fn org_link_abbrev_radio_custom_reveal_export_combo() {
                               "https://github.com/eval-exec/neomacs"
                               "RFC 9110" "Release Plan"))
                     (org-get-heading t t t t)
-                    (buffer-substring-no-properties
-                     (point-min) (point-max))))))))"##,
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_link_export_html_latex_structure_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (require 'ox-latex)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Link Export\n\n")
+    (insert "* Section\n")
+    (insert "Plain link: https://example.org/path?q=1\n\n")
+    (insert "Named link: [[https://example.org][Example Site]]\n\n")
+    (insert "File link: [[file:/tmp/test.org::*Heading][File Ref]]\n\n")
+    (insert "Radio: <<<radio-target>>> elsewhere\n\n")
+    (insert "Angle link: <https://angle.example.org>\n\n")
+    (let* ((org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil))
+           (latex (org-export-as 'latex nil nil t nil))
+           ;; Extract all links from HTML
+           (html-links nil)
+           (s 0)
+           (_ (while (string-match "href=\"\\([^\"]+\\)\"" html s)
+                (push (match-string 1 html) html-links)
+                (setq s (match-end 0))))
+           ;; Extract all links from LaTeX
+           (latex-links nil)
+           (s2 0)
+           (_ (while (string-match "\\\\\\(?:href\\|url\\){\\([^}]+\\)}" latex s2)
+                (push (match-string 1 latex) latex-links)
+                (setq s2 (match-end 0))))
+           ;; Check specific patterns
+           (html-has-plain (string-match-p "https://example.org/path" html))
+           (html-has-named (string-match-p "Example Site" html))
+           (html-has-angle (string-match-p "https://angle.example.org" html))
+           (latex-has-plain (string-match-p "https://example.org/path" latex))
+           (latex-has-named (string-match-p "Example Site" latex)))
+      (list (nreverse html-links)
+            (nreverse latex-links)
+            html-has-plain
+            html-has-named
+            html-has-angle
+            latex-has-plain
+            latex-has-named
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+" "sec:org-id"
+             (replace-regexp-in-string
+              "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+              html))
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+" "sec:org-id"
+             latex))))))"##,
     );
 }
