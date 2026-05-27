@@ -429,7 +429,59 @@ fn org_timer_countdown_replace_done_display_combo() {
                   org-timer-countdown-timer
                   global-mode-string
                   frame-title-format
-                  (buffer-substring-no-properties
-                   (point-min) (point-max))))))))"##,
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
+fn org_timer_hms_secs_parse_region_modify_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-timer)
+  (with-temp-buffer
+    (insert "00:05:00\n01:30:45\n00:00:10\n02:00:00\n")
+    ;; Parse hms values
+    (let ((parsed (mapcar #'org-timer-hms-to-secs
+                          '("0:05:00" "1:30:45" "0:00:10" "2:00:00")))
+          ;; Format secs to hms
+          (formatted (mapcar #'org-timer-secs-to-hms '(300 5445 10 7200)))
+          ;; Fix incomplete
+          (fixed (mapcar #'org-timer-fix-incomplete
+                         '("5" "1:02" "1:02:03" "0:30"))))
+      ;; Modify region
+      (let ((before-region (buffer-substring-no-properties
+                            (point-min) (point-max))))
+        (org-timer-change-times-in-region
+         (point-min) (point-max) "0:01:00")
+        (let ((after-add (buffer-substring-no-properties
+                          (point-min) (point-max))))
+          ;; Reset and subtract
+          (erase-buffer)
+          (insert "00:10:00\n00:20:00\n00:30:00\n")
+          (org-timer-change-times-in-region
+           (point-min) (point-max) "-0:05:00")
+          (let ((after-subtract (buffer-substring-no-properties
+                                 (point-min) (point-max))))
+            ;; Item timer
+            (erase-buffer)
+            (org-mode)
+            (insert "* Task\n- item one\n- item two\n")
+            (let ((item-timer
+                   (condition-case nil
+                       (progn (org-timer-item) 'ok)
+                     (error 'error))))
+              (list parsed
+                    formatted
+                    fixed
+                    before-region
+                    after-add
+                    after-subtract
+                    item-timer
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
     );
 }
