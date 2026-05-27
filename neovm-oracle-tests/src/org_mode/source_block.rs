@@ -42,6 +42,152 @@ fn org_src_edit_switches_indent_writeback_combo() {
 }
 
 #[test]
+fn org_babel_demarcate_hash_visibility_navigation_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Code\n")
+    (insert "#+NAME: split-me\n")
+    (insert "#+begin_src emacs-lisp :results value replace :cache yes\n")
+    (insert "(let ((x 1))\n")
+    (insert "  (+ x 2)\n")
+    (insert "  (* x 4))\n")
+    (insert "#+end_src\n\n")
+    (insert "#+NAME: keep-me\n")
+    (insert "#+begin_src emacs-lisp :results output replace\n")
+    (insert "(princ \"alpha\\nbeta\")\n")
+    (insert "#+end_src\n")
+    (insert "#+RESULTS[oldhasholdhash]: keep-me\n")
+    (insert ": alpha\n: beta\n")
+    (let ((offset (lambda (pos) (and pos (- pos (point-min)))))
+          split-before split-after mark-summary navigation-summary
+          hash-summary visibility-summary parsed)
+      (goto-char (point-min))
+      (search-forward "(+ x 2)")
+      (setq split-before
+            (list (funcall offset (org-babel-where-is-src-block-head))
+                  (nth 0 (org-babel-get-src-block-info 'no-eval))
+                  (nth 1 (org-babel-get-src-block-info 'no-eval))
+                  (buffer-substring-no-properties
+                   (line-beginning-position) (line-end-position))))
+      (org-babel-demarcate-block)
+      (setq split-after
+            (list (org-babel-src-block-names)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "(* x 4)")
+      (org-babel-mark-block)
+      (setq mark-summary
+            (list (funcall offset (region-beginning))
+                  (funcall offset (region-end))
+                  (buffer-substring-no-properties
+                   (region-beginning) (region-end))))
+      (deactivate-mark)
+      (goto-char (point-min))
+      (org-babel-next-src-block 2)
+      (setq navigation-summary
+            (list (funcall offset (point))
+                  (buffer-substring-no-properties
+                   (line-beginning-position) (line-end-position))
+                  (funcall offset (org-babel-where-is-src-block-head))))
+      (org-babel-previous-src-block 1)
+      (setq navigation-summary
+            (append navigation-summary
+                    (list (funcall offset (point))
+                          (buffer-substring-no-properties
+                           (line-beginning-position) (line-end-position)))))
+      (goto-char (point-min))
+      (search-forward "keep-me")
+      (search-forward "begin_src")
+      (let* ((info (org-babel-get-src-block-info))
+             (hash (org-babel-sha1-hash info))
+             (result-pos (org-babel-where-is-src-block-result nil info)))
+        (goto-char result-pos)
+        (setq hash-summary
+              (list (org-babel-current-result-hash info)
+                    hash
+                    (org-babel-hash-at-point (point))))
+        (org-babel-hide-hash)
+        (setq hash-summary
+              (append hash-summary
+                      (list
+                       (mapcar (lambda (ov)
+                                 (list (funcall offset (overlay-start ov))
+                                       (funcall offset (overlay-end ov))
+                                       (overlay-get ov 'babel-hash)
+                                       (overlay-get ov 'invisible)))
+                               (overlays-in (line-beginning-position)
+                                            (line-end-position)))))))
+      (org-babel-result-hide-all)
+      (setq visibility-summary
+            (list
+             (mapcar
+              (lambda (needle)
+                (let ((pos (save-excursion
+                             (goto-char (point-min))
+                             (search-forward needle)
+                             (point))))
+                  (list needle
+                        (invisible-p pos)
+                        (get-text-property pos 'invisible))))
+              '(": alpha" ": beta" "(* x 4)"))
+             (length org-babel-hide-result-overlays)))
+      (org-babel-show-result-all)
+      (setq visibility-summary
+            (append visibility-summary
+                    (list
+                     (mapcar
+                      (lambda (needle)
+                        (let ((pos (save-excursion
+                                     (goto-char (point-min))
+                                     (search-forward needle)
+                                     (point))))
+                          (list needle
+                                (invisible-p pos)
+                                (get-text-property pos 'invisible))))
+                      '(": alpha" ": beta" "(* x 4)"))
+                     org-babel-hide-result-overlays)))
+      (setq parsed
+            (org-element-map (org-element-parse-buffer)
+                '(headline src-block keyword fixed-width)
+              (lambda (el)
+                (pcase (org-element-type el)
+                  ('headline
+                   (list 'headline
+                         (org-element-property :raw-value el)))
+                  ('src-block
+                   (list 'src
+                         (org-element-property :name el)
+                         (org-element-property :language el)
+                         (org-element-property :parameters el)
+                         (org-element-property :value el)))
+                  ('keyword
+                   (list 'keyword
+                         (org-element-property :key el)
+                         (org-element-property :value el)))
+                  ('fixed-width
+                   (list 'fixed-width
+                         (org-element-property :value el)))))))
+      (list split-before
+            split-after
+            mark-summary
+            navigation-summary
+            hash-summary
+            visibility-summary
+            parsed
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_noweb_expand_export_processing_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
