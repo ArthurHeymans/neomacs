@@ -783,13 +783,13 @@ total",
     fn jit_float_constant() {
         let artifact = crate::jit_interp::execute_with_jit(
             "float-const.el",
-            ";;; -*- lexical-binding: t; -*-\n3.14",
+            ";;; -*- lexical-binding: t; -*-\n3.125",
             &[],
         );
         assert_eq!(artifact.result.diagnostics, Vec::new());
         let value = artifact.result.value.unwrap();
         assert!(artifact.runtime.is_float(value));
-        assert!((artifact.runtime.float_data(value).unwrap() - 3.14).abs() < f64::EPSILON);
+        assert!((artifact.runtime.float_data(value).unwrap() - 3.125).abs() < f64::EPSILON);
     }
 
     #[test]

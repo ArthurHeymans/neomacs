@@ -9788,10 +9788,10 @@ mod tests {
 
     #[test]
     fn executes_float_constant() {
-        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n3.14");
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n3.125");
         assert!(rt.is_float(value.unwrap()));
         let f = rt.float_data(value.unwrap()).unwrap();
-        assert!((f - 3.14).abs() < 1e-10);
+        assert!((f - 3.125).abs() < 1e-10);
     }
 
     #[test]
@@ -9840,10 +9840,10 @@ mod tests {
 
     #[test]
     fn executes_float_negation() {
-        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(- 3.14)");
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(- 3.125)");
         assert!(rt.is_float(value.unwrap()));
         let f = rt.float_data(value.unwrap()).unwrap();
-        assert!((f + 3.14).abs() < 1e-10);
+        assert!((f + 3.125).abs() < 1e-10);
     }
 
     #[test]
@@ -9915,10 +9915,10 @@ mod tests {
 
     #[test]
     fn executes_string_to_number_float() {
-        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(string-to-number \"3.14\")");
+        let (value, rt) = execute(";;; -*- lexical-binding: t; -*-\n(string-to-number \"3.125\")");
         assert!(rt.is_float(value.unwrap()));
         let f = rt.float_data(value.unwrap()).unwrap();
-        assert!((f - 3.14).abs() < 1e-10);
+        assert!((f - 3.125).abs() < 1e-10);
     }
 
     #[test]
