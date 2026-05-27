@@ -49,6 +49,107 @@ fn org_html_export_drawer_special_footnote_filter_combo() {
 }
 
 #[test]
+fn org_html_export_visible_subtree_planning_filter_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Visible Subtree\n")
+    (insert "#+OPTIONS: toc:nil prop:t\n")
+    (insert "#+MACRO: badge Badge-$1\n")
+    (insert "* Parent\n")
+    (insert "Parent body hidden during visible export.\n")
+    (insert "** TODO Export Me :ship:\n")
+    (insert "SCHEDULED: <2026-05-27 Wed> DEADLINE: <2026-05-28 Thu>\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: export-me\n:Owner: Ada\n:END:\n")
+    (insert "Visible paragraph {{{badge(ok)}}} with [[#export-me][self]] and [fn:a].\n")
+    (insert "#+begin_quote\nquoted visible text\n#+end_quote\n")
+    (insert "*** Hidden Child\n")
+    (insert "Child body should be invisible-only skipped.\n")
+    (insert "** TODO Sibling :noexport:\n")
+    (insert "Sibling body should never export.\n")
+    (insert "* Tail\nTail body.\n")
+    (insert "[fn:a] Footnote visible body.\n")
+    (goto-char (point-min))
+    (search-forward "Hidden Child")
+    (beginning-of-line)
+    (org-fold-hide-subtree)
+    (goto-char (point-min))
+    (search-forward "Export Me")
+    (beginning-of-line)
+    (let ((calls nil))
+      (let ((org-export-exclude-tags '("noexport"))
+            (org-export-with-toc nil)
+            (org-export-filter-headline-functions
+             (list (lambda (text backend info)
+                     (push (list 'headline backend
+                                 (string-match-p "Export Me" text)
+                                 (length text))
+                           calls)
+                     text)))
+            (org-export-filter-final-output-functions
+             (list (lambda (text backend info)
+                     (push (list 'final backend
+                                 (plist-get info :with-toc)
+                                 (length text))
+                           calls)
+                     text))))
+        (let* ((html (org-export-as 'html t t t
+                                    '(:with-toc nil
+                                      :html-html5-fancy t)))
+               (info (org-export-get-environment
+                      'html t '(:with-toc nil)))
+               (tree (plist-get info :parse-tree))
+               (headlines
+                (org-element-map tree 'headline
+                  (lambda (h)
+                    (list (org-element-property :raw-value h)
+                          (org-export-get-relative-level h info)
+                          (org-export-get-headline-number h info)
+                          (org-export-get-tags h info)
+                          (org-export-numbered-headline-p h info)))))
+               (links
+                (org-element-map tree 'link
+                  (lambda (link)
+                    (let ((resolved
+                           (ignore-errors
+                             (org-export-resolve-link link info))))
+                      (list (org-element-property :raw-link link)
+                            (org-element-type resolved)
+                            (and resolved
+                                 (org-export-get-reference resolved info)))))))
+               (footnotes
+                (org-export-collect-footnote-definitions info)))
+          (list (nreverse calls)
+                headlines
+                links
+                (mapcar (lambda (entry)
+                          (list (car entry)
+                                (org-element-property :label (cdr entry))))
+                        footnotes)
+                (mapcar (lambda (needle)
+                          (not (null (string-match-p needle html))))
+                        '("Export Me" "Badge-ok" "Visible paragraph"
+                          "quoted visible text" "Footnote visible body"
+                          "Owner"))
+                (mapcar (lambda (needle)
+                          (null (string-match-p needle html)))
+                        '("Parent body" "Child body" "Sibling body"
+                          "Tail body"))
+                (replace-regexp-in-string
+                 "org[[:alnum:]]+"
+                 "org-id"
+                 html))))))"##,
+    );
+}
+
+#[test]
 fn org_export_multi_backend_resolution_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
