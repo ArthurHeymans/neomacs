@@ -39,6 +39,7 @@ mod export_backends;
 mod export_mix;
 mod export_upstream;
 mod export_upstream_2;
+mod fold_core;
 mod fold_font;
 mod footnote_edit;
 mod goto_workflow;
