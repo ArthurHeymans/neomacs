@@ -271,3 +271,84 @@ fn org_feed_handlers_changed_update_all_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_feed_atom_formatter_filter_status_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-feed)
+  (let* ((root (make-temp-file "org-feed-atom" t))
+         (file (expand-file-name "atom.org" root))
+         (feed-buf (get-buffer-create " *atom-feed*"))
+         (org-feed-save-after-adding nil)
+         (before nil)
+         (after nil))
+    (unwind-protect
+        (progn
+          (with-current-buffer feed-buf
+            (erase-buffer)
+            (insert "<?xml version=\"1.0\"?><feed xmlns=\"http://www.w3.org/2005/Atom\">")
+            (insert "<entry><id>tag:example,2026:1</id><title>Keep One</title>")
+            (insert "<link href=\"https://example.org/one\"/>")
+            (insert "<updated>2026-05-27T09:30:00Z</updated>")
+            (insert "<summary>Atom summary &amp; details</summary></entry>")
+            (insert "<entry><id>tag:example,2026:2</id><title>Drop Two</title>")
+            (insert "<link href=\"https://example.org/two\"/>")
+            (insert "<content>Drop content</content></entry>")
+            (insert "</feed>"))
+          (with-temp-file file (insert "* Inbox\n"))
+          (let* ((raw (org-feed-parse-atom-feed feed-buf))
+                 (parsed (mapcar #'org-feed-parse-atom-entry raw))
+                 (kept
+                  (delq nil
+                        (mapcar (lambda (entry)
+                                  (and (string-match-p
+                                        "Keep" (plist-get entry :title))
+                                       entry))
+                                parsed)))
+                 (formatted
+                  (mapcar
+                   (lambda (entry)
+                     (let ((copy (copy-sequence entry)))
+                       (plist-put copy :description
+                                  (concat "DESC:"
+                                          (plist-get copy :description)))
+                       (org-feed-format-entry
+                        copy
+                        "\n** %h\n   %u\n   %description\n   %a"
+                        nil)))
+                   kept))
+                 (pos (org-feed-goto-inbox-internal file "Inbox")))
+            (add-hook 'org-feed-before-adding-hook
+                      (lambda () (push (line-number-at-pos) before)))
+            (add-hook 'org-feed-after-adding-hook
+                      (lambda () (push (line-number-at-pos) after)))
+            (org-feed-add-items pos formatted)
+            (org-feed-write-status
+             pos "ATOMSTATUS"
+             (mapcar (lambda (entry)
+                       (list (plist-get entry :guid)
+                             t
+                             (sha1 (plist-get entry :item-full-text))))
+                     parsed))
+            (list (mapcar (lambda (entry)
+                            (list (plist-get entry :guid)
+                                  (plist-get entry :title)
+                                  (plist-get entry :link)
+                                  (plist-get entry :description)
+                                  (plist-get entry :date)))
+                          parsed)
+                  (nreverse before)
+                  (nreverse after)
+                  (org-feed-read-previous-status pos "ATOMSTATUS")
+                  (with-current-buffer (find-file-noselect file)
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))
+      (when (get-buffer feed-buf) (kill-buffer feed-buf))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
