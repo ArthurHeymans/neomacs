@@ -350,9 +350,76 @@ fn org_beamer_export_columns_blocks_againframe_combo() {
             (not (null (string-match-p "\\\\begin{block}<2->" latex)))
             (not (null (string-match-p "\\\\begin{alertblock}{Custom Alert}" latex)))
             (not (null (string-match-p "\\\\note<2>" latex)))
-            (not (null (string-match-p "\\\\againframe<3>{sec-one-main-frame}" latex)))
-            (not (null (string-match-p "\\\\appendix" latex)))
-            (not (null (string-match-p "\\\\begin{verbatim}" latex)))
-            normalized))))"##,
+             (not (null (string-match-p "\\\\againframe<3>{sec-one-main-frame}" latex)))
+             (not (null (string-match-p "\\\\appendix" latex)))
+             (not (null (string-match-p "\\\\begin{verbatim}" latex)))
+             normalized))))"##,
+    );
+}
+
+#[test]
+fn org_html_export_detailed_structure_link_image_table_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Detailed Export\n")
+    (insert "#+AUTHOR: Test Author\n")
+    (insert "#+OPTIONS: toc:nil num:nil\n\n")
+    (insert "* Section One :tag1:tag2:\n")
+    (insert "Paragraph with *bold*, /italic/, _underline_, =code=, and ~verbatim~.\n\n")
+    (insert "A [[https://example.org][Example Link]] and a [[file:notes.org::*Target][file link]].\n\n")
+    (insert "#+NAME: tbl\n")
+    (insert "| Name | Value |\n")
+    (insert "|------+-------|\n")
+    (insert "| Alpha | 10 |\n")
+    (insert "| Beta | 20 |\n\n")
+    (insert "#+CAPTION: My Table\n")
+    (insert "#+ATTR_HTML: :border 2 :class custom\n\n")
+    (insert "#+begin_quote\n")
+    (insert "A blockquote with *emphasis*.\n")
+    (insert "#+end_quote\n\n")
+    (insert "#+begin_src emacs-lisp\n")
+    (insert "(+ 1 2)\n")
+    (insert "#+end_src\n\n")
+    (insert "** Subsection\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: my-id\n:END:\n")
+    (insert "Text with footnote[fn:1].\n\n")
+    (insert "[fn:1] Footnote body with =code=.\n")
+    (let* ((org-export-with-toc nil)
+           (org-export-show-temporary-export-buffer nil)
+           (html (org-export-as 'html nil nil t nil))
+           (normalized
+            (replace-regexp-in-string
+             "sec:org[[:alnum:]-]+" "sec:org-id"
+             (replace-regexp-in-string
+              "org[[:alnum:]-]\\{8,\\}" "orgHASH"
+              html))))
+      (list
+       (replace-regexp-in-string
+        "<[^>]+>" ""
+        (or (and (string-match "<title>\\([^<]+\\)</title>" html)
+                 (match-string 1 html))
+            "no-title"))
+       (mapcar (lambda (tag)
+                 (let ((s 0) (c 0))
+                   (while (string-match (concat "<" tag) html s)
+                     (setq s (match-end 0) c (1+ c)))
+                   c))
+               '("h1" "h2" "h3" "blockquote" "pre" "table"))
+       (and (string-match "href=\"\\([^\"]+\\)\"" html)
+            (match-string 1 html))
+       (list (not (null (string-match "<b>bold</b>" html)))
+             (not (null (string-match "<i>italic</i>" html)))
+             (not (null (string-match "<code>code</code>" html)))
+             (not (null (string-match "<pre>" html))))
+       (let ((td-count 0) (s 0))
+         (while (string-match "<td" html s)
+           (setq s (match-end 0) td-count (1+ td-count)))
+         td-count)
+       normalized)))))"##,
     );
 }
