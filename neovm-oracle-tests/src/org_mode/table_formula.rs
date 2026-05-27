@@ -766,3 +766,107 @@ fn org_table_named_remote_debug_structural_combo() {
                 (org-table-to-lisp)))))))"##,
     );
 }
+
+#[test]
+fn org_table_shrink_coordinates_formula_lifecycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| ! | Name | Count | Price | Total | Notes |\n")
+    (insert "|---+------+-------+-------+-------+-------|\n")
+    (insert "| # | alpha item | 2 | 10.50 | | long note alpha beta gamma |\n")
+    (insert "|   | beta item | 3 | 7.25 | | long note beta delta epsilon |\n")
+    (insert "| # | gamma item | 4 | 2.00 | | compact |\n")
+    (insert "|---+------+-------+-------+-------+-------|\n")
+    (insert "| _ | Sum | | | | |\n")
+    (insert "#+TBLFM: $Total=$Count*$Price;%.2f::@>$Total=vsum(@I$Total..@II$Total);%.2f\n")
+    (goto-char (point-min))
+    (org-table-recalculate 'all)
+    (org-table-align)
+    (let ((after-recalc
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (stored (org-table-get-stored-formulas))
+          (formula-at-alpha
+           (save-excursion
+             (goto-char (point-min))
+             (search-forward "alpha")
+             (org-table-goto-column 5)
+             (org-table-current-field-formula 'key 'noerror)))
+          (coordinate-before nil)
+          (coordinate-after nil)
+          (shrink-before nil)
+          (shrink-after nil)
+          (range-overlay nil))
+      (org-table-toggle-coordinate-overlays)
+      (setq coordinate-before
+            (mapcar (lambda (ov)
+                      (list (overlay-start ov)
+                            (overlay-end ov)
+                            (overlay-get ov 'display)
+                            (overlay-get ov 'face)
+                            (overlay-get ov 'evaporate)))
+                    org-table-coordinate-overlays))
+      (org-table-toggle-coordinate-overlays)
+      (setq coordinate-after
+            (and (boundp 'org-table-coordinate-overlays)
+                 org-table-coordinate-overlays))
+      (goto-char (point-min))
+      (search-forward "long note alpha")
+      (org-table-toggle-column-width 12)
+      (setq shrink-before
+            (mapcar (lambda (ov)
+                      (list (overlay-start ov)
+                            (overlay-end ov)
+                            (overlay-get ov 'display)
+                            (overlay-get ov 'org-table-column-shrinked)
+                            (overlay-get ov 'evaporate)))
+                    (overlays-in (point-min) (point-max))))
+      (org-table-expand)
+      (setq shrink-after
+            (mapcar (lambda (ov)
+                      (list (overlay-start ov)
+                            (overlay-end ov)
+                            (overlay-get ov 'org-table-column-shrinked)))
+                    (overlays-in (point-min) (point-max))))
+      (goto-char (point-min))
+      (search-forward "alpha item")
+      (let ((beg (point)))
+        (search-forward "7.25")
+        (org-table-highlight-rectangle beg (point))
+        (setq range-overlay
+              (mapcar (lambda (ov)
+                        (list (overlay-start ov)
+                              (overlay-end ov)
+                              (overlay-get ov 'face)
+                              (overlay-get ov 'evaporate)))
+                      (overlays-in (point-min) (point-max))))
+        (org-table-remove-rectangle-highlight))
+      (goto-char (point-min))
+      (search-forward "beta item")
+      (beginning-of-line)
+      (org-table-move-row-down)
+      (goto-char (point-min))
+      (search-forward "gamma item")
+      (org-table-goto-column 3)
+      (org-table-get-field nil "5")
+      (org-table-recalculate 'all)
+      (list after-recalc
+            stored
+            formula-at-alpha
+            coordinate-before
+            coordinate-after
+            shrink-before
+            shrink-after
+            range-overlay
+            (org-table-get-range "@I$Count..@II$Total")
+            (org-table-formula-substitute-names
+             "$Total=$Count*$Price")
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
