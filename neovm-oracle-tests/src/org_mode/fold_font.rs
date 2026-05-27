@@ -685,6 +685,82 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_deep_heading_cycle_hidden_edit_font_regression_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO L1\n")
+      (insert "** DONE L2\n")
+      (insert "*** TODO L3\n")
+      (insert "**** WAIT L4\n")
+      (insert "***** DONE L5\n")
+      (insert "****** TODO L6\n")
+      (insert "******* WAIT L7\n")
+      (insert "******** DONE L8\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Cycle L4 multiple times
+      (goto-char (point-min))
+      (search-forward "L4")
+      (beginning-of-line)
+      (dotimes (_ 5)
+        (org-cycle))
+      ;; Hide L5 subtree, edit while hidden
+      (goto-char (point-min))
+      (search-forward "L5")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (end-of-line)
+      (insert "\n***** TODO Inserted under L5\nInserted body.\n")
+      ;; Show all
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check state
+      (let ((headings
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (line-number-at-pos)
+                            (invisible-p (point))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face))
+                      (list needle 'not-found nil nil nil))))
+              '("L1" "L2" "L3" "L4" "L5" "L6" "L7" "L8" "Inserted")))
+            (merged nil)
+            (level-ok t))
+        (dolist (line (split-string
+                       (buffer-substring-no-properties
+                        (point-min) (point-max))
+                       "\n" t))
+          (when (string-match-p "^\\*+ .*\\*+ " line)
+            (push line merged)))
+        (goto-char (point-min))
+        (while (re-search-forward "^\\(\\*+\\) " nil t)
+          (let ((stars (length (match-string 1)))
+                (level (org-outline-level)))
+            (unless (= stars level)
+              (setq level-ok nil))))
+        (list headings
+              (nreverse merged)
+              level-ok
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_global_cycle_overview_content_all_font_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
