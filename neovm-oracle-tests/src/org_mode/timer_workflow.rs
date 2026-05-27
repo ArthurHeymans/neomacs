@@ -315,3 +315,121 @@ fn org_timer_list_region_countdown_element_lifecycle_combo() {
                  (point-min) (point-max)))))))"##,
     );
 }
+
+#[test]
+fn org_timer_countdown_replace_done_display_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-timer)
+  (with-temp-buffer
+    (let ((org-timer-display 'both)
+          (org-timer-default-timer "0:04")
+          (org-clock-sound "ding")
+          (global-mode-string nil)
+          (frame-title-format nil)
+          (events nil)
+          (fake-timers nil)
+          (cancelled nil)
+          (notify nil)
+          (answers nil))
+      (add-hook 'org-timer-set-hook
+                (lambda () (push (list 'set
+                                       org-timer-countdown-timer-title
+                                       org-timer-start-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-pause-hook
+                (lambda () (push (list 'pause org-timer-pause-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-continue-hook
+                (lambda () (push (list 'continue org-timer-start-time)
+                                 events))
+                nil t)
+      (add-hook 'org-timer-stop-hook
+                (lambda () (push 'stop events))
+                nil t)
+      (add-hook 'org-timer-done-hook
+                (lambda () (push 'done events))
+                nil t)
+      (org-mode)
+      (insert "* TODO Countdown target\n")
+      (insert ":PROPERTIES:\n:Effort: 0:06\n:END:\nBody\n")
+      (goto-char (point-min))
+      (cl-letf (((symbol-function 'run-with-timer)
+                 (lambda (secs repeat function &rest args)
+                   (let ((timer (list :fake-timer secs repeat function args)))
+                     (push timer fake-timers)
+                     timer)))
+                ((symbol-function 'timerp)
+                 (lambda (object)
+                   (and (consp object) (eq (car object) :fake-timer))))
+                ((symbol-function 'cancel-timer)
+                 (lambda (timer) (push timer cancelled) nil))
+                ((symbol-function 'timer--time)
+                 (lambda (timer) (seconds-to-time (plist-get (cdr timer) :fake-timer))))
+                ((symbol-function 'org-notify)
+                 (lambda (message sound) (push (list message sound) notify)))
+                ((symbol-function 'y-or-n-p)
+                 (lambda (&rest _) (pop answers)))
+                ((symbol-function 'force-mode-line-update)
+                 (lambda (&rest _) (push 'force-mode-line events)))
+                ((symbol-function 'current-time)
+                 (lambda () (seconds-to-time 1000))))
+        (let (states)
+          (let ((snapshot
+                 (lambda (label)
+                   (list label
+                         (timerp org-timer-countdown-timer)
+                         org-timer-countdown-timer
+                         org-timer-countdown-timer-title
+                         org-timer-start-time
+                         org-timer-pause-time
+                         org-timer-mode-line-string
+                         org-timer-mode-line-timer
+                         global-mode-string
+                         frame-title-format
+                         (org-timer-value-string)
+                         (nreverse (copy-sequence events))
+                         (nreverse (copy-sequence cancelled))
+                         (nreverse (copy-sequence notify))
+                         (nreverse (copy-sequence fake-timers))))))
+            (org-timer-set-timer nil)
+            (push (funcall snapshot 'effort-set) states)
+            (setq answers '(nil))
+            (org-timer-set-timer "0:02")
+            (push (funcall snapshot 'replace-declined) states)
+            (setq answers '(t))
+            (org-timer-set-timer "0:02")
+            (push (funcall snapshot 'replace-accepted) states)
+            (org-timer-pause-or-continue nil)
+            (push (funcall snapshot 'paused) states)
+            (cl-letf (((symbol-function 'current-time)
+                       (lambda () (seconds-to-time 1015))))
+              (org-timer-pause-or-continue nil))
+            (push (funcall snapshot 'continued) states)
+            (org-timer-set-timer '(16))
+            (push (funcall snapshot 'forced-replace) states)
+            (let* ((timer org-timer-countdown-timer)
+                   (callback (nth 3 timer)))
+              (funcall callback))
+            (push (funcall snapshot 'after-callback) states)
+            (condition-case err
+                (org-timer-stop)
+              (error (push (cons (car err) (cdr err)) events)))
+            (list (nreverse states)
+                  (nreverse events)
+                  (nreverse cancelled)
+                  (nreverse notify)
+                  org-timer-start-time
+                  org-timer-pause-time
+                  org-timer-countdown-timer
+                  global-mode-string
+                  frame-title-format
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
