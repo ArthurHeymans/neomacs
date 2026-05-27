@@ -44,13 +44,13 @@ impl RenderApp {
         } else {
             (0.0, 0.0)
         };
+        let scale_factor = self.primary_scale_factor();
 
         ImeCursorArea {
-            x: ((target.x as f64 + ime_off_x) * self.scale_factor).round() as i32,
-            y: ((target.y as f64 + target.height as f64 + ime_off_y) * self.scale_factor).round()
-                as i32,
-            width: ((target.width as f64 * self.scale_factor).max(1.0)).round() as u32,
-            height: ((target.height as f64 * self.scale_factor).max(1.0)).round() as u32,
+            x: ((target.x as f64 + ime_off_x) * scale_factor).round() as i32,
+            y: ((target.y as f64 + target.height as f64 + ime_off_y) * scale_factor).round() as i32,
+            width: ((target.width as f64 * scale_factor).max(1.0)).round() as u32,
+            height: ((target.height as f64 * scale_factor).max(1.0)).round() as u32,
         }
     }
 
@@ -59,7 +59,7 @@ impl RenderApp {
         if !self.ime_enabled && !self.primary_ime_preedit_active() {
             return;
         }
-        let Some(ref window) = self.window else {
+        let Some(window) = self.primary_window() else {
             return;
         };
 

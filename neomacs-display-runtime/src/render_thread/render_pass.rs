@@ -847,7 +847,7 @@ impl RenderApp {
     pub(super) fn render(&mut self) {
         // Early return checks
         if self.primary_current_frame().is_none()
-            || self.surface.is_none()
+            || self.primary_surface().is_none()
             || self.renderer.is_none()
             || self.primary_frame.is_none()
         {
@@ -860,7 +860,7 @@ impl RenderApp {
         }
 
         // Get surface texture
-        let Some(surface) = self.surface.as_ref() else {
+        let Some(surface) = self.primary_surface() else {
             return;
         };
         let output = match surface.get_current_texture() {

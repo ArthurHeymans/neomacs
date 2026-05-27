@@ -620,6 +620,51 @@ impl RenderApp {
             .and_then(|frame| frame.tab_bar.as_ref())
     }
 
+    pub(super) fn primary_window(&self) -> Option<&Arc<Window>> {
+        self.window.as_ref()
+    }
+
+    pub(super) fn primary_surface(&self) -> Option<&wgpu::Surface<'static>> {
+        self.surface.as_ref()
+    }
+
+    pub(super) fn primary_surface_config_mut(&mut self) -> Option<&mut wgpu::SurfaceConfiguration> {
+        self.surface_config.as_mut()
+    }
+
+    pub(super) fn configure_primary_surface(&mut self, width: u32, height: u32) {
+        if let (Some(surface), Some(config), Some(gpu)) =
+            (&self.surface, &mut self.surface_config, &self.gpu)
+        {
+            config.width = width;
+            config.height = height;
+            surface.configure(&gpu.device, config);
+        }
+    }
+
+    pub(super) fn primary_native_size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    pub(super) fn primary_logical_size(&self) -> (f32, f32) {
+        (
+            self.width as f32 / self.scale_factor as f32,
+            self.height as f32 / self.scale_factor as f32,
+        )
+    }
+
+    pub(super) fn primary_scale_factor(&self) -> f64 {
+        self.scale_factor
+    }
+
+    pub(super) fn primary_chrome(&self) -> &WindowChrome {
+        &self.chrome
+    }
+
+    pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
+        &mut self.chrome
+    }
+
     pub(super) fn primary_chrome_interaction(&self) -> GuiChromeInteractionState {
         self.primary_frame
             .as_ref()

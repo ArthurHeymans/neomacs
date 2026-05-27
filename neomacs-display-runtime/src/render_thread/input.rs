@@ -348,10 +348,11 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<winit::window::ResizeDirection> {
+        let (logical_width, logical_height) = self.primary_logical_size();
         Self::detect_resize_edge_for_chrome(
-            &self.chrome,
-            self.width as f32 / self.scale_factor as f32,
-            self.height as f32 / self.scale_factor as f32,
+            self.primary_chrome(),
+            logical_width,
+            logical_height,
             x,
             y,
         )
@@ -395,12 +396,8 @@ impl RenderApp {
     /// Check if a point is in the primary custom title bar area.
     /// Returns: 0 = not in title bar, 1 = drag area, 2 = close, 3 = maximize, 4 = minimize
     pub(super) fn titlebar_hit_test(&self, x: f32, y: f32) -> u32 {
-        Self::titlebar_hit_test_for_chrome(
-            &self.chrome,
-            self.width as f32 / self.scale_factor as f32,
-            x,
-            y,
-        )
+        let (logical_width, _) = self.primary_logical_size();
+        Self::titlebar_hit_test_for_chrome(self.primary_chrome(), logical_width, x, y)
     }
 
     pub(super) fn frame_window_titlebar_hit_test(

@@ -246,13 +246,7 @@ impl RenderApp {
         self.height = height;
 
         // Reconfigure surface
-        if let (Some(surface), Some(config), Some(gpu)) =
-            (&self.surface, &mut self.surface_config, &self.gpu)
-        {
-            config.width = width;
-            config.height = height;
-            surface.configure(&gpu.device, config);
-        }
+        self.configure_primary_surface(width, height);
 
         // Resize renderer
         if let Some(renderer) = &mut self.renderer {
