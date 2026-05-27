@@ -256,3 +256,66 @@ fn org_capture_clock_target_resume_and_links_combo() {
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_capture_kill_finalize_goto_marker_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (let* ((file (make-temp-file "org-capture-life" nil ".org"
+                               "* Inbox\nOld line\n* Done\n"))
+         (org-capture-templates
+          `(("e" "Entry" entry
+             (file+headline ,file "Inbox")
+             "* TODO %i\nCaptured from %f\n"
+             :empty-lines 0))))
+    (unwind-protect
+        (progn
+          (org-capture-string "transient body" "e")
+          (let ((capture-state
+                 (list (buffer-name)
+                       (buffer-narrowed-p)
+                       (marker-position org-capture-last-stored-marker)
+                       (buffer-substring-no-properties
+                        (point-min) (point-max)))))
+            (org-capture-kill)
+            (let ((after-kill
+                   (with-temp-buffer
+                     (insert-file-contents file)
+                     (buffer-string))))
+              (org-capture-string "stored body" "e")
+              (let ((before-finalize
+                     (list (buffer-name)
+                           (marker-position org-capture-last-stored-marker)
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+                (org-capture-finalize)
+                (let ((stored-pos
+                       (marker-position org-capture-last-stored-marker))
+                      (stored-buffer
+                       (buffer-name
+                        (marker-buffer org-capture-last-stored-marker)))
+                      goto-line)
+                  (org-capture-goto-last-stored)
+                  (setq goto-line
+                        (buffer-substring-no-properties
+                         (line-beginning-position)
+                         (line-end-position)))
+                  (list capture-state
+                        after-kill
+                        before-finalize
+                        stored-pos
+                        stored-buffer
+                        goto-line
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))
+      (dolist (buf '("CAPTURE-org-capture-life"
+                     "CAPTURE-org-capture-life.org"))
+        (when (get-buffer buf) (kill-buffer buf)))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (when (file-exists-p file) (delete-file file)))))"##,
+    );
+}
