@@ -685,6 +685,89 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_cycle_hidden_edit_global_font_state_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Root :root:\n")
+      (insert "Root body.\n")
+      (insert "** DONE Child :work:\n")
+      (insert "Child body.\n")
+      (insert "*** TODO Grand\n")
+      (insert "Grand body.\n")
+      (insert "**** WAIT Fourth\n")
+      (insert "Fourth body.\n")
+      (insert "***** DONE Fifth\n")
+      (insert "Fifth body.\n")
+      (insert "** NEXT Sibling\n")
+      (insert "Sibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Per-heading state capture
+      (let ((heading-state
+             (lambda ()
+               (font-lock-ensure (point-min) (point-max))
+               (let (out)
+                 (goto-char (point-min))
+                 (while (re-search-forward "^\\(\\*+\\) +\\(.*\\)$" nil t)
+                   (let ((beg (line-beginning-position)))
+                     (push (list (match-string 2)
+                                 (length (match-string 1))
+                                 (org-outline-level)
+                                 (invisible-p beg)
+                                 (get-text-property beg 'face)
+                                 (get-text-property (match-beginning 2) 'face))
+                           out)))
+                 (nreverse out)))))
+        ;; Cycle on Grand
+        (goto-char (point-min))
+        (search-forward "Grand")
+        (beginning-of-line)
+        (let ((after-cycle-1 (funcall heading-state)))
+          (org-cycle)
+          (let ((after-cycle-2 (funcall heading-state)))
+            (org-cycle)
+            (let ((after-cycle-3 (funcall heading-state)))
+              ;; Hide Fifth subtree, edit
+              (goto-char (point-min))
+              (search-forward "Fifth")
+              (beginning-of-line)
+              (org-fold-hide-subtree)
+              (end-of-line)
+              (insert "\n***** TODO Inserted under hidden Fifth\nInserted body.\n")
+              ;; Global cycles
+              (goto-char (point-min))
+              (dotimes (_ 5) (org-cycle-global))
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              ;; Check for merged headings
+              (let ((merged nil))
+                (dolist (line (split-string
+                               (buffer-substring-no-properties
+                                (point-min) (point-max))
+                               "\n" t))
+                  (when (string-match-p "^\\*+ .*\\*+ " line)
+                    (push line merged)))
+                (list after-cycle-1
+                      after-cycle-2
+                      after-cycle-3
+                      (nreverse merged)
+                      (search-forward "Inserted under hidden Fifth" nil t)
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_font_lock_todo_keyword_face_level_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
