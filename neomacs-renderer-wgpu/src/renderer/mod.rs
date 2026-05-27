@@ -349,9 +349,43 @@ pub struct RendererFrameEffects {
 }
 
 impl RendererFrameEffects {
-    pub fn is_active(&self) -> bool {
+    pub fn needs_redraw(&self) -> bool {
         self.needs_continuous_redraw
             || self.has_animated_borders
+            || !self.active_line_anims.is_empty()
+            || !self.active_window_fades.is_empty()
+            || !self.active_title_fades.is_empty()
+            || !self.border_transitions.is_empty()
+            || !self.active_mode_line_fades.is_empty()
+            || !self.active_text_fades.is_empty()
+            || !self.active_scroll_spacings.is_empty()
+            || self.cursor_wake_started.is_some()
+            || !self.cursor_magnetism_entries.is_empty()
+            || !self.cursor_comet_positions.is_empty()
+            || !self.cursor_particles.is_empty()
+            || !self.typing_heatmap_entries.is_empty()
+            || !self.scroll_velocity_fades.is_empty()
+            || self.resize_padding_started.is_some()
+            || !self.active_scroll_momentums.is_empty()
+            || !self.cursor_ghost_entries.is_empty()
+            || !self.cursor_sonar_ping_entries.is_empty()
+            || !self.lightning_bolt_segments.is_empty()
+            || self.cursor_pendulum_swing_start.is_some()
+            || !self.cursor_sparkle_burst_entries.is_empty()
+            || self.cursor_metronome_tick_start.is_some()
+            || self.cursor_ripple_ring_start.is_some()
+            || self.cursor_shockwave_start.is_some()
+            || self.cursor_bubble_spawn_time.is_some()
+            || self.cursor_firework_start.is_some()
+            || self.cursor_lightning_start.is_some()
+            || self.cursor_snowflake_start.is_some()
+            || !self.edge_glow_entries.is_empty()
+            || !self.cursor_ripple_waves.is_empty()
+            || self.has_transient_effects()
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.needs_redraw()
             || !self.active_ripples.is_empty()
             || !self.active_line_anims.is_empty()
             || !self.active_window_fades.is_empty()
@@ -407,6 +441,34 @@ impl RendererFrameEffects {
             started: now,
             duration: std::time::Duration::from_millis(duration_ms as u64),
         });
+    }
+
+    pub fn trigger_cursor_wake(&mut self, now: std::time::Instant) {
+        self.cursor_wake_started = Some(now);
+    }
+
+    pub fn trigger_resize_padding(&mut self, now: std::time::Instant) {
+        self.resize_padding_started = Some(now);
+    }
+
+    pub fn spawn_ripple(&mut self, cx: f32, cy: f32) {
+        self.active_ripples
+            .push((cx, cy, std::time::Instant::now()));
+    }
+
+    pub fn record_cursor_trail(&mut self, x: f32, y: f32, w: f32, h: f32, length: usize) {
+        let dist = ((x - self.cursor_trail_last_pos.0).powi(2)
+            + (y - self.cursor_trail_last_pos.1).powi(2))
+        .sqrt();
+        if dist < 2.0 {
+            return;
+        }
+        self.cursor_trail_positions
+            .push((x, y, w, h, std::time::Instant::now()));
+        self.cursor_trail_last_pos = (x, y);
+        while self.cursor_trail_positions.len() > length {
+            self.cursor_trail_positions.remove(0);
+        }
     }
 
     pub fn trigger_edge_snap(

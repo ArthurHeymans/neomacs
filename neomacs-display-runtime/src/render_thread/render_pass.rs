@@ -484,7 +484,7 @@ impl RenderApp {
                     native.height,
                 );
             });
-            if render.renderer_effects.is_active() {
+            if render.renderer_effects.needs_redraw() {
                 render.frame_dirty = true;
             }
 
@@ -553,7 +553,7 @@ impl RenderApp {
                     native.height,
                 );
             });
-            if render.renderer_effects.is_active() {
+            if render.renderer_effects.needs_redraw() {
                 render.frame_dirty = true;
             }
             if render.transitions.has_active() {
@@ -605,7 +605,7 @@ impl RenderApp {
                 }
             }
         });
-        if render.renderer_effects.is_active() {
+        if render.renderer_effects.needs_redraw() {
             render.frame_dirty = true;
         }
 
@@ -625,7 +625,7 @@ impl RenderApp {
                 scroll_indicators_enabled,
             );
         });
-        if render.renderer_effects.is_active() {
+        if render.renderer_effects.needs_redraw() {
             render.frame_dirty = true;
         }
 
@@ -782,7 +782,7 @@ impl RenderApp {
                 bg_gradient,
             );
         });
-        let renderer_effects_still_active = render.renderer_effects.is_active();
+        let renderer_effects_still_active = render.renderer_effects.needs_redraw();
 
         if !include_overlays {
             render.frame_dirty = renderer_effects_still_active;
@@ -916,24 +916,40 @@ impl RenderApp {
                 let renderer = self.renderer.as_mut().expect("checked in render");
                 let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
 
-                // SAFETY: current_view is valid for the duration of this block
-                renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
-                renderer.render_frame_glyphs(
-                    unsafe { &*current_view },
-                    frame,
-                    glyph_atlas,
-                    &self.faces,
-                    self.width,
-                    self.height,
-                    self.cursor.blink_on,
-                    root_animated_cursor,
-                    self.mouse_pos,
-                    bg_gradient,
-                );
+                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                    renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
+                    renderer.render_frame_glyphs(
+                        unsafe { &*current_view },
+                        frame,
+                        glyph_atlas,
+                        &self.faces,
+                        self.width,
+                        self.height,
+                        self.cursor.blink_on,
+                        root_animated_cursor,
+                        self.mouse_pos,
+                        bg_gradient,
+                    );
+                });
             }
 
             // Detect transitions (compare window_infos)
-            self.detect_transitions();
+            if let Some(renderer) = self.renderer.as_mut() {
+                renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                    detect_frame_transitions(
+                        renderer,
+                        &mut self.transitions,
+                        &self.effects.clone(),
+                        self.current_frame.as_mut().expect("checked in render"),
+                        &mut self.frame_dirty,
+                        self.width,
+                        self.height,
+                    );
+                });
+            }
+            if self.renderer_effects.needs_redraw() {
+                self.frame_dirty = true;
+            }
 
             // Blit current offscreen to surface
             if let Some((_, current_bg)) = self
@@ -957,19 +973,24 @@ impl RenderApp {
             let renderer = self.renderer.as_mut().expect("checked in render");
             let glyph_atlas = self.glyph_atlas.as_mut().expect("checked in render");
 
-            renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
-            renderer.render_frame_glyphs(
-                &surface_view,
-                frame,
-                glyph_atlas,
-                &self.faces,
-                self.width,
-                self.height,
-                self.cursor.blink_on,
-                root_animated_cursor,
-                self.mouse_pos,
-                bg_gradient,
-            );
+            renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                renderer.set_idle_dim_alpha(self.idle_dim.current_alpha);
+                renderer.render_frame_glyphs(
+                    &surface_view,
+                    frame,
+                    glyph_atlas,
+                    &self.faces,
+                    self.width,
+                    self.height,
+                    self.cursor.blink_on,
+                    root_animated_cursor,
+                    self.mouse_pos,
+                    bg_gradient,
+                );
+            });
+        }
+        if self.renderer_effects.needs_redraw() {
+            self.frame_dirty = true;
         }
 
         // Render child frames as floating overlays on top of the parent frame
@@ -977,30 +998,35 @@ impl RenderApp {
             for &child_id in self.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = self.child_frames.frames.get(&child_id) {
                     if let (Some(renderer), Some(glyph_atlas)) =
-                        (&self.renderer, &mut self.glyph_atlas)
+                        (&mut self.renderer, &mut self.glyph_atlas)
                     {
                         // Pass animated cursor only if it belongs to this child frame
                         let child_anim = animated_cursor.filter(|ac| ac.frame_id == child_id);
-                        renderer.render_child_frame(
-                            &surface_view,
-                            &child_entry.frame,
-                            child_entry.abs_x,
-                            child_entry.abs_y,
-                            glyph_atlas,
-                            &self.faces,
-                            self.width,
-                            self.height,
-                            self.cursor.blink_on,
-                            child_anim,
-                            self.child_frame_corner_radius,
-                            self.child_frame_shadow_enabled,
-                            self.child_frame_shadow_layers,
-                            self.child_frame_shadow_offset,
-                            self.child_frame_shadow_opacity,
-                        );
+                        renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                            renderer.render_child_frame(
+                                &surface_view,
+                                &child_entry.frame,
+                                child_entry.abs_x,
+                                child_entry.abs_y,
+                                glyph_atlas,
+                                &self.faces,
+                                self.width,
+                                self.height,
+                                self.cursor.blink_on,
+                                child_anim,
+                                self.child_frame_corner_radius,
+                                self.child_frame_shadow_enabled,
+                                self.child_frame_shadow_layers,
+                                self.child_frame_shadow_offset,
+                                self.child_frame_shadow_opacity,
+                            );
+                        });
                     }
                 }
             }
+        }
+        if self.renderer_effects.needs_redraw() {
+            self.frame_dirty = true;
         }
 
         // Render floating WebKit overlays above frame contents but below GUI chrome.
@@ -1016,15 +1042,20 @@ impl RenderApp {
             &mut self.glyph_atlas,
             &self.current_frame,
         ) {
-            Self::render_frame_common_overlays(
-                renderer,
-                &surface_view,
-                frame,
-                glyph_atlas,
-                self.width,
-                self.height,
-                self.scroll_indicators_enabled,
-            );
+            renderer.with_frame_effects(&mut self.renderer_effects, |renderer| {
+                Self::render_frame_common_overlays(
+                    renderer,
+                    &surface_view,
+                    frame,
+                    glyph_atlas,
+                    self.width,
+                    self.height,
+                    self.scroll_indicators_enabled,
+                );
+            });
+        }
+        if self.renderer_effects.needs_redraw() {
+            self.frame_dirty = true;
         }
 
         tracing::trace!(

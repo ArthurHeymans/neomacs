@@ -126,8 +126,8 @@ impl RenderApp {
             self.cursor.blink_on = !self.cursor.blink_on;
             self.cursor.last_blink_toggle = now;
             if was_off && self.cursor.blink_on && self.effects.cursor_wake.enabled {
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.trigger_cursor_wake(now);
+                if let Some(renderer) = self.renderer.as_ref() {
+                    renderer.trigger_transient_cursor_wake(&mut self.renderer_effects, now);
                 }
             }
             true

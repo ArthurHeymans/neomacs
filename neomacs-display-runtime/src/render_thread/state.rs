@@ -10,7 +10,9 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::{MenuBarItem, RenderComms, TabBarItem, ToolBarItem};
 use neomacs_display_protocol::EffectsConfig;
-use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRenderer};
+use neomacs_renderer_wgpu::{
+    PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
+};
 use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
@@ -306,6 +308,8 @@ pub(super) struct RenderApp {
 
     // Window transition state (crossfade, scroll)
     pub(super) transitions: TransitionState,
+    /// Renderer runtime effects owned by the primary GUI frame window.
+    pub(super) renderer_effects: RendererFrameEffects,
 
     // WebKit state (video cache is managed by renderer)
     #[cfg(feature = "wpe-webkit")]
@@ -447,6 +451,7 @@ impl RenderApp {
             visual_cursors: HashMap::new(),
             effects: EffectsConfig::default(),
             transitions: TransitionState::default(),
+            renderer_effects: RendererFrameEffects::default(),
             #[cfg(feature = "wpe-webkit")]
             wpe_backend: None,
             #[cfg(feature = "wpe-webkit")]

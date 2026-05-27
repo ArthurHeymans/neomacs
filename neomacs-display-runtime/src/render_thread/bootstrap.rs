@@ -213,8 +213,11 @@ impl RenderApp {
 
         // Trigger resize padding transition
         if self.effects.resize_padding.enabled {
-            if let Some(renderer) = self.renderer.as_mut() {
-                renderer.trigger_resize_padding(std::time::Instant::now());
+            if let Some(renderer) = self.renderer.as_ref() {
+                renderer.trigger_transient_resize_padding(
+                    &mut self.renderer_effects,
+                    std::time::Instant::now(),
+                );
             }
         }
 

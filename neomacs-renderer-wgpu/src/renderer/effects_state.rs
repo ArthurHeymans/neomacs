@@ -84,7 +84,7 @@ impl WgpuRenderer {
 
     /// Trigger a cursor wake animation
     pub fn trigger_cursor_wake(&mut self, now: std::time::Instant) {
-        self.cursor_wake_started = Some(now);
+        self.primary_frame_effects_mut().trigger_cursor_wake(now);
     }
 
     /// Trigger edge snap indicator
@@ -154,7 +154,7 @@ impl WgpuRenderer {
 
     /// Trigger resize padding animation
     pub fn trigger_resize_padding(&mut self, now: std::time::Instant) {
-        self.resize_padding_started = Some(now);
+        self.primary_frame_effects_mut().trigger_resize_padding(now);
     }
 
     /// Get current resize padding amount (eases from max to 0)
@@ -214,6 +214,41 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         effects.trigger_cursor_error_pulse(now);
+    }
+
+    pub fn trigger_transient_cursor_wake(
+        &self,
+        effects: &mut RendererFrameEffects,
+        now: std::time::Instant,
+    ) {
+        effects.trigger_cursor_wake(now);
+    }
+
+    pub fn trigger_transient_resize_padding(
+        &self,
+        effects: &mut RendererFrameEffects,
+        now: std::time::Instant,
+    ) {
+        effects.trigger_resize_padding(now);
+    }
+
+    pub fn spawn_transient_ripple(&self, effects: &mut RendererFrameEffects, cx: f32, cy: f32) {
+        if self.effects.typing_ripple.enabled {
+            effects.spawn_ripple(cx, cy);
+        }
+    }
+
+    pub fn record_transient_cursor_trail(
+        &self,
+        effects: &mut RendererFrameEffects,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    ) {
+        if self.effects.cursor_trail_fade.enabled {
+            effects.record_cursor_trail(x, y, w, h, self.effects.cursor_trail_fade.length);
+        }
     }
 
     pub fn with_frame_effects<R>(
@@ -587,19 +622,9 @@ impl WgpuRenderer {
         if !self.effects.cursor_trail_fade.enabled {
             return;
         }
-        let dist = ((x - self.cursor_trail_last_pos.0).powi(2)
-            + (y - self.cursor_trail_last_pos.1).powi(2))
-        .sqrt();
-        if dist < 2.0 {
-            return;
-        } // Skip tiny movements
-        self.cursor_trail_positions
-            .push((x, y, w, h, std::time::Instant::now()));
-        self.cursor_trail_last_pos = (x, y);
-        // Trim to max length
-        while self.cursor_trail_positions.len() > self.effects.cursor_trail_fade.length {
-            self.cursor_trail_positions.remove(0);
-        }
+        let length = self.effects.cursor_trail_fade.length;
+        self.primary_frame_effects_mut()
+            .record_cursor_trail(x, y, w, h, length);
     }
 
     /// Update idle dim alpha
@@ -656,8 +681,7 @@ impl WgpuRenderer {
     /// Spawn a new ripple at the given position
     pub fn spawn_ripple(&mut self, cx: f32, cy: f32) {
         if self.effects.typing_ripple.enabled {
-            self.active_ripples
-                .push((cx, cy, std::time::Instant::now()));
+            self.primary_frame_effects_mut().spawn_ripple(cx, cy);
         }
     }
 
@@ -715,6 +739,36 @@ impl RendererFrameEffectsRef<'_> {
 
     fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
         self.renderer.cursor_error_pulse_started = Some(now);
+    }
+
+    fn trigger_cursor_wake(&mut self, now: std::time::Instant) {
+        self.renderer.cursor_wake_started = Some(now);
+    }
+
+    fn trigger_resize_padding(&mut self, now: std::time::Instant) {
+        self.renderer.resize_padding_started = Some(now);
+    }
+
+    fn spawn_ripple(&mut self, cx: f32, cy: f32) {
+        self.renderer
+            .active_ripples
+            .push((cx, cy, std::time::Instant::now()));
+    }
+
+    fn record_cursor_trail(&mut self, x: f32, y: f32, w: f32, h: f32, length: usize) {
+        let dist = ((x - self.renderer.cursor_trail_last_pos.0).powi(2)
+            + (y - self.renderer.cursor_trail_last_pos.1).powi(2))
+        .sqrt();
+        if dist < 2.0 {
+            return;
+        }
+        self.renderer
+            .cursor_trail_positions
+            .push((x, y, w, h, std::time::Instant::now()));
+        self.renderer.cursor_trail_last_pos = (x, y);
+        while self.renderer.cursor_trail_positions.len() > length {
+            self.renderer.cursor_trail_positions.remove(0);
+        }
     }
 }
 
