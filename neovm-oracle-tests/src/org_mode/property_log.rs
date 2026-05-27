@@ -314,3 +314,72 @@ fn org_property_space_multivalue_cleanup_parse_combo() {
                    (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_startup_log_options_todo_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-todo-keywords
+           '((sequence "TODO(t)" "WAIT(w@/!)" "|" "DONE(d!)" "CANCELED(c@)")))
+          (org-log-note-headings
+           '((done . "DONE %-12s from %-12S %t")
+             (state . "STATE %-12s from %-12S %t")
+             (note . "NOTE %t")))
+          (org-log-note-clock-out nil))
+      (org-mode)
+      (insert "#+STARTUP: logdrawer lognotedone lognoterepeat nologreschedule logredeadline nologstatesreversed\n")
+      (insert "#+PROPERTY: Owner_ALL Ada Bea Cy\n")
+      (insert "* TODO Parent :project:\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:END:\n")
+      (insert "** TODO Child\n")
+      (insert "SCHEDULED: <2026-05-27 Wed +1w>\n")
+      (insert "DEADLINE: <2026-05-28 Thu>\n")
+      (goto-char (point-min))
+      (org-set-regexps-and-options)
+      (let ((startup-settings
+             (list org-log-into-drawer
+                   org-log-done
+                   org-log-repeat
+                   org-log-reschedule
+                   org-log-redeadline
+                   org-log-states-order-reversed)))
+        (search-forward "Child")
+        (beginning-of-line)
+        (let ((inherited-owner (org-entry-get nil "Owner" 'inherit))
+              (allowed-owner
+               (org-property-get-allowed-values nil "Owner" 'table)))
+          (org-set-property "Owner" "Bea")
+          (org-schedule nil "2026-06-03")
+          (org-deadline nil "2026-06-04")
+          (org-todo "WAIT")
+          (when (and (boundp 'org-log-note-marker)
+                     org-log-note-marker
+                     (marker-buffer org-log-note-marker))
+            (with-current-buffer (marker-buffer org-log-note-marker)
+              (goto-char org-log-note-marker)
+              (insert "Waiting on review")
+              (org-add-log-note)))
+          (org-todo "DONE")
+          (when (and (boundp 'org-log-note-marker)
+                     org-log-note-marker
+                     (marker-buffer org-log-note-marker))
+            (with-current-buffer (marker-buffer org-log-note-marker)
+              (goto-char org-log-note-marker)
+              (insert "Finished after review")
+              (org-add-log-note)))
+          (list startup-settings
+                inherited-owner
+                allowed-owner
+                (org-entry-properties nil 'standard)
+                (org-log-beginning nil)
+                (replace-regexp-in-string
+                 "\\[[0-9][^]\n]+\\]"
+                 "[stamp]"
+                 (buffer-substring-no-properties
+                  (point-min) (point-max))))))))"##,
+    );
+}
