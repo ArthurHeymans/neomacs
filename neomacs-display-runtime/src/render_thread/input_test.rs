@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::render_thread::frame_windows::GuiFrameRenderState;
-use crate::thread_comm::ToolBarItem;
+use crate::thread_comm::{MenuBarItem, ToolBarItem};
 use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 use winit::keyboard::{Key, NamedKey, SmolStr};
@@ -154,6 +154,52 @@ fn toolbar_hit_test_uses_toolbar_local_y() {
         app.toolbar_hit_test(7.0, app.toolbar_y_origin() + 16.0),
         None
     );
+}
+
+#[test]
+fn menu_bar_hit_test_uses_shared_item_geometry() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.menu_bar = Some(GuiMenuBarState {
+        items: vec![MenuBarItem {
+            index: 11,
+            label: "File".to_string(),
+            key: "file".to_string(),
+        }],
+        height: 24.0,
+        fg: (0.0, 0.0, 0.0),
+        bg: (0.0, 0.0, 0.0),
+    });
+
+    assert_eq!(app.menu_bar_hit_test(12.0, 12.0), Some(11));
+    assert_eq!(app.menu_bar_hit_test(12.0, 30.0), None);
+}
+
+#[test]
+fn compact_bar_tool_hit_test_offsets_after_menu_items() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    primary_frame.compact_bar = Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
+        menu_items: vec![MenuBarItem {
+            index: 1,
+            label: "File".to_string(),
+            key: "file".to_string(),
+        }],
+        tool_items: vec![toolbar_item(9)],
+        height: 30.0,
+        menu_fg: (0.0, 0.0, 0.0),
+        menu_bg: (0.0, 0.0, 0.0),
+        tool_fg: (0.0, 0.0, 0.0),
+        tool_bg: (0.0, 0.0, 0.0),
+    });
+    let x = app.compact_bar_menu_width() + app.toolbar_padding as f32 + 1.0;
+
+    assert_eq!(app.compact_bar_tool_hit_test(x, 12.0), Some(9));
+    assert_eq!(app.compact_bar_tool_hit_test(1.0, 12.0), None);
 }
 
 // ===================================================================

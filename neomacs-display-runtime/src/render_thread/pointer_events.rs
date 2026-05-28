@@ -2,9 +2,12 @@
 
 use super::RenderApp;
 use super::frame_windows::GuiFrameWindowState;
+use super::input::{
+    compact_bar_menu_width, menu_bar_hit_test_items, tab_bar_hit_test_items, toolbar_hit_test_items,
+};
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
-use crate::thread_comm::{InputEvent, MenuBarItem, TabBarItem, ToolBarItem};
+use crate::thread_comm::InputEvent;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use winit::window::WindowId;
@@ -26,94 +29,6 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
                 return Some((*webkit_id, (x - *wx) as i32, (y - *wy) as i32));
             }
         }
-    }
-    None
-}
-
-fn menu_bar_hit_test_items(
-    items: &[MenuBarItem],
-    height: f32,
-    char_width: f32,
-    x: f32,
-    y: f32,
-) -> Option<u32> {
-    if height <= 0.0 || y >= height || items.is_empty() {
-        return None;
-    }
-    let padding_x = 8.0_f32;
-    let mut item_x = padding_x;
-    for item in items {
-        let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
-        if x >= item_x && x < item_x + label_width {
-            return Some(item.index);
-        }
-        item_x += label_width;
-    }
-    None
-}
-
-fn toolbar_hit_test_items(
-    items: &[ToolBarItem],
-    height: f32,
-    padding: u32,
-    icon_size: u32,
-    x: f32,
-    y: f32,
-) -> Option<u32> {
-    if height <= 0.0 || y >= height || items.is_empty() {
-        return None;
-    }
-    let padding = padding as f32;
-    let icon_size = icon_size as f32;
-    let item_size = icon_size + padding * 2.0;
-    let separator_width = 12.0_f32;
-    let item_spacing = 2.0_f32;
-    let mut item_x = padding;
-    for item in items {
-        if item.is_separator {
-            item_x += separator_width;
-            continue;
-        }
-        let right = item_x + item_size;
-        if x >= item_x && x < right {
-            return Some(item.index);
-        }
-        item_x = right + item_spacing;
-    }
-    None
-}
-
-fn compact_bar_menu_width(items: &[MenuBarItem], char_width: f32) -> f32 {
-    let padding_x = 8.0_f32;
-    let menu_width = items.iter().fold(padding_x, |x, item| {
-        x + item.label.len() as f32 * char_width + padding_x * 2.0
-    });
-    menu_width + padding_x
-}
-
-fn tab_bar_hit_test_items(
-    items: &[TabBarItem],
-    height: f32,
-    char_width: f32,
-    x: f32,
-    y: f32,
-) -> Option<u32> {
-    if height <= 0.0 || y >= height || items.is_empty() {
-        return None;
-    }
-    let padding_x = 8.0_f32;
-    let tab_padding = 12.0_f32;
-    let mut tab_x = padding_x;
-    for item in items {
-        if item.is_separator {
-            tab_x += 12.0;
-            continue;
-        }
-        let tab_width = item.label.len() as f32 * char_width + tab_padding * 2.0;
-        if x >= tab_x && x < tab_x + tab_width {
-            return Some(item.index);
-        }
-        tab_x += tab_width + 2.0;
     }
     None
 }
