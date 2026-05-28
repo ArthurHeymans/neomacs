@@ -1080,6 +1080,70 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_results_edit_reexecute_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source: generate table
+      (insert "#+NAME: gen-table\n")
+      (insert "#+begin_src emacs-lisp :results value table replace\n")
+      (insert "(list '(\"Name\" \"Score\")\n")
+      (insert "      'hline\n")
+      (insert "      '(\"Alice\" 85)\n")
+      (insert "      '(\"Bob\" 92)\n")
+      (insert "      '(\"Carol\" 78))\n")
+      (insert "#+end_src\n\n")
+      ;; Transform: add grade column
+      (insert "#+NAME: graded\n")
+      (insert "#+begin_src emacs-lisp :var data=gen-table :results value table replace\n")
+      (insert "(cons '(\"Name\" \"Score\" \"Grade\")\n")
+      (insert "      (cons 'hline\n")
+      (insert "            (mapcar (lambda (r)\n")
+      (insert "                      (list (car r) (cadr r)\n")
+      (insert "                            (if (>= (cadr r) 90) \"A\"\n")
+      (insert "                              (if (>= (cadr r) 80) \"B\" \"C\"))))\n")
+      (insert "                    (cdr (memq 'hline data)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("gen-table" "graded"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Edit: change Bob score to 95
+        (goto-char (point-min))
+        (search-forward "(\"Bob\" 92)")
+        (replace-match "(\"Bob\" 95)")
+        ;; Re-execute
+        (dolist (name '("gen-table" "graded"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((results2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) results2))
+          (list (nreverse results1)
+                (nreverse results2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_header_args_results_format_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
