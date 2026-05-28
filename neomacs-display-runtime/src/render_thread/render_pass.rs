@@ -718,6 +718,35 @@ impl RenderApp {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn render_frame_root_glyphs(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+    ) {
+        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            renderer.set_idle_dim_alpha(render.idle_dim.current_alpha);
+            renderer.render_frame_glyphs(
+                surface_view,
+                frame,
+                &mut render.glyph_atlas,
+                faces,
+                native.width,
+                native.height,
+                cursor_visible,
+                root_animated_cursor,
+                render.mouse_pos,
+                bg_gradient,
+            );
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn render_frame_content_overlays(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
@@ -802,21 +831,17 @@ impl RenderApp {
         child_frame_shadow_opacity: f32,
         scroll_indicators_enabled: bool,
     ) {
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            renderer.set_idle_dim_alpha(render.idle_dim.current_alpha);
-            renderer.render_frame_glyphs(
-                surface_view,
-                frame,
-                &mut render.glyph_atlas,
-                faces,
-                native.width,
-                native.height,
-                cursor_visible,
-                root_animated_cursor,
-                render.mouse_pos,
-                bg_gradient,
-            );
-        });
+        Self::render_frame_root_glyphs(
+            renderer,
+            faces,
+            native,
+            render,
+            surface_view,
+            frame,
+            cursor_visible,
+            root_animated_cursor,
+            bg_gradient,
+        );
         let renderer_effects_still_active = render.renderer_effects.needs_redraw();
 
         if !include_overlays {
@@ -956,34 +981,25 @@ impl RenderApp {
                 .current_offscreen_view_and_bg()
                 .map(|(v, bg)| (v as *const wgpu::TextureView, bg))
             {
-                let primary_frame = &mut self
+                let primary_window = self
                     .frame_windows
                     .primary_window_mut()
-                    .expect("checked in render")
-                    .render;
-                let frame = primary_frame
-                    .current_frame
-                    .as_ref()
                     .expect("checked in render");
+                let GuiFrameWindowState { native, render } = primary_window;
+                let frame = render.current_frame.clone().expect("checked in render");
                 let renderer = self.renderer.as_mut().expect("checked in render");
-                let glyph_atlas = &mut primary_frame.glyph_atlas;
-                let mouse_pos = primary_frame.mouse_pos;
-
-                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
-                    renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
-                    renderer.render_frame_glyphs(
-                        unsafe { &*current_view },
-                        frame,
-                        glyph_atlas,
-                        &self.faces,
-                        primary_width,
-                        primary_height,
-                        primary_frame.cursor.blink_on,
-                        root_animated_cursor,
-                        mouse_pos,
-                        bg_gradient,
-                    );
-                });
+                let cursor_visible = render.cursor.blink_on;
+                Self::render_frame_root_glyphs(
+                    renderer,
+                    &self.faces,
+                    native,
+                    render,
+                    unsafe { &*current_view },
+                    &frame,
+                    cursor_visible,
+                    root_animated_cursor,
+                    bg_gradient,
+                );
             }
 
             // Detect transitions (compare window_infos)
@@ -1031,34 +1047,25 @@ impl RenderApp {
             self.render_transitions(&surface_view);
         } else {
             // Simple path: render directly to surface
-            let primary_frame = &mut self
+            let primary_window = self
                 .frame_windows
                 .primary_window_mut()
-                .expect("checked in render")
-                .render;
-            let frame = primary_frame
-                .current_frame
-                .as_ref()
                 .expect("checked in render");
+            let GuiFrameWindowState { native, render } = primary_window;
+            let frame = render.current_frame.clone().expect("checked in render");
             let renderer = self.renderer.as_mut().expect("checked in render");
-            let glyph_atlas = &mut primary_frame.glyph_atlas;
-            let mouse_pos = primary_frame.mouse_pos;
-
-            renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
-                renderer.set_idle_dim_alpha(primary_frame.idle_dim.current_alpha);
-                renderer.render_frame_glyphs(
-                    &surface_view,
-                    frame,
-                    glyph_atlas,
-                    &self.faces,
-                    primary_width,
-                    primary_height,
-                    primary_frame.cursor.blink_on,
-                    root_animated_cursor,
-                    mouse_pos,
-                    bg_gradient,
-                );
-            });
+            let cursor_visible = render.cursor.blink_on;
+            Self::render_frame_root_glyphs(
+                renderer,
+                &self.faces,
+                native,
+                render,
+                &surface_view,
+                &frame,
+                cursor_visible,
+                root_animated_cursor,
+                bg_gradient,
+            );
         }
         if let Some(primary_frame) = self.primary_render_state_mut()
             && primary_frame.renderer_effects.needs_redraw()
