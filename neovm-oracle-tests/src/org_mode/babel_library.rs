@@ -1080,6 +1080,63 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_list_table_join_aggregate_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Prices
+      (insert "#+NAME: prices\n")
+      (insert "| ID | Name | Price |\n")
+      (insert("|----+------+-------|\n")
+      (insert "| 1 | Pa | 5 |\n")
+      (insert "| 2 | Pb | 10 |\n")
+      (insert "| 3 | Pc | 15 |\n\n")
+      ;; Orders
+      (insert "#+NAME: orders\n")
+      (insert "| ID | Qty |\n")
+      (insert("|----+-----|\n")
+      (insert "| 1 | 3 |\n")
+      (insert "| 2 | 2 |\n")
+      (insert "| 3 | 4 |\n\n")
+      ;; Join and compute
+      (insert "#+NAME: invoices\n")
+      (insert "#+begin_src emacs-lisp :var p=prices o=orders :results value replace\n")
+      (insert "(let ((rows (mapcar\n")
+      (insert "              (lambda (order)\n")
+      (insert "                (let* ((id (car order))\n")
+      (insert "                       (qty (cadr order))\n")
+      (insert "                       (prod (assoc id p))\n")
+      (insert "                       (name (cadr prod))\n")
+      (insert "                       (price (caddr prod)))\n")
+      (insert "                  (list name qty price (* qty price))))\n")
+      (insert "              o)))\n")
+      (insert "  (list :rows rows\n")
+      (insert "        :total (apply #'+ (mapcar #'cadddr rows))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "invoices")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
