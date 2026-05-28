@@ -533,6 +533,13 @@ impl RenderApp {
         self.set_primary_dirty(true);
     }
 
+    pub(super) fn mark_top_level_frame_windows_dirty(&mut self) {
+        self.mark_primary_dirty();
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state.render.frame_dirty = true;
+        }
+    }
+
     pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.frame_dirty = dirty;

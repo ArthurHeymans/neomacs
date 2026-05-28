@@ -22,12 +22,6 @@ pub(super) fn toolbar_visual_config_for_height(height: f32) -> (u32, u32) {
 }
 
 impl RenderApp {
-    fn mark_frame_windows_dirty(&mut self) {
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.frame_dirty = true;
-        }
-    }
-
     pub(super) fn set_toolbar_visual_config(&mut self, icon_size: u32, padding: u32) {
         if self.toolbar_icon_size == icon_size && self.toolbar_padding == padding {
             return;
@@ -439,8 +433,7 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }
-                self.mark_frame_windows_dirty();
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorEffect(command) => {
@@ -448,14 +441,12 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }
-                self.mark_frame_windows_dirty();
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetScrollIndicators { enabled } => {
                 self.scroll_indicators_enabled = enabled;
-                self.mark_frame_windows_dirty();
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetTitlebarHeight { height } => {
