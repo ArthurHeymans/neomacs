@@ -486,3 +486,62 @@ fn org_sparse_tree_tag_todo_match_edit_occur_combo() {
                    (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_sparse_tree_todo_tag_edit_resparse_occur_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-occur)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha :work:\nBody alpha.\n\n")
+    (insert "** DONE Beta :home:\nBody beta.\n\n")
+    (insert "*** TODO Gamma :work:\nBody gamma.\n\n")
+    (insert "** WAIT Delta :home:\nBody delta.\n\n")
+    (insert "* DONE Epsilon :work:\nBody epsilon.\n\n")
+    (insert "* TODO Zeta :work:\nBody zeta.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (pos)
+                    (save-excursion
+                      (goto-char pos)
+                      (list (buffer-substring-no-properties
+                             (line-beginning-position) (line-end-position))
+                            (invisible-p pos))))
+                  (let ((positions nil))
+                    (goto-char (point-min))
+                    (while (not (eobp))
+                      (push (point) positions)
+                      (forward-line 1))
+                    (nreverse positions)))))))
+      ;; Sparse tree for TODO
+      (let ((before-vis (funcall vis)))
+        (org-match-sparse-tree nil "TODO")
+        (let ((after-todo-vis (funcall vis)))
+          ;; Edit: change Zeta to DONE
+          (goto-char (point-min))
+          (search-forward "TODO Zeta")
+          (replace-match "DONE Zeta")
+          ;; Re-sparse
+          (org-match-sparse-tree nil "TODO")
+          (let ((after-resparse-vis (funcall vis)))
+            ;; Sparse by tag
+            (org-tags-view nil "work")
+            (let ((tag-vis (funcall vis)))
+              ;; Occur for "Body"
+              (goto-char (point-min))
+              (occur "Body")
+              (let ((occur-count (length org-occur-highlights)))
+                (org-remove-occur-highlights)
+                (list before-vis
+                      after-todo-vis
+                      after-resparse-vis
+                      tag-vis
+                      occur-count
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
