@@ -833,4 +833,25 @@ impl RenderApp {
             );
         }
     }
+
+    pub(super) fn sync_top_level_cursor_config_from_defaults(&mut self) {
+        self.sync_primary_cursor_config_from_defaults();
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state
+                .render
+                .cursor
+                .copy_config_from(&self.cursor_defaults);
+            window_state.render.frame_dirty = true;
+        }
+    }
+
+    pub(super) fn sync_top_level_cursor_config_from_defaults_without_dirty(&mut self) {
+        self.sync_primary_cursor_config_from_defaults();
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state
+                .render
+                .cursor
+                .copy_config_from(&self.cursor_defaults);
+        }
+    }
 }

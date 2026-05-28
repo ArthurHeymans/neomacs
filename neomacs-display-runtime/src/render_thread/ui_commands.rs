@@ -83,13 +83,9 @@ impl RenderApp {
                     }
                     self.mark_primary_dirty();
                 }
-                self.sync_primary_cursor_config_from_defaults();
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state
-                        .render
-                        .cursor
-                        .copy_config_from(&self.cursor_defaults);
-                    if !enabled {
+                self.sync_top_level_cursor_config_from_defaults_without_dirty();
+                if !enabled {
+                    for window_state in self.frame_windows.windows.values_mut() {
                         window_state.render.cursor.blink_on = true;
                         window_state.render.frame_dirty = true;
                     }
@@ -106,14 +102,7 @@ impl RenderApp {
                         cursor.animating = false;
                     }
                 }
-                self.sync_primary_cursor_config_from_defaults();
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state
-                        .render
-                        .cursor
-                        .copy_config_from(&self.cursor_defaults);
-                    window_state.render.frame_dirty = true;
-                }
+                self.sync_top_level_cursor_config_from_defaults();
                 Ok(())
             }
             RenderCommand::SetAnimationConfig {
@@ -154,12 +143,8 @@ impl RenderApp {
                         cursor.animating = false;
                     }
                 }
-                self.sync_primary_cursor_config_from_defaults();
+                self.sync_top_level_cursor_config_from_defaults();
                 for window_state in self.frame_windows.windows.values_mut() {
-                    window_state
-                        .render
-                        .cursor
-                        .copy_config_from(&self.cursor_defaults);
                     window_state.render.transitions.policy = transition_policy;
                     window_state.render.frame_dirty = true;
                 }
@@ -519,14 +504,7 @@ impl RenderApp {
                         cursor.size_animating = false;
                     }
                 }
-                self.sync_primary_cursor_config_from_defaults();
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state
-                        .render
-                        .cursor
-                        .copy_config_from(&self.cursor_defaults);
-                    window_state.render.frame_dirty = true;
-                }
+                self.sync_top_level_cursor_config_from_defaults();
                 self.mark_primary_dirty();
                 Ok(())
             }
