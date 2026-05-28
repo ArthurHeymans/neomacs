@@ -192,6 +192,19 @@ impl GuiFrameRenderState {
         }
     }
 
+    pub(super) fn with_chrome_interaction_mut(
+        &mut self,
+        f: impl FnOnce(&mut GuiChromeInteractionState),
+    ) -> bool {
+        let previous = self.chrome_interaction;
+        f(&mut self.chrome_interaction);
+        let changed = self.chrome_interaction != previous;
+        if changed {
+            self.frame_dirty = true;
+        }
+        changed
+    }
+
     pub(super) fn trigger_visual_bell(
         &mut self,
         cursor_error_pulse_enabled: bool,

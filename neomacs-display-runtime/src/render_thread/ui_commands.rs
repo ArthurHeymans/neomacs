@@ -189,16 +189,7 @@ impl RenderApp {
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
                 self.hide_top_level_popup_menus();
-                let mut primary_chrome_dirty = false;
-                self.with_primary_chrome_interaction_mut(|chrome| {
-                    if chrome.menu_bar_active.is_some() {
-                        chrome.menu_bar_active = None;
-                        primary_chrome_dirty = true;
-                    }
-                });
-                if primary_chrome_dirty {
-                    self.mark_primary_dirty();
-                }
+                self.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None);
                 Ok(())
             }
             RenderCommand::ShowTooltip {

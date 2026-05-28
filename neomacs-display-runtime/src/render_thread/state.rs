@@ -857,9 +857,11 @@ impl RenderApp {
     pub(super) fn with_primary_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
-    ) {
+    ) -> bool {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            f(&mut primary_frame.chrome_interaction);
+            primary_frame.with_chrome_interaction_mut(f)
+        } else {
+            false
         }
     }
 
