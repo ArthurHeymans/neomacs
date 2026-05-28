@@ -1080,6 +1080,69 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_multi_format_results_edit_reexecute_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Scalar result
+      (insert "#+NAME: scalar\n")
+      (insert "#+begin_src emacs-lisp :results scalar replace\n")
+      (insert "(+ 1 2 3 4 5)\n")
+      (insert "#+end_src\n\n")
+      ;; List result
+      (insert "#+NAME: list-res\n")
+      (insert "#+begin_src emacs-lisp :results list replace\n")
+      (insert "'(a b c d e)\n")
+      (insert "#+end_src\n\n")
+      ;; Table result
+      (insert "#+NAME: table-res\n")
+      (insert "#+begin_src emacs-lisp :results table replace\n")
+      (insert "(list '(\"X\" \"Y\") 'hline '(1 2) '(3 4) '(5 6))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dolist (name '("scalar" "list-res" "table-res"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Edit: change scalar
+        (goto-char (point-min))
+        (search-forward "(+ 1 2 3 4 5)")
+        (replace-match "(+ 10 20 30)")
+        ;; Edit: change list
+        (goto-char (point-min))
+        (search-forward "'(a b c d e)")
+        (replace-match "'(x y z)")
+        ;; Re-execute
+        (dolist (name '("scalar" "list-res" "table-res"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((results2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) results2))
+          (list (nreverse results1)
+                (nreverse results2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_list_results_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
