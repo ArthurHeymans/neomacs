@@ -1,7 +1,8 @@
 use super::super::eval::Context;
 use super::*;
 use crate::emacs_core::builtins::{
-    builtin_current_buffer, builtin_get_pos_property, builtin_make_indirect_buffer,
+    builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
+    builtin_make_indirect_buffer,
 };
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -139,6 +140,51 @@ fn indirect_buffers_share_text_property_updates() {
     )
     .unwrap();
     assert!(via_base.is_nil());
+}
+
+#[test]
+fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let key = Value::string("C-u");
+    let mut props = crate::buffer::text_props::TextPropertyTable::new();
+    props.put_property(
+        0,
+        3,
+        Value::symbol("face"),
+        Value::symbol("help-key-binding"),
+    );
+    props.put_property(
+        0,
+        3,
+        Value::symbol("font-lock-face"),
+        Value::symbol("help-key-binding"),
+    );
+    crate::emacs_core::value::set_string_text_properties_table_for_value(key, props);
+
+    builtin_insert(&mut eval, vec![key]).expect("insert propertized string");
+    builtin_insert(&mut eval, vec![Value::string("' rest")]).expect("insert plain string");
+    builtin_goto_char(&mut eval, vec![Value::fixnum(4)]).expect("goto inserted quote");
+    builtin_insert(&mut eval, vec![Value::string("X")]).expect("insert replacement");
+    crate::emacs_core::editfns::builtin_delete_region(
+        &mut eval,
+        vec![Value::fixnum(5), Value::fixnum(6)],
+    )
+    .expect("delete original quote");
+
+    let current_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let buffer = eval.buffers.get(current_id).expect("buffer exists");
+    let text = buffer.buffer_substring_lisp_string(buffer.point_min(), buffer.point_max());
+    let shape: Vec<_> = text
+        .intervals()
+        .object_interval_runs(text.schars())
+        .into_iter()
+        .map(|(start, end, plist)| (start, end, plist.is_empty()))
+        .collect();
+
+    assert_eq!(text.as_utf8_str(), Some("C-uX rest"));
+    assert_eq!(shape, vec![(0, 3, false), (3, 4, true), (4, 9, true)]);
 }
 
 // -----------------------------------------------------------------------

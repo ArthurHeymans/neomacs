@@ -382,6 +382,11 @@ impl IntervalTree {
         Self::from_normalized_runs(runs)
     }
 
+    fn from_runs_preserving_shape(runs: Vec<IntervalRun>) -> Self {
+        let runs = Self::normalize_runs_preserving_shape(runs);
+        Self::from_normalized_runs(runs)
+    }
+
     fn from_normalized_runs(runs: Vec<IntervalRun>) -> Self {
         let mut tree = Self {
             root: None,
@@ -392,12 +397,20 @@ impl IntervalTree {
     }
 
     fn normalize_runs(mut runs: Vec<IntervalRun>) -> Vec<IntervalRun> {
+        Self::normalize_runs_impl(&mut runs, false)
+    }
+
+    fn normalize_runs_preserving_shape(mut runs: Vec<IntervalRun>) -> Vec<IntervalRun> {
+        Self::normalize_runs_impl(&mut runs, true)
+    }
+
+    fn normalize_runs_impl(runs: &mut Vec<IntervalRun>, preserve_empty: bool) -> Vec<IntervalRun> {
         runs.retain(|run| run.start < run.end);
         runs.sort_by_key(|run| run.start);
 
         let mut normalized = Vec::new();
         let mut cursor = 0;
-        for mut run in runs {
+        for mut run in runs.drain(..) {
             if run.end <= cursor {
                 continue;
             }
@@ -411,11 +424,13 @@ impl IntervalTree {
             normalized.push(run);
         }
 
-        while normalized.last().is_some_and(IntervalRun::is_empty_plist) {
-            normalized.pop();
-        }
         if normalized.iter().all(IntervalRun::is_empty_plist) {
             return Vec::new();
+        }
+        if !preserve_empty {
+            while normalized.last().is_some_and(IntervalRun::is_empty_plist) {
+                normalized.pop();
+            }
         }
         normalized
     }
@@ -918,8 +933,6 @@ impl IntervalTree {
             }
             left_to_delete -= deleted;
         }
-
-        self.prune_trailing_empty_intervals();
     }
 
     fn merge_interval_left(&mut self, id: IntervalId) -> Option<IntervalId> {
@@ -1170,7 +1183,7 @@ impl TextPropertyTable {
             run.plist = plist_value_from_pairs(&plist_pairs(run.plist));
             run.refresh_cache();
         }
-        Self::from_interval_runs(runs)
+        Self::from_interval_runs_preserving_shape(runs)
     }
 
     // -- Query helpers -------------------------------------------------------
@@ -1281,8 +1294,18 @@ impl TextPropertyTable {
         }
     }
 
+    fn from_interval_runs_preserving_shape(runs: Vec<IntervalRun>) -> Self {
+        Self {
+            intervals: IntervalTree::from_runs_preserving_shape(runs),
+        }
+    }
+
     fn replace_runs(&mut self, runs: Vec<IntervalRun>) {
         self.intervals = IntervalTree::from_runs(runs);
+    }
+
+    fn replace_runs_preserving_shape(&mut self, runs: Vec<IntervalRun>) {
+        self.intervals = IntervalTree::from_runs_preserving_shape(runs);
     }
 
     fn split_runs_at(runs: &mut Vec<IntervalRun>, pos: usize) {
@@ -1343,9 +1366,9 @@ impl TextPropertyTable {
     }
 
     pub(crate) fn from_plist_runs(runs: Vec<(usize, usize, Vec<(Value, Value)>)>) -> Self {
-        Self::from_interval_runs(
+        Self::from_interval_runs_preserving_shape(
             runs.into_iter()
-                .filter(|(start, end, plist)| start < end && !plist.is_empty())
+                .filter(|(start, end, _)| start < end)
                 .map(|(start, end, plist)| {
                     IntervalRun::new(start, end, plist_value_from_pairs(&plist))
                 })
@@ -1786,7 +1809,7 @@ impl TextPropertyTable {
             run.end += offset;
             Self::splice_interval_run(&mut runs, run);
         }
-        self.replace_runs(runs);
+        self.replace_runs_preserving_shape(runs);
     }
 
     pub fn append_shifted_via_add_text_properties(
@@ -1828,7 +1851,7 @@ impl TextPropertyTable {
                 }
             }
         }
-        self.replace_runs(target_runs);
+        self.replace_runs_preserving_shape(target_runs);
     }
 
     pub fn merge_adjacent_equal_properties_around(&mut self, start: usize, end: usize) {
@@ -1868,7 +1891,7 @@ impl TextPropertyTable {
                 break;
             }
         }
-        self.replace_runs(runs);
+        self.replace_runs_preserving_shape(runs);
     }
 
     pub(crate) fn dump_intervals(&self) -> Vec<PropertyInterval> {
