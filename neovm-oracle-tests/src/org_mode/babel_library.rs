@@ -1080,6 +1080,60 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_join_compute_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Prices table
+      (insert "#+NAME: prices\n")
+      (insert "| Item | Cost |\n")
+      (insert "|------+------|\n")
+      (insert "| A | 5 |\n")
+      (insert "| B | 8 |\n")
+      (insert "| C | 3 |\n\n")
+      ;; Quantities table
+      (insert "#+NAME: qtys\n")
+      (insert "| Item | N |\n")
+      (insert "|------+---|\n")
+      (insert "| A | 4 |\n")
+      (insert "| B | 2 |\n")
+      (insert "| C | 7 |\n\n")
+      ;; Join and compute
+      (insert "#+NAME: joined\n")
+      (insert "#+begin_src emacs-lisp :var p=prices q=qtys :results value table replace\n")
+      (insert "(cons '(\"Item\" \"Cost\" \"Qty\" \"Total\")\n")
+      (insert "      (cons 'hline\n")
+      (insert "            (mapcar (lambda (row)\n")
+      (insert "                      (let* ((item (car row))\n")
+      (insert "                             (cost (cadr row))\n")
+      (insert "                             (qty (cadr (assoc item q))))\n")
+      (insert "                        (list item cost qty (* cost qty))))\n")
+      (insert "                    p)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "joined")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_multi_block_var_chain_table_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
