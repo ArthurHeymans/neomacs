@@ -1080,6 +1080,52 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_mapcar_table_column_compute_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: scores\n")
+      (insert "| Student | Math | Lang | Sci |\n")
+      (insert "|---------+--------+------|\n")
+      (insert "| Ada | 95 | 88 | 92 |\n")
+      (insert "| Bob | 78 | 85 | 80 |\n")
+      (insert "| Cal | 90 | 92 | 88 |\n")
+      (insert "| Dee | 85 | 90 | 95 |\n\n")
+      ;; Column stats
+      (insert "#+NAME: stats\n")
+      (insert "#+begin_src emacs-lisp :var tbl=scores :results value replace\n")
+      (insert "(let ((math (mapcar #'cadr tbl))\n")
+      (insert "      (lang (mapcar #'caddr tbl))\n")
+      (insert "      (sci (mapcar #'cadddr tbl)))\n")
+      (insert "  (list :math (list (apply #'min math) (/ (apply #'+ math) (length math)) (apply #'max math))\n")
+      (insert "        :lang (list (apply #'min lang) (/ (apply #'+ lang) (length lang)) (apply #'max lang))\n")
+      (insert "        :sci (list (apply #'min sci) (/ (apply #'+ sci) (length sci)) (apply #'max sci))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "stats")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_map_tree_assoc_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
