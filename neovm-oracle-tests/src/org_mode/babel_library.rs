@@ -1080,6 +1080,58 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Prices
+      (insert "#+NAME: prices\n")
+      (insert "| Item | Price |\n")
+      (insert("|------+-------|\n")
+      (insert "| X | 5 |\n")
+      (insert "| Y | 10 |\n")
+      (insert "| Z | 15 |\n\n")
+      ;; Orders
+      (insert "#+NAME: orders\n")
+      (insert "| Item | Qty |\n")
+      (insert("|------+-----|\n")
+      (insert "| X | 3 |\n")
+      (insert "| Y | 1 |\n")
+      (insert "| Z | 2 |\n\n")
+      ;; Compute line totals
+      (insert "#+NAME: lines\n")
+      (insert "#+begin_src emacs-lisp :var p=prices o=orders :results value replace\n")
+      (insert "(mapcar (lambda (order)\n")
+      (insert "          (let* ((item (car order))\n")
+      (insert "                 (qty (cadr order))\n")
+      (insert "                 (price (cadr (assoc item p))))\n")
+      (insert "            (list item qty price (* qty price))))\n")
+      (insert "        o)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "lines")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
