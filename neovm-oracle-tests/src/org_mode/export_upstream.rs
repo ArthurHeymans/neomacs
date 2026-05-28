@@ -659,3 +659,56 @@ fn org_export_headline_numbering_edit_reexport_deep() {
                  (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_export_todo_tags_planning_edit_reexport_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: PlanningExport\n")
+    (insert "#+TODO: TODO DONE WAIT\n\n")
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert "CLOSED: [2026-05-27 Tue 10:00]\n")
+    (insert "Body beta.\n\n")
+    (insert "** WAIT Gamma\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert "Body gamma.\n\n")
+    (let* ((snap (lambda ()
+                   (let* ((tree (org-element-parse-buffer))
+                          (info (org-combine-plists
+                                 (org-export--get-buffer-attributes)
+                                 (org-export-get-environment)))
+                          (headlines (org-element-map tree 'headline #'identity)))
+                     (mapcar (lambda (h)
+                               (list (org-element-property :raw-value h)
+                                     (org-element-property :level h)
+                                     (org-export-get-headline-number h info)
+                                     (org-export-get-tags h info)
+                                     (org-export-get-todo-keyword h info)))
+                             headlines)))))
+      (let ((before (funcall snap)))
+        ;; Edit: change WAIT to TODO
+        (goto-char (point-min))
+        (search-forward "WAIT Gamma")
+        (replace-match "TODO Gamma")
+        ;; Change Alpha to DONE
+        (goto-char (point-min))
+        (search-forward "TODO Alpha")
+        (replace-match "DONE Alpha")
+        (let ((after (funcall snap)))
+          ;; Export
+          (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
+            (list before after html
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
