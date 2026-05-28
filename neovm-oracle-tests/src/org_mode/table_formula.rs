@@ -1301,3 +1301,55 @@ fn org_table_sort_region_hline_formula_deep_state_combo() {
                   after-recalc)))))))"##,
     );
 }
+
+#[test]
+fn org_table_formula_multi_col_sort_recalc_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | Q1 | Q2 | Q3 | Total |\n")
+    (insert "|------+----+----+----+-------|\n")
+    (insert "| Eve | 30 | 40 | 50 | |\n")
+    (insert "| Alice | 80 | 90 | 70 | |\n")
+    (insert "| Dave | 50 | 60 | 40 | |\n")
+    (insert "| Bob | 90 | 85 | 95 | |\n")
+    (insert "| Carol | 70 | 75 | 80 | |\n")
+    (insert "#+TBLFM: $5=vsum($2..$4)\n")
+    (org-table-recalculate-buffer-tables)
+    (let ((initial-lisp (org-table-to-lisp))
+          (initial-buf (buffer-substring-no-properties
+                        (point-min) (point-max))))
+      ;; Sort by Total descending
+      (goto-char (point-min))
+      (search-forward "Total")
+      (beginning-of-line)
+      (org-table-sort-lines t ?n)
+      (let ((sorted-lisp (org-table-to-lisp))
+            (sorted-buf (buffer-substring-no-properties
+                         (point-min) (point-max))))
+        ;; Edit: change Bob's Q1 to 95
+        (goto-char (point-min))
+        (search-forward "Bob")
+        (org-table-goto-column 2)
+        (org-table-get-field nil "95")
+        ;; Recalculate
+        (org-table-recalculate-buffer-tables)
+        (let ((edited-lisp (org-table-to-lisp))
+              (edited-buf (buffer-substring-no-properties
+                           (point-min) (point-max)))
+              (bob-total (progn
+                           (goto-char (point-min))
+                           (search-forward "Bob")
+                           (org-table-goto-column 5)
+                           (org-table-get-field))))
+          (list initial-lisp
+                sorted-lisp
+                edited-lisp
+                bob-total
+                edited-buf))))))"##,
+    );
+}
