@@ -1477,3 +1477,59 @@ fn org_link_stored_insert_edit_search_deep() {
                    (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_link_id_radio_custom_export_parse_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-id)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Target heading\n")
+    (insert ":PROPERTIES:\n:CUSTOM_ID: my-target\n:END:\n")
+    (insert "Target body.\n\n")
+    (insert "* References\n")
+    (insert "See [[#my-target][custom link]].\n")
+    (insert "See [[id:" (org-id-get-create (point-min)) "][id link]].\n")
+    ;; Parse links
+    (let* ((tree (org-element-parse-buffer))
+           (links
+            (org-element-map tree 'link
+              (lambda (lk)
+                (list (org-element-property :type lk)
+                      (org-element-property :path lk)
+                      (org-element-property :raw-link lk)
+                      (org-element-property :search-option lk)))))
+           ;; Export HTML
+           (html (org-export-as 'html nil nil t '(:with-toc nil)))
+           (html-has-custom (string-match-p "my-target" html))
+           (html-has-id (string-match-p "id-" html))
+           ;; Edit: change CUSTOM_ID
+           (_ (progn
+                (goto-char (point-min))
+                (search-forward "CUSTOM_ID: my-target")
+                (replace-match "CUSTOM_ID: renamed-target")))
+           ;; Re-parse
+           (tree2 (org-element-parse-buffer))
+           (links2
+            (org-element-map tree2 'link
+              (lambda (lk)
+                (list (org-element-property :type lk)
+                      (org-element-property :path lk)
+                      (org-element-property :raw-link lk)))))
+           ;; Re-export
+           (html2 (org-export-as 'html nil nil t '(:with-toc nil)))
+           (html2-has-renamed (string-match-p "renamed-target" html2)))
+      (list links
+            html-has-custom
+            html-has-id
+            links2
+            html2-has-renamed
+            (buffer-substring-no-properties
+             (point-min) (point-max)))))))"##,
+    );
+}
