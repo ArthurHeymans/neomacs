@@ -624,7 +624,7 @@ impl GuiFrameWindowManager {
 
     /// Get a window state by Emacs frame_id.
     pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
-        if self.primary_emacs_frame_id == Some(emacs_frame_id) {
+        if self.is_primary_frame_id(emacs_frame_id) {
             self.primary_window.as_ref()
         } else {
             self.windows.get(&emacs_frame_id)
@@ -633,7 +633,7 @@ impl GuiFrameWindowManager {
 
     /// Get a mutable window state by Emacs frame_id.
     pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut GuiFrameWindowState> {
-        if self.primary_emacs_frame_id == Some(emacs_frame_id) {
+        if self.is_primary_frame_id(emacs_frame_id) {
             self.primary_window.as_mut()
         } else {
             self.windows.get_mut(&emacs_frame_id)

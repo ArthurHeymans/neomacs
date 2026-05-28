@@ -351,11 +351,55 @@ impl RenderApp {
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
         scroll_indicators_enabled: bool,
-    ) {
+        toolbar_icon_textures: &HashMap<String, u32>,
+        toolbar_icon_size: u32,
+        toolbar_padding: u32,
+    ) -> Option<(
+        wgpu::SurfaceTexture,
+        crate::core::frame_glyphs::FrameGlyphBuffer,
+    )> {
+        Self::render_frame_window_contents_to_acquired_surface(
+            renderer,
+            faces,
+            window_state,
+            bg_gradient,
+            child_frame_corner_radius,
+            child_frame_shadow_enabled,
+            child_frame_shadow_layers,
+            child_frame_shadow_offset,
+            child_frame_shadow_opacity,
+            scroll_indicators_enabled,
+            toolbar_icon_textures,
+            toolbar_icon_size,
+            toolbar_padding,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame_window_contents_to_acquired_surface(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        window_state: &mut GuiFrameWindowState,
+        bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
+        toolbar_icon_textures: &HashMap<String, u32>,
+        toolbar_icon_size: u32,
+        toolbar_padding: u32,
+        output: Option<wgpu::SurfaceTexture>,
+    ) -> Option<(
+        wgpu::SurfaceTexture,
+        crate::core::frame_glyphs::FrameGlyphBuffer,
+    )> {
         let GuiFrameWindowState { native, render } = window_state;
         Self::update_fps_counter(&mut render.fps);
         let Some(frame_for_decision) = render.current_frame_clone() else {
-            return;
+            return None;
         };
         let mut frame = frame_for_decision.clone();
         let animated_cursor = render.cursor.animated_cursor();
@@ -378,29 +422,33 @@ impl RenderApp {
                 )
             });
 
-        let output = match native.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(output)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
-                native
-                    .surface
-                    .configure(renderer.device(), &native.surface_config);
-                return;
-            }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return;
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                tracing::warn!(
-                    "Surface validation error for frame 0x{:x}",
-                    render.emacs_frame_id
-                );
-                return;
+        let output = if let Some(output) = output {
+            output
+        } else {
+            match native.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(output)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
+                wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
+                    native
+                        .surface
+                        .configure(renderer.device(), &native.surface_config);
+                    return None;
+                }
+                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
+                    return None;
+                }
+                wgpu::CurrentSurfaceTexture::Validation => {
+                    tracing::warn!(
+                        "Surface validation error for frame 0x{:x}",
+                        render.emacs_frame_id
+                    );
+                    return None;
+                }
             }
         };
 
         let Some(drained_frame) = render.take_current_frame_for_render() else {
-            return;
+            return None;
         };
         frame = drained_frame;
 
@@ -456,6 +504,9 @@ impl RenderApp {
                     child_frame_shadow_offset,
                     child_frame_shadow_opacity,
                     scroll_indicators_enabled,
+                    toolbar_icon_textures,
+                    toolbar_icon_size,
+                    toolbar_padding,
                 );
             }
 
@@ -506,7 +557,7 @@ impl RenderApp {
             if render.transitions.has_active() {
                 render.frame_dirty = true;
             }
-            Self::render_frame_window_overlays(
+            Self::render_frame_window_overlays_with_toolbar_resources(
                 renderer,
                 faces,
                 native,
@@ -521,6 +572,9 @@ impl RenderApp {
                 child_frame_shadow_offset,
                 child_frame_shadow_opacity,
                 scroll_indicators_enabled,
+                toolbar_icon_textures,
+                toolbar_icon_size,
+                toolbar_padding,
             );
         } else {
             Self::render_frame_window_contents(
@@ -541,6 +595,9 @@ impl RenderApp {
                 child_frame_shadow_offset,
                 child_frame_shadow_opacity,
                 scroll_indicators_enabled,
+                toolbar_icon_textures,
+                toolbar_icon_size,
+                toolbar_padding,
             );
             renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
                 detect_frame_transitions(
@@ -561,9 +618,9 @@ impl RenderApp {
             }
         }
 
-        output.present();
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
+        Some((output, frame))
     }
 
     fn render_frame_window_overlays(
@@ -582,6 +639,47 @@ impl RenderApp {
         child_frame_shadow_opacity: f32,
         scroll_indicators_enabled: bool,
     ) {
+        Self::render_frame_window_overlays_with_toolbar_resources(
+            renderer,
+            faces,
+            native,
+            render,
+            surface_view,
+            frame,
+            cursor_visible,
+            animated_cursor,
+            child_frame_corner_radius,
+            child_frame_shadow_enabled,
+            child_frame_shadow_layers,
+            child_frame_shadow_offset,
+            child_frame_shadow_opacity,
+            scroll_indicators_enabled,
+            &HashMap::new(),
+            24,
+            5,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame_window_overlays_with_toolbar_resources(
+        renderer: &mut WgpuRenderer,
+        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
+        native: &GuiFrameNativeWindowState,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        cursor_visible: bool,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        child_frame_corner_radius: f32,
+        child_frame_shadow_enabled: bool,
+        child_frame_shadow_layers: u32,
+        child_frame_shadow_offset: f32,
+        child_frame_shadow_opacity: f32,
+        scroll_indicators_enabled: bool,
+        toolbar_icon_textures: &HashMap<String, u32>,
+        toolbar_icon_size: u32,
+        toolbar_padding: u32,
+    ) {
         Self::render_frame_content_overlays(
             renderer,
             faces,
@@ -599,7 +697,6 @@ impl RenderApp {
             scroll_indicators_enabled,
         );
 
-        let empty_icon_textures = HashMap::new();
         let menu_bar_height = render
             .menu_bar
             .as_ref()
@@ -642,9 +739,9 @@ impl RenderApp {
                         height: tool_bar.height,
                         fg: tool_bar.fg,
                         bg: tool_bar.bg,
-                        icon_textures: &empty_icon_textures,
-                        icon_size: 24,
-                        padding: 5,
+                        icon_textures: toolbar_icon_textures,
+                        icon_size: toolbar_icon_size,
+                        padding: toolbar_padding,
                     }),
                 compact_bar: render.compact_bar.as_ref().map(|compact_bar| {
                     GuiFrameCompactBarOverlay {
@@ -655,9 +752,9 @@ impl RenderApp {
                         menu_bg: compact_bar.menu_bg,
                         tool_fg: compact_bar.tool_fg,
                         tool_bg: compact_bar.tool_bg,
-                        icon_textures: &empty_icon_textures,
-                        icon_size: 24,
-                        padding: 5,
+                        icon_textures: toolbar_icon_textures,
+                        icon_size: toolbar_icon_size,
+                        padding: toolbar_padding,
                     }
                 }),
                 popup_menu: render.popup_menu.as_ref(),
@@ -830,6 +927,9 @@ impl RenderApp {
         child_frame_shadow_offset: f32,
         child_frame_shadow_opacity: f32,
         scroll_indicators_enabled: bool,
+        toolbar_icon_textures: &HashMap<String, u32>,
+        toolbar_icon_size: u32,
+        toolbar_padding: u32,
     ) {
         Self::render_frame_root_glyphs(
             renderer,
@@ -849,7 +949,7 @@ impl RenderApp {
             return;
         }
 
-        Self::render_frame_window_overlays(
+        Self::render_frame_window_overlays_with_toolbar_resources(
             renderer,
             faces,
             native,
@@ -864,6 +964,9 @@ impl RenderApp {
             child_frame_shadow_offset,
             child_frame_shadow_opacity,
             scroll_indicators_enabled,
+            toolbar_icon_textures,
+            toolbar_icon_size,
+            toolbar_padding,
         );
         if renderer_effects_still_active {
             render.frame_dirty = true;
@@ -882,6 +985,7 @@ impl RenderApp {
             None
         };
 
+        let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
@@ -890,7 +994,7 @@ impl RenderApp {
         };
         window_state.render.transitions.policy = self.transition_policy;
 
-        Self::render_frame_window_contents_to_surface(
+        if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
             renderer,
             &self.faces,
             window_state,
@@ -901,365 +1005,33 @@ impl RenderApp {
             self.child_frame_shadow_offset,
             self.child_frame_shadow_opacity,
             self.scroll_indicators_enabled,
-        );
+            &self.toolbar_icon_textures,
+            self.toolbar_icon_size,
+            self.toolbar_padding,
+        ) {
+            if is_primary_frame {
+                surface_readback::maybe_log_first_frame_surface_readback(
+                    &mut self.debug_first_frame_readback_pending,
+                    &output.texture,
+                    renderer,
+                    &frame,
+                    window_state.native.width,
+                    window_state.native.height,
+                );
+                surface_readback::maybe_log_debug_surface_readback(
+                    &mut self.debug_surface_readback_frames_remaining,
+                    &output.texture,
+                    renderer,
+                    &frame,
+                    window_state.native.width,
+                    window_state.native.height,
+                );
+            }
+            output.present();
+        }
     }
 
     pub(super) fn render(&mut self) {
-        let (primary_width, primary_height) = self.primary_native_size();
-        // Early return checks
-        if self.primary_current_frame().is_none()
-            || self.primary_surface().is_none()
-            || self.renderer.is_none()
-            || self.primary_render_state().is_none()
-        {
-            return;
-        }
-
-        self.prepare_frame_state_for_render();
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            Self::update_fps_counter(&mut primary_frame.fps);
-        }
-
-        // Get surface texture
-        let Some(surface) = self.primary_surface() else {
-            return;
-        };
-        let output = match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(output)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
-                // Reconfigure surface
-                let (w, h) = (primary_width, primary_height);
-                self.handle_resize(w, h);
-                return;
-            }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return;
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                tracing::warn!("Surface validation error");
-                return;
-            }
-        };
-
-        let surface_view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        // Build animated cursor override if applicable
-        let animated_cursor = self.primary_cursor().animated_cursor();
-        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
-        let root_animated_cursor =
-            animated_cursor.filter(|cursor| cursor.frame_id == primary_frame_id);
-
-        // Build background gradient option
-        let bg_gradient = if self.effects.bg_gradient.enabled {
-            Some((
-                self.effects.bg_gradient.top,
-                self.effects.bg_gradient.bottom,
-            ))
-        } else {
-            None
-        };
-
-        // Check if we need offscreen rendering (for transitions)
-        let need_offscreen = self
-            .primary_render_state()
-            .is_some_and(|frame| frame.transitions.policy.needs_offscreen());
-
-        if need_offscreen {
-            // Swap: previous ← current
-            if let Some(primary_frame) = self.primary_render_state_mut() {
-                primary_frame.transitions.current_is_a = !primary_frame.transitions.current_is_a;
-            }
-
-            // Ensure offscreen textures exist
-            self.ensure_offscreen_textures();
-
-            // Render frame to current offscreen texture
-            if let Some((current_view, _)) = self
-                .current_offscreen_view_and_bg()
-                .map(|(v, bg)| (v as *const wgpu::TextureView, bg))
-            {
-                let primary_window = self
-                    .frame_windows
-                    .primary_window_mut()
-                    .expect("checked in render");
-                let GuiFrameWindowState { native, render } = primary_window;
-                let frame = render.current_frame.clone().expect("checked in render");
-                let renderer = self.renderer.as_mut().expect("checked in render");
-                let cursor_visible = render.cursor.blink_on;
-                Self::render_frame_root_glyphs(
-                    renderer,
-                    &self.faces,
-                    native,
-                    render,
-                    unsafe { &*current_view },
-                    &frame,
-                    cursor_visible,
-                    root_animated_cursor,
-                    bg_gradient,
-                );
-            }
-
-            // Detect transitions (compare window_infos)
-            if let (Some(renderer), Some(primary_frame)) = (
-                self.renderer.as_mut(),
-                self.frame_windows.primary_window_mut(),
-            ) {
-                let primary_frame = &mut primary_frame.render;
-                renderer.with_frame_effects(&mut primary_frame.renderer_effects, |renderer| {
-                    detect_frame_transitions(
-                        renderer,
-                        &mut primary_frame.transitions,
-                        &self.effects.clone(),
-                        primary_frame
-                            .current_frame
-                            .as_mut()
-                            .expect("checked in render"),
-                        &mut primary_frame.frame_dirty,
-                        primary_width,
-                        primary_height,
-                    );
-                });
-            }
-            if let Some(primary_frame) = self.primary_render_state_mut()
-                && primary_frame.renderer_effects.needs_redraw()
-            {
-                primary_frame.frame_dirty = true;
-            }
-
-            // Blit current offscreen to surface
-            if let Some((_, current_bg)) = self
-                .current_offscreen_view_and_bg()
-                .map(|(v, bg)| (v, bg as *const wgpu::BindGroup))
-            {
-                let renderer = self.renderer.as_ref().expect("checked in render");
-                renderer.blit_texture_to_view(
-                    unsafe { &*current_bg },
-                    &surface_view,
-                    primary_width,
-                    primary_height,
-                );
-            }
-
-            // Composite active transitions on top
-            self.render_transitions(&surface_view);
-        } else {
-            // Simple path: render directly to surface
-            let primary_window = self
-                .frame_windows
-                .primary_window_mut()
-                .expect("checked in render");
-            let GuiFrameWindowState { native, render } = primary_window;
-            let frame = render.current_frame.clone().expect("checked in render");
-            let renderer = self.renderer.as_mut().expect("checked in render");
-            let cursor_visible = render.cursor.blink_on;
-            Self::render_frame_root_glyphs(
-                renderer,
-                &self.faces,
-                native,
-                render,
-                &surface_view,
-                &frame,
-                cursor_visible,
-                root_animated_cursor,
-                bg_gradient,
-            );
-        }
-        if let Some(primary_frame) = self.primary_render_state_mut()
-            && primary_frame.renderer_effects.needs_redraw()
-        {
-            primary_frame.frame_dirty = true;
-        }
-
-        if let (Some(renderer), Some(primary_frame)) =
-            (&mut self.renderer, self.frame_windows.primary_window_mut())
-        {
-            let GuiFrameWindowState { native, render } = primary_frame;
-            if let Some(frame) = render.current_frame.clone() {
-                let cursor_visible = render.cursor.blink_on;
-                Self::render_frame_content_overlays(
-                    renderer,
-                    &self.faces,
-                    native,
-                    render,
-                    &surface_view,
-                    &frame,
-                    cursor_visible,
-                    animated_cursor,
-                    self.child_frame_corner_radius,
-                    self.child_frame_shadow_enabled,
-                    self.child_frame_shadow_layers,
-                    self.child_frame_shadow_offset,
-                    self.child_frame_shadow_opacity,
-                    self.scroll_indicators_enabled,
-                );
-            }
-        }
-
-        tracing::trace!(
-            "CSD state: decorations_enabled={} is_fullscreen={} titlebar_height={}",
-            self.primary_chrome().decorations_enabled,
-            self.primary_chrome().is_fullscreen,
-            self.primary_chrome().titlebar_height
-        );
-        let toolbar_y_origin = self.toolbar_y_origin();
-        let primary_ime_preedit_text = self
-            .primary_render_state()
-            .map(|frame| frame.ime_preedit_text.clone())
-            .unwrap_or_default();
-        let ime_preedit = Self::frame_ime_preedit_overlay(
-            self.primary_ime_preedit_active(),
-            &primary_ime_preedit_text,
-            self.primary_cursor().target_cloned(),
-            0,
-            self.primary_child_frames(),
-        );
-        let titlebar_background = self
-            .primary_current_frame()
-            .map(|f| (f.background.r, f.background.g, f.background.b));
-        let primary_chrome = self.primary_chrome().clone();
-        if let (Some(renderer), Some(primary_frame)) =
-            (&self.renderer, self.frame_windows.primary_window_mut())
-        {
-            let primary_frame = &mut primary_frame.render;
-            Self::render_frame_chrome_overlays(
-                renderer,
-                &surface_view,
-                &mut primary_frame.glyph_atlas,
-                GuiFrameChromeOverlays {
-                    native_chrome: &primary_chrome,
-                    titlebar_background,
-                    chrome_interaction: primary_frame.chrome_interaction,
-                    menu_bar: primary_frame.menu_bar.as_ref().map(|menu_bar| {
-                        GuiFrameMenuBarOverlay {
-                            items: &menu_bar.items,
-                            height: menu_bar.height,
-                            fg: menu_bar.fg,
-                            bg: menu_bar.bg,
-                        }
-                    }),
-                    tool_bar: primary_frame.tool_bar.as_ref().map(|tool_bar| {
-                        GuiFrameToolBarOverlay {
-                            items: &tool_bar.items,
-                            y_origin: toolbar_y_origin,
-                            height: tool_bar.height,
-                            fg: tool_bar.fg,
-                            bg: tool_bar.bg,
-                            icon_textures: &self.toolbar_icon_textures,
-                            icon_size: self.toolbar_icon_size,
-                            padding: self.toolbar_padding,
-                        }
-                    }),
-                    compact_bar: primary_frame.compact_bar.as_ref().map(|compact_bar| {
-                        GuiFrameCompactBarOverlay {
-                            menu_items: &compact_bar.menu_items,
-                            tool_items: &compact_bar.tool_items,
-                            height: compact_bar.height,
-                            menu_fg: compact_bar.menu_fg,
-                            menu_bg: compact_bar.menu_bg,
-                            tool_fg: compact_bar.tool_fg,
-                            tool_bg: compact_bar.tool_bg,
-                            icon_textures: &self.toolbar_icon_textures,
-                            icon_size: self.toolbar_icon_size,
-                            padding: self.toolbar_padding,
-                        }
-                    }),
-                    popup_menu: primary_frame.popup_menu.as_ref(),
-                    tooltip: primary_frame.tooltip.as_ref(),
-                    ime_preedit,
-                },
-                primary_width,
-                primary_height,
-            );
-        }
-
-        if let Some(ref renderer) = self.renderer {
-            if let Some(primary_state) = self.frame_windows.primary_window_mut() {
-                let primary_frame = &mut primary_state.render;
-                Self::render_frame_visual_bell_overlay(
-                    renderer,
-                    &surface_view,
-                    &mut primary_frame.visual_bell_start,
-                    &mut primary_frame.frame_dirty,
-                    primary_width,
-                    primary_height,
-                );
-            }
-        }
-
-        let fps_glyph_count = self.primary_current_frame().map_or(0, |f| f.glyphs.len());
-        let fps_window_count = self
-            .primary_current_frame()
-            .map_or(0, |f| f.window_infos.len());
-        if let (Some(renderer), Some(primary_frame)) =
-            (&self.renderer, self.frame_windows.primary_window_mut())
-        {
-            let primary_frame = &mut primary_frame.render;
-            Self::render_frame_fps_overlay(
-                renderer,
-                &surface_view,
-                &mut primary_frame.glyph_atlas,
-                &mut primary_frame.fps,
-                fps_glyph_count,
-                fps_window_count,
-                primary_frame.transitions.crossfades.len()
-                    + primary_frame.transitions.scroll_slides.len(),
-                primary_width,
-                primary_height,
-            );
-        }
-
-        if self.effects.typing_speed.enabled {
-            if let (Some(renderer), Some(primary_frame)) =
-                (&self.renderer, self.frame_windows.primary_window_mut())
-            {
-                let primary_frame = &mut primary_frame.render;
-                if let Some(frame) = primary_frame.current_frame.as_ref() {
-                    Self::render_frame_typing_speed_overlay(
-                        renderer,
-                        &surface_view,
-                        frame,
-                        &mut primary_frame.glyph_atlas,
-                        &mut primary_frame.typing_speed,
-                        &mut primary_frame.frame_dirty,
-                    );
-                }
-            }
-        }
-
-        if let Some(ref renderer) = self.renderer {
-            Self::render_frame_corner_mask(
-                renderer,
-                &surface_view,
-                self.primary_chrome(),
-                primary_width,
-                primary_height,
-            );
-        }
-
-        let readback_frame = self.primary_current_frame().cloned();
-        if let (Some(renderer), Some(frame)) = (&self.renderer, readback_frame.as_ref()) {
-            surface_readback::maybe_log_first_frame_surface_readback(
-                &mut self.debug_first_frame_readback_pending,
-                &output.texture,
-                renderer,
-                frame,
-                primary_width,
-                primary_height,
-            );
-            surface_readback::maybe_log_debug_surface_readback(
-                &mut self.debug_surface_readback_frames_remaining,
-                &output.texture,
-                renderer,
-                frame,
-                primary_width,
-                primary_height,
-            );
-        }
-
-        // Present the frame
-        output.present();
+        self.render_frame_window(self.frame_windows.primary_event_frame_id());
     }
 }
