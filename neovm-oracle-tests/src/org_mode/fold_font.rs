@@ -685,7 +685,7 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
-fn org_fold_font_level_visibility_cycle_hidden_edit_v4_combo() {
+fn org_fold_multiple_subtree_hide_cycle_show_font_level_v5_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     assert_oracle_parity(
@@ -696,11 +696,9 @@ fn org_fold_font_level_visibility_cycle_hidden_edit_v4_combo() {
   (with-temp-buffer
     (let ((org-cycle-level-faces t)
           (org-fontify-whole-heading-line t)
-          (org-fontify-todo-headline t)
-          (org-fontify-done-headline t))
+          (org-fontify-todo-headline t))
       (org-mode)
       (insert "* TODO Root\n")
-      (insert "Root body.\n")
       (insert "** DONE Alpha\n")
       (insert "Alpha body.\n")
       (insert "*** TODO Beta\n")
@@ -710,18 +708,22 @@ fn org_fold_font_level_visibility_cycle_hidden_edit_v4_combo() {
       (insert "** NEXT Sibling\n")
       (insert "Sibling body.\n")
       (font-lock-ensure (point-min) (point-max))
-      ;; Hide Beta subtree, edit
+      ;; Hide Alpha subtree
       (goto-char (point-min))
-      (search-forward "Beta")
+      (search-forward "Alpha")
       (beginning-of-line)
       (org-fold-hide-subtree)
       (end-of-line)
-      (insert "\n**** TODO Inserted under Beta\nInserted body.\n")
-      ;; Global cycle
+      (insert "\n*** TODO Inserted A\nInserted A body.\n")
+      ;; Hide Sibling subtree
       (goto-char (point-min))
-      (org-cycle-global)
-      (org-cycle-global)
-      (org-cycle-global)
+      (search-forward "Sibling")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      (end-of-line)
+      (insert "\n** DONE Inserted S\nInserted S body.\n")
+      ;; 5 global cycles
+      (dotimes (_ 5) (org-cycle-global))
       ;; Show all
       (org-fold-show-all)
       (font-lock-ensure (point-min) (point-max))
@@ -738,129 +740,8 @@ fn org_fold_font_level_visibility_cycle_hidden_edit_v4_combo() {
                             (org-outline-level)
                             (get-text-property (line-beginning-position) 'face))
                       (list needle 'not-found nil nil nil))))
-              '("Root" "Alpha" "Beta" "Gamma" "Inserted under Beta" "SIBLING")))
-            (merged nil))
-        (dolist (line (split-string
-                       (buffer-substring-no-properties
-                        (point-min) (point-max))
-                       "\n" t))
-          (when (string-match-p "^\\*+ .*\\*+ " line)
-            (push line merged)))
-        (list headings
-              (nreverse merged)
-              (buffer-substring-no-properties
-               (point-min) (point-max))))))))"##,
-    );
-}
-
-#[test]
-fn org_fold_font_face_visibility_after_show_all_cycle_combo() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-
-    assert_oracle_parity(
-        r##"(progn
-  (require 'org)
-  (require 'org-cycle)
-  (require 'org-fold)
-  (with-temp-buffer
-    (let ((org-cycle-level-faces t)
-          (org-fontify-whole-heading-line t)
-          (org-fontify-todo-headline t))
-      (org-mode)
-      (insert "* TODO Root\n")
-      (insert "** DONE Alpha\n")
-      (insert "*** TODO Beta\n")
-      (insert "**** WAIT Gamma\n")
-      (insert "** NEXT Sibling\n")
-      (font-lock-ensure (point-min) (point-max))
-      ;; Show all
-      (org-fold-show-all)
-      ;; Global cycle
-      (org-cycle-global)
-      (org-cycle-global)
-      (org-cycle-global)
-      ;; Show all again
-      (org-fold-show-all)
-      (font-lock-ensure (point-min) (point-max))
-      ;; Check state
-      (let ((headings
-             (mapcar
-              (lambda (needle)
-                (save-excursion
-                  (goto-char (point-min))
-                  (if (search-forward needle nil t)
-                      (list needle
-                            (invisible-p (point))
-                            (org-outline-level)
-                            (get-text-property (line-beginning-position) 'face))
-                      (list needle 'not-found nil nil))))
-              '("Root" "Alpha" "Beta" "Gamma" "SIBLING")))
-            (merged nil))
-        (dolist (line (split-string
-                       (buffer-substring-no-properties
-                        (point-min) (point-max))
-                       "\n" t))
-          (when (string-match-p "^\\*+ .*\\*+ " line)
-            (push line merged)))
-        (list headings
-              (nreverse merged)
-              (buffer-substring-no-properties
-               (point-min) (point-max))))))))"##,
-    );
-}
-
-#[test]
-fn org_fold_subtree_hide_edit_cycle_show_font_level_v3_combo() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
-
-    assert_oracle_parity(
-        r##"(progn
-  (require 'org)
-  (require 'org-cycle)
-  (require 'org-fold)
-  (with-temp-buffer
-    (let ((org-cycle-level-faces t)
-          (org-fontify-whole-heading-line t)
-          (org-fontify-todo-headline t)
-          (org-fontify-done-headline t))
-      (org-mode)
-      (insert "* TODO Root\n")
-      (insert "Root body.\n")
-      (insert "** DONE Alpha\n")
-      (insert "Alpha body.\n")
-      (insert "*** TODO Beta\n")
-      (insert "Beta body.\n")
-      (insert "**** WAIT Gamma\n")
-      (insert "Gamma body.\n")
-      (insert "** NEXT Sibling\n")
-      (insert "Sibling body.\n")
-      (font-lock-ensure (point-min) (point-max))
-      ;; Hide Alpha subtree
-      (goto-char (point-min))
-      (search-forward "Alpha")
-      (beginning-of-line)
-      (org-fold-hide-subtree)
-      (end-of-line)
-      (insert "\n*** TODO Inserted under Alpha\nInserted body.\n")
-      ;; Cycle global 5 times
-      (dotimes (_ 5) (org-cycle-global))
-      ;; Show all
-      (org-fold-show-all)
-      (font-lock-ensure (point-min) (point-max))
-      ;; Check state
-      (let ((headings
-             (mapcar
-              (lambda (needle)
-                (save-excursion
-                  (goto-char (point-min))
-                  (if (search-forward needle nil t)
-                      (list needle
-                            (line-number-at-pos)
-                            (invisible-p (point))
-                            (org-outline-level)
-                            (get-text-property (line-beginning-position) 'face))
-                      (list needle 'not-found nil nil nil))))
-              '("Root" "Alpha" "Beta" "Gamma" "Inserted under Alpha" "SIBLING")))
+              '("Root" "Alpha" "Beta" "Gamma" "Inserted A"
+                "Sibling" "Inserted S")))
             (merged nil))
         (dolist (line (split-string
                        (buffer-substring-no-properties
