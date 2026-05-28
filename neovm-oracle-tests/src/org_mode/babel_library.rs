@@ -1080,6 +1080,56 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_aggregate_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: log\n")
+      (insert "| Action | Val |\n")
+      (insert("|--------+-----|\n")
+      (insert "| Add | 10 |\n")
+      (insert "| Sub | 5 |\n")
+      (insert "| Add | 20 |\n")
+      (insert "| Mul | 3 |\n")
+      (insert "| Add | 15 |\n\n")
+      ;; Group by action
+      (insert "#+NAME: summary\n")
+      (insert "#+begin_src emacs-lisp :var tbl=log :results value replace\n")
+      (insert "(let ((groups nil))\n")
+      (insert "  (dolist (row tbl)\n")
+      (insert "    (let* ((action (car row))\n")
+      (insert "           (val (cadr row))\n")
+      (insert "           (entry (assoc action groups)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) val))\n")
+      (insert "          (push (cons action val) groups))))\n")
+      (insert "  (sort groups (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "summary")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
