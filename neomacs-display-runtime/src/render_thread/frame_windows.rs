@@ -353,6 +353,12 @@ impl GuiFrameRenderState {
         true
     }
 
+    pub(super) fn trigger_click_halo(&mut self, x: f32, y: f32, now: Instant, duration_ms: u32) {
+        self.renderer_effects
+            .trigger_click_halo(x, y, now, duration_ms);
+        self.frame_dirty = true;
+    }
+
     pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
         let mut dirty = self.cursor.tick_size_animation();
         for cursor in self.visual_cursors.values_mut() {

@@ -747,13 +747,12 @@ impl RenderApp {
                 && let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id)
             {
                 let (x, y) = window_state.render.mouse_pos;
-                window_state.render.renderer_effects.trigger_click_halo(
+                window_state.render.trigger_click_halo(
                     x,
                     y,
                     std::time::Instant::now(),
                     self.effects.click_halo.duration_ms,
                 );
-                window_state.render.frame_dirty = true;
             }
             return;
         }
@@ -1211,18 +1210,10 @@ impl RenderApp {
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
-            if let (Some(renderer), Some(primary_state)) = (
-                self.renderer.as_ref(),
-                self.frame_windows.primary_window_mut(),
-            ) {
-                renderer.trigger_transient_click_halo(
-                    &mut primary_state.render.renderer_effects,
-                    mouse_pos.0,
-                    mouse_pos.1,
-                    now,
-                );
+            let duration_ms = self.effects.click_halo.duration_ms;
+            if let Some(primary_frame) = self.primary_render_state_mut() {
+                primary_frame.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
             }
-            self.mark_primary_dirty();
         }
     }
 
