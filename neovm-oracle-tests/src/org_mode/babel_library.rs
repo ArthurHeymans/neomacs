@@ -1080,6 +1080,52 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_chain_aggregate_deep_v3_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Orders table
+      (insert "#+NAME: orders\n")
+      (insert "| Item | Price | Qty |\n")
+      (insert("|------+-------+-----|\n")
+      (insert "| A | 5 | 10 |\n")
+      (insert "| B | 8 | 3 |\n")
+      (insert "| C | 4 | 7 |\n\n")
+      ;; Compute subtotals
+      (insert "#+NAME: subtotals\n")
+      (insert "#+begin_src emacs-lisp :var tbl=orders :results value replace\n")
+      (insert "(let ((rows (mapcar\n")
+      (insert "              (lambda (r)\n")
+      (insert "                (list (car r) (cadr r) (caddr r)\n")
+      (insert "                      (* (cadr r) (caddr r))))\n")
+      (insert "              tbl)))\n")
+      (insert "  (list :rows rows\n")
+      (insert "        :total (apply #'+ (mapcar #'cadddr rows))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "subtotals")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_seq_group_by_partition_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
