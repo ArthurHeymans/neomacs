@@ -1080,6 +1080,55 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_mapcar_table_assoc_compute_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Input table
+      (insert "#+NAME: input\n")
+      (insert "| Name | Score |\n")
+      (insert "|------+-------|\n")
+      (insert "| Ada | 95 |\n")
+      (insert "| Bob | 78 |\n")
+      (insert "| Cal | 92 |\n")
+      (insert "| Dee | 85 |\n\n")
+      ;; Grade compute
+      (insert "#+NAME: graded\n")
+      (insert "#+begin_src emacs-lisp :var tbl=input :results value replace\n")
+      (insert "(mapcar (lambda (row)\n")
+      (insert "          (let* ((name (car row))\n")
+      (insert "                 (score (cadr row))\n")
+      (insert "                 (grade (cond ((>= score 90) 'A)\n")
+      (insert "                              ((>= score 80) 'B)\n")
+      (insert "                              ((>= score 70) 'C)\n")
+      (insert "                              (t 'D))))\n")
+      (insert "            (list name score grade)))\n")
+      (insert "        tbl)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "graded")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_pcase_cond_cl_case_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
