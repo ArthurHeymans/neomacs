@@ -23,12 +23,15 @@ use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::TransitionPolicy;
+use neomacs_display_protocol::effect_config::IdleDimConfig;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
-use neomacs_renderer_wgpu::{PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas};
+use neomacs_renderer_wgpu::{
+    PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
+};
 use neovm_core::window::GuiFrameGeometryHints;
 
 /// Native window/surface state for a top-level GUI frame.
@@ -158,6 +161,66 @@ impl GuiFrameRenderState {
         frame.transition_hints = transition_hints;
         frame.effect_hints = effect_hints;
         frame
+    }
+
+    pub(super) fn tick_cursor_animation(&mut self) -> bool {
+        let mut dirty = self.cursor.tick_animation();
+        for cursor in self.visual_cursors.values_mut() {
+            dirty |= cursor.tick_animation();
+        }
+        if dirty {
+            self.frame_dirty = true;
+        }
+        dirty
+    }
+
+    pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
+        let mut dirty = self.cursor.tick_size_animation();
+        for cursor in self.visual_cursors.values_mut() {
+            dirty |= cursor.tick_size_animation();
+        }
+        if dirty {
+            self.frame_dirty = true;
+        }
+        dirty
+    }
+
+    pub(super) fn tick_idle_dim(&mut self, config: &IdleDimConfig) -> bool {
+        let idle_time = self.idle_dim.last_activity_time.elapsed();
+        let target_alpha = if idle_time >= config.delay {
+            config.opacity
+        } else {
+            0.0
+        };
+        let diff = target_alpha - self.idle_dim.current_alpha;
+        if diff.abs() > 0.001 {
+            let fade_speed = if config.fade_duration.as_secs_f32() > 0.0 {
+                1.0 / config.fade_duration.as_secs_f32() * 0.016
+            } else {
+                1.0
+            };
+            if diff > 0.0 {
+                self.idle_dim.current_alpha =
+                    (self.idle_dim.current_alpha + fade_speed * config.opacity).min(target_alpha);
+            } else {
+                self.idle_dim.current_alpha =
+                    (self.idle_dim.current_alpha - fade_speed * config.opacity).max(0.0);
+            }
+            self.idle_dim.active = true;
+            self.frame_dirty = true;
+            true
+        } else if self.idle_dim.current_alpha > 0.001 {
+            self.idle_dim.active = true;
+            false
+        } else {
+            self.idle_dim.active = false;
+            false
+        }
+    }
+
+    pub(super) fn clear_idle_dim(&mut self) {
+        self.idle_dim.active = false;
+        self.idle_dim.current_alpha = 0.0;
     }
 }
 
@@ -737,6 +800,70 @@ impl GuiFrameWindowManager {
             }
         });
         dirty
+    }
+
+    pub(super) fn tick_top_level_cursor_blinks(
+        &mut self,
+        now: Instant,
+        cursor_wake_enabled: bool,
+        renderer: Option<&WgpuRenderer>,
+    ) -> bool {
+        let primary_winit_id = self.primary_winit_id;
+        let mut dirty = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            let cursor = &mut window_state.render.cursor;
+            if !cursor.blink_enabled || cursor.target_cloned().is_none() {
+                return;
+            }
+            if now.duration_since(cursor.last_blink_toggle) < cursor.blink_interval {
+                return;
+            }
+            let was_off = !cursor.blink_on;
+            cursor.blink_on = !cursor.blink_on;
+            cursor.last_blink_toggle = now;
+            if primary_winit_id == Some(window_state.native.window.id())
+                && was_off
+                && cursor.blink_on
+                && cursor_wake_enabled
+                && let Some(renderer) = renderer
+            {
+                renderer
+                    .trigger_transient_cursor_wake(&mut window_state.render.renderer_effects, now);
+            }
+            window_state.render.frame_dirty = true;
+            dirty = true;
+        });
+        dirty
+    }
+
+    pub(super) fn tick_top_level_cursor_animations(&mut self) -> bool {
+        let mut dirty = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            dirty |= window_state.render.tick_cursor_animation();
+        });
+        dirty
+    }
+
+    pub(super) fn tick_top_level_cursor_size_animations(&mut self) -> bool {
+        let mut dirty = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            dirty |= window_state.render.tick_cursor_size_animation();
+        });
+        dirty
+    }
+
+    pub(super) fn tick_top_level_idle_dim(&mut self, config: &IdleDimConfig) -> bool {
+        let mut dirty = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            dirty |= window_state.render.tick_idle_dim(config);
+        });
+        dirty
+    }
+
+    pub(super) fn clear_top_level_idle_dim(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.clear_idle_dim();
+        });
     }
 
     pub(super) fn any_top_level_cursor_animating(&self) -> bool {

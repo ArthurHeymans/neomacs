@@ -1,5 +1,4 @@
 use super::RenderApp;
-use super::state::IdleDimState;
 use super::state::{
     RenderGpuContext, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
@@ -188,114 +187,46 @@ impl RenderApp {
         self.pump_glib();
 
         // Update cursor blink state
-        let cursor_wake_enabled = self.effects.cursor_wake.enabled;
-        let primary_winit_id = self.frame_windows.primary_winit_id;
-        let renderer = self.renderer.as_ref();
         let now = std::time::Instant::now();
-        self.frame_windows
-            .for_each_top_level_window_mut(|window_state| {
-                let cursor = &mut window_state.render.cursor;
-                if !cursor.blink_enabled || cursor.target_cloned().is_none() {
-                    return;
-                }
-                if now.duration_since(cursor.last_blink_toggle) < cursor.blink_interval {
-                    return;
-                }
-                let was_off = !cursor.blink_on;
-                cursor.blink_on = !cursor.blink_on;
-                cursor.last_blink_toggle = now;
-                if primary_winit_id == Some(window_state.native.window.id())
-                    && was_off
-                    && cursor.blink_on
-                    && cursor_wake_enabled
-                    && let Some(renderer) = renderer
-                {
-                    renderer.trigger_transient_cursor_wake(
-                        &mut window_state.render.renderer_effects,
-                        now,
-                    );
-                }
-                window_state.render.frame_dirty = true;
-            });
+        self.frame_windows.tick_top_level_cursor_blinks(
+            now,
+            self.effects.cursor_wake.enabled,
+            self.renderer.as_ref(),
+        );
         if self.primary_window_state().is_none() && self.tick_cursor_blink() {
             self.mark_primary_dirty();
         }
 
         // Tick cursor animation
-        self.frame_windows
-            .for_each_top_level_window_mut(|window_state| {
-                if window_state.render.cursor.tick_animation() {
-                    window_state.render.frame_dirty = true;
-                }
-            });
+        self.frame_windows.tick_top_level_cursor_animations();
         if self.primary_window_state().is_none()
             && let Some(primary_frame) = self.primary_render_state_mut()
-            && primary_frame.cursor.tick_animation()
         {
-            primary_frame.frame_dirty = true;
-        }
-
-        let mut visual_cursor_dirty = false;
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            for cursor in primary_frame.visual_cursors.values_mut() {
-                visual_cursor_dirty |= cursor.tick_animation();
-            }
-        }
-        if visual_cursor_dirty {
-            self.mark_primary_dirty();
+            primary_frame.tick_cursor_animation();
         }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
-        self.frame_windows
-            .for_each_top_level_window_mut(|window_state| {
-                if window_state.render.cursor.tick_size_animation() {
-                    window_state.render.frame_dirty = true;
-                }
-            });
+        self.frame_windows.tick_top_level_cursor_size_animations();
         if self.primary_window_state().is_none()
             && let Some(primary_frame) = self.primary_render_state_mut()
-            && primary_frame.cursor.tick_size_animation()
         {
-            primary_frame.frame_dirty = true;
-        }
-        let mut visual_cursor_size_dirty = false;
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            for cursor in primary_frame.visual_cursors.values_mut() {
-                visual_cursor_size_dirty |= cursor.tick_size_animation();
-            }
-        }
-        if visual_cursor_size_dirty {
-            self.mark_primary_dirty();
+            primary_frame.tick_cursor_size_animation();
         }
 
         if self.effects.idle_dim.enabled {
             let idle_dim_config = self.effects.idle_dim.clone();
-            self.frame_windows
-                .for_each_top_level_window_mut(|window_state| {
-                    if Self::tick_idle_dim_state(
-                        &mut window_state.render.idle_dim,
-                        &idle_dim_config,
-                    ) {
-                        window_state.render.frame_dirty = true;
-                    }
-                });
+            self.frame_windows.tick_top_level_idle_dim(&idle_dim_config);
             if self.primary_window_state().is_none()
                 && let Some(primary_frame) = self.primary_render_state_mut()
-                && Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &idle_dim_config)
             {
-                primary_frame.frame_dirty = true;
+                primary_frame.tick_idle_dim(&idle_dim_config);
             }
         } else {
-            self.frame_windows
-                .for_each_top_level_window_mut(|window_state| {
-                    window_state.render.idle_dim.active = false;
-                    window_state.render.idle_dim.current_alpha = 0.0;
-                });
+            self.frame_windows.clear_top_level_idle_dim();
             if self.primary_window_state().is_none()
                 && let Some(primary_frame) = self.primary_render_state_mut()
             {
-                primary_frame.idle_dim.active = false;
-                primary_frame.idle_dim.current_alpha = 0.0;
+                primary_frame.clear_idle_dim();
             }
         }
 
@@ -439,41 +370,5 @@ impl RenderApp {
         }
 
         tracing::info!("GPU resources cleaned up");
-    }
-}
-
-impl RenderApp {
-    fn tick_idle_dim_state(
-        state: &mut IdleDimState,
-        config: &neomacs_display_protocol::effect_config::IdleDimConfig,
-    ) -> bool {
-        let idle_time = state.last_activity_time.elapsed();
-        let target_alpha = if idle_time >= config.delay {
-            config.opacity
-        } else {
-            0.0
-        };
-        let diff = target_alpha - state.current_alpha;
-        if diff.abs() > 0.001 {
-            let fade_speed = if config.fade_duration.as_secs_f32() > 0.0 {
-                1.0 / config.fade_duration.as_secs_f32() * 0.016
-            } else {
-                1.0
-            };
-            if diff > 0.0 {
-                state.current_alpha =
-                    (state.current_alpha + fade_speed * config.opacity).min(target_alpha);
-            } else {
-                state.current_alpha = (state.current_alpha - fade_speed * config.opacity).max(0.0);
-            }
-            state.active = true;
-            true
-        } else if state.current_alpha > 0.001 {
-            state.active = true;
-            false
-        } else {
-            state.active = false;
-            false
-        }
     }
 }
