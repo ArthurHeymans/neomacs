@@ -422,3 +422,64 @@ fn org_outline_path_entry_position_level_visibility_deep_state_combo() {
                              (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_up_forward_end_subtree_cycle_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project\n")
+    (insert "** Module A\n")
+    (insert "*** Component X\n")
+    (insert "**** Sub 1\nBody sub 1.\n")
+    (insert "**** Sub 2\nBody sub 2.\n")
+    (insert "*** Component Y\nBody Y.\n")
+    (insert "** Module B\n")
+    (insert "*** Component Z\nBody Z.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At Sub 1
+      (goto-char (point-min))
+      (search-forward "Sub 1")
+      (beginning-of-line)
+      (let ((at-sub1 (funcall track)))
+        ;; Up to Component X
+        (org-up-heading-safe)
+        (let ((up-to-comp-x (funcall track)))
+          ;; Up to Module A
+          (org-up-heading-safe)
+          (let ((up-to-mod-a (funcall track)))
+            ;; Forward same level to Module B
+            (org-forward-heading-same-level 1)
+            (let ((fwd-to-mod-b (funcall track)))
+              ;; End of subtree of Module A
+              (goto-char (point-min))
+              (search-forward "Module A")
+              (beginning-of-line)
+              (let ((end-of-mod-a (progn (org-end-of-subtree) (point))))
+                ;; Edit: insert new heading under Module B
+                (goto-char (point-max))
+                (insert "** Module C\n*** Component W\nBody W.\n")
+                ;; Re-track
+                (goto-char (point-min))
+                (search-forward "Sub 2")
+                (beginning-of-line)
+                (let ((at-sub2 (funcall track)))
+                  (list at-sub1
+                        up-to-comp-x
+                        up-to-mod-a
+                        fwd-to-mod-b
+                        (line-number-at-pos end-of-mod-a)
+                        at-sub2
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
