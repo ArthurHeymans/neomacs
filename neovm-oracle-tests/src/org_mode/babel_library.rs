@@ -1080,6 +1080,62 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_list_table_join_aggregate_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Prices
+      (insert "#+NAME: prices\n")
+      (insert "| Item | Price |\n")
+      (insert "|------+-------|\n")
+      (insert "| A | 5 |\n")
+      (insert "| B | 8 |\n")
+      (insert "| C | 3 |\n\n")
+      ;; Quantities
+      (insert "#+NAME: qtys\n")
+      (insert "| Item | Qty |\n")
+      (insert "|------+-----|\n")
+      (insert "| A | 4 |\n")
+      (insert "| B | 2 |\n")
+      (insert "| C | 7 |\n\n")
+      ;; Aggregate
+      (insert "#+NAME: agg\n")
+      (insert "#+begin_src emacs-lisp :var p=prices q=qtys :results value replace\n")
+      (insert "(let* ((rows (mapcar\n")
+      (insert "               (lambda (row)\n")
+      (insert "                 (let* ((item (car row))\n")
+      (insert "                        (price (cadr row))\n")
+      (insert "                        (qty (cadr (assoc item q)))\n")
+      (insert "                        (total (* price (or qty 0))))\n")
+      (insert "                   (list item price (or qty 0) total)))\n")
+      (insert "               p))\n")
+      (insert "       (grand (apply #'+ (mapcar #'cadddr rows))))\n")
+      (insert "  (list :rows rows :grand grand))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "agg")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_join_stats_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
