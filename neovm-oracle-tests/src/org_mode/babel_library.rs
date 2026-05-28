@@ -1080,6 +1080,49 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_seq_sort_group_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; seq-sort
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(seq-sort #'< '(5 2 8 1 9 3 7 4 6))\n")
+      (insert "#+end_src\n\n")
+      ;; seq-group-by
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(seq-group-by #'evenp '(1 2 3 4 5 6 7 8 9 10))\n")
+      (insert "#+end_src\n\n")
+      ;; seq-take seq-drop seq-take-while
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((s '(1 2 3 4 5 6 7 8 9 10)))\n")
+      (insert "  (list (seq-take s 3) (seq-drop s 7)\n")
+      (insert "        (seq-take-while #'< (list 1 2 3 0 4 5))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 3)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_hash_table_operations_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
