@@ -455,6 +455,52 @@ fn org_export_derived_backend_transcoder_combo() {
 }
 
 #[test]
+fn org_export_headline_number_tags_todo_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox-html)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: Export State\n")
+    (insert "#+OPTIONS: tags:t num:t todo:t\n\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "Alpha body.\n")
+    (insert "** DONE Sub Alpha\n")
+    (insert "Sub alpha body.\n")
+    (insert "** WAIT Sub Alpha2\n")
+    (insert "Sub alpha2 body.\n")
+    (insert "* Beta :home:\n")
+    (insert "Beta body.\n")
+    (insert "** TODO Sub Beta\n")
+    (insert "Sub beta body.\n")
+    (let* ((org-export-with-toc nil)
+           (html (org-export-as 'html nil nil t nil)))
+      ;; Count specific patterns
+      (let ((count-re (lambda (re)
+                        (let ((c 0) (s 0))
+                          (while (string-match re html s)
+                            (setq s (match-end 0) c (1+ c)))
+                          c))))
+        (list (funcall count-re "TODO")
+              (funcall count-re "DONE")
+              (funcall count-re "WAIT")
+              (funcall count-re "work")
+              (funcall count-re "home")
+              (funcall count-re "<h[1-3]")
+              (funcall count-re "<li>")
+              (not (null (string-match-p "Alpha" html)))
+              (not (null (string-match-p "Beta" html)))
+              (replace-regexp-in-string
+               "sec:org[[:alnum:]-]+" "sec:org-id"
+               (replace-regexp-in-string
+                "org[[:alnum:]-]\\{8,\\}" "orgHASH" html))))))))"##,
+    );
+}
+
+#[test]
 fn org_export_latex_math_table_footnote_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
