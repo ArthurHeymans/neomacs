@@ -710,6 +710,22 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn remove_primary_child_frame(&mut self, frame_id: u64) -> bool {
+        let target_was_child = self
+            .primary_cursor()
+            .target_cloned()
+            .is_some_and(|target| target.frame_id == frame_id);
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            let changed = primary_frame.remove_child_frame(frame_id);
+            if target_was_child {
+                self.reset_primary_ime_cursor_area();
+            }
+            changed
+        } else {
+            self.pending_primary_child_frames.remove_frame(frame_id)
+        }
+    }
+
     pub(super) fn primary_transitions_active(&self) -> bool {
         self.primary_render_state()
             .is_some_and(|frame| frame.transitions.has_active())

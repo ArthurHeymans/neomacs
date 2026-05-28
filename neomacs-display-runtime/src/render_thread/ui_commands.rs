@@ -365,21 +365,7 @@ impl RenderApp {
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
                 if self.primary_window_state().is_none() {
-                    let cursor_was_in_child = self
-                        .primary_cursor()
-                        .target_cloned()
-                        .is_some_and(|target| target.frame_id == frame_id);
-                    let removed = self.primary_child_frames_mut().remove_frame(frame_id);
-                    if cursor_was_in_child {
-                        if let Some(cursor) = self.primary_cursor_mut() {
-                            cursor.clear_target();
-                        }
-                        self.reset_primary_ime_cursor_area();
-                        self.clear_primary_ime_preedit();
-                    }
-                    if removed || cursor_was_in_child {
-                        self.mark_primary_dirty();
-                    }
+                    self.remove_primary_child_frame(frame_id);
                 }
                 Ok(())
             }
