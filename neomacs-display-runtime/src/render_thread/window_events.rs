@@ -12,14 +12,8 @@ use winit::window::WindowId;
 impl RenderApp {
     fn emacs_frame_for_window_event(&self, window_id: WindowId) -> u64 {
         self.frame_windows
-            .emacs_frame_for_winit(window_id)
-            .unwrap_or_else(|| {
-                if self.frame_windows.is_primary_winit(window_id) {
-                    self.frame_windows.primary_event_frame_id()
-                } else {
-                    0
-                }
-            })
+            .event_frame_for_winit(window_id)
+            .unwrap_or(0)
     }
 
     fn record_typing_speed_keypress(&mut self, window_id: WindowId) {
@@ -27,12 +21,7 @@ impl RenderApp {
             return;
         }
         let now = std::time::Instant::now();
-        if self.frame_windows.is_primary_winit(window_id) {
-            if let Some(primary_frame) = self.primary_render_state_mut() {
-                primary_frame.typing_speed.key_press_times.push(now);
-            }
-            self.mark_primary_dirty();
-        } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+        if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.typing_speed.key_press_times.push(now);
             window_state.render.frame_dirty = true;
         }
@@ -43,12 +32,7 @@ impl RenderApp {
             return;
         }
         let now = std::time::Instant::now();
-        if self.frame_windows.is_primary_winit(window_id) {
-            if let Some(primary_frame) = self.primary_render_state_mut() {
-                primary_frame.idle_dim.last_activity_time = now;
-            }
-            self.mark_primary_dirty();
-        } else if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+        if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             window_state.render.idle_dim.last_activity_time = now;
             window_state.render.frame_dirty = true;
         }
@@ -78,28 +62,26 @@ impl RenderApp {
             WindowEvent::Resized(size) => {
                 tracing::info!("WindowEvent::Resized: {}x{}", size.width, size.height);
 
-                let is_primary = self.frame_windows.is_primary_winit(window_id);
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
-                if is_primary {
-                    self.handle_resize(size.width, size.height);
-                    let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
-                        size.width,
-                        size.height,
-                        self.primary_scale_factor(),
-                    );
-                    tracing::info!(
-                        "Sending WindowResize event to Emacs: {}x{}",
-                        emacs_w,
-                        emacs_h
-                    );
-                    self.comms.send_input(InputEvent::WindowResize {
-                        width: emacs_w,
-                        height: emacs_h,
-                        emacs_frame_id: emacs_fid,
-                    });
-                } else if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
-                    if let Some(ws) = self.frame_windows.get_mut(emacs_fid) {
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let mut sent_resize = false;
+                if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
+                    if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
                         ws.handle_resize(&device, size.width, size.height);
+                        if is_primary {
+                            if let Some(renderer) = &mut self.renderer {
+                                renderer.resize(size.width, size.height);
+                            }
+                            if self.effects.resize_padding.enabled
+                                && let Some(renderer) = self.renderer.as_ref()
+                            {
+                                renderer.trigger_transient_resize_padding(
+                                    &mut ws.render.renderer_effects,
+                                    std::time::Instant::now(),
+                                );
+                            }
+                            ws.render.frame_dirty = true;
+                        }
                         let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
                             size.width,
                             size.height,
@@ -110,7 +92,23 @@ impl RenderApp {
                             height: emacs_h,
                             emacs_frame_id: emacs_fid,
                         });
+                        sent_resize = true;
                     }
+                }
+                if is_primary && !sent_resize {
+                    self.width = size.width;
+                    self.height = size.height;
+                    if let Some(renderer) = &mut self.renderer {
+                        renderer.resize(size.width, size.height);
+                    }
+                    self.mark_primary_dirty();
+                    let (emacs_w, emacs_h) =
+                        emacs_pixels_from_window_size(size.width, size.height, self.scale_factor);
+                    self.comms.send_input(InputEvent::WindowResize {
+                        width: emacs_w,
+                        height: emacs_h,
+                        emacs_frame_id: emacs_fid,
+                    });
                 }
             }
 
@@ -317,15 +315,7 @@ impl RenderApp {
                                 state == ElementState::Pressed
                             );
                             if state == ElementState::Pressed {
-                                if is_primary {
-                                    if let Some(primary_state) = self.primary_window_state_mut() {
-                                        primary_state.set_mouse_hidden_for_typing(true);
-                                    } else if !self.primary_mouse_hidden_for_typing()
-                                        && self.primary_window().is_some()
-                                    {
-                                        self.set_primary_mouse_hidden_for_typing(true);
-                                    }
-                                } else if let Some(window_state) =
+                                if let Some(window_state) =
                                     self.frame_windows.get_by_winit_mut(window_id)
                                 {
                                     window_state.set_mouse_hidden_for_typing(true);
@@ -496,13 +486,10 @@ impl RenderApp {
             WindowEvent::DroppedFile(path) => {
                 if let Some(path_str) = path.to_str() {
                     tracing::info!("File dropped: {}", path_str);
-                    let mouse_pos = if self.frame_windows.is_primary_winit(window_id) {
-                        self.primary_mouse_pos()
-                    } else {
-                        self.frame_windows
-                            .get_by_winit(window_id)
-                            .map_or((0.0, 0.0), |window_state| window_state.render.mouse_pos)
-                    };
+                    let mouse_pos = self
+                        .frame_windows
+                        .get_by_winit(window_id)
+                        .map_or((0.0, 0.0), |window_state| window_state.render.mouse_pos);
                     self.comms.send_input(InputEvent::FileDrop {
                         paths: vec![path_str.to_string()],
                         x: mouse_pos.0,
@@ -513,30 +500,30 @@ impl RenderApp {
 
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 let effective_scale = effective_window_scale_factor(scale_factor);
-                if !self.frame_windows.is_primary_winit(window_id) {
-                    if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
-                        tracing::info!(
-                            "Scale factor changed for frame 0x{:x}: previous_effective={} raw={} effective={}",
-                            ws.render.emacs_frame_id,
-                            ws.native.scale_factor,
-                            scale_factor,
-                            effective_scale
-                        );
-                        ws.set_scale_factor(scale_factor);
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
+                    tracing::info!(
+                        "Scale factor changed for frame 0x{:x}: previous_effective={} raw={} effective={}",
+                        ws.render.emacs_frame_id,
+                        ws.native.scale_factor,
+                        scale_factor,
+                        effective_scale
+                    );
+                    ws.set_scale_factor(scale_factor);
+                    if is_primary {
+                        if let Some(ref mut renderer) = self.renderer {
+                            renderer.set_scale_factor(effective_scale as f32);
+                        }
                     }
-                    return;
+                } else if is_primary {
+                    tracing::info!(
+                        "Scale factor changed: previous_effective={} raw={} effective={}",
+                        self.scale_factor,
+                        scale_factor,
+                        effective_scale
+                    );
+                    self.scale_factor = effective_scale;
                 }
-                tracing::info!(
-                    "Scale factor changed: previous_effective={} raw={} effective={}",
-                    self.primary_scale_factor(),
-                    scale_factor,
-                    effective_scale
-                );
-                self.set_primary_scale_factor(scale_factor);
-                if let Some(ref mut renderer) = self.renderer {
-                    renderer.set_scale_factor(effective_scale as f32);
-                }
-                self.mark_primary_dirty();
             }
 
             _ => {}
