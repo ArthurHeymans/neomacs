@@ -1080,6 +1080,49 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_letrec_named_let_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; letrec
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(letrec ((is-even (lambda (n) (if (= n 0) t (funcall is-odd (1- n)))))\n")
+      (insert "         (is-odd (lambda (n) (if (= n 0) nil (funcall is-even (1- n))))))\n")
+      (insert "  (list (funcall is-even 4) (funcall is-odd 5)\n")
+      (insert "        (funcall is-even 7) (funcall is-odd 2)))\n")
+      (insert "#+end_src\n\n")
+      ;; named let (loop)
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let loop ((i 0) (acc nil))\n")
+      (insert "  (if (> i 5)\n")
+      (insert "      (nreverse acc)\n")
+      (insert "      (loop (1+ i) (cons (* i i) acc))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 2)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_join_compute_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
