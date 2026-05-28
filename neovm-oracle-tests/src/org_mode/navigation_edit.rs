@@ -483,3 +483,63 @@ fn org_navigate_up_forward_end_subtree_cycle_edit_deep() {
                          (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_up_down_forward_backward_edit_fold_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\nBody alpha.\n\n")
+    (insert "** Beta\nBody beta.\n\n")
+    (insert "*** Gamma\nBody gamma.\n\n")
+    (insert "** Delta\nBody delta.\n\n")
+    (insert "* Epsilon\nBody epsilon.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At Gamma
+      (goto-char (point-min))
+      (search-forward "Gamma")
+      (beginning-of-line)
+      (let ((at-gamma (funcall track)))
+        ;; Up to Beta
+        (org-up-heading-safe)
+        (let ((up-to-beta (funcall track)))
+          ;; Forward to Delta
+          (org-forward-heading-same-level 1)
+          (let ((fwd-to-delta (funcall track)))
+            ;; Backward to Beta
+            (org-backward-heading-same-level 1)
+            (let ((back-to-beta (funcall track)))
+              ;; Down to Gamma
+              (org-next-visible-heading 1)
+              (let ((down-to-gamma (funcall track)))
+                ;; Edit: insert under Delta
+                (goto-char (point-min))
+                (search-forward "Delta")
+                (end-of-line)
+                (insert "\n*** Zeta\nBody zeta.\n")
+                ;; Fold Beta subtree
+                (goto-char (point-min))
+                (search-forward "Beta")
+                (beginning-of-line)
+                (org-fold-subtree)
+                (let ((after-fold (funcall track)))
+                  (list at-gamma
+                        up-to-beta
+                        fwd-to-delta
+                        back-to-beta
+                        down-to-gamma
+                        after-fold
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
