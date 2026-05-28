@@ -604,7 +604,7 @@ impl RenderApp {
 
     pub(super) fn set_primary_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.popup_menu = popup_menu;
+            primary_frame.set_popup_menu(popup_menu);
         } else {
             self.pending_primary_popup_menu = popup_menu;
         }
@@ -660,8 +660,7 @@ impl RenderApp {
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.visual_bell_start = start;
-            primary_frame.frame_dirty = primary_frame.frame_dirty || start.is_some();
+            primary_frame.set_visual_bell_start(start);
         } else {
             self.pending_primary_visual_bell_start = start;
         }

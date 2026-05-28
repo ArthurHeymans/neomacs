@@ -178,7 +178,6 @@ impl RenderApp {
                     window_state.render.set_popup_menu(Some(menu));
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_popup_menu(Some(menu));
-                    self.mark_primary_dirty();
                 } else {
                     tracing::warn!(
                         "ShowPopupMenu requested for unknown frame_id=0x{:x}",
@@ -252,7 +251,6 @@ impl RenderApp {
                     window_state.render.set_tooltip(Some(tooltip));
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_tooltip(Some(tooltip));
-                    self.mark_primary_dirty();
                 } else {
                     tracing::warn!(
                         "ShowTooltip requested for unknown frame_id=0x{:x}",

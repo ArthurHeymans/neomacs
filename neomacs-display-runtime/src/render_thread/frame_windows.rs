@@ -185,6 +185,13 @@ impl GuiFrameRenderState {
         self.frame_dirty = true;
     }
 
+    pub(super) fn set_visual_bell_start(&mut self, start: Option<Instant>) {
+        self.visual_bell_start = start;
+        if start.is_some() {
+            self.frame_dirty = true;
+        }
+    }
+
     pub(super) fn trigger_visual_bell(
         &mut self,
         cursor_error_pulse_enabled: bool,

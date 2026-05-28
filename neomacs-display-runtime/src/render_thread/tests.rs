@@ -352,6 +352,41 @@ fn primary_menubar_command_marks_render_state_dirty() {
 }
 
 #[test]
+fn primary_tooltip_command_marks_render_state_dirty() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+
+    app.handle_ui_command(RenderCommand::ShowTooltip {
+        emacs_frame_id: 0,
+        x: 10.0,
+        y: 20.0,
+        text: "tip".to_string(),
+        fg_r: 1.0,
+        fg_g: 1.0,
+        fg_b: 1.0,
+        bg_r: 0.0,
+        bg_g: 0.0,
+        bg_b: 0.0,
+    })
+    .expect("show primary tooltip");
+
+    assert!(
+        app.primary_render_state()
+            .and_then(|frame| frame.tooltip.as_ref())
+            .is_some()
+    );
+    assert!(app.primary_dirty());
+}
+
+#[test]
 fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
     let mut app = make_test_app();
     let Some(device) = make_test_device() else {
