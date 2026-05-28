@@ -1188,11 +1188,15 @@ impl GuiFrameWindowManager {
         });
     }
 
-    pub(super) fn force_top_level_cursor_blink_on(&mut self) {
+    pub(super) fn force_top_level_cursor_blink_on(&mut self) -> bool {
+        let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.cursor.blink_on = true;
-            window_state.render.frame_dirty = true;
+            if window_state.render.cursor.force_blink_on() {
+                window_state.render.frame_dirty = true;
+                dirty = true;
+            }
         });
+        dirty
     }
 
     pub(super) fn clear_top_level_glyph_atlases(&mut self) {

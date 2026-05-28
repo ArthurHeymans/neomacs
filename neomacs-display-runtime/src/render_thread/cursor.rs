@@ -515,6 +515,14 @@ impl CursorState {
         self.blink_on = true;
         self.last_blink_toggle = std::time::Instant::now();
     }
+
+    pub(super) fn force_blink_on(&mut self) -> bool {
+        if self.blink_on {
+            return false;
+        }
+        self.blink_on = true;
+        true
+    }
 }
 
 #[cfg(test)]
