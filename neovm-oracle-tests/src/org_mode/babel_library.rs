@@ -1080,6 +1080,59 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_join_compute_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Rates table
+      (insert "#+NAME: rates\n")
+      (insert "| Service | Rate |\n")
+      (insert("|---------+------|\n")
+      (insert "| Std | 100 |\n")
+      (insert "| Prem | 200 |\n\n")
+      ;; Usage table
+      (insert "#+NAME: usage\n")
+      (insert "| Client | Service | Hours |\n")
+      (insert "|--------+---------+-------|\n")
+      (insert "| X | Std | 5 |\n")
+      (insert "| Y | Prem | 3 |\n")
+      (insert "| Z | Std | 8 |\n\n")
+      ;; Compute bills
+      (insert "#+NAME: bills\n")
+      (insert "#+begin_src emacs-lisp :var r=rates u=usage :results value replace\n")
+      (insert "(mapcar (lambda (row)\n")
+      (insert "          (let* ((client (car row))\n")
+      (insert "                 (service (cadr row))\n")
+      (insert "                 (hours (caddr row))\n")
+      (insert "                 (rate (cadr (assoc service r)))\n")
+      (insert "                 (bill (* hours rate)))\n")
+      (insert "            (list client service hours rate bill)))\n")
+      (insert "        u)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "bills")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_multi_table_join_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
