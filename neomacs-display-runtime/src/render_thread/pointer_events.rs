@@ -385,14 +385,16 @@ impl RenderApp {
     ) {
         self.record_idle_dim_activity(window_id);
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
-        if !self.frame_windows.is_primary_winit(window_id) {
+        if self.frame_windows.get_by_winit(window_id).is_some() {
             let mut event = None;
             let mut handled_chrome = false;
             let mut delivered_mouse_button = false;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 let x = window_state.render.mouse_pos.0;
                 let y = window_state.render.mouse_pos.1;
-                if state == ElementState::Pressed && button == MouseButton::Left {
+                let popup_was_open = window_state.render.popup_menu.is_some();
+                if !popup_was_open && state == ElementState::Pressed && button == MouseButton::Left
+                {
                     if window_state.drag_resize_for_current_edge() {
                         handled_chrome = true;
                     }
@@ -422,7 +424,7 @@ impl RenderApp {
                     }
                 }
 
-                if window_state.render.popup_menu.is_some() {
+                if popup_was_open {
                     if state == ElementState::Pressed && button == MouseButton::Left {
                         if !handled_chrome
                             && let Some(compact_bar) = window_state.render.compact_bar.as_ref()
@@ -475,34 +477,67 @@ impl RenderApp {
                             }
                             window_state.render.frame_dirty = true;
                             handled_chrome = true;
-                        } else if let Some(idx) =
-                            Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                        } else if let Some(tab_bar) = window_state
+                            .render
+                            .current_frame
+                            .as_ref()
+                            .and_then(|frame| frame.tab_bar.as_ref())
+                            && y >= tab_bar.y
+                            && y < tab_bar.y + tab_bar.height
                         {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.popup_menu = None;
-                            window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
-                            event = Some(InputEvent::TabBarClick {
-                                index: idx as i32,
-                                emacs_frame_id: window_state.render.emacs_frame_id,
-                            });
+                            window_state.render.chrome_interaction.menu_bar_active = None;
+                            window_state
+                                .render
+                                .chrome_interaction
+                                .compact_bar_menu_active = None;
+                            window_state
+                                .render
+                                .chrome_interaction
+                                .tab_bar_press_captured = true;
+                            if let Some(idx) =
+                                Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                            {
+                                window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
+                                event = Some(InputEvent::TabBarClick {
+                                    index: idx as i32,
+                                    emacs_frame_id: window_state.render.emacs_frame_id,
+                                });
+                            }
                             window_state.render.frame_dirty = true;
                             handled_chrome = true;
-                        } else if let Some(idx) = Self::frame_window_toolbar_hit_test(
-                            window_state,
-                            x,
-                            y,
-                            self.toolbar_padding,
-                            self.toolbar_icon_size,
-                        ) {
+                        } else if let Some(tool_bar) = window_state.render.tool_bar.as_ref()
+                            && y >= Self::frame_window_toolbar_y_origin(window_state)
+                            && y < Self::frame_window_toolbar_y_origin(window_state)
+                                + tool_bar.height
+                        {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.popup_menu = None;
-                            window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
-                            event = Some(InputEvent::ToolBarClick {
-                                index: idx as i32,
-                                emacs_frame_id: window_state.render.emacs_frame_id,
-                            });
+                            window_state.render.chrome_interaction.menu_bar_active = None;
+                            window_state
+                                .render
+                                .chrome_interaction
+                                .compact_bar_menu_active = None;
+                            window_state
+                                .render
+                                .chrome_interaction
+                                .toolbar_press_captured = true;
+                            if let Some(idx) = Self::frame_window_toolbar_hit_test(
+                                window_state,
+                                x,
+                                y,
+                                self.toolbar_padding,
+                                self.toolbar_icon_size,
+                            ) {
+                                window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
+                                event = Some(InputEvent::ToolBarClick {
+                                    index: idx as i32,
+                                    emacs_frame_id: window_state.render.emacs_frame_id,
+                                });
+                            }
                             window_state.render.frame_dirty = true;
                             handled_chrome = true;
                         } else {
@@ -515,6 +550,10 @@ impl RenderApp {
                                 event = Some(InputEvent::MenuSelection { index: idx });
                                 window_state.render.popup_menu = None;
                                 window_state.render.chrome_interaction.menu_bar_active = None;
+                                window_state
+                                    .render
+                                    .chrome_interaction
+                                    .compact_bar_menu_active = None;
                                 window_state.render.frame_dirty = true;
                             } else {
                                 let (depth, local_idx) = window_state
@@ -543,12 +582,20 @@ impl RenderApp {
                                         window_state.render.popup_menu = None;
                                         window_state.render.chrome_interaction.menu_bar_active =
                                             None;
+                                        window_state
+                                            .render
+                                            .chrome_interaction
+                                            .compact_bar_menu_active = None;
                                         window_state.render.frame_dirty = true;
                                     }
                                 } else {
                                     event = Some(InputEvent::MenuSelection { index: -1 });
                                     window_state.render.popup_menu = None;
                                     window_state.render.chrome_interaction.menu_bar_active = None;
+                                    window_state
+                                        .render
+                                        .chrome_interaction
+                                        .compact_bar_menu_active = None;
                                     window_state.render.frame_dirty = true;
                                 }
                             }
@@ -558,7 +605,14 @@ impl RenderApp {
                         event = Some(InputEvent::MenuSelection { index: -1 });
                         window_state.render.popup_menu = None;
                         window_state.render.chrome_interaction.menu_bar_active = None;
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .compact_bar_menu_active = None;
                         window_state.render.frame_dirty = true;
+                        handled_chrome = true;
+                    }
+                    if !handled_chrome {
                         handled_chrome = true;
                     }
                 }
@@ -633,38 +687,66 @@ impl RenderApp {
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
-                        && let Some(idx) = Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                        && let Some(tab_bar) = window_state
+                            .render
+                            .current_frame
+                            .as_ref()
+                            .and_then(|frame| frame.tab_bar.as_ref())
+                        && y >= tab_bar.y
+                        && y < tab_bar.y + tab_bar.height
                     {
-                        window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
-                        event = Some(InputEvent::TabBarClick {
-                            index: idx as i32,
-                            emacs_frame_id: window_state.render.emacs_frame_id,
-                        });
-                        window_state.render.frame_dirty = true;
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .tab_bar_press_captured = true;
+                        if let Some(idx) = Self::frame_window_tab_bar_hit_test(window_state, x, y) {
+                            window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
+                            event = Some(InputEvent::TabBarClick {
+                                index: idx as i32,
+                                emacs_frame_id: window_state.render.emacs_frame_id,
+                            });
+                            window_state.render.frame_dirty = true;
+                        }
                         handled_chrome = true;
                     } else if !handled_chrome
-                        && let Some(idx) = Self::frame_window_toolbar_hit_test(
+                        && let Some(tool_bar) = window_state.render.tool_bar.as_ref()
+                        && y >= Self::frame_window_toolbar_y_origin(window_state)
+                        && y < Self::frame_window_toolbar_y_origin(window_state) + tool_bar.height
+                    {
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .toolbar_press_captured = true;
+                        if let Some(idx) = Self::frame_window_toolbar_hit_test(
                             window_state,
                             x,
                             y,
                             self.toolbar_padding,
                             self.toolbar_icon_size,
-                        )
-                    {
-                        window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
-                        event = Some(InputEvent::ToolBarClick {
-                            index: idx as i32,
-                            emacs_frame_id: window_state.render.emacs_frame_id,
-                        });
-                        window_state.render.frame_dirty = true;
+                        ) {
+                            window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
+                            event = Some(InputEvent::ToolBarClick {
+                                index: idx as i32,
+                                emacs_frame_id: window_state.render.emacs_frame_id,
+                            });
+                            window_state.render.frame_dirty = true;
+                        }
                         handled_chrome = true;
                     }
                 } else if state == ElementState::Released && button == MouseButton::Left {
                     if window_state
                         .render
                         .chrome_interaction
-                        .tab_bar_pressed
-                        .is_some()
+                        .tab_bar_press_captured
+                        || window_state
+                            .render
+                            .chrome_interaction
+                            .toolbar_press_captured
+                        || window_state
+                            .render
+                            .chrome_interaction
+                            .tab_bar_pressed
+                            .is_some()
                         || window_state
                             .render
                             .chrome_interaction
@@ -680,8 +762,16 @@ impl RenderApp {
                         window_state
                             .render
                             .chrome_interaction
+                            .tab_bar_press_captured = false;
+                        window_state
+                            .render
+                            .chrome_interaction
                             .compact_bar_tool_pressed = None;
                         window_state.render.chrome_interaction.toolbar_pressed = None;
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .toolbar_press_captured = false;
                         window_state.render.frame_dirty = true;
                         handled_chrome = true;
                     }
@@ -720,6 +810,16 @@ impl RenderApp {
                         webkit_rel_x: wk_rx,
                         webkit_rel_y: wk_ry,
                     });
+                    if state == ElementState::Pressed {
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .tab_bar_press_captured = false;
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .toolbar_press_captured = false;
+                    }
                     delivered_mouse_button = true;
                 }
             }
@@ -740,6 +840,10 @@ impl RenderApp {
                 );
                 window_state.render.frame_dirty = true;
             }
+            return;
+        }
+
+        if !self.frame_windows.is_primary_winit(window_id) {
             return;
         }
 
@@ -811,6 +915,56 @@ impl RenderApp {
                         });
                         self.mark_primary_dirty();
                     }
+                } else if tab_bar_height > 0.0
+                    && self.primary_mouse_pos().1 >= tab_bar_y
+                    && self.primary_mouse_pos().1 < tab_bar_y + tab_bar_height
+                {
+                    let idx = self
+                        .tab_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
+                    self.comms
+                        .send_input(InputEvent::MenuSelection { index: -1 });
+                    self.set_primary_popup_menu(None);
+                    self.with_primary_chrome_interaction_mut(|chrome| {
+                        chrome.menu_bar_active = None;
+                        chrome.compact_bar_menu_active = None;
+                        chrome.tab_bar_press_captured = true;
+                        if let Some(idx) = idx {
+                            chrome.tab_bar_pressed = Some(idx);
+                        }
+                    });
+                    if let Some(idx) = idx {
+                        self.comms.send_input(InputEvent::TabBarClick {
+                            index: idx as i32,
+                            emacs_frame_id: primary_event_frame_id,
+                        });
+                    }
+                    self.mark_primary_dirty();
+                } else if tool_bar_height > 0.0
+                    && self.primary_mouse_pos().1 < self.toolbar_y_origin() + tool_bar_height
+                    && self.primary_mouse_pos().1 >= self.toolbar_y_origin()
+                {
+                    let idx = self.toolbar_hit_test(
+                        self.primary_mouse_pos().0,
+                        self.primary_mouse_pos().1 - self.toolbar_y_origin(),
+                    );
+                    self.comms
+                        .send_input(InputEvent::MenuSelection { index: -1 });
+                    self.set_primary_popup_menu(None);
+                    self.with_primary_chrome_interaction_mut(|chrome| {
+                        chrome.menu_bar_active = None;
+                        chrome.compact_bar_menu_active = None;
+                        chrome.toolbar_press_captured = true;
+                        if let Some(idx) = idx {
+                            chrome.toolbar_pressed = Some(idx);
+                        }
+                    });
+                    if let Some(idx) = idx {
+                        self.comms.send_input(InputEvent::ToolBarClick {
+                            index: idx as i32,
+                            emacs_frame_id: primary_event_frame_id,
+                        });
+                    }
+                    self.mark_primary_dirty();
                 } else {
                     let idx = self.primary_popup_menu().map_or(-1, |menu| {
                         menu.hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
@@ -821,6 +975,7 @@ impl RenderApp {
                         self.set_primary_popup_menu(None);
                         self.with_primary_chrome_interaction_mut(|chrome| {
                             chrome.menu_bar_active = None;
+                            chrome.compact_bar_menu_active = None;
                         });
                         self.mark_primary_dirty();
                     } else {
@@ -849,6 +1004,7 @@ impl RenderApp {
                                 self.set_primary_popup_menu(None);
                                 self.with_primary_chrome_interaction_mut(|chrome| {
                                     chrome.menu_bar_active = None;
+                                    chrome.compact_bar_menu_active = None;
                                 });
                                 self.mark_primary_dirty();
                             }
@@ -858,6 +1014,7 @@ impl RenderApp {
                             self.set_primary_popup_menu(None);
                             self.with_primary_chrome_interaction_mut(|chrome| {
                                 chrome.menu_bar_active = None;
+                                chrome.compact_bar_menu_active = None;
                             });
                             self.mark_primary_dirty();
                         }
@@ -869,6 +1026,7 @@ impl RenderApp {
                 self.set_primary_popup_menu(None);
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.menu_bar_active = None;
+                    chrome.compact_bar_menu_active = None;
                 });
                 self.mark_primary_dirty();
             }
@@ -992,22 +1150,29 @@ impl RenderApp {
             {
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_pressed = Some(idx);
+                    chrome.tab_bar_press_captured = true;
                 });
                 self.comms.send_input(InputEvent::TabBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
                 self.mark_primary_dirty();
+            } else {
+                self.with_primary_chrome_interaction_mut(|chrome| {
+                    chrome.tab_bar_press_captured = true;
+                });
             }
             return;
         }
 
         if state == ElementState::Released
             && button == MouseButton::Left
-            && self.primary_chrome_interaction().tab_bar_pressed.is_some()
+            && (self.primary_chrome_interaction().tab_bar_pressed.is_some()
+                || self.primary_chrome_interaction().tab_bar_press_captured)
         {
             self.with_primary_chrome_interaction_mut(|chrome| {
                 chrome.tab_bar_pressed = None;
+                chrome.tab_bar_press_captured = false;
             });
             self.mark_primary_dirty();
             return;
@@ -1025,12 +1190,17 @@ impl RenderApp {
             ) {
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_pressed = Some(idx);
+                    chrome.toolbar_press_captured = true;
                 });
                 self.comms.send_input(InputEvent::ToolBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
                 self.mark_primary_dirty();
+            } else {
+                self.with_primary_chrome_interaction_mut(|chrome| {
+                    chrome.toolbar_press_captured = true;
+                });
             }
             return;
         }
@@ -1051,10 +1221,12 @@ impl RenderApp {
 
         if state == ElementState::Released
             && button == MouseButton::Left
-            && self.primary_chrome_interaction().toolbar_pressed.is_some()
+            && (self.primary_chrome_interaction().toolbar_pressed.is_some()
+                || self.primary_chrome_interaction().toolbar_press_captured)
         {
             self.with_primary_chrome_interaction_mut(|chrome| {
                 chrome.toolbar_pressed = None;
+                chrome.toolbar_press_captured = false;
             });
             self.mark_primary_dirty();
             return;
@@ -1132,6 +1304,12 @@ impl RenderApp {
             webkit_rel_x: wk_rx,
             webkit_rel_y: wk_ry,
         });
+        if state == ElementState::Pressed {
+            self.with_primary_chrome_interaction_mut(|chrome| {
+                chrome.tab_bar_press_captured = false;
+                chrome.toolbar_press_captured = false;
+            });
+        }
 
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();

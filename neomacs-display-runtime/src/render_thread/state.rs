@@ -225,8 +225,10 @@ pub(crate) struct GuiChromeInteractionState {
     pub(super) menu_bar_active: Option<u32>,
     pub(super) tab_bar_hovered: Option<u32>,
     pub(super) tab_bar_pressed: Option<u32>,
+    pub(super) tab_bar_press_captured: bool,
     pub(super) toolbar_hovered: Option<u32>,
     pub(super) toolbar_pressed: Option<u32>,
+    pub(super) toolbar_press_captured: bool,
     pub(super) compact_bar_menu_hovered: Option<u32>,
     pub(super) compact_bar_menu_active: Option<u32>,
     pub(super) compact_bar_tool_hovered: Option<u32>,
@@ -242,11 +244,15 @@ impl GuiChromeInteractionState {
     pub(super) fn clear_tab_bar(&mut self) {
         self.tab_bar_hovered = None;
         self.tab_bar_pressed = None;
+        // Preserve press capture across chrome removal so a chrome press does
+        // not leak a buffer release if the tab bar disappears mid-click.
     }
 
     pub(super) fn clear_toolbar(&mut self) {
         self.toolbar_hovered = None;
         self.toolbar_pressed = None;
+        // Preserve press capture across chrome removal so a chrome press does
+        // not leak a buffer release if the toolbar disappears mid-click.
     }
 
     pub(super) fn clear_compact_bar(&mut self) {
