@@ -282,6 +282,76 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
 }
 
 #[test]
+fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+
+    app.handle_ui_command(RenderCommand::ShowPopupMenu {
+        emacs_frame_id: 0x2000,
+        x: 10.0,
+        y: 20.0,
+        items: vec![PopupMenuItem {
+            label: "Open".to_string(),
+            shortcut: String::new(),
+            enabled: true,
+            separator: false,
+            submenu: false,
+            depth: 0,
+        }],
+        title: None,
+        fg: None,
+        bg: None,
+    })
+    .expect("unknown secondary popup is handled as no-op");
+
+    assert!(app.primary_popup_menu().is_none());
+    assert!(!app.primary_dirty());
+}
+
+#[test]
+fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+
+    app.handle_ui_command(RenderCommand::ShowTooltip {
+        emacs_frame_id: 0x2000,
+        x: 10.0,
+        y: 20.0,
+        text: "secondary".to_string(),
+        fg_r: 1.0,
+        fg_g: 1.0,
+        fg_b: 1.0,
+        bg_r: 0.0,
+        bg_g: 0.0,
+        bg_b: 0.0,
+    })
+    .expect("unknown secondary tooltip is handled as no-op");
+
+    assert!(
+        app.primary_render_state()
+            .and_then(|frame| frame.tooltip.as_ref())
+            .is_none()
+    );
+    assert!(!app.primary_dirty());
+}
+
+#[test]
 fn adopted_primary_frame_id_targets_primary_visual_bell() {
     let mut app = make_test_app();
     let Some(device) = make_test_device() else {
@@ -306,6 +376,42 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
             .is_some()
     );
     assert!(app.primary_dirty());
+}
+
+#[test]
+fn managed_primary_visual_bell_uses_frame_renderer_effects() {
+    let mut render = make_test_device()
+        .map(|device| super::frame_windows::GuiFrameRenderState::new(0x1000, &device, 1.0, false));
+    let Some(render) = render.as_mut() else {
+        return;
+    };
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.add_window_info(
+        7,
+        1,
+        1,
+        50,
+        50,
+        0.0,
+        0.0,
+        400.0,
+        300.0,
+        20.0,
+        0.0,
+        0.0,
+        true,
+        false,
+        17.0,
+        String::new(),
+        false,
+    );
+    render.current_frame = Some(frame);
+
+    render.trigger_visual_bell(true, true, 120, std::time::Instant::now());
+
+    assert!(render.visual_bell_start.is_some());
+    assert!(render.renderer_effects.has_transient_effects());
+    assert!(render.frame_dirty);
 }
 
 #[test]

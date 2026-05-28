@@ -78,10 +78,12 @@ impl RenderApp {
                     std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
                     self.cursor_defaults.blink_on = true;
-                    if let Some(cursor) = self.primary_cursor_mut() {
-                        cursor.blink_on = true;
+                    if self.primary_window_state().is_none() {
+                        if let Some(cursor) = self.primary_cursor_mut() {
+                            cursor.blink_on = true;
+                        }
+                        self.mark_primary_dirty();
                     }
-                    self.mark_primary_dirty();
                 }
                 self.sync_top_level_cursor_config_from_defaults_without_dirty();
                 if !enabled {
@@ -95,9 +97,6 @@ impl RenderApp {
                 self.cursor_defaults.anim_speed = speed;
                 if !enabled {
                     self.cursor_defaults.animating = false;
-                    if let Some(cursor) = self.primary_cursor_mut() {
-                        cursor.animating = false;
-                    }
                 }
                 self.sync_top_level_cursor_config_from_defaults();
                 Ok(())
@@ -132,12 +131,9 @@ impl RenderApp {
                 self.cursor_defaults.anim_duration = cursor_duration_ms as f32 / 1000.0;
                 self.cursor_defaults.trail_size = trail_size.clamp(0.0, 1.0);
                 self.transition_policy = transition_policy;
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 if !cursor_enabled {
                     self.cursor_defaults.animating = false;
-                    if let Some(cursor) = self.primary_cursor_mut() {
-                        cursor.animating = false;
-                    }
                 }
                 self.sync_top_level_cursor_config_from_defaults();
                 self.sync_top_level_transition_policy_from_default();
@@ -165,40 +161,24 @@ impl RenderApp {
                     y,
                     items.len()
                 );
-                let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
-                let (fs, lh, cw) = if is_primary_frame {
-                    self.primary_render_state()
-                        .map(|a| {
-                            let atlas = &a.glyph_atlas;
-                            (
-                                atlas.default_font_size(),
-                                atlas.default_line_height(),
-                                atlas.default_char_width(),
-                            )
-                        })
-                        .unwrap_or((13.0, 17.0, 13.0 * 0.6))
-                } else {
-                    self.frame_windows
-                        .get(emacs_frame_id)
-                        .map(|window_state| {
-                            let atlas = &window_state.render.glyph_atlas;
-                            (
-                                atlas.default_font_size(),
-                                atlas.default_line_height(),
-                                atlas.default_char_width(),
-                            )
-                        })
-                        .unwrap_or((13.0, 17.0, 13.0 * 0.6))
-                };
+                let (fs, lh, cw) = self
+                    .frame_windows
+                    .get(emacs_frame_id)
+                    .map(|window_state| window_state.render.font_metrics())
+                    .or_else(|| {
+                        self.primary_render_state()
+                            .map(|primary_frame| primary_frame.font_metrics())
+                            .filter(|_| self.frame_windows.is_primary_frame_id(emacs_frame_id))
+                    })
+                    .unwrap_or((13.0, 17.0, 13.0 * 0.6));
                 let mut menu = PopupMenuState::new(x, y, items, title, fs, lh, cw);
                 menu.face_fg = fg;
                 menu.face_bg = bg;
-                if is_primary_frame {
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.render.set_popup_menu(Some(menu));
+                } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_popup_menu(Some(menu));
                     self.mark_primary_dirty();
-                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.render.popup_menu = Some(menu);
-                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "ShowPopupMenu requested for unknown frame_id=0x{:x}",
@@ -226,41 +206,36 @@ impl RenderApp {
                 bg_b,
             } => {
                 tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
-                let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
-                let (fs, lh, cw, screen_w, screen_h) = if is_primary_frame {
-                    let (fs, lh, cw) = self
-                        .primary_render_state()
-                        .map(|primary_frame| {
-                            let atlas = &primary_frame.glyph_atlas;
-                            (
-                                atlas.default_font_size(),
-                                atlas.default_line_height(),
-                                atlas.default_char_width(),
-                            )
-                        })
-                        .unwrap_or((13.0, 17.0, 13.0 * 0.6));
-                    let (screen_w, screen_h) = self.primary_logical_size();
-                    (fs, lh, cw, screen_w, screen_h)
-                } else {
-                    self.frame_windows
-                        .get(emacs_frame_id)
-                        .map(|window_state| {
-                            let atlas = &window_state.render.glyph_atlas;
-                            (
-                                atlas.default_font_size(),
-                                atlas.default_line_height(),
-                                atlas.default_char_width(),
-                                window_state.native.width as f32
-                                    / window_state.native.scale_factor as f32,
-                                window_state.native.height as f32
-                                    / window_state.native.scale_factor as f32,
-                            )
-                        })
-                        .unwrap_or_else(|| {
-                            let (screen_w, screen_h) = self.primary_logical_size();
-                            (13.0, 17.0, 13.0 * 0.6, screen_w, screen_h)
-                        })
-                };
+                let (fs, lh, cw, screen_w, screen_h) = self
+                    .frame_windows
+                    .get(emacs_frame_id)
+                    .map(|window_state| {
+                        let (fs, lh, cw) = window_state.render.font_metrics();
+                        (
+                            fs,
+                            lh,
+                            cw,
+                            window_state.native.width as f32
+                                / window_state.native.scale_factor as f32,
+                            window_state.native.height as f32
+                                / window_state.native.scale_factor as f32,
+                        )
+                    })
+                    .or_else(|| {
+                        if !self.frame_windows.is_primary_frame_id(emacs_frame_id) {
+                            return None;
+                        }
+                        let (fs, lh, cw) = self
+                            .primary_render_state()
+                            .map(|primary_frame| primary_frame.font_metrics())
+                            .unwrap_or((13.0, 17.0, 13.0 * 0.6));
+                        let (screen_w, screen_h) = self.primary_logical_size();
+                        Some((fs, lh, cw, screen_w, screen_h))
+                    })
+                    .unwrap_or_else(|| {
+                        let (screen_w, screen_h) = self.primary_logical_size();
+                        (13.0, 17.0, 13.0 * 0.6, screen_w, screen_h)
+                    });
                 let tooltip = TooltipState::new(
                     x,
                     y,
@@ -273,12 +248,11 @@ impl RenderApp {
                     lh,
                     cw,
                 );
-                if is_primary_frame {
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.render.set_tooltip(Some(tooltip));
+                } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_tooltip(Some(tooltip));
                     self.mark_primary_dirty();
-                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.render.tooltip = Some(tooltip);
-                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "ShowTooltip requested for unknown frame_id=0x{:x}",
@@ -294,86 +268,18 @@ impl RenderApp {
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
                 let now = std::time::Instant::now();
-                if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
+                let cursor_error_pulse_enabled = self.effects.cursor_error_pulse.enabled;
+                let edge_snap_enabled = self.effects.edge_snap.enabled;
+                let edge_snap_duration_ms = self.effects.edge_snap.duration_ms;
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.render.trigger_visual_bell(
+                        cursor_error_pulse_enabled,
+                        edge_snap_enabled,
+                        edge_snap_duration_ms,
+                        now,
+                    );
+                } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.set_primary_visual_bell_start(Some(now));
-                    if self.effects.cursor_error_pulse.enabled {
-                        if let (Some(renderer), Some(primary_state)) = (
-                            self.renderer.as_ref(),
-                            self.frame_windows.primary_window_mut(),
-                        ) {
-                            renderer.trigger_transient_cursor_error_pulse(
-                                &mut primary_state.render.renderer_effects,
-                                now,
-                            );
-                        }
-                    }
-                    if self.effects.edge_snap.enabled {
-                        let selected_info = self.primary_current_frame().and_then(|frame| {
-                            frame
-                                .window_infos
-                                .iter()
-                                .find(|info| info.selected && !info.is_minibuffer)
-                                .cloned()
-                        });
-                        if let Some(info) = selected_info {
-                            let at_top = info.window_start <= 1;
-                            let at_bottom = info.window_end >= info.buffer_size;
-                            if at_top || at_bottom {
-                                if let (Some(renderer), Some(primary_state)) = (
-                                    self.renderer.as_ref(),
-                                    self.frame_windows.primary_window_mut(),
-                                ) {
-                                    renderer.trigger_transient_edge_snap(
-                                        &mut primary_state.render.renderer_effects,
-                                        info.bounds,
-                                        info.mode_line_height,
-                                        at_top,
-                                        at_bottom,
-                                        now,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                } else if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                    window_state.render.visual_bell_start = Some(now);
-                    if self.effects.cursor_error_pulse.enabled {
-                        window_state
-                            .render
-                            .renderer_effects
-                            .trigger_cursor_error_pulse(now);
-                    }
-                    if self.effects.edge_snap.enabled {
-                        let selected_info =
-                            window_state
-                                .render
-                                .current_frame
-                                .as_ref()
-                                .and_then(|frame| {
-                                    frame
-                                        .window_infos
-                                        .iter()
-                                        .find(|info| info.selected && !info.is_minibuffer)
-                                        .cloned()
-                                });
-                        if let Some(info) = selected_info {
-                            {
-                                let at_top = info.window_start <= 1;
-                                let at_bottom = info.window_end >= info.buffer_size;
-                                if at_top || at_bottom {
-                                    window_state.render.renderer_effects.trigger_edge_snap(
-                                        info.bounds,
-                                        info.mode_line_height,
-                                        at_top,
-                                        at_bottom,
-                                        now,
-                                        self.effects.edge_snap.duration_ms,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                    window_state.render.frame_dirty = true;
                 } else {
                     tracing::warn!(
                         "VisualBell requested for unknown frame_id=0x{:x}",
@@ -437,7 +343,7 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.set_indent_guide_rainbow(enabled, linear_colors);
                 }
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorSizeTransition {
@@ -448,12 +354,9 @@ impl RenderApp {
                 self.cursor_defaults.size_transition_duration = duration_ms as f32 / 1000.0;
                 if !enabled {
                     self.cursor_defaults.size_animating = false;
-                    if let Some(cursor) = self.primary_cursor_mut() {
-                        cursor.size_animating = false;
-                    }
                 }
                 self.sync_top_level_cursor_config_from_defaults();
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetLigaturesEnabled { enabled } => {
@@ -514,7 +417,7 @@ impl RenderApp {
                 self.child_frame_shadow_layers = shadow_layers;
                 self.child_frame_shadow_offset = shadow_offset;
                 self.child_frame_shadow_opacity = shadow_opacity;
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetToolBar {

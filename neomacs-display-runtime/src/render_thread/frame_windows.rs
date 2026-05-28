@@ -152,6 +152,61 @@ impl GuiFrameRenderState {
         self.current_frame.clone()
     }
 
+    pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
+        (
+            self.glyph_atlas.default_font_size(),
+            self.glyph_atlas.default_line_height(),
+            self.glyph_atlas.default_char_width(),
+        )
+    }
+
+    pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
+        self.popup_menu = popup_menu;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn set_tooltip(&mut self, tooltip: Option<TooltipState>) {
+        self.tooltip = tooltip;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn trigger_visual_bell(
+        &mut self,
+        cursor_error_pulse_enabled: bool,
+        edge_snap_enabled: bool,
+        edge_snap_duration_ms: u32,
+        now: Instant,
+    ) {
+        self.visual_bell_start = Some(now);
+        if cursor_error_pulse_enabled {
+            self.renderer_effects.trigger_cursor_error_pulse(now);
+        }
+        if edge_snap_enabled {
+            let selected_info = self.current_frame.as_ref().and_then(|frame| {
+                frame
+                    .window_infos
+                    .iter()
+                    .find(|info| info.selected && !info.is_minibuffer)
+                    .cloned()
+            });
+            if let Some(info) = selected_info {
+                let at_top = info.window_start <= 1;
+                let at_bottom = info.window_end >= info.buffer_size;
+                if at_top || at_bottom {
+                    self.renderer_effects.trigger_edge_snap(
+                        info.bounds,
+                        info.mode_line_height,
+                        at_top,
+                        at_bottom,
+                        now,
+                        edge_snap_duration_ms,
+                    );
+                }
+            }
+        }
+        self.frame_dirty = true;
+    }
+
     pub(super) fn take_current_frame_for_render(&mut self) -> Option<FrameGlyphBuffer> {
         self.current_frame.as_mut().map(Self::take_frame_for_render)
     }
