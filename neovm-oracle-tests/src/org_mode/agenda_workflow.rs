@@ -1564,3 +1564,56 @@ fn org_agenda_multi_file_edit_clock_reagenda_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_todo_filter_edit_reschedule_reagenda_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-filter-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgendaFilter*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE Beta\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO Gamma\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT Delta\nSCHEDULED: <2026-05-29 Thu>\n"))
+          ;; Agenda for two days
+          (org-agenda-list nil "2026-05-28" 2)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((full (replace-regexp-in-string
+                         (regexp-quote root) "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+              ;; Filter TODO
+              (org-agenda-filter-apply '("+TODO") 'todo)
+              (let ((todo-only (replace-regexp-in-string
+                                (regexp-quote root) "<root>"
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+                (org-agenda-filter-remove-all)
+                ;; Edit: reschedule Gamma to Thursday
+                (org-agenda-goto nil)
+                (with-current-buffer (current-buffer)
+                  (org-reschedule nil '(5 29 2026)))
+                ;; Re-agenda
+                (org-agenda-quit)
+                (org-agenda-list nil "2026-05-28" 2)
+                (with-current-buffer org-agenda-buffer-name
+                  (let ((after-reschedule (replace-regexp-in-string
+                                          (regexp-quote root) "<root>"
+                                          (buffer-substring-no-properties
+                                           (point-min) (point-max)))))
+                    (org-agenda-quit)
+                    (list full todo-only after-reschedule))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
