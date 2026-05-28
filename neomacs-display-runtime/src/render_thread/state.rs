@@ -569,12 +569,34 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn hide_top_level_popup_menus(&mut self) {
+        self.set_primary_popup_menu(None);
+        for window_state in self.frame_windows.windows.values_mut() {
+            if window_state.render.popup_menu.is_some() {
+                window_state.render.popup_menu = None;
+                window_state.render.frame_dirty = true;
+            }
+        }
+        self.mark_primary_dirty();
+    }
+
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.tooltip = tooltip;
         } else {
             self.pending_primary_tooltip = tooltip;
         }
+    }
+
+    pub(super) fn hide_top_level_tooltips(&mut self) {
+        self.set_primary_tooltip(None);
+        for window_state in self.frame_windows.windows.values_mut() {
+            if window_state.render.tooltip.is_some() {
+                window_state.render.tooltip = None;
+                window_state.render.frame_dirty = true;
+            }
+        }
+        self.mark_primary_dirty();
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {

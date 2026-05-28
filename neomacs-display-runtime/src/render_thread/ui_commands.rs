@@ -212,15 +212,8 @@ impl RenderApp {
             }
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
-                self.set_primary_popup_menu(None);
+                self.hide_top_level_popup_menus();
                 self.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None);
-                for window_state in self.frame_windows.windows.values_mut() {
-                    if window_state.render.popup_menu.is_some() {
-                        window_state.render.popup_menu = None;
-                        window_state.render.frame_dirty = true;
-                    }
-                }
-                self.mark_primary_dirty();
                 Ok(())
             }
             RenderCommand::ShowTooltip {
@@ -299,14 +292,7 @@ impl RenderApp {
             }
             RenderCommand::HideTooltip => {
                 tracing::debug!("HideTooltip");
-                self.set_primary_tooltip(None);
-                for window_state in self.frame_windows.windows.values_mut() {
-                    if window_state.render.tooltip.is_some() {
-                        window_state.render.tooltip = None;
-                        window_state.render.frame_dirty = true;
-                    }
-                }
-                self.mark_primary_dirty();
+                self.hide_top_level_tooltips();
                 Ok(())
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
