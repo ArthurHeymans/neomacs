@@ -685,6 +685,62 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_subtree_scheduled_deadline_cycle_v41() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert "Body beta.\n\n")
+    (insert "*** TODO Gamma\n")
+    (insert "Body gamma.\n\n")
+    (let ((snap (lambda (tag)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level))
+                           (list needle 'not-found nil nil))))
+                   '("Alpha" "Beta" "Gamma")))))
+      (let ((initial (funcall snap 'initial)))
+        ;; Hide Alpha subtree
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (let ((after-hide (funcall snap 'hide)))
+          ;; Edit: insert under hidden Alpha
+          (end-of-line)
+          (insert "\n** WAIT Delta\nBody delta.\n")
+          (let ((after-edit (funcall snap 'edit)))
+            ;; Show all
+            (org-fold-show-all)
+            (let ((after-show (funcall snap 'show)))
+              ;; Cycle globally
+              (org-global-cycle nil)
+              (let ((after-cycle (funcall snap 'cycle)))
+                (list initial
+                      after-hide
+                      after-edit
+                      after-show
+                      after-cycle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_subtree_edit_cycle_prop_clock_v40() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
