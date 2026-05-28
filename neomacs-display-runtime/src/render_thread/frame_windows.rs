@@ -345,6 +345,14 @@ impl GuiFrameRenderState {
         true
     }
 
+    pub(super) fn mark_active_visuals_dirty(&mut self) -> bool {
+        if !self.renderer_effects.needs_redraw() && !self.transitions.has_active() {
+            return false;
+        }
+        self.frame_dirty = true;
+        true
+    }
+
     pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
         let mut dirty = self.cursor.tick_size_animation();
         for cursor in self.visual_cursors.values_mut() {
@@ -1072,12 +1080,7 @@ impl GuiFrameWindowManager {
     pub(super) fn mark_active_top_level_visuals_dirty(&mut self) -> bool {
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            if window_state.render.renderer_effects.needs_redraw()
-                || window_state.render.transitions.has_active()
-            {
-                window_state.render.frame_dirty = true;
-                dirty = true;
-            }
+            dirty |= window_state.render.mark_active_visuals_dirty();
         });
         dirty
     }

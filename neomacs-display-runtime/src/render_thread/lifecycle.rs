@@ -238,9 +238,9 @@ impl RenderApp {
         // Keep dirty if frame-owned renderer effects or transitions are active.
         self.frame_windows.mark_active_top_level_visuals_dirty();
         if self.primary_window_state().is_none()
-            && (self.primary_renderer_effects_need_redraw() || self.primary_transitions_active())
+            && let Some(primary_frame) = self.primary_render_state_mut()
         {
-            self.mark_primary_dirty();
+            primary_frame.mark_active_visuals_dirty();
         }
 
         // Check for terminal PTY activity
