@@ -114,8 +114,8 @@ impl RenderApp {
         let config = wgpu::SurfaceConfiguration {
             usage: surface_usage,
             format,
-            width: self.width,
-            height: self.height,
+            width: self.primary_native_fallback.width,
+            height: self.primary_native_fallback.height,
             present_mode: wgpu::PresentMode::Fifo, // VSync
             alpha_mode,
             view_formats: vec![],
@@ -127,10 +127,10 @@ impl RenderApp {
         let renderer = WgpuRenderer::with_device(
             device.clone(),
             queue.clone(),
-            self.width,
-            self.height,
+            self.primary_native_fallback.width,
+            self.primary_native_fallback.height,
             format,
-            self.scale_factor as f32,
+            self.primary_native_fallback.scale_factor as f32,
         );
 
         // Create adopted-primary frame render state with its own glyph atlas.
@@ -138,7 +138,7 @@ impl RenderApp {
         let mut primary_frame = GuiFrameRenderState::new(
             primary_frame_id,
             &device,
-            self.scale_factor,
+            self.primary_native_fallback.scale_factor,
             self.primary_fps_enabled(),
         );
         primary_frame.popup_menu = self.pending_primary_popup_menu.take();
@@ -176,8 +176,8 @@ impl RenderApp {
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",
-            self.width,
-            self.height,
+            self.primary_native_fallback.width,
+            self.primary_native_fallback.height,
             format
         );
 
@@ -193,13 +193,13 @@ impl RenderApp {
                 window,
                 surface,
                 surface_config: config,
-                width: self.width,
-                height: self.height,
-                scale_factor: self.scale_factor,
-                mouse_hidden_for_typing: self.mouse_hidden_for_typing,
-                ime_enabled: self.ime_enabled,
-                last_ime_cursor_area: self.last_ime_cursor_area,
-                chrome: self.chrome.clone(),
+                width: self.primary_native_fallback.width,
+                height: self.primary_native_fallback.height,
+                scale_factor: self.primary_native_fallback.scale_factor,
+                mouse_hidden_for_typing: self.primary_native_fallback.mouse_hidden_for_typing,
+                ime_enabled: self.primary_native_fallback.ime_enabled,
+                last_ime_cursor_area: self.primary_native_fallback.last_ime_cursor_area,
+                chrome: self.primary_native_fallback.chrome.clone(),
             },
             render: primary_frame,
         });
@@ -260,12 +260,12 @@ impl RenderApp {
             if let Some(primary_state) = self.primary_window_state_mut() {
                 primary_state.handle_resize(&device, width, height);
             } else {
-                self.width = width;
-                self.height = height;
+                self.primary_native_fallback.width = width;
+                self.primary_native_fallback.height = height;
             }
         } else {
-            self.width = width;
-            self.height = height;
+            self.primary_native_fallback.width = width;
+            self.primary_native_fallback.height = height;
         }
 
         // Resize renderer

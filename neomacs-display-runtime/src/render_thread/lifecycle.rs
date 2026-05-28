@@ -88,43 +88,48 @@ impl RenderApp {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
                 self.primary_window().is_some(),
-                self.width,
-                self.height,
-                self.title
+                self.primary_native_fallback.width,
+                self.primary_native_fallback.height,
+                self.primary_native_fallback.chrome.title
             );
             self.resumed_seen = true;
         }
         if self.primary_window().is_none() && !self.primary_window_destroyed {
             let attrs = Window::default_attributes()
-                .with_title(&self.title)
-                .with_inner_size(window_size_from_emacs_pixels(self.width, self.height))
+                .with_title(&self.primary_native_fallback.chrome.title)
+                .with_inner_size(window_size_from_emacs_pixels(
+                    self.primary_native_fallback.width,
+                    self.primary_native_fallback.height,
+                ))
+                .with_decorations(self.primary_native_fallback.chrome.decorations_enabled)
                 .with_transparent(true);
 
             tracing::info!(
                 "Render thread creating primary window: emacs_pixels={}x{} title={:?}",
-                self.width,
-                self.height,
-                self.title
+                self.primary_native_fallback.width,
+                self.primary_native_fallback.height,
+                self.primary_native_fallback.chrome.title
             );
             match event_loop.create_window(attrs) {
                 Ok(window) => {
                     let window = Arc::new(window);
 
                     let raw_scale_factor = window.scale_factor();
-                    self.scale_factor = effective_window_scale_factor(raw_scale_factor);
+                    self.primary_native_fallback.scale_factor =
+                        effective_window_scale_factor(raw_scale_factor);
                     tracing::info!(
                         "Display scale factor: raw={} effective={}",
                         raw_scale_factor,
-                        self.scale_factor
+                        self.primary_native_fallback.scale_factor
                     );
 
                     let phys = window.inner_size();
-                    self.width = phys.width;
-                    self.height = phys.height;
+                    self.primary_native_fallback.width = phys.width;
+                    self.primary_native_fallback.height = phys.height;
                     tracing::info!(
                         "Render thread: window created (physical {}x{})",
-                        self.width,
-                        self.height
+                        self.primary_native_fallback.width,
+                        self.primary_native_fallback.height
                     );
 
                     // Initialize wgpu with the window
@@ -133,7 +138,7 @@ impl RenderApp {
 
                     // Enable IME input for CJK and compose support
                     window.set_ime_allowed(true);
-                    if let Some(geometry_hints) = self.primary_geometry_hints {
+                    if let Some(geometry_hints) = self.primary_native_fallback.geometry_hints {
                         apply_window_geometry_hints(&window, geometry_hints);
                     }
 

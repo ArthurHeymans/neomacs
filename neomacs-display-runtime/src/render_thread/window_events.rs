@@ -195,14 +195,17 @@ impl RenderApp {
                     }
                 }
                 if is_primary && !sent_resize {
-                    self.width = size.width;
-                    self.height = size.height;
+                    self.primary_native_fallback.width = size.width;
+                    self.primary_native_fallback.height = size.height;
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }
                     self.mark_primary_dirty();
-                    let (emacs_w, emacs_h) =
-                        emacs_pixels_from_window_size(size.width, size.height, self.scale_factor);
+                    let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
+                        size.width,
+                        size.height,
+                        self.primary_native_fallback.scale_factor,
+                    );
                     self.comms.send_input(InputEvent::WindowResize {
                         width: emacs_w,
                         height: emacs_h,
@@ -620,11 +623,11 @@ impl RenderApp {
                 } else if is_primary {
                     tracing::info!(
                         "Scale factor changed: previous_effective={} raw={} effective={}",
-                        self.scale_factor,
+                        self.primary_native_fallback.scale_factor,
                         scale_factor,
                         effective_scale
                     );
-                    self.scale_factor = effective_scale;
+                    self.primary_native_fallback.scale_factor = effective_scale;
                 }
             }
 

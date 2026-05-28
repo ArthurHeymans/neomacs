@@ -211,6 +211,37 @@ impl Default for WindowChrome {
     }
 }
 
+/// Native state kept only until the primary frame has an adopted winit window.
+#[derive(Clone)]
+pub(super) struct PrimaryNativeFallbackState {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) scale_factor: f64,
+    pub(super) mouse_hidden_for_typing: bool,
+    pub(super) ime_enabled: bool,
+    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
+    pub(super) chrome: WindowChrome,
+    pub(super) geometry_hints: Option<GuiFrameGeometryHints>,
+}
+
+impl PrimaryNativeFallbackState {
+    fn new(width: u32, height: u32, title: String) -> Self {
+        Self {
+            width,
+            height,
+            scale_factor: 1.0,
+            mouse_hidden_for_typing: false,
+            ime_enabled: false,
+            last_ime_cursor_area: None,
+            chrome: WindowChrome {
+                title,
+                ..WindowChrome::default()
+            },
+            geometry_hints: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ImeCursorArea {
     pub(super) x: i32,
@@ -273,10 +304,7 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
     pub(super) primary_window_destroyed: bool,
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) title: String,
-    pub(super) primary_geometry_hints: Option<GuiFrameGeometryHints>,
+    pub(super) primary_native_fallback: PrimaryNativeFallbackState,
 
     // Shared wgpu context used by the primary surface and secondary windows.
     pub(super) gpu: Option<RenderGpuContext>,
@@ -287,14 +315,8 @@ pub(super) struct RenderApp {
     // Face cache built from frame data
     pub(super) faces: HashMap<u32, Face>,
 
-    // Display scale factor (physical pixels / logical pixels)
-    pub(super) scale_factor: f64,
-
     // Current modifier state (NEOMACS_*_MASK flags)
     pub(super) modifiers: u32,
-
-    /// Whether the mouse cursor is hidden during keyboard input
-    pub(super) mouse_hidden_for_typing: bool,
 
     // Shared image dimensions (written here, read from main thread)
     pub(super) image_dimensions: SharedImageDimensions,
@@ -344,10 +366,6 @@ pub(super) struct RenderApp {
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
 
-    // Primary native IME state; preedit text/active state lives on primary_frame.
-    pub(super) ime_enabled: bool,
-    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
-
     // UI overlay state
     pub(super) scroll_indicators_enabled: bool,
     pub(super) primary_fps_enabled: bool,
@@ -355,8 +373,6 @@ pub(super) struct RenderApp {
     pub(super) pending_primary_tooltip: Option<TooltipState>,
     pub(super) pending_primary_visual_bell_start: Option<Instant>,
 
-    // Window chrome (borderless title bar, resize, decorations)
-    pub(super) chrome: WindowChrome,
     /// Extra line spacing in pixels (added between rows)
     pub(super) extra_line_spacing: f32,
     /// Extra letter spacing in pixels (added between characters)
@@ -390,18 +406,13 @@ impl RenderApp {
         Self {
             comms,
             primary_window_destroyed: false,
-            width,
-            height,
-            title,
-            primary_geometry_hints: None,
-            scale_factor: 1.0,
+            primary_native_fallback: PrimaryNativeFallbackState::new(width, height, title),
             gpu: None,
             renderer: None,
             #[cfg(test)]
             primary_render_state_for_tests: None,
             faces: HashMap::new(),
             modifiers: 0,
-            mouse_hidden_for_typing: false,
             image_dimensions,
             cursor_defaults: CursorState::default(),
             effects: EffectsConfig::default(),
@@ -431,14 +442,11 @@ impl RenderApp {
             toolbar_icon_textures: HashMap::new(),
             toolbar_icon_size: 24,
             toolbar_padding: 5,
-            ime_enabled: false,
-            last_ime_cursor_area: None,
             scroll_indicators_enabled: false,
             primary_fps_enabled: false,
             pending_primary_popup_menu: None,
             pending_primary_tooltip: None,
             pending_primary_visual_bell_start: None,
-            chrome: WindowChrome::default(),
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
             shared_monitors: Some(shared_monitors),
@@ -547,7 +555,7 @@ impl RenderApp {
     }
 
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
-        self.chrome.titlebar_height = height;
+        self.primary_native_fallback.chrome.titlebar_height = height;
         self.frame_windows.set_top_level_titlebar_height(height);
         if self.primary_window_state().is_none() {
             self.mark_primary_dirty();
@@ -555,7 +563,7 @@ impl RenderApp {
     }
 
     pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
-        self.chrome.corner_radius = radius;
+        self.primary_native_fallback.chrome.corner_radius = radius;
         self.frame_windows.set_top_level_corner_radius(radius);
         if self.primary_window_state().is_none() {
             self.mark_primary_dirty();
@@ -748,10 +756,13 @@ impl RenderApp {
     }
 
     pub(super) fn primary_native_size(&self) -> (u32, u32) {
-        self.primary_window_state()
-            .map_or((self.width, self.height), |window_state| {
-                (window_state.native.width, window_state.native.height)
-            })
+        self.primary_window_state().map_or(
+            (
+                self.primary_native_fallback.width,
+                self.primary_native_fallback.height,
+            ),
+            |window_state| (window_state.native.width, window_state.native.height),
+        )
     }
 
     pub(super) fn primary_logical_size(&self) -> (f32, f32) {
@@ -762,7 +773,7 @@ impl RenderApp {
 
     pub(super) fn primary_scale_factor(&self) -> f64 {
         self.primary_window_state()
-            .map_or(self.scale_factor, |window_state| {
+            .map_or(self.primary_native_fallback.scale_factor, |window_state| {
                 window_state.native.scale_factor
             })
     }
@@ -771,26 +782,28 @@ impl RenderApp {
         if let Some(window_state) = self.primary_window_state_mut() {
             window_state.set_scale_factor(scale_factor);
         } else {
-            self.scale_factor = effective_window_scale_factor(scale_factor);
+            self.primary_native_fallback.scale_factor = effective_window_scale_factor(scale_factor);
         }
     }
 
     pub(super) fn primary_chrome(&self) -> &WindowChrome {
         self.primary_window_state()
-            .map_or(&self.chrome, |window_state| &window_state.native.chrome)
+            .map_or(&self.primary_native_fallback.chrome, |window_state| {
+                &window_state.native.chrome
+            })
     }
 
     pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             &mut window_state.native.chrome
         } else {
-            &mut self.chrome
+            &mut self.primary_native_fallback.chrome
         }
     }
 
     pub(super) fn primary_ime_enabled(&self) -> bool {
         self.primary_window_state()
-            .map_or(self.ime_enabled, |window_state| {
+            .map_or(self.primary_native_fallback.ime_enabled, |window_state| {
                 window_state.native.ime_enabled
             })
     }
@@ -799,7 +812,7 @@ impl RenderApp {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.ime_enabled = enabled;
         } else {
-            self.ime_enabled = enabled;
+            self.primary_native_fallback.ime_enabled = enabled;
         }
     }
 
@@ -807,7 +820,7 @@ impl RenderApp {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.last_ime_cursor_area = None;
         } else {
-            self.last_ime_cursor_area = None;
+            self.primary_native_fallback.last_ime_cursor_area = None;
         }
     }
 

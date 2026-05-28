@@ -94,7 +94,7 @@ fn apply_visual_cursor_animations_rewrites_visual_cursor_rect() {
     app.set_primary_render_state_for_tests(GuiFrameRenderState::new(
         0,
         &device,
-        app.scale_factor,
+        app.primary_scale_factor(),
         false,
     ));
 

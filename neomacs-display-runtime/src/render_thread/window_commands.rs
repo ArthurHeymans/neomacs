@@ -90,6 +90,9 @@ impl RenderApp {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
                 if let Some(primary_state) = self.primary_window_state() {
                     primary_state.request_inner_size(width, height);
+                } else {
+                    self.primary_native_fallback.width = width;
+                    self.primary_native_fallback.height = height;
                 }
                 Ok(())
             }
@@ -106,10 +109,13 @@ impl RenderApp {
                     height
                 );
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_geometry_hints = Some(geometry_hints);
+                    self.primary_native_fallback.geometry_hints = Some(geometry_hints);
                     if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
                         primary_state.request_inner_size(width, height);
+                    } else {
+                        self.primary_native_fallback.width = width;
+                        self.primary_native_fallback.height = height;
                     }
                 } else if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
                     window_state.apply_geometry_hints(geometry_hints);
@@ -135,7 +141,7 @@ impl RenderApp {
                     geometry_hints.height_inc
                 );
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_geometry_hints = Some(geometry_hints);
+                    self.primary_native_fallback.geometry_hints = Some(geometry_hints);
                     if let Some(primary_state) = self.primary_window_state() {
                         primary_state.apply_geometry_hints(geometry_hints);
                     }
@@ -150,7 +156,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowDecorated { decorated } => {
-                self.chrome.decorations_enabled = decorated;
+                self.primary_native_fallback.chrome.decorations_enabled = decorated;
                 self.frame_windows.set_top_level_decorations(decorated);
                 Ok(())
             }

@@ -2,6 +2,7 @@ use super::RenderApp;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::thread_comm::{RenderCommand, ThreadComms};
 use neomacs_display_protocol::PopupMenuItem;
+use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use winit::keyboard::{Key, NamedKey};
@@ -170,6 +171,56 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
 }
 
 #[test]
+fn pre_bootstrap_primary_resize_updates_native_fallback_size() {
+    let mut app = make_test_app();
+    let geometry_hints = GuiFrameGeometryHints {
+        base_width: 24,
+        base_height: 32,
+        min_width: 48,
+        min_height: 64,
+        width_inc: 8,
+        height_inc: 16,
+    };
+
+    app.handle_window_command(RenderCommand::ResizeWindow {
+        emacs_frame_id: 0,
+        width: 1024,
+        height: 768,
+        geometry_hints,
+    })
+    .expect("pre-bootstrap primary resize");
+
+    assert_eq!(app.primary_native_size(), (1024, 768));
+    assert_eq!(
+        app.primary_native_fallback.geometry_hints,
+        Some(geometry_hints)
+    );
+}
+
+#[test]
+fn pre_bootstrap_set_window_size_updates_native_fallback_size() {
+    let mut app = make_test_app();
+
+    app.handle_window_command(RenderCommand::SetWindowSize {
+        width: 900,
+        height: 700,
+    })
+    .expect("pre-bootstrap primary set size");
+
+    assert_eq!(app.primary_native_size(), (900, 700));
+}
+
+#[test]
+fn pre_bootstrap_window_decorations_update_native_fallback_chrome() {
+    let mut app = make_test_app();
+
+    app.handle_window_command(RenderCommand::SetWindowDecorated { decorated: false })
+        .expect("pre-bootstrap primary decorations");
+
+    assert!(!app.primary_chrome().decorations_enabled);
+}
+
+#[test]
 fn adopt_primary_window_command_updates_existing_primary_render_state_identity() {
     let mut app = make_test_app();
     let Some(device) = make_test_device() else {
@@ -178,7 +229,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
     app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.scale_factor,
+        app.primary_scale_factor(),
         app.primary_fps_enabled(),
     ));
 
@@ -203,7 +254,7 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
     app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.scale_factor,
+        app.primary_scale_factor(),
         app.primary_fps_enabled(),
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
@@ -239,7 +290,7 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
     app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.scale_factor,
+        app.primary_scale_factor(),
         app.primary_fps_enabled(),
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
@@ -266,7 +317,7 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
     app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.scale_factor,
+        app.primary_scale_factor(),
         app.primary_fps_enabled(),
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
