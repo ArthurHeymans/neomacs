@@ -1080,6 +1080,72 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_two_table_join_sort_aggregate_deep_v3_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Teams
+      (insert "#+NAME: teams\n")
+      (insert "| ID | Name | Team |\n")
+      (insert("|----+------+------|\n")
+      (insert "| 1 | T1 | A |\n")
+      (insert "| 2 | T2 | B |\n")
+      (insert "| 3 | T3 | A |\n\n")
+      ;; Scores
+      (insert "#+NAME: scores\n")
+      (insert "| ID | Pts |\n")
+      (insert("|----+-----|\n")
+      (insert "| 1 | 90 |\n")
+      (insert "| 2 | 75 |\n")
+      (insert "| 3 | 85 |\n\n")
+      ;; Join, rank, aggregate by team
+      (insert "#+NAME: ranked\n")
+      (insert "#+begin_src emacs-lisp :var t=teams s=scores :results value replace\n")
+      (insert "(let* ((joined (mapcar\n")
+      (insert "                 (lambda (score)\n")
+      (insert "                   (let* ((id (car score))\n")
+      (insert "                          (pts (cadr score))\n")
+      (insert "                          (tm (assoc id t))\n")
+      (insert "                          (name (cadr tm))\n")
+      (insert "                          (team (caddr tm)))\n")
+      (insert "                     (list name team pts)))\n")
+      (insert "                 s))\n")
+      (insert "       (sorted (sort (copy-sequence joined)\n")
+      (insert "                     (lambda (a b) (> (caddr a) (caddr b)))))\n")
+      (insert "       (teams nil))\n")
+      (insert "  (dolist (row sorted)\n")
+      (insert "    (let* ((team (cadr row))\n")
+      (insert "           (pts (caddr row))\n")
+      (insert "           (entry (assoc team teams)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) pts))\n")
+      (insert "          (push (cons team pts) teams))))\n")
+      (insert "  (list :ranked sorted :team-totals teams))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "ranked")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_two_table_join_sort_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
