@@ -6272,6 +6272,39 @@ fn apply_lambda_with_dotted_formals_signals_invalid_function() {
 }
 
 #[test]
+fn lambda_forms_validate_non_list_arglists_during_closure_construction() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one("(condition-case err (eval '(lambda _) nil) (error err))"),
+        "OK (wrong-type-argument listp _)"
+    );
+
+    let mut ev = Context::new();
+    ev.set_lexical_binding(true);
+    ev.eval_str(
+        r#"
+        (fset 'vm-closure-hook
+              (lambda (args body env docstring iform)
+                (if (listp args)
+                    (make-interpreted-closure args body env docstring iform)
+                  (signal 'cl-assertion-failed (list '(listp args))))))
+        (setq internal-make-interpreted-closure-function 'vm-closure-hook)
+        "#,
+    )
+    .expect("install closure hook");
+
+    let rendered = format_eval_result(&ev.eval_str(
+        r#"(list
+            (condition-case err (eval '(lambda _) t) (error err))
+            (condition-case err (function (lambda _)) (error err)))"#,
+    ));
+    assert_eq!(
+        rendered,
+        "OK ((cl-assertion-failed (listp args)) (cl-assertion-failed (listp args)))"
+    );
+}
+
+#[test]
 fn funcall_and_apply_nil_signal_void_function() {
     crate::test_utils::init_test_tracing();
     let funcall_result = eval_one(

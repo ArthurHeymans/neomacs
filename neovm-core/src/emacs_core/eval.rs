@@ -10654,26 +10654,14 @@ impl Context {
         self.push_specpdl_root(iform_value);
 
         let result = if is_lambda {
-            if env_value.is_nil() || list_length(&params_value).is_none() {
-                Ok(
-                    builtins::symbols::make_interpreted_closure_from_parts_unchecked(
-                        &params_value,
-                        &body_value,
-                        &env_value,
-                        Some(&closure_doc_value),
-                        Some(&iform_value),
-                    ),
-                )
-            } else {
-                self.make_interpreted_closure_with_value_runtime_hook(
-                    function,
-                    params_value,
-                    body_value,
-                    env_value,
-                    closure_doc_value,
-                    iform_value,
-                )
-            }
+            self.make_interpreted_closure_with_value_runtime_hook(
+                function,
+                params_value,
+                body_value,
+                env_value,
+                closure_doc_value,
+                iform_value,
+            )
         } else {
             builtins::symbols::make_interpreted_closure_from_parts(
                 &params_value,
