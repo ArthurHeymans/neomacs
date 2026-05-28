@@ -1080,6 +1080,54 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_compute_chain_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source data
+      (insert "#+NAME: vals\n")
+      (insert "| A | B |\n")
+      (insert("|---+---|\n")
+      (insert "| 2 | 3 |\n")
+      (insert "| 4 | 5 |\n")
+      (insert "| 6 | 7 |\n\n")
+      ;; Compute products and sums
+      (insert "#+NAME: computed\n")
+      (insert "#+begin_src emacs-lisp :var tbl=vals :results value replace\n")
+      (insert "(let ((rows (mapcar\n")
+      (insert "              (lambda (row)\n")
+      (insert "                (list (car row) (cadr row)\n")
+      (insert "                      (* (car row) (cadr row))\n")
+      (insert "                      (+ (car row) (cadr row))))\n")
+      (insert "              tbl)))\n")
+      (insert "  (list :rows rows\n")
+      (insert "        :total-prod (apply #'+ (mapcar #'caddr rows))\n")
+      (insert "        :total-sum (apply #'+ (mapcar #'cadddr rows))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "computed")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_list_table_join_compute_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
