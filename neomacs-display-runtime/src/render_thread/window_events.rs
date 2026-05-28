@@ -1,5 +1,5 @@
 use super::RenderApp;
-use super::frame_windows::GuiFrameWindowState;
+use super::frame_windows::GuiFrameRenderState;
 use super::state::{effective_window_scale_factor, emacs_pixels_from_window_size};
 use crate::backend::wgpu::{
     NEOMACS_CTRL_MASK, NEOMACS_META_MASK, NEOMACS_SHIFT_MASK, NEOMACS_SUPER_MASK,
@@ -11,97 +11,88 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::WindowId;
 
 impl RenderApp {
-    fn handle_frame_window_popup_key(
-        window_state: &mut GuiFrameWindowState,
+    fn handle_render_popup_key(
+        render: &mut GuiFrameRenderState,
         logical_key: &Key,
     ) -> Option<InputEvent> {
         match logical_key.as_ref() {
             Key::Named(NamedKey::Escape) => {
-                window_state.render.popup_menu = None;
-                window_state.render.chrome_interaction.menu_bar_active = None;
-                window_state
-                    .render
-                    .chrome_interaction
-                    .compact_bar_menu_active = None;
-                window_state.render.frame_dirty = true;
+                render.popup_menu = None;
+                render.chrome_interaction.menu_bar_active = None;
+                render.chrome_interaction.compact_bar_menu_active = None;
+                render.frame_dirty = true;
                 Some(InputEvent::MenuSelection { index: -1 })
             }
             Key::Named(NamedKey::ArrowDown) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 if menu.move_hover(1) {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
             Key::Named(NamedKey::ArrowUp) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 if menu.move_hover(-1) {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
             Key::Named(NamedKey::Enter) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 let panel = menu.active_panel();
                 let hi = panel.hover_index;
                 if hi >= 0 && (hi as usize) < panel.item_indices.len() {
                     let global_idx = panel.item_indices[hi as usize];
                     if menu.all_items[global_idx].submenu {
                         if menu.open_submenu() {
-                            window_state.render.frame_dirty = true;
+                            render.frame_dirty = true;
                         }
                         None
                     } else {
-                        window_state.render.popup_menu = None;
-                        window_state.render.chrome_interaction.menu_bar_active = None;
-                        window_state
-                            .render
-                            .chrome_interaction
-                            .compact_bar_menu_active = None;
-                        window_state.render.frame_dirty = true;
+                        render.popup_menu = None;
+                        render.chrome_interaction.menu_bar_active = None;
+                        render.chrome_interaction.compact_bar_menu_active = None;
+                        render.frame_dirty = true;
                         Some(InputEvent::MenuSelection {
                             index: global_idx as i32,
                         })
                     }
                 } else {
-                    window_state.render.popup_menu = None;
-                    window_state.render.chrome_interaction.menu_bar_active = None;
-                    window_state
-                        .render
-                        .chrome_interaction
-                        .compact_bar_menu_active = None;
-                    window_state.render.frame_dirty = true;
+                    render.popup_menu = None;
+                    render.chrome_interaction.menu_bar_active = None;
+                    render.chrome_interaction.compact_bar_menu_active = None;
+                    render.frame_dirty = true;
                     Some(InputEvent::MenuSelection { index: -1 })
                 }
             }
             Key::Named(NamedKey::ArrowRight) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 if menu.open_submenu() {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
             Key::Named(NamedKey::ArrowLeft) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 if menu.close_submenu() {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
             Key::Named(NamedKey::Home) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 menu.active_panel_mut().hover_index = -1;
                 if menu.move_hover(1) {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
             Key::Named(NamedKey::End) => {
-                let menu = window_state.render.popup_menu.as_mut()?;
+                let menu = render.popup_menu.as_mut()?;
                 let len = menu.active_panel().item_indices.len() as i32;
                 menu.active_panel_mut().hover_index = len;
                 if menu.move_hover(-1) {
-                    window_state.render.frame_dirty = true;
+                    render.frame_dirty = true;
                 }
                 None
             }
@@ -258,95 +249,16 @@ impl RenderApp {
                     let event = self
                         .frame_windows
                         .get_by_winit_mut(window_id)
-                        .and_then(|ws| Self::handle_frame_window_popup_key(ws, &logical_key));
+                        .and_then(|ws| Self::handle_render_popup_key(&mut ws.render, &logical_key));
                     if let Some(event) = event {
                         self.comms.send_input(event);
                     }
                 } else if self.primary_popup_menu().is_some() && state == ElementState::Pressed {
-                    match logical_key.as_ref() {
-                        Key::Named(NamedKey::Escape) => {
-                            self.comms
-                                .send_input(InputEvent::MenuSelection { index: -1 });
-                            self.set_primary_popup_menu(None);
-                            self.with_primary_chrome_interaction_mut(|chrome| {
-                                chrome.menu_bar_active = None;
-                            });
-                        }
-                        Key::Named(NamedKey::ArrowDown) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                if menu.move_hover(1) {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::ArrowUp) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                if menu.move_hover(-1) {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::Enter) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                let panel = menu.active_panel();
-                                let hi = panel.hover_index;
-                                if hi >= 0 && (hi as usize) < panel.item_indices.len() {
-                                    let global_idx = panel.item_indices[hi as usize];
-                                    if menu.all_items[global_idx].submenu {
-                                        if menu.open_submenu() {
-                                            self.mark_primary_dirty();
-                                        }
-                                    } else {
-                                        self.comms.send_input(InputEvent::MenuSelection {
-                                            index: global_idx as i32,
-                                        });
-                                        self.set_primary_popup_menu(None);
-                                        self.with_primary_chrome_interaction_mut(|chrome| {
-                                            chrome.menu_bar_active = None;
-                                        });
-                                    }
-                                } else {
-                                    self.comms
-                                        .send_input(InputEvent::MenuSelection { index: -1 });
-                                    self.set_primary_popup_menu(None);
-                                    self.with_primary_chrome_interaction_mut(|chrome| {
-                                        chrome.menu_bar_active = None;
-                                    });
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::ArrowRight) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                if menu.open_submenu() {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::ArrowLeft) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                if menu.close_submenu() {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::Home) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                menu.active_panel_mut().hover_index = -1;
-                                if menu.move_hover(1) {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        Key::Named(NamedKey::End) => {
-                            if let Some(menu) = self.primary_popup_menu_mut() {
-                                let len = menu.active_panel().item_indices.len() as i32;
-                                menu.active_panel_mut().hover_index = len;
-                                if menu.move_hover(-1) {
-                                    self.mark_primary_dirty();
-                                }
-                            }
-                        }
-                        _ => {}
+                    let event = self
+                        .primary_render_state_mut()
+                        .and_then(|render| Self::handle_render_popup_key(render, &logical_key));
+                    if let Some(event) = event {
+                        self.comms.send_input(event);
                     }
                 } else if ime_preedit_active {
                     tracing::debug!(
