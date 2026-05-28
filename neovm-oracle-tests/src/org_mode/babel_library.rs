@@ -1080,6 +1080,47 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_number_predicates_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Number predicates
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (numberp 42) (integerp 42) (floatp 3.14)\n")
+      (insert "      (natnump 0) (wholenump 5) (zerop 0)\n")
+      (insert "      (plusp 1) (minusp -1) (oddp 3) (evenp 4))\n")
+      (insert "#+end_src\n\n")
+      ;; Arithmetic with edge cases
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (/ 10 3) (% 10 3) (mod 10 3)\n")
+      (insert "      (abs -7) (max 1 3 2) (min 5 2 8)\n")
+      (insert "      (expt 2 10) (sqrt 144) (log 100 10))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 2)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_list_map_tree_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
