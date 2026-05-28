@@ -1080,6 +1080,55 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: data\n")
+      (insert "| Cat | Val |\n")
+      (insert("|-----+-----|\n")
+      (insert "| A | 10 |\n")
+      (insert "| B | 20 |\n")
+      (insert "| A | 30 |\n")
+      (insert "| C | 40 |\n")
+      (insert "| B | 50 |\n\n")
+      ;; Group and sum
+      (insert "#+NAME: groups\n")
+      (insert "#+begin_src emacs-lisp :var tbl=data :results value replace\n")
+      (insert "(let ((g nil))\n")
+      (insert "  (dolist (r tbl)\n")
+      (insert "    (let* ((c (car r))\n")
+      (insert "           (v (cadr r))\n")
+      (insert "           (e (assoc c g)))\n")
+      (insert "      (if e (setcdr e (+ (cdr e) v))\n")
+      (insert "          (push (cons c v) g))))\n")
+      (insert "  (sort g (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "groups")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
