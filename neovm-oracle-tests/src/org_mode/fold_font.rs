@@ -679,8 +679,8 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
                     active-after-local
                     after-global
                     (funcall snapshot)
-                   (buffer-substring-no-properties
-                    (point-min) (point-max)))))))))"##,
+                     (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))"##,
     );
 }
 
