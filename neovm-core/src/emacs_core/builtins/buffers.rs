@@ -2987,6 +2987,27 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
     Ok(Value::NIL)
 }
 
+pub(crate) fn builtin_insert_before_markers(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
+    let pieces = collect_insert_pieces(&args, target_multibyte)?;
+    let total_len: usize = pieces.iter().map(|p| p.text.sbytes()).sum();
+    if total_len == 0 {
+        return Ok(Value::NIL);
+    }
+    let insert_pos = eval
+        .buffers
+        .current_buffer()
+        .map(|buf| buf.pt_byte)
+        .unwrap_or(0);
+    super::editfns::signal_before_change(eval, insert_pos, insert_pos)?;
+    insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, false)?;
+    super::editfns::signal_after_change(eval, insert_pos, insert_pos + total_len, 0)?;
+    Ok(Value::NIL)
+}
+
 pub(crate) fn builtin_insert_and_inherit(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

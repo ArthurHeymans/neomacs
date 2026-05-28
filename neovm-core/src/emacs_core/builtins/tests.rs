@@ -2472,6 +2472,36 @@ fn insert_copies_string_text_properties_into_buffer() {
 }
 
 #[test]
+fn insert_before_markers_copies_string_text_properties_into_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let text = Value::string("xy");
+    assert!(text.is_string(), "expected string value");
+
+    let mut table = crate::buffer::text_props::TextPropertyTable::new();
+    table.put_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(1, 2, Value::symbol("help-echo"), Value::string("tip"));
+    crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
+
+    assert_eq!(
+        builtin_insert_before_markers(&mut eval, vec![text]).unwrap(),
+        Value::NIL
+    );
+
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    assert_eq!(buf.buffer_string(), "xy");
+    assert_eq!(
+        buf.text.text_props_get_property(0, Value::symbol("face")),
+        Some(Value::symbol("bold"))
+    );
+    assert_eq!(
+        buf.text
+            .text_props_get_property(1, Value::symbol("help-echo")),
+        Some(Value::string("tip"))
+    );
+}
+
+#[test]
 fn insert_and_inherit_copies_previous_text_properties() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

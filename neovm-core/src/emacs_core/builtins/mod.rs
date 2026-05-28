@@ -3966,7 +3966,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "insert-before-markers",
-        super::editfns::builtin_insert_before_markers,
+        builtin_insert_before_markers,
         0,
         None,
     );

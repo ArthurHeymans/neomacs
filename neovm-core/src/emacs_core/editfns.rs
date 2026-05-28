@@ -813,22 +813,7 @@ pub(crate) fn builtin_insert_before_markers(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let bytes = collect_insert_text("insert-before-markers", &args)?;
-    if bytes.is_empty() {
-        return Ok(Value::NIL);
-    }
-    ensure_current_buffer_writable_in_state(&ctx.obarray, &[], &ctx.buffers)?;
-    if let Some(id) = ctx.buffers.current_buffer_id() {
-        let insert_pos = ctx.buffers.get(id).map(|buf| buf.pt_byte).unwrap_or(0);
-        let byte_len = bytes.len();
-        let ls = crate::heap_types::LispString::from_emacs_bytes(bytes);
-        signal_before_change(ctx, insert_pos, insert_pos)?;
-        let _ = ctx
-            .buffers
-            .insert_lisp_string_into_buffer_before_markers(id, &ls);
-        signal_after_change(ctx, insert_pos, insert_pos + byte_len, 0)?;
-    }
-    Ok(Value::NIL)
+    crate::emacs_core::builtins::builtin_insert_before_markers(ctx, args)
 }
 
 /// `(delete-char N &optional KILLFLAG)` — delete N characters forward.

@@ -7,6 +7,18 @@
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
+#[test]
+fn oracle_prop_tpm_insert_before_markers_copies_string_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let form = r#"(with-temp-buffer
+  (let ((s (make-string 3 ?x)))
+    (put-text-property 0 1 'face 'foo s)
+    (put-text-property 1 2 'help-echo "h" s)
+    (insert-before-markers s)
+    (buffer-string)))"#;
+    assert_oracle_parity(form);
+}
+
 // ---------------------------------------------------------------------------
 // add-text-properties: additive merging across overlapping intervals
 // ---------------------------------------------------------------------------

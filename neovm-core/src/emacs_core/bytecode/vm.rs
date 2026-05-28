@@ -3781,7 +3781,7 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_insert_before_markers_shared(&mut self, args: &[Value]) -> EvalResult {
-        crate::emacs_core::editfns::builtin_insert_before_markers(&mut *self.ctx, args.to_vec())
+        crate::emacs_core::builtins::builtin_insert_before_markers(&mut *self.ctx, args.to_vec())
     }
 
     fn builtin_insert_buffer_substring_shared(&mut self, args: &[Value]) -> EvalResult {
