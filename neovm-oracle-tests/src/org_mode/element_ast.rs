@@ -582,6 +582,57 @@ fn org_element_parse_single_scheduled_single_deadline_deep() {
 }
 
 #[test]
+fn org_element_parse_property_drawer_set_delete_reparse_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:CUSTOM_ID: alpha\n:Owner: Alice\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:Owner: Bob\n:END:\n")
+    (insert "Body beta.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)
+                                (org-element-property :todo-keyword hl)
+                                (org-element-property :tags hl))))
+                      (org-element-map tree 'property-drawer
+                        (lambda (pd)
+                          (org-element-map pd 'node-property
+                            (lambda (np)
+                              (list (org-element-property :key np)
+                                    (org-element-property :value np)))))))))))
+      (let ((initial (funcall snap)))
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-set-property "Status" "active")
+        (goto-char (point-min))
+        (search-forward "Beta")
+        (beginning-of-line)
+        (org-set-property "Priority" "high")
+        (let ((after-set (funcall snap)))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-delete-property "Owner")
+          (let ((after-delete (funcall snap)))
+            (list initial after-set after-delete
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
 fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
