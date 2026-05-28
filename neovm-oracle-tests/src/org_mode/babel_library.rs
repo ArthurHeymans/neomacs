@@ -1080,6 +1080,65 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_join_filter_aggregate_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Workers
+      (insert "#+NAME: workers\n")
+      (insert "| ID | Name | Dept |\n")
+      (insert("|----+------+------|\n")
+      (insert "| 1 | W1 | Eng |\n")
+      (insert "| 2 | W2 | Mkt |\n")
+      (insert "| 3 | W3 | Eng |\n")
+      (insert "| 4 | W4 | Mkt |\n\n")
+      ;; Hours
+      (insert "#+NAME: hours\n")
+      (insert "| ID | Hrs |\n")
+      (insert("|----+-----|\n")
+      (insert "| 1 | 8 |\n")
+      (insert "| 2 | 6 |\n")
+      (insert "| 3 | 7 |\n")
+      (insert "| 4 | 5 |\n\n")
+      ;; Compute dept hours
+      (insert "#+NAME: dept-hrs\n")
+      (insert "#+begin_src emacs-lisp :var w=workers h=hours :results value replace\n")
+      (insert "(let ((groups nil))\n")
+      (insert "  (dolist (wh h)\n")
+      (insert "    (let* ((id (car wh))\n")
+      (insert "           (hrs (cadr wh))\n")
+      (insert "           (wk (assoc id w))\n")
+      (insert "           (dept (caddr wk)))\n")
+      (insert "      (let ((entry (assoc dept groups)))\n")
+      (insert "        (if entry\n")
+      (insert "            (setcdr entry (+ (cdr entry) hrs))\n")
+      (insert "            (push (cons dept) groups)))))\n")
+      (insert "  (sort groups (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "dept-hrs")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_mapcar_table_column_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
