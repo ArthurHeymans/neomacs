@@ -685,6 +685,69 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_font_face_after_todo_toggle_cycle_show_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t)
+          (org-log-done nil))
+      (org-mode)
+      (insert "* TODO Root\n")
+      (insert "** DONE Alpha\n")
+      (insert "*** TODO Beta\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Toggle Alpha: DONE->TODO
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (org-todo "TODO")
+      ;; Toggle Beta: TODO->DONE
+      (goto-char (point-min))
+      (search-forward "Beta")
+      (beginning-of-line)
+      (org-todo "DONE")
+      ;; 3 global cycles
+      (dotimes (_ 3) (org-cycle-global))
+      ;; Show all
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check
+      (let ((probe (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level)
+                                 (get-text-property (line-beginning-position) 'face)
+                                 (get-text-property (point) 'face))
+                           (list needle 'not-found nil nil nil nil))))))
+        (let ((headings (mapcar probe '("Root" "Alpha" "Beta" "SIBLING")))
+              (merged nil))
+          (dolist (line (split-string
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         "\n" t))
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line merged)))
+          (list headings
+                (nreverse merged)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_subtree_edit_cycle_show_font_face_v9_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
