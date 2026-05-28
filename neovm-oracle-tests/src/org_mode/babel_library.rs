@@ -1080,6 +1080,53 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_multi_block_dependency_chain_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Block A: generates list
+      (insert "#+NAME: gen\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(mapcar (lambda (i) (list i (* i i))) (number-sequence 1 5))\n")
+      (insert "#+end_src\n\n")
+      ;; Block B: transforms gen result
+      (insert "#+NAME: xform\n")
+      (insert "#+begin_src emacs-lisp :var data=gen :results value replace\n")
+      (insert "(mapcar (lambda (r) (cons (car r) (+ (cadr r) 100))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Block C: summarizes xform
+      (insert "#+NAME: summary\n")
+      (insert "#+begin_src emacs-lisp :var data=xform :results value replace\n")
+      (insert "(list :count (length data)\n")
+      (insert "      :first (car data)\n")
+      (insert "      :last (car (last data))\n")
+      (insert "      :total (apply #'+ (mapcar #'cdr data)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("gen" "xform" "summary"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read all results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_seq_sort_group_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
