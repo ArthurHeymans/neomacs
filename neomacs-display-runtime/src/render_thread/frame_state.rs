@@ -31,41 +31,42 @@ impl RenderApp {
 
     fn refresh_faces_from_frames(&mut self) {
         let old_face_ids: std::collections::HashSet<u32> = self.faces.keys().copied().collect();
-        if let Some(frame) = self.primary_current_frame() {
-            self.faces = frame.faces.clone();
-        }
-        let primary_child_faces: Vec<_> = self
-            .primary_child_frames()
-            .frames
-            .values()
-            .flat_map(|entry| {
-                entry
-                    .frame
-                    .faces
-                    .iter()
-                    .map(|(id, face)| (*id, face.clone()))
-            })
-            .collect();
-        for (face_id, face) in primary_child_faces {
-            self.faces.entry(face_id).or_insert(face);
-        }
+
+        let mut faces = std::collections::HashMap::new();
         self.frame_windows
             .for_each_top_level_window(|window_state| {
                 if let Some(frame) = window_state.render.current_frame.as_ref() {
                     for (face_id, face) in &frame.faces {
-                        self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                        faces.entry(*face_id).or_insert_with(|| face.clone());
                     }
                 }
                 for entry in window_state.render.child_frames.frames.values() {
                     for (face_id, face) in &entry.frame.faces {
-                        self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                        faces.entry(*face_id).or_insert_with(|| face.clone());
                     }
                 }
             });
+
+        if self.primary_window_state().is_none() {
+            if let Some(frame) = self.primary_current_frame() {
+                for (face_id, face) in &frame.faces {
+                    faces.entry(*face_id).or_insert_with(|| face.clone());
+                }
+            }
+            for entry in self.primary_child_frames().frames.values() {
+                for (face_id, face) in &entry.frame.faces {
+                    faces.entry(*face_id).or_insert_with(|| face.clone());
+                }
+            }
+        }
+
+        self.faces = faces;
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             let face_count = self.faces.len();
-            if let Some(primary_frame) = self.primary_render_state_mut() {
+            if self.primary_window_state().is_none()
+                && let Some(primary_frame) = self.primary_render_state_mut()
+            {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),

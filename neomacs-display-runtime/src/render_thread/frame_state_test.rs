@@ -1,6 +1,51 @@
 use super::*;
+use crate::core::face::Face;
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole};
+use crate::thread_comm::ThreadComms;
 use neomacs_display_protocol::types::Color;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+fn make_test_app() -> RenderApp {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (_emacs, render) = comms.split();
+    RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    )
+}
+
+fn make_test_device() -> Option<wgpu::Device> {
+    let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance_descriptor.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .ok()?;
+    let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("frame-state test device"),
+        ..Default::default()
+    }))
+    .ok()?;
+    Some(device)
+}
+
+fn face(id: u32) -> Face {
+    Face {
+        id,
+        ..Face::default()
+    }
+}
 
 #[test]
 fn apply_extra_spacing_remaps_cursor_by_slot_id() {
@@ -46,4 +91,35 @@ fn apply_extra_spacing_remaps_cursor_by_slot_id() {
     let cursor = frame.phys_cursor.as_ref().expect("phys cursor");
     assert_eq!(cursor.x, 9.0);
     assert_eq!(cursor.y, 0.0);
+}
+
+#[test]
+fn refresh_faces_rebuilds_from_primary_fallback_frames() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+    app.faces.insert(99, face(99));
+
+    let mut root = FrameGlyphBuffer::with_size(80.0, 32.0);
+    root.faces.insert(7, face(7));
+    app.set_primary_current_frame(Some(root));
+
+    let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);
+    child.frame_id = 0x2000;
+    child.parent_id = 0;
+    child.faces.insert(8, face(8));
+    app.primary_child_frames_mut().update_frame(child);
+
+    app.refresh_faces_from_frames();
+
+    assert!(app.faces.contains_key(&7));
+    assert!(app.faces.contains_key(&8));
+    assert!(!app.faces.contains_key(&99));
 }
