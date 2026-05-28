@@ -387,7 +387,7 @@ fn strong_xv_db() {
     assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
-  (insert "#+BEGIN: clocktable :maxlevel 2\n#+END:")
+  (insert "#+BEGIN: clocktable :maxlevel 2 :header \"Clock summary\"\n#+END:")
   (goto-char (point-min))
   (org-dblock-update)
   (buffer-string))"##,
