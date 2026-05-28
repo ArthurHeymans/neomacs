@@ -798,16 +798,75 @@ fn org_capture_template_expand_body_placeholders_deep_state_combo() {
                                      (org-element-property :key el)
                                      (org-element-property :value el))))
                          (kill-buffer)))))
-                (list after-t
-                      after-n
-                      (replace-regexp-in-string
-                       "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
+                 (list after-t
+                       after-n
                        (replace-regexp-in-string
-                        ":Created: \\[.*\\]" ":Created: [stamp]"
+                        "CLOSED: \\[.*\\]" "CLOSED: [stamp]"
                         (replace-regexp-in-string
-                         ":Source: .*" ":Source: [src]"
-                         final-content)))
-                      elements)))))
+                         ":Created: \\[.*\\]" ":Created: [stamp]"
+                         (replace-regexp-in-string
+                          ":Source: .*" ":Source: [src]"
+                          final-content)))
+                       elements)))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_capture_insert_todo_edit_clock_refile_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (require 'org-refile)
+  (let* ((root (make-temp-file "org-capture-clock-" t))
+         (target (expand-file-name "target.org" root))
+         (refile-target (expand-file-name "refile.org" root))
+         (org-capture-templates
+          `(("t" "Todo" entry (file+headline ,target "Inbox")
+             "* TODO %?\n%U\n")))
+         (org-refile-targets `((,refile-target :maxlevel . 2))))
+    (unwind-protect
+        (progn
+          ;; Create target
+          (with-temp-file target
+            (insert "* Inbox\n* Tasks\n** Sub\n"))
+          ;; Create refile target
+          (with-temp-file refile-target
+            (insert "* Refile inbox\n* Refile tasks\n** Refile sub\n"))
+          ;; Capture
+          (org-capture nil "t")
+          (insert "Captured task alpha")
+          (org-capture-finalize)
+          ;; Edit: add clock to captured heading
+          (with-current-buffer (find-file-noselect target)
+            (goto-char (point-min))
+            (search-forward "Captured task")
+            (beginning-of-line)
+            (org-clock-in)
+            (org-clock-out)
+            ;; Refile
+            (goto-char (point-min))
+            (search-forward "Captured task")
+            (beginning-of-line)
+            (let ((before-refile (buffer-substring-no-properties
+                                  (point-min) (point-max))))
+              (org-refile nil nil
+                          (list "Refile tasks" refile-target nil nil))
+              ;; Read refile target
+              (let ((target-after (with-current-buffer
+                                      (find-file-noselect target)
+                                    (buffer-substring-no-properties
+                                     (point-min) (point-max))))
+                    (refile-after (with-current-buffer
+                                     (find-file-noselect refile-target)
+                                   (buffer-substring-no-properties
+                                    (point-min) (point-max)))))
+                (list before-refile
+                      target-after
+                      refile-after))))))
       (delete-directory root t))))"##,
     );
 }
