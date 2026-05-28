@@ -1,4 +1,5 @@
 use super::RenderApp;
+use super::frame_windows::GuiFrameWindowState;
 use super::state::{effective_window_scale_factor, emacs_pixels_from_window_size};
 use crate::backend::wgpu::{
     NEOMACS_CTRL_MASK, NEOMACS_META_MASK, NEOMACS_SHIFT_MASK, NEOMACS_SUPER_MASK,
@@ -10,6 +11,104 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::WindowId;
 
 impl RenderApp {
+    fn handle_frame_window_popup_key(
+        window_state: &mut GuiFrameWindowState,
+        logical_key: &Key,
+    ) -> Option<InputEvent> {
+        match logical_key.as_ref() {
+            Key::Named(NamedKey::Escape) => {
+                window_state.render.popup_menu = None;
+                window_state.render.chrome_interaction.menu_bar_active = None;
+                window_state
+                    .render
+                    .chrome_interaction
+                    .compact_bar_menu_active = None;
+                window_state.render.frame_dirty = true;
+                Some(InputEvent::MenuSelection { index: -1 })
+            }
+            Key::Named(NamedKey::ArrowDown) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                if menu.move_hover(1) {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            Key::Named(NamedKey::ArrowUp) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                if menu.move_hover(-1) {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            Key::Named(NamedKey::Enter) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                let panel = menu.active_panel();
+                let hi = panel.hover_index;
+                if hi >= 0 && (hi as usize) < panel.item_indices.len() {
+                    let global_idx = panel.item_indices[hi as usize];
+                    if menu.all_items[global_idx].submenu {
+                        if menu.open_submenu() {
+                            window_state.render.frame_dirty = true;
+                        }
+                        None
+                    } else {
+                        window_state.render.popup_menu = None;
+                        window_state.render.chrome_interaction.menu_bar_active = None;
+                        window_state
+                            .render
+                            .chrome_interaction
+                            .compact_bar_menu_active = None;
+                        window_state.render.frame_dirty = true;
+                        Some(InputEvent::MenuSelection {
+                            index: global_idx as i32,
+                        })
+                    }
+                } else {
+                    window_state.render.popup_menu = None;
+                    window_state.render.chrome_interaction.menu_bar_active = None;
+                    window_state
+                        .render
+                        .chrome_interaction
+                        .compact_bar_menu_active = None;
+                    window_state.render.frame_dirty = true;
+                    Some(InputEvent::MenuSelection { index: -1 })
+                }
+            }
+            Key::Named(NamedKey::ArrowRight) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                if menu.open_submenu() {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            Key::Named(NamedKey::ArrowLeft) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                if menu.close_submenu() {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            Key::Named(NamedKey::Home) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                menu.active_panel_mut().hover_index = -1;
+                if menu.move_hover(1) {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            Key::Named(NamedKey::End) => {
+                let menu = window_state.render.popup_menu.as_mut()?;
+                let len = menu.active_panel().item_indices.len() as i32;
+                menu.active_panel_mut().hover_index = len;
+                if menu.move_hover(-1) {
+                    window_state.render.frame_dirty = true;
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     fn emacs_frame_for_window_event(&self, window_id: WindowId) -> u64 {
         self.frame_windows
             .event_frame_for_winit(window_id)
@@ -147,7 +246,20 @@ impl RenderApp {
                     || is_primary && self.primary_ime_preedit_active(),
                     |ws| ws.render.ime_preedit_active,
                 );
-                if self.primary_popup_menu().is_some() && state == ElementState::Pressed {
+                let handled_managed_popup = state == ElementState::Pressed
+                    && self
+                        .frame_windows
+                        .get_by_winit(window_id)
+                        .is_some_and(|ws| ws.render.popup_menu.is_some());
+                if handled_managed_popup {
+                    let event = self
+                        .frame_windows
+                        .get_by_winit_mut(window_id)
+                        .and_then(|ws| Self::handle_frame_window_popup_key(ws, &logical_key));
+                    if let Some(event) = event {
+                        self.comms.send_input(event);
+                    }
+                } else if self.primary_popup_menu().is_some() && state == ElementState::Pressed {
                     match logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
                             self.comms
