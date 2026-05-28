@@ -1109,3 +1109,55 @@ fn org_list_structure_indent_outdent_renumber_deep_state_combo() {
                       after-sort))))))))))"##,
     );
 }
+
+#[test]
+fn org_list_checkbox_toggle_update_sort_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-list)
+  (with-temp-buffer
+    (org-mode)
+    (insert "- [ ] Item alpha\n")
+    (insert "- [ ] Item beta\n")
+    (insert "- [X] Item gamma\n")
+    (insert "- [ ] Item delta\n")
+    (insert "  - [ ] Sub A\n")
+    (insert "  - [X] Sub B\n")
+    (let ((snap (lambda ()
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      (let ((initial (funcall snap)))
+        ;; Toggle checkbox on alpha
+        (goto-char (point-min))
+        (search-forward "alpha")
+        (beginning-of-line)
+        (org-toggle-checkbox)
+        (let ((after-toggle (funcall snap)))
+          ;; Update counter
+          (goto-char (point-min))
+          (org-update-checkbox-count)
+          (let ((after-count (funcall snap)))
+            ;; Sort list
+            (goto-char (point-min))
+            (org-sort-list nil ?A)
+            (let ((after-sort (funcall snap)))
+              ;; Edit: add new item
+              (goto-char (point-max))
+              (insert "- [ ] Item epsilon\n")
+              (let ((after-edit (funcall snap)))
+                ;; Re-toggle all
+                (goto-char (point-min))
+                (while (re-search-forward "\\[ \\]" nil t)
+                  (replace-match "[X]"))
+                (let ((after-replace (funcall snap)))
+                  (list initial
+                        after-toggle
+                        after-count
+                        after-sort
+                        after-edit
+                        after-replace))))))))))))"##,
+    );
+}
