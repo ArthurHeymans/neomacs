@@ -1080,6 +1080,63 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_join_sort_chain_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Items
+      (insert "#+NAME: items\n")
+      (insert "| ID | Name | Price |\n")
+      (insert("|----+------+-------|\n")
+      (insert "| 1 | X | 10 |\n")
+      (insert "| 2 | Y | 25 |\n")
+      (insert "| 3 | Z | 15 |\n\n")
+      ;; Orders
+      (insert "#+NAME: orders\n")
+      (insert "| IID | Qty |\n")
+      (insert("|-----+-----|\n")
+      (insert "| 1 | 4 |\n")
+      (insert "| 2 | 2 |\n")
+      (insert "| 3 | 5 |\n\n")
+      ;; Compute and sort by total desc
+      (insert "#+NAME: bills\n")
+      (insert "#+begin_src emacs-lisp :var i=items o=orders :results value replace\n")
+      (insert "(sort\n")
+      (insert " (mapcar\n")
+      (insert "  (lambda (order)\n")
+      (insert "    (let* ((iid (car order))\n")
+      (insert "           (qty (cadr order))\n")
+      (insert "           (item (assoc iid i))\n")
+      (insert "           (name (cadr item))\n")
+      (insert "           (price (caddr item)))\n")
+      (insert "      (list name qty price (* qty price))))\n")
+      (insert "  o)\n")
+      (insert " (lambda (a b) (> (cadddr a) (cadddr b))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "bills")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_multi_table_join_sort_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
