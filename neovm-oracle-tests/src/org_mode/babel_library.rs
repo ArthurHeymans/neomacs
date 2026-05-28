@@ -1080,6 +1080,49 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_number_theory_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; GCD/LCM
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (gcd 12 8) (lcm 12 8) (gcd 0 5))\n")
+      (insert "#+end_src\n\n")
+      ;; Number predicates
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (numberp 42) (integerp 3.14) (floatp 3.14)\n")
+      (insert "      (zerop 0) (plusp 5) (minusp -3) (evenp 4) (oddp 7))\n")
+      (insert "#+end_src\n\n")
+      ;; Rounding
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (truncate 7 2) (floor 7 2) (ceiling 7 2) (round 7 2)\n")
+      (insert "      (truncate -7 2) (floor -7 2) (ceiling -7 2))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 3)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_string_split_join_match_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
