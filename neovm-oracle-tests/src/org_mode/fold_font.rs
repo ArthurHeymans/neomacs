@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_export_html_after_cycle_font_state_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-cycle)
+  (require 'org-fold)
+  (require 'ox-html)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-todo-headline t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "#+TITLE: Fold Export\n\n")
+      (insert "* TODO Root :root:\n")
+      (insert "Root body with *bold*.\n")
+      (insert "** DONE Alpha\n")
+      (insert "Alpha body.\n")
+      (insert "*** TODO Beta\n")
+      (insert "Beta body.\n")
+      (insert "** NEXT Gamma\n")
+      (insert "Gamma body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Cycle
+      (dotimes (_ 3) (org-cycle-global))
+      ;; Show all
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Export
+      (let* ((org-export-with-toc nil)
+             (html (org-export-as 'html nil nil t nil)))
+        ;; Check HTML structure
+        (let ((count-re (lambda (re)
+                          (let ((c 0) (s 0))
+                            (while (string-match re html s)
+                              (setq s (match-end 0) c (1+ c)))
+                            c))))
+          (list (funcall count-re "<h[1-3]")
+                (funcall count-re "<b>bold</b>")
+                (funcall count-re "TODO")
+                (funcall count-re "DONE")
+                (funcall count-re "NEXT")
+                (not (null (string-match-p "Root" html)))
+                (not (null (string-match-p "Alpha" html)))
+                (replace-regexp-in-string
+                 "outline-container-org[[:alnum:]]+"
+                 "outline-container-orgHASH"
+                 (replace-regexp-in-string
+                  "sec:org[[:alnum:]-]+" "sec:org-id"
+                  (replace-regexp-in-string
+                   "org[[:alnum:]-]\\{8,\\}" "orgHASH" html))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_font_face_after_narrow_cycle_edit_widen_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
