@@ -205,6 +205,40 @@ impl GuiFrameRenderState {
         changed
     }
 
+    pub(super) fn update_popup_hover(&mut self, x: f32, y: f32) -> bool {
+        let Some(menu) = self.popup_menu.as_mut() else {
+            return false;
+        };
+        let (hit_depth, hit_local) = menu.hit_test_all(x, y);
+        let mut dirty = false;
+        if hit_depth >= 0 {
+            let target_depth = hit_depth as usize;
+            while menu.submenu_panels.len() > target_depth {
+                menu.submenu_panels.pop();
+                dirty = true;
+            }
+            let panel = if target_depth == 0 {
+                &mut menu.root_panel
+            } else {
+                &mut menu.submenu_panels[target_depth - 1]
+            };
+            if hit_local != panel.hover_index {
+                panel.hover_index = hit_local;
+                dirty = true;
+                if hit_local >= 0 && (hit_local as usize) < panel.item_indices.len() {
+                    let global_idx = panel.item_indices[hit_local as usize];
+                    if menu.all_items[global_idx].submenu {
+                        menu.open_submenu();
+                    }
+                }
+            }
+        }
+        if dirty {
+            self.frame_dirty = true;
+        }
+        dirty
+    }
+
     pub(super) fn trigger_visual_bell(
         &mut self,
         cursor_error_pulse_enabled: bool,

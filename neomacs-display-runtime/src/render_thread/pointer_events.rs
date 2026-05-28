@@ -1386,31 +1386,7 @@ impl RenderApp {
                 );
             dirty |= window_state.render.chrome_interaction.toolbar_hovered != old_toolbar_hover;
 
-            if let Some(ref mut menu) = window_state.render.popup_menu {
-                let (hit_depth, hit_local) = menu.hit_test_all(lx, ly);
-                if hit_depth >= 0 {
-                    let target_depth = hit_depth as usize;
-                    while menu.submenu_panels.len() > target_depth {
-                        menu.submenu_panels.pop();
-                        dirty = true;
-                    }
-                    let panel = if target_depth == 0 {
-                        &mut menu.root_panel
-                    } else {
-                        &mut menu.submenu_panels[target_depth - 1]
-                    };
-                    if hit_local != panel.hover_index {
-                        panel.hover_index = hit_local;
-                        dirty = true;
-                        if hit_local >= 0 && (hit_local as usize) < panel.item_indices.len() {
-                            let global_idx = panel.item_indices[hit_local as usize];
-                            if menu.all_items[global_idx].submenu {
-                                menu.open_submenu();
-                            }
-                        }
-                    }
-                }
-            }
+            dirty |= window_state.render.update_popup_hover(lx, ly);
 
             if dirty {
                 window_state.render.frame_dirty = true;
@@ -1565,34 +1541,12 @@ impl RenderApp {
             }
         }
 
-        if let Some(menu) = self.primary_popup_menu_mut() {
-            let (hit_depth, hit_local) = menu.hit_test_all(lx, ly);
-            let mut popup_dirty = false;
-            if hit_depth >= 0 {
-                let target_depth = hit_depth as usize;
-                while menu.submenu_panels.len() > target_depth {
-                    menu.submenu_panels.pop();
-                    popup_dirty = true;
-                }
-                let panel = if target_depth == 0 {
-                    &mut menu.root_panel
-                } else {
-                    &mut menu.submenu_panels[target_depth - 1]
-                };
-                if hit_local != panel.hover_index {
-                    panel.hover_index = hit_local;
-                    popup_dirty = true;
-                    if hit_local >= 0 && (hit_local as usize) < panel.item_indices.len() {
-                        let global_idx = panel.item_indices[hit_local as usize];
-                        if menu.all_items[global_idx].submenu {
-                            menu.open_submenu();
-                        }
-                    }
-                }
-            }
-            if popup_dirty {
-                self.mark_primary_dirty();
-            }
+        let handled_primary_popup = self.primary_render_state_mut().is_some_and(|render| {
+            let had_popup = render.popup_menu.is_some();
+            render.update_popup_hover(lx, ly);
+            had_popup
+        });
+        if handled_primary_popup {
             return;
         }
 
