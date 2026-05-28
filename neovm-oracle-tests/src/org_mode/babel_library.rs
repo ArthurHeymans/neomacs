@@ -1080,6 +1080,49 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_string_split_join_match_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; String split
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(split-string \"hello world foo bar\" \" \")\n")
+      (insert "#+end_src\n\n")
+      ;; String join
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(mapconcat #'upcase '(\"hello\" \"world\") \"-\")\n")
+      (insert "#+end_src\n\n")
+      ;; String match
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (string-match \"[0-9]+\" \"abc123def456\")\n")
+      (insert "      (match-string 0 \"abc123def456\")\n")
+      (insert "      (replace-regexp-in-string \"[0-9]+\" \"#\" \"a1b2c3\"))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 3)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_setq_let_star_dolist_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
