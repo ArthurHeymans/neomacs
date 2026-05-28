@@ -1450,6 +1450,7 @@ fn org_element_planning_property_timestamp_combo() {
 mod strong_advanced_combos;
 mod strong_advanced_edge;
 mod strong_advanced_features;
+mod strong_combo_complex_1;
 mod strong_complex_combos;
 mod strong_comprehensive_edge;
 mod strong_deep_divergence;
@@ -1575,6 +1576,7 @@ mod strong_uncovered_features_53;
 mod strong_uncovered_features_54;
 mod strong_uncovered_features_55;
 mod strong_uncovered_features_56;
+mod strong_uncovered_features_57;
 mod strong_uncovered_features_6;
 mod strong_uncovered_features_7;
 mod strong_uncovered_features_8;
