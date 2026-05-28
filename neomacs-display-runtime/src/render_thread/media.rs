@@ -1,4 +1,5 @@
 use super::RenderApp;
+use super::frame_windows::GuiFrameRenderState;
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
@@ -69,6 +70,18 @@ impl RenderApp {
         }
 
         extra_glyphs
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn expand_terminal_glyphs_for_render_state(
+        render: &mut GuiFrameRenderState,
+        terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
+    ) {
+        let Some(frame) = render.current_frame.as_ref() else {
+            return;
+        };
+        let extra_glyphs = Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
+        render.extend_current_frame_glyphs(extra_glyphs);
     }
 
     #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
@@ -406,29 +419,15 @@ impl RenderApp {
 
         self.frame_windows
             .for_each_top_level_window_mut(|window_state| {
-                let Some(frame) = window_state.render.current_frame.as_mut() else {
-                    return;
-                };
-                let extra_glyphs =
-                    Self::expanded_terminal_glyphs_for_frame(frame, &terminal_contents);
-                if !extra_glyphs.is_empty() {
-                    frame.glyphs.extend(extra_glyphs);
-                    window_state.render.frame_dirty = true;
-                }
+                Self::expand_terminal_glyphs_for_render_state(
+                    &mut window_state.render,
+                    &terminal_contents,
+                );
             });
 
         if self.primary_window_state().is_none() {
-            let mut primary_dirty = false;
-            if let Some(frame) = self.primary_current_frame_mut() {
-                let extra_glyphs =
-                    Self::expanded_terminal_glyphs_for_frame(frame, &terminal_contents);
-                if !extra_glyphs.is_empty() {
-                    frame.glyphs.extend(extra_glyphs);
-                    primary_dirty = true;
-                }
-            }
-            if primary_dirty {
-                self.mark_primary_dirty();
+            if let Some(primary_frame) = self.primary_render_state_mut() {
+                Self::expand_terminal_glyphs_for_render_state(primary_frame, &terminal_contents);
             }
         }
 
