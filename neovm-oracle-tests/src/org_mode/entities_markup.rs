@@ -379,3 +379,63 @@ fn org_entity_latex_utf8_html_parse_element_deep_state_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_entity_markup_edit_reexport_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (require 'ox-html)
+  (require 'ox-latex)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Test Entities\n\n")
+    (insert "Greek: \\alpha \\beta \\gamma\n\n")
+    (insert "Math: \\infty \\pm \\times\n\n")
+    (insert "Markup: *bold* /italic/ _underline_ +strike+\n\n")
+    (insert "Sub/super: H_{2}O E=mc^{2}\n\n")
+    ;; Parse objects
+    (let* ((tree (org-element-parse-buffer))
+           (objects
+            (org-element-map tree '(bold italic underline strike-through
+                                         superscript subscript entity)
+              (lambda (obj)
+                (list (org-element-type obj)
+                      (org-element-property :value obj)
+                      (and (org-element-contents-begin obj)
+                           (buffer-substring-no-properties
+                            (org-element-contents-begin obj)
+                            (org-element-contents-end obj)))))))
+           ;; Entity values
+           (entity-vals
+            (mapcar (lambda (name)
+                      (let ((entry (assoc name org-entities)))
+                        (list name
+                              (nth 1 entry)  ; latex
+                              (nth 3 entry)  ; html
+                              (nth 6 entry)))) ; utf-8
+                    '("alpha" "beta" "gamma" "infty" "pm" "times")))
+           ;; Export HTML
+           (html (org-export-as 'html nil nil t '(:with-toc nil)))
+           ;; Export LaTeX
+           (latex (org-export-as 'latex nil nil t '(:with-toc nil)))
+           ;; Check patterns
+           (html-checks
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle html))))
+                    '("&alpha;" "&beta;" "&gamma;" "&infty;" "&pm;" "&times;"
+                      "<b>" "<i>" "<u>" "<s>" "<sub>" "<sup>")))
+           (latex-checks
+            (mapcar (lambda (needle)
+                      (not (null (string-match-p needle latex))))
+                    '("\\alpha" "\\beta" "\\gamma" "\\infty" "\\pm" "\\times"
+                      "\\textbf" "\\textit" "\\underline" "\\sout"
+                      "\\textsubscript" "\\textsuperscript"))))
+      (list objects entity-vals html-checks latex-checks
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
