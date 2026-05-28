@@ -294,7 +294,9 @@ impl RenderApp {
     }
 
     fn glyphs_for_pointer_target(&self, target_fid: u64) -> Option<&[FrameGlyph]> {
-        if self.frame_windows.is_primary_frame_id(target_fid) {
+        if let Some(primary_state) = self.primary_window_state() {
+            Self::glyphs_for_frame_window_pointer_target(primary_state, target_fid)
+        } else if self.frame_windows.is_primary_frame_id(target_fid) {
             self.primary_current_frame()
                 .map(|frame| frame.glyphs.as_slice())
         } else {
@@ -306,6 +308,9 @@ impl RenderApp {
     }
 
     pub(super) fn pointer_target_at(&self, x: f32, y: f32) -> (f32, f32, u64) {
+        if let Some(primary_state) = self.primary_window_state() {
+            return Self::pointer_target_for_frame_window(primary_state, x, y);
+        }
         let primary_frame_id = self.frame_windows.primary_event_frame_id();
         #[cfg(feature = "wpe-webkit")]
         if let Some(primary_frame) = self.primary_render_state() {
@@ -321,6 +326,9 @@ impl RenderApp {
     }
 
     fn webkit_target_at(&self, target_fid: u64, ev_x: f32, ev_y: f32) -> (u32, i32, i32) {
+        if let Some(primary_state) = self.primary_window_state() {
+            return Self::webkit_target_for_frame_window(primary_state, target_fid, ev_x, ev_y);
+        }
         let mut wk_id = 0u32;
         let mut wk_rx = 0i32;
         let mut wk_ry = 0i32;
