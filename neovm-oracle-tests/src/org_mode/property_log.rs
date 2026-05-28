@@ -902,8 +902,57 @@ fn org_property_inherit_clock_edit_delete_global_deep() {
                        (org-entry-get nil "Owner" 'inherit)
                        (org-entry-get nil "Budget" 'inherit)
                        (org-entry-get nil "Effort"))))
-            (list alpha beta alpha-after beta-after
-                  (buffer-substring-no-properties
-                   (point-min) (point-max))))))))))"##,
+             (list alpha beta alpha-after beta-after
+                   (buffer-substring-no-properties
+                    (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
+fn org_property_block_tags_inherit_set_delete_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project :project:\n")
+    (insert ":PROPERTIES:\n:Owner: Alice\n:CATEGORY: work\n:END:\n")
+    (insert "** Sub A :alpha:\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:Priority: high\n:END:\n")
+    (insert "*** Leaf A1\nBody.\n\n")
+    (insert "** Sub B :beta:\n")
+    (insert ":PROPERTIES:\n:Effort: 3h\n:Owner: Bob\n:END:\n")
+    (insert "*** Leaf B1\nBody.\n\n")
+    (let ((snap (lambda (name)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward name)
+                    (list name
+                          (org-entry-get nil "Owner" 'inherit)
+                          (org-entry-get nil "CATEGORY" 'inherit)
+                          (org-entry-get nil "Effort")
+                          (org-entry-get nil "Priority" 'inherit)
+                          (org-get-tags nil t))))))
+      (let ((leaf-a1 (funcall snap "Leaf A1"))
+            (leaf-b1 (funcall snap "Leaf B1")))
+        ;; Set Priority on Sub A
+        (goto-char (point-min))
+        (search-forward "Sub A")
+        (beginning-of-line)
+        (org-set-property "Priority" "critical")
+        ;; Delete Owner from Sub B
+        (goto-char (point-min))
+        (search-forward "Sub B")
+        (beginning-of-line)
+        (org-delete-property "Owner")
+        ;; Check after
+        (let ((leaf-a1-after (funcall snap "Leaf A1"))
+              (leaf-b1-after (funcall snap "Leaf B1")))
+          (list leaf-a1 leaf-b1
+                leaf-a1-after leaf-b1-after
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
     );
 }
