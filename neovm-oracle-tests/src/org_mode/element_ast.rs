@@ -545,6 +545,43 @@ fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
 }
 
 #[test]
+fn org_element_parse_single_scheduled_single_deadline_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "Body alpha.\n\n")
+    (insert "* DONE Beta\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert "Body beta.\n\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (hl)
+                (list (org-element-property :raw-value hl)
+                      (org-element-property :level hl)
+                      (org-element-property :todo-keyword hl)))))
+           (planning
+            (org-element-map tree 'planning
+              (lambda (pl)
+                (list (org-element-property :type pl)
+                      (let ((ts (org-element-property :timestamp pl)))
+                        (and ts (list (org-element-property :raw-value ts)
+                                      (org-element-property :day-start ts)
+                                      (org-element-property :month-start ts)
+                                      (org-element-property :year-start ts)))))))))
+      (list headlines planning
+            (buffer-substring-no-properties
+             (point-min) (point-max)))))))"##,
+    );
+}
+
+#[test]
 fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
