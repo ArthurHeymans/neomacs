@@ -1,12 +1,61 @@
 //! Frame ingestion and cursor target extraction.
 
 use super::RenderApp;
-use super::frame_windows::GuiFrameWindowState;
+use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
 use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-use std::collections::HashSet;
+
+#[derive(Clone, Copy)]
+struct CursorConfigSnapshot {
+    blink_enabled: bool,
+    blink_interval: std::time::Duration,
+    anim_enabled: bool,
+    anim_speed: f32,
+    anim_style: crate::core::types::CursorAnimStyle,
+    anim_duration: f32,
+    trail_size: f32,
+    size_transition_enabled: bool,
+    size_transition_duration: f32,
+}
+
+impl CursorConfigSnapshot {
+    fn from_cursor(cursor: &crate::render_thread::cursor::CursorState) -> Self {
+        Self {
+            blink_enabled: cursor.blink_enabled,
+            blink_interval: cursor.blink_interval,
+            anim_enabled: cursor.anim_enabled,
+            anim_speed: cursor.anim_speed,
+            anim_style: cursor.anim_style,
+            anim_duration: cursor.anim_duration,
+            trail_size: cursor.trail_size,
+            size_transition_enabled: cursor.size_transition_enabled,
+            size_transition_duration: cursor.size_transition_duration,
+        }
+    }
+
+    fn apply_to(&self, cursor: &mut crate::render_thread::cursor::CursorState) {
+        cursor.copy_config_from_values(
+            self.blink_enabled,
+            self.blink_interval,
+            self.anim_enabled,
+            self.anim_speed,
+            self.anim_style,
+            self.anim_duration,
+            self.trail_size,
+            self.size_transition_enabled,
+            self.size_transition_duration,
+        );
+    }
+}
+
+struct CursorSyncOutcome {
+    target: CursorTarget,
+    had_target: bool,
+    target_moved: bool,
+    old_cursor_rect: (f32, f32, f32, f32),
+}
 
 impl RenderApp {
     fn ingest_frame_window_root_frame(
@@ -15,8 +64,8 @@ impl RenderApp {
         menu_bar: Option<GuiMenuBarState>,
         tool_bar: Option<GuiToolBarState>,
         compact_bar: Option<GuiCompactBarState>,
-        cursor_config: &crate::render_thread::cursor::CursorState,
-    ) {
+        cursor_config: CursorConfigSnapshot,
+    ) -> Option<CursorSyncOutcome> {
         if menu_bar.is_none() {
             window_state.render.chrome_interaction.clear_menu_bar();
         }
@@ -30,33 +79,50 @@ impl RenderApp {
             window_state.render.chrome_interaction.clear_tab_bar();
         }
 
-        window_state.render.cursor.reset_blink();
-
-        window_state.render.menu_bar = menu_bar;
-        window_state.render.tool_bar = tool_bar;
-        window_state.render.compact_bar = compact_bar;
-        window_state.render.current_frame = Some(frame);
-        Self::sync_frame_window_cursor(window_state, cursor_config);
+        let cursor_sync = Self::ingest_top_level_render_frame(
+            &mut window_state.render,
+            frame,
+            menu_bar,
+            tool_bar,
+            compact_bar,
+            cursor_config,
+        );
         window_state.render.frame_dirty = true;
+        cursor_sync
     }
 
-    fn sync_frame_window_cursor(
-        window_state: &mut GuiFrameWindowState,
-        cursor_config: &crate::render_thread::cursor::CursorState,
-    ) {
-        let mut active_cursor = window_state
-            .render
-            .current_frame
-            .as_ref()
-            .and_then(|frame| {
-                crate::render_thread::frame_windows::GuiFrameWindowManager::cursor_target_for_frame(
-                    window_state.render.emacs_frame_id,
-                    frame,
-                )
-            });
+    fn ingest_top_level_render_frame(
+        render: &mut GuiFrameRenderState,
+        frame: crate::core::frame_glyphs::FrameGlyphBuffer,
+        menu_bar: Option<GuiMenuBarState>,
+        tool_bar: Option<GuiToolBarState>,
+        compact_bar: Option<GuiCompactBarState>,
+        cursor_config: CursorConfigSnapshot,
+    ) -> Option<CursorSyncOutcome> {
+        render.cursor.reset_blink();
+        render.menu_bar = menu_bar;
+        render.tool_bar = tool_bar;
+        render.compact_bar = compact_bar;
+        render.current_frame = Some(frame);
+        let cursor_sync = Self::sync_render_cursor(render, cursor_config);
+        render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
+        render.frame_dirty = true;
+        cursor_sync
+    }
+
+    fn sync_render_cursor(
+        render: &mut GuiFrameRenderState,
+        cursor_config: CursorConfigSnapshot,
+    ) -> Option<CursorSyncOutcome> {
+        let mut active_cursor = render.current_frame.as_ref().and_then(|frame| {
+            crate::render_thread::frame_windows::GuiFrameWindowManager::cursor_target_for_frame(
+                render.emacs_frame_id,
+                frame,
+            )
+        });
 
         if active_cursor.is_none() {
-            for (_, entry) in &window_state.render.child_frames.frames {
+            for (_, entry) in &render.child_frames.frames {
                 if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
                     active_cursor = Some(CursorTarget {
                         window_id: cursor.window_id,
@@ -73,21 +139,103 @@ impl RenderApp {
             }
         }
 
-        window_state.render.cursor.copy_config_from(cursor_config);
+        cursor_config.apply_to(&mut render.cursor);
         if let Some(new_target) = active_cursor {
-            let (_, target_moved) = window_state.render.cursor.set_target(new_target);
+            let old_cursor_rect = (
+                render.cursor.current_x,
+                render.cursor.current_y,
+                render.cursor.current_w,
+                render.cursor.current_h,
+            );
+            let (had_target, target_moved) = render.cursor.set_target(new_target.clone());
             if target_moved {
-                window_state.render.frame_dirty = true;
+                render.frame_dirty = true;
             }
+            Some(CursorSyncOutcome {
+                target: new_target,
+                had_target,
+                target_moved,
+                old_cursor_rect,
+            })
         } else {
-            window_state.render.cursor.clear_target();
-            window_state.clear_ime_preedit();
+            render.cursor.clear_target();
+            render.ime_preedit_active = false;
+            render.ime_preedit_text.clear();
+            None
+        }
+    }
+
+    fn sync_frame_window_cursor(
+        window_state: &mut GuiFrameWindowState,
+        cursor_config: CursorConfigSnapshot,
+    ) -> Option<CursorSyncOutcome> {
+        let cursor_sync = Self::sync_render_cursor(&mut window_state.render, cursor_config);
+        if window_state.render.cursor.target_cloned().is_none() {
+            window_state.reset_ime_cursor_area();
+        }
+        cursor_sync
+    }
+
+    fn update_top_level_cursor_effects(
+        renderer: Option<&neomacs_renderer_wgpu::WgpuRenderer>,
+        render: &mut GuiFrameRenderState,
+        new_target: &CursorTarget,
+        had_target: bool,
+        target_moved: bool,
+        old_cursor_rect: (f32, f32, f32, f32),
+        typing_ripple_enabled: bool,
+        cursor_trail_fade_enabled: bool,
+    ) {
+        if target_moved
+            && had_target
+            && typing_ripple_enabled
+            && let Some(renderer) = renderer
+        {
+            let cx = new_target.x + new_target.width / 2.0;
+            let cy = new_target.y + new_target.height / 2.0;
+            renderer.spawn_transient_ripple(&mut render.renderer_effects, cx, cy);
+        }
+
+        if target_moved
+            && had_target
+            && cursor_trail_fade_enabled
+            && let Some(renderer) = renderer
+        {
+            renderer.record_transient_cursor_trail(
+                &mut render.renderer_effects,
+                old_cursor_rect.0,
+                old_cursor_rect.1,
+                old_cursor_rect.2,
+                old_cursor_rect.3,
+            );
+        }
+    }
+
+    fn update_primary_window_cursor_side_effects(&mut self, cursor_sync: CursorSyncOutcome) {
+        let typing_ripple_enabled = self.effects.typing_ripple.enabled;
+        let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
+        if let (Some(renderer), Some(primary_state)) = (
+            self.renderer.as_ref(),
+            self.frame_windows.primary_window_mut(),
+        ) {
+            Self::update_top_level_cursor_effects(
+                Some(renderer),
+                &mut primary_state.render,
+                &cursor_sync.target,
+                cursor_sync.had_target,
+                cursor_sync.target_moved,
+                cursor_sync.old_cursor_rect,
+                typing_ripple_enabled,
+                cursor_trail_fade_enabled,
+            );
+            Self::update_frame_window_ime_cursor_area_if_needed(primary_state, &cursor_sync.target);
         }
     }
 
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
         self.primary_child_frames_mut().tick();
+        self.frame_windows.tick_top_level_child_frames();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             let frame_id = display_state.frame_id;
             let parent_id = display_state.parent_id;
@@ -237,52 +385,97 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
-            if frame_id != 0
-                && parent_id == 0
-                && self.frame_windows.primary_frame_id() != Some(frame_id)
-            {
+            if self.frame_windows.is_primary_frame_id(frame_id) && parent_id == 0 {
+                if let Some(tool_bar) = gui_tool_bar.as_ref() {
+                    self.sync_toolbar_visual_config_from_height(tool_bar.height);
+                    self.ensure_toolbar_icon_textures(&tool_bar.items);
+                }
+                if let Some(compact_bar) = gui_compact_bar.as_ref() {
+                    self.sync_toolbar_visual_config_from_height(compact_bar.height);
+                    self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
+                }
+
+                if self.frame_windows.primary_window().is_some() {
+                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                    let primary_state = self
+                        .frame_windows
+                        .primary_window_mut()
+                        .expect("checked primary window");
+                    let cursor_sync = Self::ingest_frame_window_root_frame(
+                        primary_state,
+                        frame,
+                        gui_menu_bar,
+                        gui_tool_bar,
+                        gui_compact_bar,
+                        cursor_config,
+                    );
+                    if let Some(cursor_sync) = cursor_sync {
+                        self.update_primary_window_cursor_side_effects(cursor_sync);
+                    } else if let Some(primary_state) = self.frame_windows.primary_window_mut() {
+                        primary_state.reset_ime_cursor_area();
+                    }
+                    continue;
+                }
+            }
+
+            if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
+                if self.frame_windows.primary_window().is_some() {
+                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                    let primary_state = self
+                        .frame_windows
+                        .primary_window_mut()
+                        .expect("checked primary window");
+                    primary_state.render.child_frames.update_frame(frame);
+                    let cursor_sync = Self::sync_frame_window_cursor(primary_state, cursor_config);
+                    primary_state.render.frame_dirty = true;
+                    if let Some(cursor_sync) = cursor_sync {
+                        self.update_primary_window_cursor_side_effects(cursor_sync);
+                    }
+                    continue;
+                }
+            }
+
+            if frame_id != 0 && parent_id == 0 {
                 if let Some(window_state) = self.frame_windows.get_mut(frame_id) {
-                    Self::ingest_frame_window_root_frame(
+                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                    let cursor_sync = Self::ingest_frame_window_root_frame(
                         window_state,
                         frame,
                         gui_menu_bar,
                         gui_tool_bar,
                         gui_compact_bar,
-                        &self.cursor_defaults,
+                        cursor_config,
                     );
-                    if let Some(target) = window_state.render.cursor.target_cloned() {
-                        Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
+                    if let Some(cursor_sync) = cursor_sync {
+                        Self::update_frame_window_ime_cursor_area_if_needed(
+                            window_state,
+                            &cursor_sync.target,
+                        );
+                    } else {
+                        window_state.reset_ime_cursor_area();
                     }
                     continue;
                 }
             }
-            if parent_id != 0 && self.frame_windows.primary_frame_id() != Some(parent_id) {
+            if parent_id != 0 {
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
+                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     window_state.render.child_frames.update_frame(frame);
-                    Self::sync_frame_window_cursor(window_state, &self.cursor_defaults);
+                    let cursor_sync = Self::sync_frame_window_cursor(window_state, cursor_config);
                     window_state.render.frame_dirty = true;
-                    if let Some(target) = window_state.render.cursor.target_cloned() {
-                        Self::update_frame_window_ime_cursor_area_if_needed(window_state, &target);
+                    if let Some(cursor_sync) = cursor_sync {
+                        Self::update_frame_window_ime_cursor_area_if_needed(
+                            window_state,
+                            &cursor_sync.target,
+                        );
                     }
                     continue;
                 }
-            }
-
-            if frame_id != 0 && parent_id == 0 && self.frame_windows.has_secondary_window(frame_id)
-            {
-                self.frame_windows
-                    .route_frame(frame, gui_menu_bar, gui_tool_bar, gui_compact_bar);
-                continue;
-            }
-            if parent_id != 0 && self.frame_windows.has_secondary_window(parent_id) {
-                self.frame_windows.route_frame(frame, None, None, None);
-                continue;
             }
 
             if parent_id != 0 {
                 self.primary_child_frames_mut().update_frame(frame);
             } else {
-                self.set_primary_current_frame(Some(frame));
                 if gui_menu_bar.is_none() {
                     self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_menu_bar());
                 }
@@ -301,165 +494,39 @@ impl RenderApp {
                 if self.primary_tab_bar().is_none() {
                     self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_tab_bar());
                 }
+                let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                 if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame.menu_bar = gui_menu_bar;
-                    primary_frame.tool_bar = gui_tool_bar;
-                    primary_frame.compact_bar = gui_compact_bar;
+                    Self::ingest_top_level_render_frame(
+                        primary_frame,
+                        frame,
+                        gui_menu_bar,
+                        gui_tool_bar,
+                        gui_compact_bar,
+                        cursor_config,
+                    );
                 } else {
+                    self.set_primary_current_frame(Some(frame));
                     self.pending_primary_menu_bar = gui_menu_bar;
                     self.pending_primary_tool_bar = gui_tool_bar;
                     self.pending_primary_compact_bar = gui_compact_bar;
-                }
-                if let Some(cursor) = self.primary_cursor_mut() {
-                    cursor.reset_blink();
                 }
             }
             self.mark_primary_dirty();
         }
 
-        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
-        let mut active_cursor: Option<CursorTarget> =
-            self.primary_current_frame().and_then(|frame| {
-                frame.phys_cursor.as_ref().map(|cursor| CursorTarget {
-                    window_id: cursor.window_id,
-                    x: cursor.x,
-                    y: cursor.y,
-                    width: cursor.width,
-                    height: cursor.height,
-                    style: cursor.style,
-                    color: cursor.color,
-                    frame_id: primary_frame_id,
-                })
-            });
-
-        if active_cursor.is_none() {
-            for (_, entry) in &self.primary_child_frames().frames {
-                if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
-                    active_cursor = Some(CursorTarget {
-                        window_id: cursor.window_id,
-                        x: cursor.x,
-                        y: cursor.y,
-                        width: cursor.width,
-                        height: cursor.height,
-                        style: cursor.style,
-                        color: cursor.color,
-                        frame_id: entry.frame_id,
-                    });
-                    break;
-                }
-            }
-        }
-
-        if let Some(new_target) = active_cursor {
-            let (had_target, target_moved, old_cursor_rect) =
-                if let Some(cursor) = self.primary_cursor_mut() {
-                    let old_cursor_rect = (
-                        cursor.current_x,
-                        cursor.current_y,
-                        cursor.current_w,
-                        cursor.current_h,
-                    );
-                    let (had_target, target_moved) = cursor.set_target(new_target.clone());
-                    (had_target, target_moved, old_cursor_rect)
-                } else {
-                    (false, false, (0.0, 0.0, 0.0, 0.0))
-                };
-
-            if target_moved && had_target && self.effects.typing_ripple.enabled {
-                if let (Some(renderer), Some(primary_state)) = (
-                    self.renderer.as_ref(),
-                    self.frame_windows.primary_window_mut(),
-                ) {
-                    let cx = new_target.x + new_target.width / 2.0;
-                    let cy = new_target.y + new_target.height / 2.0;
-                    renderer.spawn_transient_ripple(
-                        &mut primary_state.render.renderer_effects,
-                        cx,
-                        cy,
-                    );
-                }
-            }
-
-            if target_moved && had_target && self.effects.cursor_trail_fade.enabled {
-                if let (Some(renderer), Some(primary_state)) = (
-                    self.renderer.as_ref(),
-                    self.frame_windows.primary_window_mut(),
-                ) {
-                    renderer.record_transient_cursor_trail(
-                        &mut primary_state.render.renderer_effects,
-                        old_cursor_rect.0,
-                        old_cursor_rect.1,
-                        old_cursor_rect.2,
-                        old_cursor_rect.3,
-                    );
-                }
-            }
-
-            self.update_ime_cursor_area_if_needed(&new_target);
-        } else {
-            if let Some(cursor) = self.primary_cursor_mut() {
-                cursor.clear_target();
-            }
-            if let Some(primary_state) = self.primary_window_state_mut() {
-                primary_state.reset_ime_cursor_area();
+        let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+        {
+            let cursor_sync = Self::sync_render_cursor(primary_frame, cursor_config);
+            primary_frame
+                .sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
+            if let Some(cursor_sync) = cursor_sync {
+                self.update_ime_cursor_area_if_needed(&cursor_sync.target);
             } else {
                 self.reset_primary_ime_cursor_area();
+                self.clear_primary_ime_preedit();
             }
-            self.clear_primary_ime_preedit();
-        }
-
-        let mut live_visual_cursor_ids = HashSet::new();
-        let window_cursors = self
-            .primary_current_frame()
-            .map(|frame| frame.window_cursors.clone())
-            .unwrap_or_default();
-        for cursor in &window_cursors {
-            if cursor.window_id >= 0 {
-                continue;
-            }
-            live_visual_cursor_ids.insert(cursor.window_id);
-            let target = CursorTarget {
-                window_id: cursor.window_id,
-                x: cursor.x,
-                y: cursor.y,
-                width: cursor.width,
-                height: cursor.height,
-                style: cursor.style,
-                color: cursor.color,
-                frame_id: primary_frame_id,
-            };
-            let cursor_defaults = (
-                self.cursor_defaults.anim_enabled,
-                self.cursor_defaults.anim_speed,
-                self.cursor_defaults.anim_style,
-                self.cursor_defaults.anim_duration,
-                self.cursor_defaults.trail_size,
-                self.cursor_defaults.size_transition_enabled,
-                self.cursor_defaults.size_transition_duration,
-            );
-            let Some(primary_frame) = self.primary_render_state_mut() else {
-                continue;
-            };
-            let state = primary_frame
-                .visual_cursors
-                .entry(cursor.window_id)
-                .or_default();
-            state.anim_enabled = cursor_defaults.0;
-            state.anim_speed = cursor_defaults.1;
-            state.anim_style = cursor_defaults.2;
-            state.anim_duration = cursor_defaults.3;
-            state.trail_size = cursor_defaults.4;
-            state.size_transition_enabled = cursor_defaults.5;
-            state.size_transition_duration = cursor_defaults.6;
-            let (_had_target, target_moved) = state.set_target(target);
-            if target_moved {
-                self.mark_primary_dirty();
-            }
-        }
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame
-                .visual_cursors
-                .retain(|id, _| live_visual_cursor_ids.contains(id));
         }
     }
 }

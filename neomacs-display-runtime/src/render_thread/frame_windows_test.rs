@@ -1,7 +1,9 @@
 use super::*;
 use crate::core::frame_glyphs::{
-    CursorStyle, FrameGlyphBuffer, WindowEffectHint, WindowTransitionHint, WindowTransitionKind,
+    CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursorVisual, WindowEffectHint,
+    WindowTransitionHint, WindowTransitionKind,
 };
+use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::{ScrollEasing, ScrollEffect};
 use neovm_core::window::GuiFrameGeometryHints;
@@ -26,6 +28,24 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     buf.frame_id = frame_id;
     buf.parent_id = parent_id;
     buf
+}
+
+fn make_test_device() -> Option<wgpu::Device> {
+    let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    instance_descriptor.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(instance_descriptor);
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::LowPower,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .ok()?;
+    let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("frame windows test device"),
+        ..Default::default()
+    }))
+    .ok()?;
+    Some(device)
 }
 
 #[test]
@@ -76,6 +96,81 @@ fn secondary_frame_cursor_state_clears_when_no_target_remains() {
 
     assert!(state.target_cloned().is_none());
     assert!(!state.is_animating());
+}
+
+#[test]
+fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.visual_cursors.insert(7, {
+        let mut cursor = crate::render_thread::cursor::CursorState::default();
+        cursor.set_target(CursorTarget {
+            window_id: 7,
+            x: 1.0,
+            y: 2.0,
+            width: 3.0,
+            height: 4.0,
+            style: CursorStyle::Bar(1.0),
+            color: Color::WHITE,
+            frame_id: 0x42,
+        });
+        cursor
+    });
+    let mut defaults = crate::render_thread::cursor::CursorState::default();
+    defaults.anim_enabled = false;
+    defaults.trail_size = 17.0;
+    defaults.size_transition_enabled = false;
+
+    render.sync_cursor_config(&defaults, true);
+
+    let visual = render.visual_cursors.get(&7).expect("visual cursor");
+    assert!(!render.cursor.anim_enabled);
+    assert!(!visual.anim_enabled);
+    assert_eq!(visual.trail_size, 17.0);
+    assert!(!visual.size_transition_enabled);
+    assert!(render.frame_dirty);
+}
+
+#[test]
+fn frame_render_state_applies_visual_cursor_animation_rects() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut frame = make_frame(0x42, 0);
+    frame.window_cursors.push(WindowCursorVisual {
+        window_id: -7,
+        slot_id: DisplaySlotId::ZERO,
+        x: 1.0,
+        y: 2.0,
+        width: 3.0,
+        height: 4.0,
+        style: CursorStyle::Hollow,
+        color: Color::WHITE,
+    });
+    render.current_frame = Some(frame);
+    let mut visual = crate::render_thread::cursor::CursorState::default();
+    visual.set_target(CursorTarget {
+        window_id: -7,
+        x: 11.0,
+        y: 12.0,
+        width: 13.0,
+        height: 14.0,
+        style: CursorStyle::Hollow,
+        color: Color::WHITE,
+        frame_id: 0x42,
+    });
+    render.visual_cursors.insert(-7, visual);
+
+    render.apply_visual_cursor_animations();
+
+    let cursor = &render.current_frame.as_ref().unwrap().window_cursors[0];
+    assert_eq!(cursor.x, 11.0);
+    assert_eq!(cursor.y, 12.0);
+    assert_eq!(cursor.width, 13.0);
+    assert_eq!(cursor.height, 14.0);
 }
 
 #[test]

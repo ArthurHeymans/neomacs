@@ -6,6 +6,7 @@
 //! of primary-window-addressed.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -221,6 +222,83 @@ impl GuiFrameRenderState {
     pub(super) fn clear_idle_dim(&mut self) {
         self.idle_dim.active = false;
         self.idle_dim.current_alpha = 0.0;
+    }
+
+    pub(super) fn sync_visual_cursors_from_current_frame(
+        &mut self,
+        cursor_config: impl Fn(&mut CursorState),
+    ) {
+        let Some(current_frame) = self.current_frame.as_ref() else {
+            self.visual_cursors.clear();
+            return;
+        };
+        let mut live_visual_cursor_ids = HashSet::new();
+        for cursor in &current_frame.window_cursors {
+            if cursor.window_id >= 0 {
+                continue;
+            }
+            live_visual_cursor_ids.insert(cursor.window_id);
+            let state = self.visual_cursors.entry(cursor.window_id).or_default();
+            cursor_config(state);
+            let (_, target_moved) = state.set_target(CursorTarget {
+                window_id: cursor.window_id,
+                x: cursor.x,
+                y: cursor.y,
+                width: cursor.width,
+                height: cursor.height,
+                style: cursor.style,
+                color: cursor.color,
+                frame_id: self.emacs_frame_id,
+            });
+            if target_moved {
+                self.frame_dirty = true;
+            }
+        }
+        self.visual_cursors
+            .retain(|id, _| live_visual_cursor_ids.contains(id));
+    }
+
+    pub(super) fn sync_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {
+        self.cursor.copy_config_from(defaults);
+        for cursor in self.visual_cursors.values_mut() {
+            cursor.copy_config_from(defaults);
+        }
+        if dirty {
+            self.frame_dirty = true;
+        }
+    }
+
+    pub(super) fn apply_visual_cursor_animations(&mut self) {
+        if self.visual_cursors.is_empty() {
+            return;
+        }
+        let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
+            .visual_cursors
+            .iter()
+            .map(|(id, state)| {
+                (
+                    *id,
+                    (
+                        state.current_x,
+                        state.current_y,
+                        state.current_w,
+                        state.current_h,
+                    ),
+                )
+            })
+            .collect();
+        let Some(frame) = self.current_frame.as_mut() else {
+            return;
+        };
+        for cursor in &mut frame.window_cursors {
+            let Some((x, y, width, height)) = visual_cursor_rects.get(&cursor.window_id) else {
+                continue;
+            };
+            cursor.x = *x;
+            cursor.y = *y;
+            cursor.width = *width;
+            cursor.height = *height;
+        }
     }
 }
 
@@ -970,10 +1048,13 @@ impl GuiFrameWindowManager {
 
     pub(super) fn sync_top_level_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.cursor.copy_config_from(defaults);
-            if dirty {
-                window_state.render.frame_dirty = true;
-            }
+            window_state.render.sync_cursor_config(defaults, dirty);
+        });
+    }
+
+    pub(super) fn tick_top_level_child_frames(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.child_frames.tick();
         });
     }
 
@@ -987,6 +1068,12 @@ impl GuiFrameWindowManager {
     pub(super) fn clear_top_level_glyph_atlases(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
             window_state.render.glyph_atlas.clear();
+        });
+    }
+
+    pub(super) fn apply_top_level_visual_cursor_animations(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.apply_visual_cursor_animations();
         });
     }
 

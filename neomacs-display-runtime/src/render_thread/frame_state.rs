@@ -13,6 +13,8 @@ impl RenderApp {
         self.refresh_faces_from_frames();
         self.apply_extra_spacing_if_needed();
         self.apply_visual_cursor_animations();
+        self.frame_windows
+            .apply_top_level_visual_cursor_animations();
     }
 
     pub(super) fn update_fps_counter(fps: &mut FpsCounter) {
