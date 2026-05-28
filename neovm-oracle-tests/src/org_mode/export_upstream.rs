@@ -617,3 +617,45 @@ fn org_export_headline_number_category_tags_todo_deep_combo() {
                     headlines)))))"##,
     );
 }
+
+#[test]
+fn org_export_headline_numbering_edit_reexport_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: ExportEditTest\n\n")
+    (insert "* Alpha\nBody alpha.\n\n")
+    (insert "** Beta\nBody beta.\n\n")
+    (insert "*** Gamma\nBody gamma.\n\n")
+    (insert "** Delta\nBody delta.\n\n")
+    (insert "* Epsilon\nBody epsilon.\n\n")
+    (let* ((snap (lambda ()
+                   (let* ((tree (org-element-parse-buffer))
+                          (info (org-combine-plists
+                                 (org-export--get-buffer-attributes)
+                                 (org-export-get-environment)))
+                          (headlines (org-element-map tree 'headline #'identity)))
+                     (mapcar (lambda (h)
+                               (list (org-element-property :raw-value h)
+                                     (org-element-property :level h)
+                                     (org-export-get-headline-number h info)
+                                     (org-export-get-tags h info)
+                                     (org-export-get-todo-keyword h info)))
+                             headlines)))))
+      (let ((before (funcall snap)))
+        ;; Edit: insert new heading under Alpha
+        (goto-char (point-min))
+        (search-forward "Body alpha.")
+        (end-of-line)
+        (insert "\n** Zeta\nBody zeta.\n")
+        (let ((after (funcall snap)))
+          (list before after
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))))"##,
+    );
+}
