@@ -1080,6 +1080,55 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_map_tree_assoc_chain_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Build data
+      (insert "#+NAME: data\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((name . \"Project\")\n")
+      (insert "  (tasks . ((a 1 2 3)\n")
+      (insert "            (b 4 5 6)\n")
+      (insert "            (c 7 8 9))))\n")
+      (insert "#+end_src\n\n")
+      ;; Process
+      (insert "#+NAME: proc\n")
+      (insert "#+begin_src emacs-lisp :var d=data :results value replace\n")
+      (insert "(let* ((tasks (cdr (assoc 'tasks d)))\n")
+      (insert "       (sums (mapcar (lambda (item)\n")
+      (insert "                       (cons (car item)\n")
+      (insert "                             (apply #'+ (cdr item))))\n")
+      (insert "                     tasks)))\n")
+      (insert "  (list :name (cdr (assoc 'name d))\n")
+      (insert "        :sums sums\n")
+      (insert "        :total (apply #'+ (mapcar #'cdr sums))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("data" "proc"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_tree_map_reduce_pipeline_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
