@@ -1080,6 +1080,62 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_tree_map_reduce_pipeline_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Build tree
+      (insert "#+NAME: tree\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((dept-a . ((emp . 10) (budget . 100)))\n")
+      (insert "  (dept-b . ((emp . 20) (budget . 200)))\n")
+      (insert "  (dept-c . ((emp . 15) (budget . 150))))\n")
+      (insert "#+end_src\n\n")
+      ;; Map: extract and transform
+      (insert "#+NAME: mapped\n")
+      (insert "#+begin_src emacs-lisp :var data=tree :results value replace\n")
+      (insert "(mapcar (lambda (dept)\n")
+      (insert "          (let ((name (car dept))\n")
+      (insert "                (emp (cdr (assoc 'emp (cdr dept))))\n")
+      (insert "                (budget (cdr (assoc 'budget (cdr dept)))))\n")
+      (insert "            (list name emp budget (/ budget emp))))\n")
+      (insert "        data)\n")
+      (insert "#+end_src\n\n")
+      ;; Reduce: aggregate
+      (insert "#+NAME: agg\n")
+      (insert "#+begin_src emacs-lisp :var data=mapped :results value replace\n")
+      (insert "(let ((emps (mapcar #'cadr data))\n")
+      (insert "      (budgets (mapcar #'caddr data)))\n")
+      (insert "  (list :total-emp (apply #'+ emps)\n")
+      (insert "        :total-budget (apply #'+ budgets)\n")
+      (insert "        :avg-per-person (/ (apply #'+ budgets)\n")
+      (insert "                          (apply #'+ emps))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("tree" "mapped" "agg"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_multi_table_var_chain_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
