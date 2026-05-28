@@ -614,8 +614,8 @@ impl RenderApp {
         self.frame_windows.hide_top_level_popup_menus();
         if self.primary_window_state().is_none() {
             self.set_primary_popup_menu(None);
+            self.mark_primary_dirty();
         }
-        self.mark_primary_dirty();
     }
 
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
@@ -654,8 +654,8 @@ impl RenderApp {
         self.frame_windows.hide_top_level_tooltips();
         if self.primary_window_state().is_none() {
             self.set_primary_tooltip(None);
+            self.mark_primary_dirty();
         }
-        self.mark_primary_dirty();
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {

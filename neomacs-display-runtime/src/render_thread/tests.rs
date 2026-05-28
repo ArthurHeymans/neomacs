@@ -388,6 +388,28 @@ fn primary_tooltip_command_marks_render_state_dirty() {
 }
 
 #[test]
+fn hide_popup_menu_marks_primary_chrome_dirty_without_popup() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+    app.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = Some(3));
+    app.set_primary_dirty(false);
+
+    app.handle_ui_command(RenderCommand::HidePopupMenu)
+        .expect("hide popup menu");
+
+    assert_eq!(app.primary_chrome_interaction().menu_bar_active, None);
+    assert!(app.primary_dirty());
+}
+
+#[test]
 fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
     let mut app = make_test_app();
     let Some(device) = make_test_device() else {
