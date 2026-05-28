@@ -647,6 +647,33 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn sync_top_level_transition_policy_from_default(&mut self) {
+        let transition_policy = self.transition_policy;
+        self.sync_primary_transition_policy_from_default();
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state.render.transitions.policy = transition_policy;
+            window_state.render.frame_dirty = true;
+        }
+    }
+
+    pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.transitions.crossfades.clear();
+        }
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state.render.transitions.crossfades.clear();
+        }
+    }
+
+    pub(super) fn clear_top_level_scroll_transitions(&mut self) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.transitions.scroll_slides.clear();
+        }
+        for window_state in self.frame_windows.windows.values_mut() {
+            window_state.render.transitions.scroll_slides.clear();
+        }
+    }
+
     pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
         self.primary_render_state()
             .and_then(|frame| frame.menu_bar.as_ref())

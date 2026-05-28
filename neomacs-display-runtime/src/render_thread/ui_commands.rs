@@ -135,7 +135,6 @@ impl RenderApp {
                 self.cursor_defaults.anim_duration = cursor_duration_ms as f32 / 1000.0;
                 self.cursor_defaults.trail_size = trail_size.clamp(0.0, 1.0);
                 self.transition_policy = transition_policy;
-                self.sync_primary_transition_policy_from_default();
                 self.mark_primary_dirty();
                 if !cursor_enabled {
                     self.cursor_defaults.animating = false;
@@ -144,25 +143,12 @@ impl RenderApp {
                     }
                 }
                 self.sync_top_level_cursor_config_from_defaults();
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.transitions.policy = transition_policy;
-                    window_state.render.frame_dirty = true;
-                }
+                self.sync_top_level_transition_policy_from_default();
                 if !self.transition_policy.crossfade_enabled {
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
-                        primary_frame.transitions.crossfades.clear();
-                    }
-                    for window_state in self.frame_windows.windows.values_mut() {
-                        window_state.render.transitions.crossfades.clear();
-                    }
+                    self.clear_top_level_crossfade_transitions();
                 }
                 if !self.transition_policy.scroll_enabled {
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
-                        primary_frame.transitions.scroll_slides.clear();
-                    }
-                    for window_state in self.frame_windows.windows.values_mut() {
-                        window_state.render.transitions.scroll_slides.clear();
-                    }
+                    self.clear_top_level_scroll_transitions();
                 }
                 Ok(())
             }
