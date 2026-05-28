@@ -1459,3 +1459,58 @@ fn org_agenda_list_edit_todo_reagenda_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_tag_filter_edit_clock_reagenda_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-agenda-clock-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgendaClock*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha :work:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO Beta :home:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT Gamma :work:urgent:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE Delta :home:\nSCHEDULED: <2026-05-28 Wed>\n"))
+          ;; Agenda full
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((full (replace-regexp-in-string
+                         (regexp-quote root) "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+              ;; Filter by work tag
+              (org-agenda-filter-apply '("+work") 'tag)
+              (let ((work-only (replace-regexp-in-string
+                                (regexp-quote root) "<root>"
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+                (org-agenda-filter-remove-all)
+                ;; Edit: clock in on Alpha
+                (org-agenda-goto nil)
+                (with-current-buffer (current-buffer)
+                  (org-clock-in)
+                  (org-clock-out))
+                ;; Re-agenda
+                (org-agenda-quit)
+                (org-agenda-list nil "2026-05-28" 1)
+                (with-current-buffer org-agenda-buffer-name
+                  (let ((after-clock (replace-regexp-in-string
+                                     (regexp-quote root) "<root>"
+                                     (buffer-substring-no-properties
+                                      (point-min) (point-max)))))
+                    (org-agenda-quit)
+                    (list full work-only after-clock))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
