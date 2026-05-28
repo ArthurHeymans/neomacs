@@ -1080,6 +1080,56 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: ledger\n")
+      (insert "| Acct | Amt |\n")
+      (insert("|------+-----|\n")
+      (insert "| A | 100 |\n")
+      (insert "| B | 200 |\n")
+      (insert "| A | 50 |\n")
+      (insert "| C | 300 |\n")
+      (insert "| B | 150 |\n\n")
+      ;; Group by account
+      (insert "#+NAME: balances\n")
+      (insert "#+begin_src emacs-lisp :var tbl=ledger :results value replace\n")
+      (insert "(let ((acc nil))\n")
+      (insert "  (dolist (row tbl)\n")
+      (insert "    (let* ((acct (car row))\n")
+      (insert "           (amt (cadr row))\n")
+      (insert "           (entry (assoc acct acc)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) amt))\n")
+      (insert "          (push (cons acct amt) acc))))\n")
+      (insert "  (sort acc (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "balances")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
