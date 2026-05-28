@@ -129,7 +129,8 @@ fn strong_footnote_create_renumber_combo() {
   (insert "Text[fn:2] more[fn:1] end\n\n[fn:1] First\n[fn:2] Second")
   (goto-char (point-min))
   (let ((before (buffer-string)))
-    (org-footnote-action 'sort)
+    (let ((unread-command-events (list ?s)))
+      (org-footnote-action t))
     (let ((after (buffer-string))
           (count (count-matches "\\[fn:" (point-min) (point-max))))
       (list before after count))))"##,

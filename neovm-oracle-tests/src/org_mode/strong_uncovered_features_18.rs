@@ -17,8 +17,12 @@ fn uf18_ctrlc_prop() {
   (insert "* T\n:PROPERTIES:\n:A: 1\n:END:")
   (goto-char (point-min))
   (search-forward ":A:")
-  (org-ctrl-c-ctrl-c)
-  (buffer-string))"##,
+  (let ((before (buffer-string)))
+    (condition-case err
+        (let ((unread-command-events (list ?c)))
+          (org-ctrl-c-ctrl-c)
+          (list :ok before (buffer-string)))
+      (error (list :error err before (buffer-string))))))"##,
     );
 }
 

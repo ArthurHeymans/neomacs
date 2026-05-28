@@ -157,9 +157,11 @@ fn uf26_export_dispatch() {
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+TITLE: Test\n* H1\nBody *bold* /italic/")
-  (condition-case nil
-      (org-export-dispatch nil)
-    (error nil)))"##,
+  (condition-case err
+      (let ((unread-command-events (list ?q)))
+        (org-export-dispatch nil)
+        (list :ok (buffer-string)))
+    (error (list :error err (buffer-string)))))"##,
     );
 }
 
