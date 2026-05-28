@@ -870,3 +870,43 @@ fn org_capture_insert_todo_edit_clock_refile_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_capture_datetree_insert_edit_clock_refile_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-capture)
+  (require 'org-datetree)
+  (let* ((root (make-temp-file "org-capture-datetree-" t))
+         (target (expand-file-name "journal.org" root))
+         (org-capture-templates
+          `(("j" "Journal" entry (file+datetree ,target)
+             "* %?\n%U\n"))))
+    (unwind-protect
+        (progn
+          (with-temp-file target
+            (insert "#+TITLE: Journal\n\n"))
+          ;; Capture
+          (org-capture nil "j")
+          (insert "Journal entry alpha")
+          (org-capture-finalize)
+          ;; Read target
+          (let ((after-capture
+                 (with-current-buffer (find-file-noselect target)
+                   (buffer-substring-no-properties
+                    (point-min) (point-max)))))
+            ;; Second capture
+            (org-capture nil "j")
+            (insert "Journal entry beta")
+            (org-capture-finalize)
+            (let ((after-second
+                   (with-current-buffer (find-file-noselect target)
+                     (buffer-substring-no-properties
+                      (point-min) (point-max)))))
+              (list after-capture after-second))))
+      (delete-directory root t))))"##,
+    );
+}
