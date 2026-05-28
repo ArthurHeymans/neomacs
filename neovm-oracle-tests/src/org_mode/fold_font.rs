@@ -685,6 +685,80 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_sublevels_show_context_font_level_visibility_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fold-show-context-detail '((default . lineage)
+                                          (isearch . lineage))))
+      (org-mode)
+      (insert "* Root\n")
+      (insert "** Alpha\n")
+      (insert "Alpha body.\n")
+      (insert "*** Beta\n")
+      (insert "Beta body.\n")
+      (insert "**** Gamma\n")
+      (insert "Gamma body.\n")
+      (insert "***** Delta\n")
+      (insert "Delta body.\n")
+      (insert "** Sibling\n")
+      (insert "Sibling body.\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide to level 1
+      (org-fold-hide-sublevels 1)
+      ;; Capture hidden state
+      (let ((after-hide
+             (mapcar
+              (lambda (needle)
+                (save-excursion
+                  (goto-char (point-min))
+                  (if (search-forward needle nil t)
+                      (list needle
+                            (line-number-at-pos)
+                            (invisible-p (point))
+                            (org-outline-level)
+                            (get-text-property (line-beginning-position) 'face))
+                      (list needle 'not-found nil nil nil))))
+              '("Root" "Alpha" "Beta" "Gamma" "Delta" "Sibling"))))
+        ;; Show subtree at Alpha
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-fold-show-subtree)
+        (let ((after-show
+               (mapcar
+                (lambda (needle)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (if (search-forward needle nil t)
+                        (list needle
+                              (invisible-p (point))
+                              (org-outline-level))
+                        (list needle 'not-found nil nil))))
+                '("Root" "Alpha" "Beta" "Gamma" "Delta" "Sibling"))))
+          ;; Merged check
+          (let ((merged nil))
+            (dolist (line (split-string
+                           (buffer-substring-no-properties
+                            (point-min) (point-max))
+                           "\n" t))
+              (when (string-match-p "^\\*+ .*\\*+ " line)
+                (push line merged)))
+            (list after-hide
+                  after-show
+                  (nreverse merged)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_multiple_subtree_hide_cycle_show_font_level_v5_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
