@@ -417,18 +417,60 @@ fn org_datetree_insert_find_cleanup_structure_deep_state_combo() {
           (org-datetree-find-month-create '(5 2026))
           (let ((month-pos (line-number-at-pos))
                 (month-heading (org-get-heading t t t t)))
-            (list after-insert
-                  headlines
-                  year-count
-                  month-count
-                  day-count
-                  pos-after-find
-                  heading-at-find
-                  after-extra
-                  month-pos
-                  month-heading
-                  (count-matches "^\\*+ " (point-min) (point-max))
-                  (buffer-substring-no-properties
-                   (point-min) (point-max)))))))))"##,
+             (list after-insert
+                   headlines
+                   year-count
+                   month-count
+                   day-count
+                   pos-after-find
+                   heading-at-find
+                   after-extra
+                   month-pos
+                   month-heading
+                   (count-matches "^\\*+ " (point-min) (point-max))
+                   (buffer-substring-no-properties
+                    (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_datetree_find_insert_edit_multi_date_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-datetree)
+  (with-temp-buffer
+    (org-mode)
+    (org-datetree-find-date-create '(5 27 2026))
+    (insert "Entry for May 27.\n")
+    (org-datetree-find-date-create '(5 28 2026))
+    (insert "Entry for May 28.\n")
+    (org-datetree-find-date-create '(6 1 2026))
+    (insert "Entry for June 1.\n")
+    ;; Insert under May 27 again
+    (goto-char (point-min))
+    (org-datetree-find-date-create '(5 27 2026))
+    (org-end-of-subtree)
+    (insert "\n** Extra under May 27\nExtra body.\n")
+    ;; Parse structure
+    (let ((headlines
+           (org-element-map (org-element-parse-buffer) 'headline
+             (lambda (hl)
+               (list (org-element-property :raw-value hl)
+                     (org-element-property :level hl)))))
+          (heading-count (count-matches "^\\*+ " (point-min) (point-max))))
+      ;; Find date and check position
+      (goto-char (point-min))
+      (org-datetree-find-date-create '(5 28 2026))
+      (let ((found-pos (line-number-at-pos))
+            (found-heading (org-get-heading t t t t)))
+        (list headlines
+              heading-count
+              found-pos
+              found-heading
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
     );
 }
