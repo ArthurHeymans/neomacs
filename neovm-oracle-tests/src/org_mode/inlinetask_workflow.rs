@@ -401,3 +401,50 @@ fn org_inlinetask_adjacent_boundary_cut_paste_combo() {
                      (point-min) (point-max))))))))"##,
     );
 }
+
+#[test]
+fn org_inlinetask_insert_promote_demote_export_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-inlinetask)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Regular heading\nBody.\n\n")
+    (insert "*************** TODO Inline task A\n")
+    (insert "Body of inline A.\n")
+    (insert "*************** END\n\n")
+    (insert "Another paragraph.\n\n")
+    (insert "*************** DONE Inline task B\n")
+    (insert "Body of inline B.\n")
+    (insert "*************** END\n\n")
+    (let ((snap (lambda (tag)
+                  (list tag
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))
+      (let ((initial (funcall snap 'initial)))
+        ;; Promote inline A
+        (goto-char (point-min))
+        (search-forward "Inline task A")
+        (beginning-of-line)
+        (org-inlinetask-promote)
+        (let ((after-promote (funcall snap 'promote)))
+          ;; Demote back
+          (goto-char (point-min))
+          (search-forward "Inline task A")
+          (beginning-of-line)
+          (org-inlinetask-demote)
+          (let ((after-demote (funcall snap 'demote)))
+            ;; Export
+            (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
+              (list initial
+                    after-promote
+                    after-demote
+                    html
+                    (buffer-substring-no-properties
+                     (point-min) (point-max))))))))))"##,
+    );
+}
