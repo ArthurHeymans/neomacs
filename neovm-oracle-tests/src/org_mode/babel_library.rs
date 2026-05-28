@@ -1080,6 +1080,54 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_list_map_tree_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; list + mapcar + tree
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((tree '(1 (2 (3 4) 5) (6 7))))\n")
+      (insert "  (list tree\n")
+      (insert "        (mapcar (lambda (x) (if (listp x) (length x) (* x 10)))\n")
+      (insert "                tree)\n")
+      (insert "        (apply #'+ (mapcar (lambda (x)\n")
+      (insert "                             (if (listp x)\n")
+      (insert "                                 (apply #'+ x)\n")
+      (insert "                                 x))\n")
+      (insert "                           tree))))\n")
+      (insert "#+end_src\n\n")
+      ;; cons + nth + length
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((l (cons 1 (cons 2 (cons 3 nil)))))\n")
+      (insert "  (list l (nth 1 l) (length l)\n")
+      (insert "        (last l) (butlast l 1)\n")
+      (insert "        (append l '(4 5))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 2)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_seq_count_position_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
