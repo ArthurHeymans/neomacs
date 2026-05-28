@@ -1080,6 +1080,47 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_seq_union_intersection_diff_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Union
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(seq-uniq (append '(1 2 3) '(2 3 4 5)))\n")
+      (insert "#+end_src\n\n")
+      ;; Intersection
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(seq-intersection '(1 2 3 4 5) '(3 4 5 6 7))\n")
+      (insert "#+end_src\n\n")
+      ;; Difference
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(seq-difference '(1 2 3 4 5) '(2 4))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 3)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_map_table_reduce_pipeline_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
