@@ -22,7 +22,7 @@ use super::state::{
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
-use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::core::frame_glyphs::{FrameGlyph, FrameGlyphBuffer};
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 use neomacs_display_protocol::glyph_matrix::{
@@ -183,6 +183,18 @@ impl GuiFrameRenderState {
     pub(super) fn set_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
         self.compact_bar = compact_bar;
         self.frame_dirty = true;
+    }
+
+    pub(super) fn extend_current_frame_glyphs(&mut self, glyphs: Vec<FrameGlyph>) -> bool {
+        if glyphs.is_empty() {
+            return false;
+        }
+        let Some(frame) = self.current_frame.as_mut() else {
+            return false;
+        };
+        frame.glyphs.extend(glyphs);
+        self.frame_dirty = true;
+        true
     }
 
     pub(super) fn set_visual_bell_start(&mut self, start: Option<Instant>) {

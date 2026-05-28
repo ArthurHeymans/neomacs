@@ -478,11 +478,8 @@ impl RenderApp {
             }
         }
 
-        if !win_glyphs.is_empty() {
-            if let Some(frame) = self.primary_current_frame_mut() {
-                frame.glyphs.extend(win_glyphs);
-            }
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.extend_current_frame_glyphs(win_glyphs);
         }
 
         // Render floating terminals
@@ -532,11 +529,8 @@ impl RenderApp {
             }
         }
 
-        if !float_glyphs.is_empty() {
-            if let Some(frame) = self.primary_current_frame_mut() {
-                frame.glyphs.extend(float_glyphs);
-            }
-            self.mark_primary_dirty();
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.extend_current_frame_glyphs(float_glyphs);
         }
     }
 
