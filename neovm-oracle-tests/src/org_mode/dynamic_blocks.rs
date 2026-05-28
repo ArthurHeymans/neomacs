@@ -558,3 +558,57 @@ fn org_clocktable_columnview_custom_dblock_update_regen_combo() {
                       after-mutate)))))))))"##,
     );
 }
+
+#[test]
+fn org_dblock_clocktable_columnview_multi_update_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (require 'org-colview)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project A\n")
+    (insert "** Task A1\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:30] =>  1:30\n:END:\n")
+    (insert "** Task A2\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\n:END:\n")
+    (insert "* Project B\n")
+    (insert "** Task B1\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 15:30] =>  1:30\n:END:\n")
+    (insert "#+BEGIN: clocktable :maxlevel 2 :scope (point-min) :block today\n")
+    (insert "#+END:\n\n")
+    (insert "#+BEGIN: columnview :maxlevel 2\n")
+    (insert "#+END:\n")
+    (let ((snap (lambda ()
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      (let ((initial (funcall snap)))
+        ;; Update clocktable
+        (goto-char (point-min))
+        (search-forward "clocktable :maxlevel 2")
+        (org-dblock-update)
+        (let ((after-ct (funcall snap)))
+          ;; Update columnview
+          (goto-char (point-min))
+          (search-forward "columnview")
+          (org-dblock-update)
+          (let ((after-col (funcall snap)))
+            ;; Mutate: add clock to Task B1
+            (goto-char (point-min))
+            (search-forward "Task B1")
+            (end-of-line)
+            (insert "\n:LOGBOOK:\nCLOCK: [2026-05-28 Wed 16:00]--[2026-05-28 Wed 17:00] =>  1:00\n:END:")
+            ;; Re-update clocktable
+            (goto-char (point-min))
+            (search-forward "clocktable :maxlevel 2")
+            (org-dblock-update)
+            (let ((after-mutate (funcall snap)))
+              (list initial
+                    after-ct
+                    after-col
+                    after-mutate)))))))))"##,
+    );
+}
