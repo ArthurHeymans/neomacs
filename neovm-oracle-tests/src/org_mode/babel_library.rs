@@ -1080,6 +1080,45 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_recursive_fib_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Recursive fibonacci
+      (insert "#+NAME: fib\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(progn\n  (defun fib (n)\n    (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))\n  (mapcar #'fib '(0 1 2 3 4 5 6 7 8 9 10)))\n")
+      (insert "#+end_src\n\n")
+      ;; Recursive factorial
+      (insert "#+NAME: fact\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(progn\n  (defun fact (n) (if (<= n 1) 1 (* n (fact (1- n)))))\n  (mapcar #'fact '(0 1 2 3 4 5 6 7 8)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("fib" "fact"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_type_coercion_boundary_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
