@@ -1080,6 +1080,52 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_string_list_table_mixed_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; String result
+      (insert "#+NAME: str\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(concat \"Hello\" \" \" \"World\")\n")
+      (insert "#+end_src\n\n")
+      ;; List result using named ref
+      (insert "#+NAME: lst\n")
+      (insert "#+begin_src emacs-lisp :var s=str :results value replace\n")
+      (insert "(list (length s) (upcase s) (downcase s))\n")
+      (insert "#+end_src\n\n")
+      ;; Table result using named ref
+      (insert "#+NAME: tbl\n")
+      (insert "#+begin_src emacs-lisp :var data=lst :results value table replace\n")
+      (insert "(cons '(\"Metric\" \"Value\")\n")
+      (insert "      (cons 'hline\n")
+      (insert "            (mapcar (lambda (v) (list (type-of v) v)) data)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("str" "lst" "tbl"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_let_lambda_defun_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
