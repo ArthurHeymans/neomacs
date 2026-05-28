@@ -392,3 +392,52 @@ fn org_element_full_ast_dump_with_properties_combo() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_clock_property_planning_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: DeepParseTest\n#+AUTHOR: Oracle\n\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert ":PROPERTIES:\n:Effort: 2h30m\n:CUSTOM_ID: alpha\n:END:\n")
+    (insert "Body text under alpha.\n\n")
+    (insert "** DONE Beta :home:\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:CUSTOM_ID: beta\n:END:\n")
+    (insert "Body text under beta.\n\n")
+    ;; Edit: insert a new sub-heading under Alpha
+    (goto-char (point-min))
+    (search-forward "Body text under alpha.")
+    (end-of-line)
+    (insert "\n*** WAIT Gamma :urgent:\n")
+    (insert ":PROPERTIES:\n:Effort: 0h45m\n:END:\n")
+    (insert "Body under gamma.\n")
+    ;; Parse
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (hl)
+                (list (org-element-property :raw-value hl)
+                      (org-element-property :level hl)
+                      (org-element-property :todo-keyword hl)
+                      (org-element-property :tags hl)
+                      (org-element-property :priority hl)))))
+           (properties
+            (org-element-map tree 'property-drawer
+              (lambda (pd)
+                (org-element-map pd 'node-property
+                  (lambda (np)
+                    (list (org-element-property :key np)
+                          (org-element-property :value np)))))))
+           (tags
+            (org-element-map tree 'headline
+              (lambda (hl) (org-element-property :tags hl)))))
+      (list headlines properties tags
+            (buffer-substring-no-properties
+             (point-min) (point-max)))))))"##,
+    );
+}
