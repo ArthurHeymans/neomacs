@@ -399,15 +399,7 @@ impl RenderApp {
 
             WindowEvent::Ime(ime_event) => match ime_event {
                 winit::event::Ime::Enabled => {
-                    if self.frame_windows.is_primary_winit(window_id) {
-                        self.set_primary_ime_enabled(true);
-                        self.reset_primary_ime_cursor_area();
-                        if let Some(target) = self.primary_cursor().target_cloned() {
-                            self.update_ime_cursor_area_if_needed(&target);
-                        }
-                    } else if let Some(window_state) =
-                        self.frame_windows.get_by_winit_mut(window_id)
-                    {
+                    if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.native.ime_enabled = true;
                         window_state.native.last_ime_cursor_area = None;
                         if let Some(target) = window_state.render.cursor.target_cloned() {
@@ -416,35 +408,37 @@ impl RenderApp {
                                 &target,
                             );
                         }
+                    } else if self.frame_windows.is_primary_winit(window_id) {
+                        self.set_primary_ime_enabled(true);
+                        self.reset_primary_ime_cursor_area();
+                        if let Some(target) = self.primary_cursor().target_cloned() {
+                            self.update_ime_cursor_area_if_needed(&target);
+                        }
                     }
                     tracing::info!("IME enabled");
                 }
                 winit::event::Ime::Disabled => {
-                    if self.frame_windows.is_primary_winit(window_id) {
-                        self.set_primary_ime_enabled(false);
-                        self.clear_primary_ime_preedit();
-                        self.reset_primary_ime_cursor_area();
-                    } else if let Some(window_state) =
-                        self.frame_windows.get_by_winit_mut(window_id)
-                    {
+                    if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.native.ime_enabled = false;
                         window_state.render.ime_preedit_active = false;
                         window_state.render.ime_preedit_text.clear();
                         window_state.native.last_ime_cursor_area = None;
                         window_state.render.frame_dirty = true;
+                    } else if self.frame_windows.is_primary_winit(window_id) {
+                        self.set_primary_ime_enabled(false);
+                        self.clear_primary_ime_preedit();
+                        self.reset_primary_ime_cursor_area();
                     }
                     tracing::info!("IME disabled");
                 }
                 winit::event::Ime::Commit(text) => {
                     tracing::debug!("IME Commit: '{}'", text);
-                    if self.frame_windows.is_primary_winit(window_id) {
-                        self.clear_primary_ime_preedit();
-                    } else if let Some(window_state) =
-                        self.frame_windows.get_by_winit_mut(window_id)
-                    {
+                    if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.render.ime_preedit_active = false;
                         window_state.render.ime_preedit_text.clear();
                         window_state.render.frame_dirty = true;
+                    } else if self.frame_windows.is_primary_winit(window_id) {
+                        self.clear_primary_ime_preedit();
                     }
                     for ch in text.chars() {
                         let keysym = ch as u32;
@@ -462,14 +456,7 @@ impl RenderApp {
                 }
                 winit::event::Ime::Preedit(text, cursor_range) => {
                     tracing::debug!("IME Preedit: '{}' cursor: {:?}", text, cursor_range);
-                    if self.frame_windows.is_primary_winit(window_id) {
-                        self.set_primary_ime_preedit(text.clone());
-                        if let Some(target) = self.primary_cursor().target_cloned() {
-                            self.update_ime_cursor_area_if_needed(&target);
-                        }
-                    } else if let Some(window_state) =
-                        self.frame_windows.get_by_winit_mut(window_id)
-                    {
+                    if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.render.ime_preedit_active = !text.is_empty();
                         window_state.render.ime_preedit_text = text.clone();
                         if let Some(target) = window_state.render.cursor.target_cloned() {
@@ -479,6 +466,11 @@ impl RenderApp {
                             );
                         }
                         window_state.render.frame_dirty = true;
+                    } else if self.frame_windows.is_primary_winit(window_id) {
+                        self.set_primary_ime_preedit(text.clone());
+                        if let Some(target) = self.primary_cursor().target_cloned() {
+                            self.update_ime_cursor_area_if_needed(&target);
+                        }
                     }
                 }
             },
