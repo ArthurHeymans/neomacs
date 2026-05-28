@@ -2567,8 +2567,7 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
     eval.set_variable("process-environment", process_environment.clone());
     let system_name = super::builtins_extra::builtin_system_name(vec![])
         .unwrap_or_else(|_| Value::string("localhost"));
-    let user_full_name = super::builtins_extra::builtin_user_full_name(vec![])
-        .unwrap_or_else(|_| Value::string("unknown"));
+    let user_full_name = super::builtins_extra::initial_user_full_name_value();
     let user_login_name = super::builtins_extra::builtin_user_login_name(vec![])
         .unwrap_or_else(|_| Value::string("unknown"));
     let user_real_login_name = super::builtins_extra::builtin_user_real_login_name(vec![])

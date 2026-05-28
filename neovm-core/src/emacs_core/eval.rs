@@ -3079,7 +3079,10 @@ impl Context {
         obarray.make_special("system-configuration-features");
         obarray.set_symbol_value("system-name", Value::string("localhost"));
         obarray.make_special("system-name");
-        obarray.set_symbol_value("user-full-name", Value::string("unknown"));
+        obarray.set_symbol_value(
+            "user-full-name",
+            super::builtins_extra::initial_user_full_name_value(),
+        );
         obarray.make_special("user-full-name");
         obarray.set_symbol_value("user-login-name", Value::string("unknown"));
         obarray.make_special("user-login-name");

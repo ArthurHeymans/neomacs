@@ -674,6 +674,27 @@ fn eval_indent_to_inserts_padding_and_returns_column() {
 }
 
 #[test]
+fn eval_indent_to_inherits_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let value = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abc:tag:")
+                 (put-text-property 1 4 'p 1)
+                 (goto-char 4)
+                 (let ((indent-tabs-mode nil))
+                   (indent-to 10))
+                 (buffer-string))"#,
+        )
+        .expect("eval");
+    assert_eq!(
+        super::super::print::print_value(&value),
+        r#"#("abc       :tag:" 0 10 (p 1))"#
+    );
+}
+
+#[test]
 fn eval_indent_to_rejects_non_fixnump_minimum() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

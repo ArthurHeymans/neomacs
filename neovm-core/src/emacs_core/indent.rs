@@ -642,7 +642,14 @@ pub(crate) fn builtin_indent_to(
     let indent_len = indent.len();
     if indent_len > 0 {
         super::editfns::signal_before_change(ctx, insert_pos, insert_pos)?;
-        let _ = ctx.buffers.insert_into_buffer(current_id, &indent);
+        super::builtins::insert_string_value_in_current_buffer(
+            &ctx.obarray,
+            &[],
+            &mut ctx.buffers,
+            Value::string(indent),
+            false,
+            true,
+        )?;
         super::editfns::signal_after_change(ctx, insert_pos, insert_pos + indent_len, 0)?;
     }
 

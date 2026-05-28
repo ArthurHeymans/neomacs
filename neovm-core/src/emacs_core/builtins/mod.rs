@@ -7554,10 +7554,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         "user-real-login-name",
         super::builtins_extra::builtin_user_real_login_name
     );
-    defsubr_pure!(
-        ctx,
+    ctx.defsubr(
         "user-full-name",
-        super::builtins_extra::builtin_user_full_name
+        super::builtins_extra::builtin_user_full_name,
+        0,
+        Some(1),
     );
     defsubr_pure!(
         ctx,

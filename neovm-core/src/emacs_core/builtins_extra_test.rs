@@ -484,10 +484,15 @@ fn seq_length_wrong_type_errors() {
 #[test]
 fn user_info() {
     crate::test_utils::init_test_tracing();
+    let mut ctx = super::super::eval::Context::new();
     // These should not panic, just return strings.
     assert!(builtin_user_login_name(vec![]).unwrap().is_string());
     assert!(builtin_user_real_login_name(vec![]).unwrap().is_string());
-    assert!(builtin_user_full_name(vec![]).unwrap().is_string());
+    assert!(
+        builtin_user_full_name(&mut ctx, vec![])
+            .unwrap()
+            .is_string()
+    );
     assert!(builtin_system_name(vec![]).unwrap().is_string());
     assert!(system_configuration_value().is_string());
     assert!(system_configuration_options_value().is_string());
@@ -499,22 +504,69 @@ fn user_info() {
 }
 
 #[test]
+fn user_full_name_uses_gecos_prefix_verbatim() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        canonical_full_name(&PasswdEntry {
+            login: "login".to_string(),
+            uid: 1,
+            gecos: "Full Name,Room,Phone".to_string(),
+        }),
+        "Full Name"
+    );
+    assert_eq!(
+        canonical_full_name(&PasswdEntry {
+            login: "login".to_string(),
+            uid: 1,
+            gecos: "".to_string(),
+        }),
+        ""
+    );
+    assert_eq!(
+        canonical_full_name(&PasswdEntry {
+            login: "login".to_string(),
+            uid: 1,
+            gecos: "  Full Name  ".to_string(),
+        }),
+        "  Full Name  "
+    );
+}
+
+#[test]
+fn user_full_name_no_arg_reads_current_special_variable() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval(
+        r#"
+        (setq user-full-name "Alice")
+        (user-full-name)
+        (let ((user-full-name "Bob"))
+          (user-full-name))
+        "#,
+    );
+    assert_eq!(results[0], "OK \"Alice\"");
+    assert_eq!(results[1], "OK \"Alice\"");
+    assert_eq!(results[2], "OK \"Bob\"");
+}
+
+#[test]
 fn user_identity_optional_args() {
     crate::test_utils::init_test_tracing();
+    let mut ctx = super::super::eval::Context::new();
     let login_for_uid = builtin_user_login_name(vec![Value::fixnum(current_uid())]).unwrap();
     assert!(login_for_uid.is_nil() || login_for_uid.is_string());
 
-    let by_uid = builtin_user_full_name(vec![Value::fixnum(current_uid())]).unwrap();
+    let by_uid = builtin_user_full_name(&mut ctx, vec![Value::fixnum(current_uid())]).unwrap();
     assert!(by_uid.is_nil() || by_uid.is_string());
 
     let login = builtin_user_login_name(vec![]).unwrap();
-    let by_login = builtin_user_full_name(vec![login]).unwrap();
+    let by_login = builtin_user_full_name(&mut ctx, vec![login]).unwrap();
     assert!(by_login.is_nil() || by_login.is_string());
 }
 
 #[test]
 fn user_identity_arity_contracts() {
     crate::test_utils::init_test_tracing();
+    let mut ctx = super::super::eval::Context::new();
     let login_name_err =
         builtin_user_login_name(vec![Value::fixnum(1), Value::fixnum(2)]).unwrap_err();
     match login_name_err {
@@ -529,7 +581,7 @@ fn user_identity_arity_contracts() {
     }
 
     let full_name_err =
-        builtin_user_full_name(vec![Value::fixnum(1), Value::fixnum(2)]).unwrap_err();
+        builtin_user_full_name(&mut ctx, vec![Value::fixnum(1), Value::fixnum(2)]).unwrap_err();
     match full_name_err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected signal, got {other:?}"),
@@ -539,6 +591,7 @@ fn user_identity_arity_contracts() {
 #[test]
 fn user_identity_type_contracts() {
     crate::test_utils::init_test_tracing();
+    let mut ctx = super::super::eval::Context::new();
     let login_name_err = builtin_user_login_name(vec![Value::string("root")]).unwrap_err();
     match login_name_err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
@@ -546,7 +599,7 @@ fn user_identity_type_contracts() {
     }
 
     let full_name_err =
-        builtin_user_full_name(vec![Value::list(vec![Value::fixnum(1)])]).unwrap_err();
+        builtin_user_full_name(&mut ctx, vec![Value::list(vec![Value::fixnum(1)])]).unwrap_err();
     match full_name_err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected signal, got {other:?}"),
@@ -558,7 +611,8 @@ fn user_identity_type_contracts() {
         other => panic!("expected signal, got {other:?}"),
     }
 
-    let negative_uid_full_name = builtin_user_full_name(vec![Value::fixnum(-1)]).unwrap_err();
+    let negative_uid_full_name =
+        builtin_user_full_name(&mut ctx, vec![Value::fixnum(-1)]).unwrap_err();
     match negative_uid_full_name {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected signal, got {other:?}"),

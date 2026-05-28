@@ -614,12 +614,7 @@ fn lookup_login_by_uid(uid: i64) -> Option<String> {
 }
 
 fn canonical_full_name(entry: &PasswdEntry) -> String {
-    let first_gecos = entry.gecos.split(',').next().unwrap_or("").trim();
-    if first_gecos.is_empty() {
-        entry.login.clone()
-    } else {
-        first_gecos.to_string()
-    }
+    entry.gecos.split(',').next().unwrap_or("").to_string()
 }
 
 fn lookup_full_name_by_uid(uid: i64) -> Option<String> {
@@ -681,24 +676,14 @@ pub(crate) fn builtin_user_real_login_name(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(user-full-name &optional UID-OR-LOGIN)` -> string or nil.
-pub(crate) fn builtin_user_full_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_user_full_name(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("user-full-name", &args, 1)?;
     if let Some(target) = args.first() {
         if target.is_nil() {
-            if let Ok(name) = std::env::var("NAME") {
-                if !name.is_empty() {
-                    return Ok(Value::string(name));
-                }
-            }
-            let fallback = lookup_full_name_by_uid(current_uid())
-                .or_else(|| {
-                    login_name_from_env()
-                        .as_deref()
-                        .and_then(lookup_full_name_by_login)
-                })
-                .or_else(login_name_from_env)
-                .unwrap_or_else(|| "unknown".to_string());
-            return Ok(Value::string(fallback));
+            return ctx.eval_symbol_by_id(super::intern::intern("user-full-name"));
         }
 
         return Ok(match target.kind() {
@@ -734,21 +719,25 @@ pub(crate) fn builtin_user_full_name(args: Vec<Value>) -> EvalResult {
         });
     }
 
+    ctx.eval_symbol_by_id(super::intern::intern("user-full-name"))
+}
+
+pub(crate) fn initial_user_full_name_value() -> Value {
     if let Ok(name) = std::env::var("NAME") {
-        if !name.is_empty() {
-            return Ok(Value::string(name));
-        }
+        return Value::string(name);
     }
 
-    let fallback = lookup_full_name_by_uid(current_uid())
-        .or_else(|| {
-            login_name_from_env()
-                .as_deref()
-                .and_then(lookup_full_name_by_login)
-        })
-        .or_else(login_name_from_env)
+    let real_login = lookup_login_by_uid(real_uid()).unwrap_or_else(|| "unknown".to_string());
+    let effective_login = login_name_from_env()
+        .or_else(|| lookup_login_by_uid(current_uid()))
         .unwrap_or_else(|| "unknown".to_string());
-    Ok(Value::string(fallback))
+    let full_name = if effective_login == real_login {
+        lookup_full_name_by_login(&effective_login)
+    } else {
+        lookup_full_name_by_uid(current_uid())
+    }
+    .unwrap_or_else(|| "unknown".to_string());
+    Value::string(full_name)
 }
 
 /// `(system-name)` -> string.
