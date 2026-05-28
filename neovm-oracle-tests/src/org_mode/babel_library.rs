@@ -1080,6 +1080,53 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Input table
+      (insert "#+NAME: src\n")
+      (insert "| N | V |\n")
+      (insert("|---+---|\n")
+      (insert "| 2 | 7 |\n")
+      (insert "| 5 | 3 |\n")
+      (insert "| 8 | 1 |\n")
+      (insert "| 4 | 9 |\n\n")
+      ;; Filter even N, sort V desc, compute
+      (insert "#+NAME: result\n")
+      (insert "#+begin_src emacs-lisp :var tbl=src :results value replace\n")
+      (insert "(let* ((evens (cl-remove-if-not\n")
+      (insert "               (lambda (r) (evenp (car r)))\n")
+      (insert "               tbl))\n")
+      (insert "       (sorted (sort (copy-sequence evens)\n")
+      (insert "                     (lambda (a b) (> (cadr a) (cadr b)))))\n")
+      (insert "       (total (apply #'+ (mapcar #'cadr sorted))))\n")
+      (insert "  (list :rows sorted :total total))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "result")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
