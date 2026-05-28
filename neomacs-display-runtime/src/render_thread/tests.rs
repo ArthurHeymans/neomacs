@@ -1,6 +1,7 @@
 use super::RenderApp;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::thread_comm::{RenderCommand, ThreadComms, ToolBarItem};
+use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
@@ -538,4 +539,47 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
 
     assert_eq!((x, y), (12.0, 34.0));
     assert_eq!(frame_id, 0x1000);
+}
+
+#[test]
+fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    );
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+    app.set_primary_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)));
+    app.set_primary_dirty(false);
+
+    let mut secondary = FrameGlyphBuffer::with_size(320.0, 240.0);
+    secondary.frame_id = 0x2000;
+    secondary.parent_id = 0;
+    emacs
+        .frame_tx
+        .send(FrameDisplayState::from_frame_glyph_buffer(&secondary))
+        .expect("queue secondary snapshot");
+
+    app.poll_frame();
+
+    assert_eq!(
+        app.primary_current_frame().map(|frame| frame.width),
+        Some(800.0)
+    );
 }

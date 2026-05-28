@@ -211,16 +211,18 @@ impl RenderApp {
         }
     }
 
-    fn update_primary_window_cursor_side_effects(&mut self, cursor_sync: CursorSyncOutcome) {
-        let typing_ripple_enabled = self.effects.typing_ripple.enabled;
-        let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
-        if let (Some(renderer), Some(primary_state)) = (
-            self.renderer.as_ref(),
-            self.frame_windows.primary_window_mut(),
-        ) {
+    fn update_frame_window_cursor_side_effects(
+        renderer: Option<&neomacs_renderer_wgpu::WgpuRenderer>,
+        window_state: &mut GuiFrameWindowState,
+        cursor_sync: CursorSyncOutcome,
+        typing_ripple_enabled: bool,
+        cursor_trail_fade_enabled: bool,
+        update_transient_effects: bool,
+    ) {
+        if update_transient_effects {
             Self::update_top_level_cursor_effects(
-                Some(renderer),
-                &mut primary_state.render,
+                renderer,
+                &mut window_state.render,
                 &cursor_sync.target,
                 cursor_sync.had_target,
                 cursor_sync.target_moved,
@@ -228,7 +230,21 @@ impl RenderApp {
                 typing_ripple_enabled,
                 cursor_trail_fade_enabled,
             );
-            Self::update_frame_window_ime_cursor_area_if_needed(primary_state, &cursor_sync.target);
+        }
+        Self::update_frame_window_ime_cursor_area_if_needed(window_state, &cursor_sync.target);
+    }
+
+    fn sync_gui_toolbar_assets(&mut self, tool_bar: Option<&GuiToolBarState>) {
+        if let Some(tool_bar) = tool_bar {
+            self.sync_toolbar_visual_config_from_height(tool_bar.height);
+            self.ensure_toolbar_icon_textures(&tool_bar.items);
+        }
+    }
+
+    fn sync_gui_compact_bar_assets(&mut self, compact_bar: Option<&GuiCompactBarState>) {
+        if let Some(compact_bar) = compact_bar {
+            self.sync_toolbar_visual_config_from_height(compact_bar.height);
+            self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
         }
     }
 
@@ -385,57 +401,18 @@ impl RenderApp {
                 tracing::info!("all_glyphs:\n{}", all_glyphs);
             }
 
-            if self.frame_windows.is_primary_frame_id(frame_id) && parent_id == 0 {
-                if let Some(tool_bar) = gui_tool_bar.as_ref() {
-                    self.sync_toolbar_visual_config_from_height(tool_bar.height);
-                    self.ensure_toolbar_icon_textures(&tool_bar.items);
-                }
-                if let Some(compact_bar) = gui_compact_bar.as_ref() {
-                    self.sync_toolbar_visual_config_from_height(compact_bar.height);
-                    self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
+            if parent_id == 0 {
+                let routed_to_managed = self.frame_windows.get(frame_id).is_some();
+                let routed_to_primary_fallback = self.frame_windows.is_primary_frame_id(frame_id);
+                if routed_to_managed {
+                    self.sync_gui_toolbar_assets(gui_tool_bar.as_ref());
+                    self.sync_gui_compact_bar_assets(gui_compact_bar.as_ref());
                 }
 
-                if self.frame_windows.primary_window().is_some() {
-                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-                    let primary_state = self
-                        .frame_windows
-                        .primary_window_mut()
-                        .expect("checked primary window");
-                    let cursor_sync = Self::ingest_frame_window_root_frame(
-                        primary_state,
-                        frame,
-                        gui_menu_bar,
-                        gui_tool_bar,
-                        gui_compact_bar,
-                        cursor_config,
-                    );
-                    if let Some(cursor_sync) = cursor_sync {
-                        self.update_primary_window_cursor_side_effects(cursor_sync);
-                    } else if let Some(primary_state) = self.frame_windows.primary_window_mut() {
-                        primary_state.reset_ime_cursor_area();
-                    }
-                    continue;
-                }
-            }
-
-            if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
-                if self.frame_windows.primary_window().is_some() {
-                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-                    let primary_state = self
-                        .frame_windows
-                        .primary_window_mut()
-                        .expect("checked primary window");
-                    primary_state.render.child_frames.update_frame(frame);
-                    let cursor_sync = Self::sync_frame_window_cursor(primary_state, cursor_config);
-                    primary_state.render.frame_dirty = true;
-                    if let Some(cursor_sync) = cursor_sync {
-                        self.update_primary_window_cursor_side_effects(cursor_sync);
-                    }
-                    continue;
-                }
-            }
-
-            if frame_id != 0 && parent_id == 0 {
+                let update_transient_effects = routed_to_primary_fallback;
+                let typing_ripple_enabled = self.effects.typing_ripple.enabled;
+                let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
+                let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(frame_id) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     let cursor_sync = Self::ingest_frame_window_root_frame(
@@ -447,9 +424,13 @@ impl RenderApp {
                         cursor_config,
                     );
                     if let Some(cursor_sync) = cursor_sync {
-                        Self::update_frame_window_ime_cursor_area_if_needed(
+                        Self::update_frame_window_cursor_side_effects(
+                            renderer,
                             window_state,
-                            &cursor_sync.target,
+                            cursor_sync,
+                            typing_ripple_enabled,
+                            cursor_trail_fade_enabled,
+                            update_transient_effects,
                         );
                     } else {
                         window_state.reset_ime_cursor_area();
@@ -457,25 +438,36 @@ impl RenderApp {
                     continue;
                 }
             }
+
             if parent_id != 0 {
+                let update_transient_effects = self.frame_windows.is_primary_frame_id(parent_id);
+                let typing_ripple_enabled = self.effects.typing_ripple.enabled;
+                let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
+                let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     window_state.render.child_frames.update_frame(frame);
                     let cursor_sync = Self::sync_frame_window_cursor(window_state, cursor_config);
                     window_state.render.frame_dirty = true;
                     if let Some(cursor_sync) = cursor_sync {
-                        Self::update_frame_window_ime_cursor_area_if_needed(
+                        Self::update_frame_window_cursor_side_effects(
+                            renderer,
                             window_state,
-                            &cursor_sync.target,
+                            cursor_sync,
+                            typing_ripple_enabled,
+                            cursor_trail_fade_enabled,
+                            update_transient_effects,
                         );
                     }
                     continue;
                 }
             }
 
-            if parent_id != 0 {
+            let mut primary_fallback_updated = false;
+            if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
                 self.primary_child_frames_mut().update_frame(frame);
-            } else {
+                primary_fallback_updated = true;
+            } else if parent_id == 0 && self.frame_windows.is_primary_frame_id(frame_id) {
                 if gui_menu_bar.is_none() {
                     self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_menu_bar());
                 }
@@ -510,8 +502,11 @@ impl RenderApp {
                     self.set_primary_tool_bar(gui_tool_bar);
                     self.set_primary_compact_bar(gui_compact_bar);
                 }
+                primary_fallback_updated = true;
             }
-            self.mark_primary_dirty();
+            if primary_fallback_updated {
+                self.mark_primary_dirty();
+            }
         }
 
         let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
