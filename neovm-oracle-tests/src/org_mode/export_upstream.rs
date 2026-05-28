@@ -712,3 +712,60 @@ fn org_export_todo_tags_planning_edit_reexport_deep() {
                    (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_export_tags_property_planning_edit_reexport_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: DeepExport\n")
+    (insert "#+TODO: TODO DONE WAIT\n")
+    (insert "#+FILETAGS: :project:\n\n")
+    (insert "* TODO Alpha :work:\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:CUSTOM_ID: alpha\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta :home:\n")
+    (insert "CLOSED: [2026-05-27 Tue 10:00]\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body beta.\n\n")
+    (insert "** WAIT Gamma :work:urgent:\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert "Body gamma.\n\n")
+    (let* ((snap (lambda ()
+                   (let* ((tree (org-element-parse-buffer))
+                          (info (org-combine-plists
+                                 (org-export--get-buffer-attributes)
+                                 (org-export-get-environment)))
+                          (headlines (org-element-map tree 'headline #'identity)))
+                     (mapcar (lambda (h)
+                               (list (org-element-property :raw-value h)
+                                     (org-element-property :level h)
+                                     (org-export-get-headline-number h info)
+                                     (org-export-get-tags h info)
+                                     (org-export-get-todo-keyword h info)))
+                             headlines)))))
+      (let ((before (funcall snap)))
+        ;; Edit: change WAIT to TODO
+        (goto-char (point-min))
+        (search-forward "WAIT Gamma")
+        (replace-match "TODO Gamma")
+        ;; Change Alpha to DONE
+        (goto-char (point-min))
+        (search-forward "TODO Alpha")
+        (replace-match "DONE Alpha")
+        (let ((after (funcall snap)))
+          ;; Export HTML
+          (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
+            ;; Export LaTeX
+            (let ((latex (org-export-as 'latex nil nil t '(:with-toc nil))))
+              (list before after html latex
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
