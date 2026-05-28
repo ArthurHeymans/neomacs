@@ -685,6 +685,64 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_subtree_prop_drawer_edit_cycle_show_v38() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:CUSTOM_ID: alpha\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body beta.\n\n")
+    (insert "*** TODO Gamma\n")
+    (insert ":PROPERTIES:\n:Effort: 30m\n:END:\n")
+    (insert "Body gamma.\n\n")
+    (let ((snap (lambda (tag)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level))
+                           (list needle 'not-found nil nil))))
+                   '("Alpha" "Beta" "Gamma")))))
+      (let ((initial (funcall snap 'initial)))
+        ;; Hide Alpha subtree
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (let ((after-hide (funcall snap 'hide)))
+          ;; Edit: insert under hidden Alpha
+          (end-of-line)
+          (insert "\n** WAIT Delta\n:PROPERTIES:\n:Effort: 45m\n:END:\nBody delta.\n")
+          (let ((after-edit (funcall snap 'edit)))
+            ;; Show all
+            (org-fold-show-all)
+            (let ((after-show (funcall snap 'show)))
+              ;; Cycle globally
+              (org-global-cycle nil)
+              (let ((after-cycle (funcall snap 'cycle)))
+                (list initial
+                      after-hide
+                      after-edit
+                      after-show
+                      after-cycle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_all_edit_cycle_font_face_v37() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
