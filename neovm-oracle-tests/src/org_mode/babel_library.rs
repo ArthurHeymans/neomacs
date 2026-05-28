@@ -1080,6 +1080,65 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_seven_block_chain_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Seed
+      (insert "#+NAME: seed\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'(3 1 4 1 5 9 2 6 5 3)\n")
+      (insert "#+end_src\n\n")
+      ;; Unique
+      (insert "#+NAME: unique\n")
+      (insert "#+begin_src emacs-lisp :var data=seed :results value replace\n")
+      (insert "(seq-uniq data)\n")
+      (insert "#+end_src\n\n")
+      ;; Sorted
+      (insert "#+NAME: sorted\n")
+      (insert "#+begin_src emacs-lisp :var data=unique :results value replace\n")
+      (insert "(sort (copy-sequence data) #'<)\n")
+      (insert "#+end_src\n\n")
+      ;; Doubled
+      (insert "#+NAME: doubled\n")
+      (insert "#+begin_src emacs-lisp :var data=sorted :results value replace\n")
+      (insert "(mapcar (lambda (x) (* x 2)) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Filtered
+      (insert "#+NAME: filtered\n")
+      (insert "#+begin_src emacs-lisp :var data=doubled :results value replace\n")
+      (insert "(cl-remove-if-not (lambda (x) (> x 6)) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Total
+      (insert "#+NAME: total\n")
+      (insert "#+begin_src emacs-lisp :var data=filtered :results value replace\n")
+      (insert "(apply #'+ data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("unique" "sorted" "doubled" "filtered" "total"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_six_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
