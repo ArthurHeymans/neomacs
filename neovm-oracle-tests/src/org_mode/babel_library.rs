@@ -1080,6 +1080,70 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_column_pivot_compute_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Revenue by dept and quarter
+      (insert "#+NAME: revenue\n")
+      (insert "| Dept | Q | Rev |\n")
+      (insert("|------+---+-----|\n")
+      (insert "| A | 1 | 100 |\n")
+      (insert "| B | 1 | 200 |\n")
+      (insert "| A | 2 | 150 |\n")
+      (insert "| B | 2 | 250 |\n")
+      (insert "| A | 3 | 300 |\n\n")
+      ;; Total by dept
+      (insert "#+NAME: by-dept\n")
+      (insert "#+begin_src emacs-lisp :var tbl=revenue :results value replace\n")
+      (insert "(let ((groups nil))\n")
+      (insert "  (dolist (row tbl)\n")
+      (insert "    (let* ((dept (car row))\n")
+      (insert "           (rev (caddr row))\n")
+      (insert "           (entry (assoc dept groups)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) rev))\n")
+      (insert "          (push (cons dept rev) groups))))\n")
+      (insert "  (sort groups (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Total by quarter
+      (insert "#+NAME: by-quarter\n")
+      (insert "#+begin_src emacs-lisp :var tbl=revenue :results value replace\n")
+      (insert "(let ((groups nil))\n")
+      (insert "  (dolist (row tbl)\n")
+      (insert "    (let* ((q (cadr row))\n")
+      (insert "           (rev (caddr row))\n")
+      (insert "           (entry (assoc q groups)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) rev))\n")
+      (insert "          (push (cons q rev) groups))))\n")
+      (insert "  (sort groups (lambda (a b) (< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("by-dept" "by-quarter"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
