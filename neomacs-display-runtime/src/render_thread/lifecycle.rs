@@ -232,7 +232,7 @@ impl RenderApp {
 
         // Keep dirty if cursor pulse is active (needs continuous redraw)
         if self.effects.cursor_pulse.enabled && self.effects.cursor_glow.enabled {
-            self.mark_primary_dirty();
+            self.mark_top_level_frame_windows_dirty();
         }
 
         // Keep dirty if frame-owned renderer effects or transitions are active.
@@ -245,7 +245,7 @@ impl RenderApp {
 
         // Check for terminal PTY activity
         if self.has_terminal_activity() {
-            self.mark_primary_dirty();
+            self.mark_top_level_frame_windows_dirty();
         }
 
         // Determine if continuous rendering is needed
