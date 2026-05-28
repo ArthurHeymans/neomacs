@@ -1080,6 +1080,70 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_file_output_tangle_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (require 'ob-tangle)
+  (let* ((root (make-temp-file "org-babel-file" t))
+         (out-el (expand-file-name "out.el" root))
+         (out-txt (expand-file-name "out.txt" root))
+         (org-confirm-babel-evaluate nil))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          ;; File output block
+          (insert "#+begin_src emacs-lisp :file " out-txt " :results file\n")
+          (insert "(with-temp-file \"" out-txt "\"\n")
+          (insert "  (insert \"hello from babel\"))\n")
+          (insert "\"" out-txt "\")\n")
+          (insert "#+end_src\n\n")
+          ;; Tangle block
+          (insert "#+begin_src emacs-lisp :tangle " out-el "\n")
+          (insert "(defun tangled-func () 42)\n")
+          (insert "#+end_src\n\n")
+          ;; Execute file block
+          (goto-char (point-min))
+          (search-forward "begin_src")
+          (org-babel-execute-src-block)
+          (let ((file-result (org-babel-read-result)))
+            ;; Tangle
+            (let ((tangle-result (org-babel-tangle)))
+              ;; Read outputs
+              (let ((txt-content
+                     (when (file-exists-p out-txt)
+                       (with-temp-buffer
+                         (insert-file-contents out-txt)
+                         (buffer-string))))
+                    (el-content
+                     (when (file-exists-p out-el)
+                       (with-temp-buffer
+                         (insert-file-contents out-el)
+                         (buffer-string)))))
+                (list (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or file-result "nil"))
+                      (mapcar (lambda (f)
+                                (replace-regexp-in-string
+                                 (regexp-quote root) "<root>" f))
+                              tangle-result)
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or txt-content "no-txt"))
+                      (replace-regexp-in-string
+                       (regexp-quote root) "<root>"
+                       (or el-content "no-el"))
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_string_list_table_mixed_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
