@@ -376,3 +376,57 @@ fn org_sort_entries_time_tag_property_alpha_combo() {
                     by-alpha-headlines)))))))))"##,
     );
 }
+
+#[test]
+fn org_sort_entries_edit_resort_by_alpha_time_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Charlie :work:\nSCHEDULED: <2026-05-30 Fri>\nBody C.\n\n")
+    (insert "* Alpha :home:\nSCHEDULED: <2026-05-28 Wed>\nBody A.\n\n")
+    (insert "* Echo :work:\nSCHEDULED: <2026-06-01 Sun>\nBody E.\n\n")
+    (insert "* Bravo :home:\nSCHEDULED: <2026-05-29 Thu>\nBody B.\n\n")
+    (insert "* Delta :work:\nSCHEDULED: <2026-05-31 Sat>\nBody D.\n\n")
+    (let ((headlines (lambda ()
+                       (mapcar
+                        (lambda (h)
+                          (list (org-element-property :raw-value h)
+                                (org-element-property :tags h)))
+                        (org-element-map (org-element-parse-buffer) 'headline
+                          #'identity)))))
+      (let ((initial (funcall headlines)))
+        ;; Sort by alpha
+        (goto-char (point-min))
+        (org-sort-entries nil ?a)
+        (let ((sorted-alpha (funcall headlines))
+              (alpha-buf (buffer-substring-no-properties
+                          (point-min) (point-max))))
+          ;; Sort by time
+          (goto-char (point-min))
+          (org-sort-entries nil ?t)
+          (let ((sorted-time (funcall headlines))
+                (time-buf (buffer-substring-no-properties
+                           (point-min) (point-max))))
+            ;; Edit: change Charlie to Zulu
+            (goto-char (point-min))
+            (search-forward "Charlie")
+            (replace-match "Zulu")
+            ;; Re-sort alpha
+            (goto-char (point-min))
+            (org-sort-entries nil ?a)
+            (let ((resorted (funcall headlines))
+                  (resort-buf (buffer-substring-no-properties
+                               (point-min) (point-max))))
+              (list initial
+                    sorted-alpha
+                    sorted-time
+                    resorted
+                    alpha-buf
+                    time-buf
+                    resort-buf)))))))))"##,
+    );
+}
