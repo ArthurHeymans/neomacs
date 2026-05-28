@@ -1080,6 +1080,61 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_join_sort_aggregate_deep_v2_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Students
+      (insert "#+NAME: students\n")
+      (insert "| ID | Name |\n")
+      (insert("|----+------|\n")
+      (insert "| 1 | S1 |\n")
+      (insert "| 2 | S2 |\n")
+      (insert "| 3 | S3 |\n\n")
+      ;; Grades
+      (insert "#+NAME: grades\n")
+      (insert "| SID | Score |\n")
+      (insert("|-----+-------|\n")
+      (insert "| 1 | 90 |\n")
+      (insert "| 2 | 75 |\n")
+      (insert "| 3 | 85 |\n\n")
+      ;; Join and rank
+      (insert "#+NAME: ranked\n")
+      (insert "#+begin_src emacs-lisp :var s=students g=grades :results value replace\n")
+      (insert "(let ((rows (mapcar\n")
+      (insert "              (lambda (grade)\n")
+      (insert "                (let* ((sid (car grade))\n")
+      (insert "                       (score (cadr grade))\n")
+      (insert "                       (student (assoc sid s))\n")
+      (insert "                       (name (cadr student)))\n")
+      (insert "                  (list name score)))\n")
+      (insert "              g)))\n")
+      (insert "  (sort rows (lambda (a b) (> (cadr a) (cadr b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "ranked")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_join_filter_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
