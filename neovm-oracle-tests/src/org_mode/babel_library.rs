@@ -1080,6 +1080,56 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_group_aggregate_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Sales table
+      (insert "#+NAME: sales\n")
+      (insert "| Region | Amt |\n")
+      (insert("|--------+-----|\n")
+      (insert "| N | 100 |\n")
+      (insert "| S | 200 |\n")
+      (insert "| N | 150 |\n")
+      (insert "| E | 300 |\n")
+      (insert "| S | 250 |\n\n")
+      ;; Group and aggregate
+      (insert "#+NAME: grouped\n")
+      (insert "#+begin_src emacs-lisp :var tbl=sales :results value replace\n")
+      (insert "(let ((groups nil))\n")
+      (insert "  (dolist (row tbl)\n")
+      (insert "    (let* ((region (car row))\n")
+      (insert "           (amt (cadr row))\n")
+      (insert "           (entry (assoc region groups)))\n")
+      (insert "      (if entry\n")
+      (insert "          (setcdr entry (+ (cdr entry) amt))\n")
+      (insert "          (push (cons region amt) groups))))\n")
+      (insert "  (sort groups (lambda (a b) (string< (car a) (car b)))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "grouped")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_join_compute_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
