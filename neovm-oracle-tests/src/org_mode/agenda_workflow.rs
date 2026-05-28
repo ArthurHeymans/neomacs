@@ -1344,3 +1344,71 @@ fn org_agenda_day_entries_properties_timestamp_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_clockreport_filter_effort_todo_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-cr" t))
+         (file (expand-file-name "tasks.org" root))
+         (org-agenda-files (list file))
+         (org-agenda-span 'day)
+         (org-agenda-start-day "2026-05-27")
+         (org-agenda-start-on-weekday nil)
+         (org-agenda-clockreport-mode t)
+         (org-agenda-clock-reporting-file file))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Write report :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-27 Wed 14:00]--[2026-05-27 Wed 15:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "* TODO Review code :work:\n")
+            (insert "SCHEDULED: <2026-05-27 Wed>\n")
+            (insert ":PROPERTIES:\n:Effort: 1:00\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "* DONE Deploy :ops:\n")
+            (insert "CLOSED: [2026-05-27 Wed]\n")
+            (insert ":PROPERTIES:\n:Effort: 0:30\n:END:\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-27 Wed 16:00]--[2026-05-27 Wed 16:30] =>  0:30\n")
+            (insert ":END:\n"))
+          (org-agenda-list nil "2026-05-27" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((full-text (replace-regexp-in-string
+                              (regexp-quote root) "<root>"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+              (org-agenda-filter-apply '("+work") 'tag)
+              (let ((work-text (replace-regexp-in-string
+                                (regexp-quote root) "<root>"
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+                (org-agenda-filter-remove-all)
+                (org-agenda-filter-apply '("1:00") 'effort)
+                (let ((effort-text (replace-regexp-in-string
+                                    (regexp-quote root) "<root>"
+                                    (buffer-substring-no-properties
+                                     (point-min) (point-max)))))
+                  (org-agenda-filter-remove-all)
+                  (org-agenda-filter-apply '("+TODO") 'todo)
+                  (let ((todo-text (replace-regexp-in-string
+                                    (regexp-quote root) "<root>"
+                                    (buffer-substring-no-properties
+                                     (point-min) (point-max)))))
+                    (list full-text work-text effort-text todo-text))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
