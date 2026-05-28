@@ -261,6 +261,57 @@ fn indirect_buffers_preserve_narrowing_across_shared_edits() {
 }
 
 #[test]
+fn cloned_indirect_buffers_do_not_share_base_state_markers() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let base_id = mgr.current_buffer_id().expect("scratch buffer");
+    let _ = mgr.insert_into_buffer(base_id, "aaa\nbbb\nccc\n");
+
+    // The first indirect forces the base buffer to allocate the hidden
+    // PT/BEGV/ZV markers GNU uses to preserve per-buffer state.
+    let _first = mgr
+        .create_indirect_buffer(base_id, "*indirect-state-first*", true)
+        .expect("first indirect buffer");
+    let second = mgr
+        .create_indirect_buffer(base_id, "*indirect-state-second*", true)
+        .expect("second indirect buffer");
+
+    mgr.set_current(second);
+    let _ = mgr.narrow_buffer_to_region(second, 4, 7);
+    mgr.set_current(base_id);
+
+    let base = mgr.get(base_id).expect("base buffer");
+    assert_eq!(base.point_min(), 0);
+    assert_eq!(base.point_max(), base.total_bytes());
+
+    let second = mgr.get(second).expect("second indirect buffer");
+    assert_eq!(second.point_min(), 4);
+    assert_eq!(second.point_max(), 7);
+}
+
+#[test]
+fn cloned_indirect_buffers_do_not_share_base_mark_marker() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let base_id = mgr.current_buffer_id().expect("scratch buffer");
+    let _ = mgr.insert_into_buffer(base_id, "abcdef");
+    mgr.get_mut(base_id).expect("base buffer").set_mark_byte(2);
+
+    let indirect = mgr
+        .create_indirect_buffer(base_id, "*indirect-mark-clone*", true)
+        .expect("indirect buffer");
+    mgr.get_mut(indirect)
+        .expect("indirect buffer")
+        .set_mark_byte(5);
+
+    assert_eq!(mgr.get(base_id).expect("base buffer").mark_byte(), Some(2));
+    assert_eq!(
+        mgr.get(indirect).expect("indirect buffer").mark_byte(),
+        Some(5)
+    );
+}
+
+#[test]
 fn indirect_buffer_overlays_track_shared_edits() {
     crate::test_utils::init_test_tracing();
     let mut mgr = BufferManager::new();

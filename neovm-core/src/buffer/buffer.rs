@@ -3173,11 +3173,20 @@ impl BufferManager {
         let id = BufferId(self.next_id);
         self.next_id += 1;
 
+        let root_mark_byte = if clone { root.mark_byte() } else { None };
+
         let mut indirect = if clone {
             let mut cloned = root.clone();
             cloned.id = id;
             cloned.set_name_value(Value::string(name));
             cloned.local_var_alist = clone_lisp_local_variables(root.local_var_alist);
+            // GNU `clone_per_buffer_values` copies marker-valued per-buffer
+            // slots by building fresh markers owned by the new buffer.  Raw
+            // marker pointers copied from the base would make the indirect
+            // buffer share point/narrowing/mark state with its base.
+            cloned.mark_marker_id = None;
+            cloned.mark_marker_ptr = std::ptr::null_mut();
+            cloned.state_markers = None;
             cloned
         } else {
             let name_value = Value::string(name);
@@ -3213,6 +3222,9 @@ impl BufferManager {
         self.buffer_order.push(id);
         let _ = self.ensure_buffer_state_markers(root_id);
         let _ = self.ensure_buffer_state_markers(id);
+        if let Some(mark_byte) = root_mark_byte {
+            self.buffers.get_mut(&id)?.set_mark_byte(mark_byte);
+        }
         Some(id)
     }
 
