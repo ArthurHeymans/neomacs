@@ -250,7 +250,9 @@ impl RenderApp {
 
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
-        self.primary_child_frames_mut().tick();
+        if self.primary_window_state().is_none() {
+            self.primary_child_frames_mut().tick();
+        }
         self.frame_windows.tick_top_level_child_frames();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             let frame_id = display_state.frame_id;
