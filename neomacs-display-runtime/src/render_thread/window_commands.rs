@@ -150,14 +150,8 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowDecorated { decorated } => {
-                self.primary_chrome_mut().decorations_enabled = decorated;
-                self.frame_windows.chrome_defaults.decorations_enabled = decorated;
-                if let Some(primary_state) = self.primary_window_state_mut() {
-                    primary_state.set_decorations(decorated);
-                }
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.set_decorations(decorated);
-                }
+                self.chrome.decorations_enabled = decorated;
+                self.frame_windows.set_top_level_decorations(decorated);
                 Ok(())
             }
             RenderCommand::RequestAttention { urgent } => {

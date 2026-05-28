@@ -268,13 +268,13 @@ impl RenderApp {
                 }
             }
 
-            if frame_id != 0 && parent_id == 0 && self.frame_windows.windows.contains_key(&frame_id)
+            if frame_id != 0 && parent_id == 0 && self.frame_windows.has_secondary_window(frame_id)
             {
                 self.frame_windows
                     .route_frame(frame, gui_menu_bar, gui_tool_bar, gui_compact_bar);
                 continue;
             }
-            if parent_id != 0 && self.frame_windows.windows.contains_key(&parent_id) {
+            if parent_id != 0 && self.frame_windows.has_secondary_window(parent_id) {
                 self.frame_windows.route_frame(frame, None, None, None);
                 continue;
             }

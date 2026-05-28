@@ -138,12 +138,17 @@ impl RenderApp {
     }
 
     pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
-        let mut next = self.primary_cursor().next_blink_deadline();
-        for window_state in self.frame_windows.windows.values() {
-            if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {
-                next = Some(next.map_or(deadline, |current| current.min(deadline)));
-            }
-        }
+        let mut next = if self.primary_window_state().is_none() {
+            self.primary_cursor().next_blink_deadline()
+        } else {
+            None
+        };
+        self.frame_windows
+            .for_each_top_level_window(|window_state| {
+                if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {
+                    next = Some(next.map_or(deadline, |current| current.min(deadline)));
+                }
+            });
         next
     }
 }

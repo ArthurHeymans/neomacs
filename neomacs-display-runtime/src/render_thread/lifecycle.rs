@@ -183,26 +183,53 @@ impl RenderApp {
         self.pump_glib();
 
         // Update cursor blink state
-        if self.tick_cursor_blink() {
-            self.mark_primary_dirty();
-        }
-        for window_state in self.frame_windows.windows.values_mut() {
-            if Self::tick_frame_window_cursor_blink(window_state, std::time::Instant::now()) {
+        let cursor_wake_enabled = self.effects.cursor_wake.enabled;
+        let primary_winit_id = self.frame_windows.primary_winit_id;
+        let renderer = self.renderer.as_ref();
+        let now = std::time::Instant::now();
+        self.frame_windows
+            .for_each_top_level_window_mut(|window_state| {
+                let cursor = &mut window_state.render.cursor;
+                if !cursor.blink_enabled || cursor.target_cloned().is_none() {
+                    return;
+                }
+                if now.duration_since(cursor.last_blink_toggle) < cursor.blink_interval {
+                    return;
+                }
+                let was_off = !cursor.blink_on;
+                cursor.blink_on = !cursor.blink_on;
+                cursor.last_blink_toggle = now;
+                if primary_winit_id == Some(window_state.native.window.id())
+                    && was_off
+                    && cursor.blink_on
+                    && cursor_wake_enabled
+                    && let Some(renderer) = renderer
+                {
+                    renderer.trigger_transient_cursor_wake(
+                        &mut window_state.render.renderer_effects,
+                        now,
+                    );
+                }
                 window_state.render.frame_dirty = true;
-            }
+            });
+        if self.primary_window_state().is_none() && self.tick_cursor_blink() {
+            self.mark_primary_dirty();
         }
 
         // Tick cursor animation
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            if primary_frame.cursor.tick_animation() {
-                primary_frame.frame_dirty = true;
-            }
+        self.frame_windows
+            .for_each_top_level_window_mut(|window_state| {
+                if window_state.render.cursor.tick_animation() {
+                    window_state.render.frame_dirty = true;
+                }
+            });
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+            && primary_frame.cursor.tick_animation()
+        {
+            primary_frame.frame_dirty = true;
         }
-        for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.render.cursor.tick_animation() {
-                window_state.render.frame_dirty = true;
-            }
-        }
+
         let mut visual_cursor_dirty = false;
         if let Some(primary_frame) = self.primary_render_state_mut() {
             for cursor in primary_frame.visual_cursors.values_mut() {
@@ -214,15 +241,17 @@ impl RenderApp {
         }
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            if primary_frame.cursor.tick_size_animation() {
-                primary_frame.frame_dirty = true;
-            }
-        }
-        for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.render.cursor.tick_size_animation() {
-                window_state.render.frame_dirty = true;
-            }
+        self.frame_windows
+            .for_each_top_level_window_mut(|window_state| {
+                if window_state.render.cursor.tick_size_animation() {
+                    window_state.render.frame_dirty = true;
+                }
+            });
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+            && primary_frame.cursor.tick_size_animation()
+        {
+            primary_frame.frame_dirty = true;
         }
         let mut visual_cursor_size_dirty = false;
         if let Some(primary_frame) = self.primary_render_state_mut() {
@@ -236,27 +265,32 @@ impl RenderApp {
 
         if self.effects.idle_dim.enabled {
             let idle_dim_config = self.effects.idle_dim.clone();
-            if let Some(primary_frame) = self.primary_render_state_mut() {
-                if Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &idle_dim_config) {
-                    primary_frame.frame_dirty = true;
-                }
-            }
-            for window_state in self.frame_windows.windows.values_mut() {
-                if Self::tick_idle_dim_state(
-                    &mut window_state.render.idle_dim,
-                    &self.effects.idle_dim,
-                ) {
-                    window_state.render.frame_dirty = true;
-                }
+            self.frame_windows
+                .for_each_top_level_window_mut(|window_state| {
+                    if Self::tick_idle_dim_state(
+                        &mut window_state.render.idle_dim,
+                        &idle_dim_config,
+                    ) {
+                        window_state.render.frame_dirty = true;
+                    }
+                });
+            if self.primary_window_state().is_none()
+                && let Some(primary_frame) = self.primary_render_state_mut()
+                && Self::tick_idle_dim_state(&mut primary_frame.idle_dim, &idle_dim_config)
+            {
+                primary_frame.frame_dirty = true;
             }
         } else {
-            if let Some(primary_frame) = self.primary_render_state_mut() {
+            self.frame_windows
+                .for_each_top_level_window_mut(|window_state| {
+                    window_state.render.idle_dim.active = false;
+                    window_state.render.idle_dim.current_alpha = 0.0;
+                });
+            if self.primary_window_state().is_none()
+                && let Some(primary_frame) = self.primary_render_state_mut()
+            {
                 primary_frame.idle_dim.active = false;
                 primary_frame.idle_dim.current_alpha = 0.0;
-            }
-            for window_state in self.frame_windows.windows.values_mut() {
-                window_state.render.idle_dim.active = false;
-                window_state.render.idle_dim.current_alpha = 0.0;
             }
         }
 
@@ -285,11 +319,12 @@ impl RenderApp {
 
         #[cfg(feature = "wpe-webkit")]
         if self.has_webkit_needing_redraw() {
-            for window_state in self.frame_windows.windows.values_mut() {
-                if !window_state.render.floating_webkits.is_empty() {
-                    window_state.render.frame_dirty = true;
-                }
-            }
+            self.frame_windows
+                .for_each_top_level_window_mut(|window_state| {
+                    if !window_state.render.floating_webkits.is_empty() {
+                        window_state.render.frame_dirty = true;
+                    }
+                });
         }
 
         // Request redraw when we have new frame data, cursor blink toggled,

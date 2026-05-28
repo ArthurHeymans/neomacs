@@ -85,10 +85,7 @@ impl RenderApp {
                 }
                 self.sync_top_level_cursor_config_from_defaults_without_dirty();
                 if !enabled {
-                    for window_state in self.frame_windows.windows.values_mut() {
-                        window_state.render.cursor.blink_on = true;
-                        window_state.render.frame_dirty = true;
-                    }
+                    self.frame_windows.force_top_level_cursor_blink_on();
                 }
                 Ok(())
             }
@@ -481,26 +478,27 @@ impl RenderApp {
                     }
                     self.clear_primary_ime_preedit();
                 }
-                for window_state in self.frame_windows.windows.values_mut() {
-                    let removed = window_state
-                        .render
-                        .child_frames
-                        .frames
-                        .contains_key(&frame_id);
-                    window_state.render.child_frames.remove_frame(frame_id);
-                    if removed {
-                        window_state.render.frame_dirty = true;
-                    }
-                    if window_state
-                        .render
-                        .cursor
-                        .target_cloned()
-                        .is_some_and(|target| target.frame_id == frame_id)
-                    {
-                        window_state.render.cursor.clear_target();
-                        window_state.clear_ime_preedit();
-                    }
-                }
+                self.frame_windows
+                    .for_each_top_level_window_mut(|window_state| {
+                        let removed = window_state
+                            .render
+                            .child_frames
+                            .frames
+                            .contains_key(&frame_id);
+                        window_state.render.child_frames.remove_frame(frame_id);
+                        if removed {
+                            window_state.render.frame_dirty = true;
+                        }
+                        if window_state
+                            .render
+                            .cursor
+                            .target_cloned()
+                            .is_some_and(|target| target.frame_id == frame_id)
+                        {
+                            window_state.render.cursor.clear_target();
+                            window_state.clear_ime_preedit();
+                        }
+                    });
                 self.mark_primary_dirty();
                 Ok(())
             }

@@ -48,18 +48,19 @@ impl RenderApp {
         for (face_id, face) in primary_child_faces {
             self.faces.entry(face_id).or_insert(face);
         }
-        for window_state in self.frame_windows.windows.values() {
-            if let Some(frame) = window_state.render.current_frame.as_ref() {
-                for (face_id, face) in &frame.faces {
-                    self.faces.entry(*face_id).or_insert_with(|| face.clone());
+        self.frame_windows
+            .for_each_top_level_window(|window_state| {
+                if let Some(frame) = window_state.render.current_frame.as_ref() {
+                    for (face_id, face) in &frame.faces {
+                        self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                    }
                 }
-            }
-            for entry in window_state.render.child_frames.frames.values() {
-                for (face_id, face) in &entry.frame.faces {
-                    self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                for entry in window_state.render.child_frames.frames.values() {
+                    for (face_id, face) in &entry.frame.faces {
+                        self.faces.entry(*face_id).or_insert_with(|| face.clone());
+                    }
                 }
-            }
-        }
+            });
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             let face_count = self.faces.len();
@@ -71,9 +72,7 @@ impl RenderApp {
                 );
                 primary_frame.glyph_atlas.clear();
             }
-            for window_state in self.frame_windows.windows.values_mut() {
-                window_state.render.glyph_atlas.clear();
-            }
+            self.frame_windows.clear_top_level_glyph_atlases();
         }
     }
 

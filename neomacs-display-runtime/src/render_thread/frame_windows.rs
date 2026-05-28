@@ -22,6 +22,7 @@ use super::state::{
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
@@ -396,6 +397,10 @@ impl GuiFrameWindowManager {
         emacs_frame_id == 0 || self.primary_emacs_frame_id == Some(emacs_frame_id)
     }
 
+    pub(super) fn has_secondary_window(&self, emacs_frame_id: u64) -> bool {
+        self.windows.contains_key(&emacs_frame_id)
+    }
+
     pub(super) fn primary_window(&self) -> Option<&GuiFrameWindowState> {
         self.primary_window.as_ref()
     }
@@ -654,6 +659,148 @@ impl GuiFrameWindowManager {
             .get(&winit_id)
             .copied()
             .and_then(move |id| self.windows.get_mut(&id))
+    }
+
+    pub(super) fn for_each_top_level_window(&self, mut f: impl FnMut(&GuiFrameWindowState)) {
+        if let Some(window_state) = self.primary_window.as_ref() {
+            f(window_state);
+        }
+        for window_state in self.windows.values() {
+            f(window_state);
+        }
+    }
+
+    pub(super) fn for_each_top_level_window_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GuiFrameWindowState),
+    ) {
+        if let Some(window_state) = self.primary_window.as_mut() {
+            f(window_state);
+        }
+        for window_state in self.windows.values_mut() {
+            f(window_state);
+        }
+    }
+
+    pub(super) fn mark_top_level_dirty(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
+        self.chrome_defaults.titlebar_height = height;
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.native.chrome.titlebar_height = height;
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
+        self.chrome_defaults.corner_radius = radius;
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.native.chrome.corner_radius = radius;
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
+        self.fps_enabled = enabled;
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.fps.enabled = enabled;
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn set_top_level_decorations(&mut self, decorated: bool) {
+        self.chrome_defaults.decorations_enabled = decorated;
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.set_decorations(decorated);
+        });
+    }
+
+    pub(super) fn hide_top_level_popup_menus(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            if window_state.render.popup_menu.is_some() {
+                window_state.render.popup_menu = None;
+                window_state.render.frame_dirty = true;
+            }
+        });
+    }
+
+    pub(super) fn hide_top_level_tooltips(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            if window_state.render.tooltip.is_some() {
+                window_state.render.tooltip = None;
+                window_state.render.frame_dirty = true;
+            }
+        });
+    }
+
+    pub(super) fn sync_top_level_transition_policy(&mut self, policy: TransitionPolicy) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.transitions.policy = policy;
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.transitions.crossfades.clear();
+        });
+    }
+
+    pub(super) fn clear_top_level_scroll_transitions(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.transitions.scroll_slides.clear();
+        });
+    }
+
+    pub(super) fn sync_top_level_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.cursor.copy_config_from(defaults);
+            if dirty {
+                window_state.render.frame_dirty = true;
+            }
+        });
+    }
+
+    pub(super) fn force_top_level_cursor_blink_on(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.cursor.blink_on = true;
+            window_state.render.frame_dirty = true;
+        });
+    }
+
+    pub(super) fn clear_top_level_glyph_atlases(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state.render.glyph_atlas.clear();
+        });
+    }
+
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) fn remove_floating_webkit_from_top_level_windows(&mut self, id: u32) {
+        self.for_each_top_level_window_mut(|window_state| {
+            let old_len = window_state.render.floating_webkits.len();
+            window_state
+                .render
+                .floating_webkits
+                .retain(|webkit| webkit.webkit_id != id);
+            if window_state.render.floating_webkits.len() != old_len {
+                window_state.render.frame_dirty = true;
+            }
+        });
+    }
+
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) fn destroy_floating_webkit_from_top_level_windows(&mut self, id: u32) {
+        self.for_each_top_level_window_mut(|window_state| {
+            window_state
+                .render
+                .floating_webkits
+                .retain(|webkit| webkit.webkit_id != id);
+            window_state.render.frame_dirty = true;
+        });
     }
 
     /// Route a FrameGlyphBuffer to the appropriate window.

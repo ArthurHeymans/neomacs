@@ -534,42 +534,36 @@ impl RenderApp {
     }
 
     pub(super) fn mark_top_level_frame_windows_dirty(&mut self) {
-        self.mark_primary_dirty();
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.frame_dirty = true;
+        self.frame_windows.mark_top_level_dirty();
+        if self.primary_window_state().is_none() {
+            self.mark_primary_dirty();
         }
     }
 
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
-        self.primary_chrome_mut().titlebar_height = height;
-        self.frame_windows.chrome_defaults.titlebar_height = height;
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.native.chrome.titlebar_height = height;
-            window_state.render.frame_dirty = true;
+        self.chrome.titlebar_height = height;
+        self.frame_windows.set_top_level_titlebar_height(height);
+        if self.primary_window_state().is_none() {
+            self.mark_primary_dirty();
         }
-        self.mark_primary_dirty();
     }
 
     pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
-        self.primary_chrome_mut().corner_radius = radius;
-        self.frame_windows.chrome_defaults.corner_radius = radius;
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.native.chrome.corner_radius = radius;
-            window_state.render.frame_dirty = true;
+        self.chrome.corner_radius = radius;
+        self.frame_windows.set_top_level_corner_radius(radius);
+        if self.primary_window_state().is_none() {
+            self.mark_primary_dirty();
         }
-        self.mark_primary_dirty();
     }
 
     pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
         self.primary_fps_enabled = enabled;
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        self.frame_windows.set_top_level_fps_enabled(enabled);
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+        {
             primary_frame.fps.enabled = enabled;
             primary_frame.frame_dirty = true;
-        }
-        self.frame_windows.fps_enabled = enabled;
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.fps.enabled = enabled;
-            window_state.render.frame_dirty = true;
         }
     }
 
@@ -603,12 +597,9 @@ impl RenderApp {
     }
 
     pub(super) fn hide_top_level_popup_menus(&mut self) {
-        self.set_primary_popup_menu(None);
-        for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.render.popup_menu.is_some() {
-                window_state.render.popup_menu = None;
-                window_state.render.frame_dirty = true;
-            }
+        self.frame_windows.hide_top_level_popup_menus();
+        if self.primary_window_state().is_none() {
+            self.set_primary_popup_menu(None);
         }
         self.mark_primary_dirty();
     }
@@ -622,12 +613,9 @@ impl RenderApp {
     }
 
     pub(super) fn hide_top_level_tooltips(&mut self) {
-        self.set_primary_tooltip(None);
-        for window_state in self.frame_windows.windows.values_mut() {
-            if window_state.render.tooltip.is_some() {
-                window_state.render.tooltip = None;
-                window_state.render.frame_dirty = true;
-            }
+        self.frame_windows.hide_top_level_tooltips();
+        if self.primary_window_state().is_none() {
+            self.set_primary_tooltip(None);
         }
         self.mark_primary_dirty();
     }
@@ -703,29 +691,28 @@ impl RenderApp {
     }
 
     pub(super) fn sync_top_level_transition_policy_from_default(&mut self) {
-        let transition_policy = self.transition_policy;
-        self.sync_primary_transition_policy_from_default();
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.transitions.policy = transition_policy;
-            window_state.render.frame_dirty = true;
+        self.frame_windows
+            .sync_top_level_transition_policy(self.transition_policy);
+        if self.primary_window_state().is_none() {
+            self.sync_primary_transition_policy_from_default();
         }
     }
 
     pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        self.frame_windows.clear_top_level_crossfade_transitions();
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+        {
             primary_frame.transitions.crossfades.clear();
-        }
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.transitions.crossfades.clear();
         }
     }
 
     pub(super) fn clear_top_level_scroll_transitions(&mut self) {
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        self.frame_windows.clear_top_level_scroll_transitions();
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+        {
             primary_frame.transitions.scroll_slides.clear();
-        }
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state.render.transitions.scroll_slides.clear();
         }
     }
 
@@ -917,23 +904,18 @@ impl RenderApp {
     }
 
     pub(super) fn sync_top_level_cursor_config_from_defaults(&mut self) {
-        self.sync_primary_cursor_config_from_defaults();
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state
-                .render
-                .cursor
-                .copy_config_from(&self.cursor_defaults);
-            window_state.render.frame_dirty = true;
+        self.frame_windows
+            .sync_top_level_cursor_config(&self.cursor_defaults, true);
+        if self.primary_window_state().is_none() {
+            self.sync_primary_cursor_config_from_defaults();
         }
     }
 
     pub(super) fn sync_top_level_cursor_config_from_defaults_without_dirty(&mut self) {
-        self.sync_primary_cursor_config_from_defaults();
-        for window_state in self.frame_windows.windows.values_mut() {
-            window_state
-                .render
-                .cursor
-                .copy_config_from(&self.cursor_defaults);
+        self.frame_windows
+            .sync_top_level_cursor_config(&self.cursor_defaults, false);
+        if self.primary_window_state().is_none() {
+            self.sync_primary_cursor_config_from_defaults();
         }
     }
 }
