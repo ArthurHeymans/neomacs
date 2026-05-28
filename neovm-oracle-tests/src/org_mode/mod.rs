@@ -1455,6 +1455,7 @@ mod strong_combo_complex_2;
 mod strong_combo_complex_3;
 mod strong_combo_complex_4;
 mod strong_combo_complex_5;
+mod strong_combo_complex_6;
 mod strong_complex_combos;
 mod strong_comprehensive_edge;
 mod strong_deep_divergence;
