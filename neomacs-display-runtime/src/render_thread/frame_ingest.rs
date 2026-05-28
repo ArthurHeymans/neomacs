@@ -506,9 +506,9 @@ impl RenderApp {
                     );
                 } else {
                     self.set_primary_current_frame(Some(frame));
-                    self.pending_primary_menu_bar = gui_menu_bar;
-                    self.pending_primary_tool_bar = gui_tool_bar;
-                    self.pending_primary_compact_bar = gui_compact_bar;
+                    self.set_primary_menu_bar(gui_menu_bar);
+                    self.set_primary_tool_bar(gui_tool_bar);
+                    self.set_primary_compact_bar(gui_compact_bar);
                 }
             }
             self.mark_primary_dirty();

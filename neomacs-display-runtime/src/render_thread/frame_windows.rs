@@ -170,6 +170,21 @@ impl GuiFrameRenderState {
         self.frame_dirty = true;
     }
 
+    pub(super) fn set_menu_bar(&mut self, menu_bar: Option<GuiMenuBarState>) {
+        self.menu_bar = menu_bar;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn set_tool_bar(&mut self, tool_bar: Option<GuiToolBarState>) {
+        self.tool_bar = tool_bar;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn set_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
+        self.compact_bar = compact_bar;
+        self.frame_dirty = true;
+    }
+
     pub(super) fn trigger_visual_bell(
         &mut self,
         cursor_error_pulse_enabled: bool,

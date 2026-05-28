@@ -620,9 +620,33 @@ impl RenderApp {
 
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.tooltip = tooltip;
+            primary_frame.set_tooltip(tooltip);
         } else {
             self.pending_primary_tooltip = tooltip;
+        }
+    }
+
+    pub(super) fn set_primary_menu_bar(&mut self, menu_bar: Option<GuiMenuBarState>) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.set_menu_bar(menu_bar);
+        } else {
+            self.pending_primary_menu_bar = menu_bar;
+        }
+    }
+
+    pub(super) fn set_primary_tool_bar(&mut self, tool_bar: Option<GuiToolBarState>) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.set_tool_bar(tool_bar);
+        } else {
+            self.pending_primary_tool_bar = tool_bar;
+        }
+    }
+
+    pub(super) fn set_primary_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.set_compact_bar(compact_bar);
+        } else {
+            self.pending_primary_compact_bar = compact_bar;
         }
     }
 

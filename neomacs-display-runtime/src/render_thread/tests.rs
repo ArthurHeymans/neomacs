@@ -1,7 +1,7 @@
 use super::RenderApp;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
-use crate::thread_comm::{RenderCommand, ThreadComms};
-use neomacs_display_protocol::PopupMenuItem;
+use crate::thread_comm::{RenderCommand, ThreadComms, ToolBarItem};
+use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -278,6 +278,76 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
     .expect("show popup on adopted primary");
 
     assert!(app.primary_popup_menu().is_some());
+    assert!(app.primary_dirty());
+}
+
+#[test]
+fn primary_toolbar_command_marks_render_state_dirty() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+
+    app.handle_ui_command(RenderCommand::SetToolBar {
+        items: vec![ToolBarItem {
+            index: 7,
+            icon_name: "open".to_string(),
+            label: String::new(),
+            help: String::new(),
+            enabled: true,
+            selected: false,
+            is_separator: false,
+        }],
+        height: 34.0,
+        fg_r: 1.0,
+        fg_g: 1.0,
+        fg_b: 1.0,
+        bg_r: 0.0,
+        bg_g: 0.0,
+        bg_b: 0.0,
+    })
+    .expect("set primary toolbar");
+
+    assert!(app.primary_tool_bar().is_some());
+    assert!(app.primary_dirty());
+}
+
+#[test]
+fn primary_menubar_command_marks_render_state_dirty() {
+    let mut app = make_test_app();
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    app.set_primary_render_state_for_tests(super::frame_windows::GuiFrameRenderState::new(
+        0,
+        &device,
+        app.primary_scale_factor(),
+        app.primary_fps_enabled(),
+    ));
+
+    app.handle_ui_command(RenderCommand::SetMenuBar {
+        items: vec![MenuBarItem {
+            index: 7,
+            label: "File".to_string(),
+            key: "file".to_string(),
+        }],
+        height: 24.0,
+        fg_r: 1.0,
+        fg_g: 1.0,
+        fg_b: 1.0,
+        bg_r: 0.0,
+        bg_g: 0.0,
+        bg_b: 0.0,
+    })
+    .expect("set primary menu bar");
+
+    assert!(app.primary_menu_bar().is_some());
     assert!(app.primary_dirty());
 }
 

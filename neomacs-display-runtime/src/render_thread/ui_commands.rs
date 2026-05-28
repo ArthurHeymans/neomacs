@@ -419,17 +419,12 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame.tool_bar = Some(tool_bar);
-                } else {
-                    self.pending_primary_tool_bar = Some(tool_bar);
-                }
-                self.mark_primary_dirty();
+                self.set_primary_tool_bar(Some(tool_bar));
                 Ok(())
             }
             RenderCommand::SetToolBarConfig { icon_size, padding } => {
                 self.set_toolbar_visual_config(icon_size, padding);
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetMenuBar {
@@ -459,12 +454,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame.menu_bar = Some(menu_bar);
-                } else {
-                    self.pending_primary_menu_bar = Some(menu_bar);
-                }
-                self.mark_primary_dirty();
+                self.set_primary_menu_bar(Some(menu_bar));
                 Ok(())
             }
             other => Err(other),
