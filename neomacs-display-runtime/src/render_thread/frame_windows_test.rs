@@ -464,51 +464,6 @@ fn winit_to_emacs_map_is_empty_initially() {
 }
 
 // =======================================================================
-// route_frame() — frame routing logic
-// =======================================================================
-
-#[test]
-fn route_frame_with_frame_id_zero_returns_false() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let frame = make_frame(0, 0);
-
-    // frame_id == 0 means primary window, not handled by frame_windows
-    assert!(!mgr.route_frame(frame, None, None, None));
-}
-
-#[test]
-fn route_frame_with_nonexistent_root_frame_returns_false() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let frame = make_frame(42, 0);
-
-    // frame_id=42, parent_id=0 → root frame for secondary window
-    // But no window with emacs_frame_id=42 exists
-    assert!(!mgr.route_frame(frame, None, None, None));
-}
-
-#[test]
-fn route_frame_child_with_no_parent_window_returns_false() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let frame = make_frame(100, 42);
-
-    // frame_id=100, parent_id=42 → child frame for parent 42
-    // But no window with emacs_frame_id=42 exists
-    assert!(!mgr.route_frame(frame, None, None, None));
-}
-
-#[test]
-fn route_frame_does_not_create_windows() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let frame = make_frame(42, 0);
-
-    mgr.route_frame(frame, None, None, None);
-
-    // route_frame should not add entries to the windows map
-    assert!(mgr.windows.is_empty());
-    assert_eq!(mgr.count(), 0);
-}
-
-// =======================================================================
 // PendingWindow struct
 // =======================================================================
 
@@ -578,40 +533,6 @@ fn process_destroys_called_twice_is_safe() {
 }
 
 // =======================================================================
-// route_frame() edge cases
-// =======================================================================
-
-#[test]
-fn route_frame_primary_window_frame_id_zero_parent_zero() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let frame = make_frame(0, 0);
-    assert!(!mgr.route_frame(frame, None, None, None));
-}
-
-#[test]
-fn route_frame_frame_id_zero_parent_nonzero_returns_false() {
-    let mut mgr = GuiFrameWindowManager::new();
-    // frame_id=0 short-circuits before checking parent_id
-    let mut frame = make_frame(0, 42);
-    frame.frame_id = 0;
-    frame.parent_id = 42;
-    assert!(!mgr.route_frame(frame, None, None, None));
-}
-
-#[test]
-fn route_frame_multiple_unmatched_calls_return_false() {
-    let mut mgr = GuiFrameWindowManager::new();
-
-    for i in 1..=10 {
-        let frame = make_frame(i, 0);
-        assert!(!mgr.route_frame(frame, None, None, None));
-    }
-
-    // Nothing should have been added
-    assert!(mgr.windows.is_empty());
-}
-
-// =======================================================================
 // count() — empty manager
 // =======================================================================
 
@@ -640,24 +561,6 @@ fn destroy_queue_refill_after_process() {
     assert_eq!(mgr.pending_destroys.len(), 2);
     assert_eq!(mgr.pending_destroys[0], 3);
     assert_eq!(mgr.pending_destroys[1], 4);
-}
-
-// =======================================================================
-// Verify that route_frame passes frame_id correctly
-// =======================================================================
-
-#[test]
-fn route_frame_extracts_frame_id_and_parent_id() {
-    let mut mgr = GuiFrameWindowManager::new();
-
-    // Create a frame with specific IDs
-    let frame = make_frame(0xDEAD, 0xBEEF);
-    assert_eq!(frame.frame_id, 0xDEAD);
-    assert_eq!(frame.parent_id, 0xBEEF);
-
-    // route_frame reads these fields for routing
-    // No matching window, so returns false
-    assert!(!mgr.route_frame(frame, None, None, None));
 }
 
 // =======================================================================
@@ -708,14 +611,4 @@ fn many_pending_destroys_processed() {
 
     mgr.process_destroys();
     assert!(mgr.pending_destroys.is_empty());
-}
-
-#[test]
-fn many_route_frame_misses() {
-    let mut mgr = GuiFrameWindowManager::new();
-    for i in 1..=100 {
-        let frame = make_frame(i, 0);
-        assert!(!mgr.route_frame(frame, None, None, None));
-    }
-    assert!(mgr.windows.is_empty());
 }

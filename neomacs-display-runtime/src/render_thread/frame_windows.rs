@@ -1102,52 +1102,6 @@ impl GuiFrameWindowManager {
         });
     }
 
-    /// Route a FrameGlyphBuffer to the appropriate window.
-    /// Returns true if the frame was routed to a secondary window.
-    pub fn route_frame(
-        &mut self,
-        frame: FrameGlyphBuffer,
-        menu_bar: Option<GuiMenuBarState>,
-        tool_bar: Option<GuiToolBarState>,
-        compact_bar: Option<GuiCompactBarState>,
-    ) -> bool {
-        let frame_id = frame.frame_id;
-        if frame_id != 0 {
-            if frame.parent_id != 0 {
-                // Child frame: route to the window that owns the parent
-                // Find which window has the parent as its root frame
-                for (_, ws) in self.windows.iter_mut() {
-                    if ws.render.emacs_frame_id == frame.parent_id {
-                        ws.render.child_frames.update_frame(frame);
-                        ws.render.frame_dirty = true;
-                        return true;
-                    }
-                }
-            } else if let Some(ws) = self.windows.get_mut(&frame_id) {
-                // Root frame for a secondary window
-                if menu_bar.is_none() {
-                    ws.render.chrome_interaction.clear_menu_bar();
-                }
-                if tool_bar.is_none() {
-                    ws.render.chrome_interaction.clear_toolbar();
-                }
-                if compact_bar.is_none() {
-                    ws.render.chrome_interaction.clear_compact_bar();
-                }
-                if frame.tab_bar.is_none() {
-                    ws.render.chrome_interaction.clear_tab_bar();
-                }
-                ws.render.menu_bar = menu_bar;
-                ws.render.tool_bar = tool_bar;
-                ws.render.compact_bar = compact_bar;
-                ws.render.current_frame = Some(frame);
-                ws.render.frame_dirty = true;
-                return true;
-            }
-        }
-        false // Not handled — belongs to primary window
-    }
-
     /// Return number of secondary windows.
     pub fn count(&self) -> usize {
         self.windows.len()

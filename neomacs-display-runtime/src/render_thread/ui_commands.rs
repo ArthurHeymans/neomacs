@@ -421,7 +421,7 @@ impl RenderApp {
             } => {
                 self.extra_line_spacing = line_spacing;
                 self.extra_letter_spacing = letter_spacing;
-                self.mark_primary_dirty();
+                self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }
             RenderCommand::SetIndentGuideRainbow { enabled, colors } => {

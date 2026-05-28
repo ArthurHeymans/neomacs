@@ -11,8 +11,7 @@ impl RenderApp {
         self.process_video_frames();
         self.process_pending_images();
         self.refresh_faces_from_frames();
-        self.apply_extra_spacing_if_needed();
-        self.apply_visual_cursor_animations();
+        self.apply_primary_fallback_visual_cursor_animations();
         self.frame_windows
             .apply_top_level_visual_cursor_animations();
     }
@@ -78,60 +77,17 @@ impl RenderApp {
         }
     }
 
-    fn apply_visual_cursor_animations(&mut self) {
-        if self
-            .primary_render_state()
-            .is_none_or(|frame| frame.visual_cursors.is_empty())
+    fn apply_primary_fallback_visual_cursor_animations(&mut self) {
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
         {
-            return;
-        }
-        let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
-            .primary_render_state()
-            .map(|frame| frame.visual_cursors.iter())
-            .into_iter()
-            .flatten()
-            .map(|(id, state)| {
-                (
-                    *id,
-                    (
-                        state.current_x,
-                        state.current_y,
-                        state.current_w,
-                        state.current_h,
-                    ),
-                )
-            })
-            .collect();
-        if let Some(frame) = self.primary_current_frame_mut() {
-            for cursor in &mut frame.window_cursors {
-                let Some((x, y, width, height)) = visual_cursor_rects.get(&cursor.window_id) else {
-                    continue;
-                };
-                cursor.x = *x;
-                cursor.y = *y;
-                cursor.width = *width;
-                cursor.height = *height;
-            }
+            primary_frame.apply_visual_cursor_animations();
         }
     }
+}
 
-    fn apply_extra_spacing_if_needed(&mut self) {
-        if self.extra_line_spacing != 0.0 || self.extra_letter_spacing != 0.0 {
-            let extra_line_spacing = self.extra_line_spacing;
-            let extra_letter_spacing = self.extra_letter_spacing;
-            if let Some(frame) = self.primary_current_frame_mut() {
-                Self::apply_extra_spacing(
-                    &mut frame.glyphs,
-                    &mut frame.window_cursors,
-                    &mut frame.phys_cursor,
-                    extra_line_spacing,
-                    extra_letter_spacing,
-                );
-            }
-        }
-    }
-
-    fn apply_extra_spacing(
+impl RenderApp {
+    pub(super) fn apply_extra_spacing(
         glyphs: &mut [FrameGlyph],
         window_cursors: &mut [WindowCursorVisual],
         phys_cursor: &mut Option<PhysCursor>,

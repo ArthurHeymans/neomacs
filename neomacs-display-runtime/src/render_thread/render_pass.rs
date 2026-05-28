@@ -354,6 +354,8 @@ impl RenderApp {
         toolbar_icon_textures: &HashMap<String, u32>,
         toolbar_icon_size: u32,
         toolbar_padding: u32,
+        extra_line_spacing: f32,
+        extra_letter_spacing: f32,
     ) -> Option<(
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
@@ -372,6 +374,8 @@ impl RenderApp {
             toolbar_icon_textures,
             toolbar_icon_size,
             toolbar_padding,
+            extra_line_spacing,
+            extra_letter_spacing,
             None,
         )
     }
@@ -391,6 +395,8 @@ impl RenderApp {
         toolbar_icon_textures: &HashMap<String, u32>,
         toolbar_icon_size: u32,
         toolbar_padding: u32,
+        extra_line_spacing: f32,
+        extra_letter_spacing: f32,
         output: Option<wgpu::SurfaceTexture>,
     ) -> Option<(
         wgpu::SurfaceTexture,
@@ -402,6 +408,15 @@ impl RenderApp {
             return None;
         };
         let mut frame = frame_for_decision.clone();
+        if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
+            Self::apply_extra_spacing(
+                &mut frame.glyphs,
+                &mut frame.window_cursors,
+                &mut frame.phys_cursor,
+                extra_line_spacing,
+                extra_letter_spacing,
+            );
+        }
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor =
             animated_cursor.filter(|cursor| cursor.frame_id == render.emacs_frame_id);
@@ -451,6 +466,15 @@ impl RenderApp {
             return None;
         };
         frame = drained_frame;
+        if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
+            Self::apply_extra_spacing(
+                &mut frame.glyphs,
+                &mut frame.window_cursors,
+                &mut frame.phys_cursor,
+                extra_line_spacing,
+                extra_letter_spacing,
+            );
+        }
 
         let surface_view = output
             .texture
@@ -1008,6 +1032,8 @@ impl RenderApp {
             &self.toolbar_icon_textures,
             self.toolbar_icon_size,
             self.toolbar_padding,
+            self.extra_line_spacing,
+            self.extra_letter_spacing,
         ) {
             if is_primary_frame {
                 surface_readback::maybe_log_first_frame_surface_readback(
