@@ -950,8 +950,67 @@ fn org_property_block_tags_inherit_set_delete_deep() {
         ;; Check after
         (let ((leaf-a1-after (funcall snap "Leaf A1"))
               (leaf-b1-after (funcall snap "Leaf B1")))
-          (list leaf-a1 leaf-b1
-                leaf-a1-after leaf-b1-after
+           (list leaf-a1 leaf-b1
+                 leaf-a1-after leaf-b1-after
+                 (buffer-substring-no-properties
+                  (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn org_property_inherit_effort_category_set_multi_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Phase 1\n")
+    (insert ":PROPERTIES:\n:CATEGORY: planning\n:Owner: Alice\n:END:\n")
+    (insert "** Step A\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:Assigned: Bob\n:END:\n")
+    (insert "*** Sub A1\nBody.\n\n")
+    (insert "*** Sub A2\nBody.\n\n")
+    (insert "** Step B\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:Assigned: Carol\n:END:\n")
+    (insert "*** Sub B1\nBody.\n\n")
+    (insert "* Phase 2\n")
+    (insert ":PROPERTIES:\n:CATEGORY: execution\n:Owner: Dave\n:END:\n")
+    (insert "** Step C\n")
+    (insert ":PROPERTIES:\n:Effort: 4h\n:END:\n")
+    (let ((snap (lambda (name)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward name)
+                    (list name
+                          (org-entry-get nil "Owner" 'inherit)
+                          (org-entry-get nil "CATEGORY" 'inherit)
+                          (org-entry-get nil "Effort")
+                          (org-entry-get nil "Assigned" 'inherit))))))
+      (let ((sub-a1 (funcall snap "Sub A1"))
+            (sub-b1 (funcall snap "Sub B1"))
+            (step-c (funcall snap "Step C")))
+        ;; Set properties
+        (goto-char (point-min))
+        (search-forward "Step A")
+        (beginning-of-line)
+        (org-set-property "Status" "active")
+        (goto-char (point-min))
+        (search-forward "Phase 2")
+        (beginning-of-line)
+        (org-set-property "Priority" "high")
+        ;; Delete
+        (goto-char (point-min))
+        (search-forward "Step B")
+        (beginning-of-line)
+        (org-delete-property "Assigned")
+        ;; Check
+        (let ((sub-a1-after (funcall snap "Sub A1"))
+              (sub-b1-after (funcall snap "Sub B1"))
+              (step-c-after (funcall snap "Step C")))
+          (list sub-a1 sub-b1 step-c
+                sub-a1-after sub-b1-after step-c-after
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
     );
