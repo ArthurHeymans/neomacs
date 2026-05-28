@@ -215,7 +215,7 @@ impl RenderApp {
                     if let Some(ref mut renderer) = self.renderer {
                         renderer.remove_webkit_view(id);
                     }
-                    self.mark_primary_dirty();
+                    self.mark_top_level_frame_windows_dirty();
                 }
                 Ok(())
             }
