@@ -1080,6 +1080,63 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_multi_table_join_stats_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Sales table
+      (insert "#+NAME: sales\n")
+      (insert "| Region | Product | Qty |\n")
+      (insert "|--------+---------+-----|\n")
+      (insert "| N | A | 10 |\n")
+      (insert "| S | B | 20 |\n")
+      (insert "| N | B | 15 |\n")
+      (insert "| E | A | 25 |\n\n")
+      ;; Price table
+      (insert "#+NAME: prices\n")
+      (insert "| Product | Price |\n")
+      (insert "|---------+-------|\n")
+      (insert "| A | 5 |\n")
+      (insert "| B | 8 |\n\n")
+      ;; Compute revenue
+      (insert "#+NAME: revenue\n")
+      (insert "#+begin_src emacs-lisp :var s=sales p=prices :results value replace\n")
+      (insert "(let ((rows (mapcar\n")
+      (insert "              (lambda (row)\n")
+      (insert "                (let* ((region (car row))\n")
+      (insert "                       (product (cadr row))\n")
+      (insert "                       (qty (caddr row))\n")
+      (insert "                       (price (cadr (assoc product p))))\n")
+      (insert "                  (list region product qty (* qty price))))\n")
+      (insert "              s)))\n")
+      (insert "  (list :rows rows\n")
+      (insert "        :total-rev (apply #'+ (mapcar #'cadddr rows))\n")
+      (insert "        :n-regions (length (seq-uniq (mapcar #'car s))))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "revenue")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_list_map_filter_reduce_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
