@@ -72,9 +72,12 @@ impl ChildFrameManager {
     }
 
     /// Remove a child frame by ID.
-    pub fn remove_frame(&mut self, frame_id: u64) {
+    pub fn remove_frame(&mut self, frame_id: u64) -> bool {
         if self.frames.remove(&frame_id).is_some() {
             self.rebuild_render_order();
+            true
+        } else {
+            false
         }
     }
 

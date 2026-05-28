@@ -355,6 +355,25 @@ impl GuiFrameRenderState {
             cursor.height = *height;
         }
     }
+
+    pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
+        let removed = self.child_frames.remove_frame(frame_id);
+        if removed {
+            self.frame_dirty = true;
+        }
+        if self
+            .cursor
+            .target_cloned()
+            .is_some_and(|target| target.frame_id == frame_id)
+        {
+            self.cursor.clear_target();
+            self.ime_preedit_active = false;
+            self.ime_preedit_text.clear();
+            self.frame_dirty = true;
+            return true;
+        }
+        removed
+    }
 }
 
 impl GuiFrameWindowState {
@@ -457,6 +476,19 @@ impl GuiFrameWindowState {
         self.render.ime_preedit_text.clear();
         self.reset_ime_cursor_area();
         self.render.frame_dirty = true;
+    }
+
+    pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
+        let target_was_child = self
+            .render
+            .cursor
+            .target_cloned()
+            .is_some_and(|target| target.frame_id == frame_id);
+        let changed = self.render.remove_child_frame(frame_id);
+        if target_was_child {
+            self.reset_ime_cursor_area();
+        }
+        changed
     }
 
     pub(super) fn drag_resize_for_current_edge(&self) -> bool {
@@ -1099,6 +1131,14 @@ impl GuiFrameWindowManager {
         self.for_each_top_level_window_mut(|window_state| {
             window_state.render.transitions.scroll_slides.clear();
         });
+    }
+
+    pub(super) fn remove_child_frame_from_top_level_windows(&mut self, frame_id: u64) -> bool {
+        let mut changed = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            changed |= window_state.remove_child_frame(frame_id);
+        });
+        changed
     }
 
     pub(super) fn sync_top_level_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {

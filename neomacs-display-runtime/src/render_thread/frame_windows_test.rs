@@ -199,6 +199,50 @@ fn frame_render_state_drains_runtime_hints_once_for_render_clone() {
     assert!(frame.effect_hints.is_empty());
 }
 
+#[test]
+fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut child = make_frame(0x99, 0x42);
+    child.parent_x = 10.0;
+    child.parent_y = 20.0;
+    render.child_frames.update_frame(child);
+
+    assert!(render.remove_child_frame(0x99));
+
+    assert!(render.child_frames.frames.is_empty());
+    assert!(render.frame_dirty);
+}
+
+#[test]
+fn frame_render_state_remove_child_cursor_clears_preedit() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.cursor.set_target(CursorTarget {
+        window_id: 7,
+        x: 1.0,
+        y: 2.0,
+        width: 3.0,
+        height: 4.0,
+        style: CursorStyle::Bar(1.0),
+        color: Color::WHITE,
+        frame_id: 0x99,
+    });
+    render.ime_preedit_active = true;
+    render.ime_preedit_text = "preedit".to_string();
+
+    assert!(render.remove_child_frame(0x99));
+
+    assert!(render.cursor.target_cloned().is_none());
+    assert!(!render.ime_preedit_active);
+    assert!(render.ime_preedit_text.is_empty());
+    assert!(render.frame_dirty);
+}
+
 // =======================================================================
 // GuiFrameWindowManager::new() — initial state
 // =======================================================================

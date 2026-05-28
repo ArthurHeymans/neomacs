@@ -365,44 +365,25 @@ impl RenderApp {
             }
             RenderCommand::RemoveChildFrame { frame_id } => {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
-                self.primary_child_frames_mut().remove_frame(frame_id);
-                if self
-                    .primary_cursor()
-                    .target_cloned()
-                    .is_some_and(|target| target.frame_id == frame_id)
-                {
-                    if let Some(cursor) = self.primary_cursor_mut() {
-                        cursor.clear_target();
-                    }
-                    if let Some(primary_state) = self.primary_window_state_mut() {
-                        primary_state.reset_ime_cursor_area();
-                    } else {
-                        self.reset_primary_ime_cursor_area();
-                    }
-                    self.clear_primary_ime_preedit();
-                }
                 self.frame_windows
-                    .for_each_top_level_window_mut(|window_state| {
-                        let removed = window_state
-                            .render
-                            .child_frames
-                            .frames
-                            .contains_key(&frame_id);
-                        window_state.render.child_frames.remove_frame(frame_id);
-                        if removed {
-                            window_state.render.frame_dirty = true;
+                    .remove_child_frame_from_top_level_windows(frame_id);
+                if self.primary_window_state().is_none() {
+                    let cursor_was_in_child = self
+                        .primary_cursor()
+                        .target_cloned()
+                        .is_some_and(|target| target.frame_id == frame_id);
+                    let removed = self.primary_child_frames_mut().remove_frame(frame_id);
+                    if cursor_was_in_child {
+                        if let Some(cursor) = self.primary_cursor_mut() {
+                            cursor.clear_target();
                         }
-                        if window_state
-                            .render
-                            .cursor
-                            .target_cloned()
-                            .is_some_and(|target| target.frame_id == frame_id)
-                        {
-                            window_state.render.cursor.clear_target();
-                            window_state.clear_ime_preedit();
-                        }
-                    });
-                self.mark_primary_dirty();
+                        self.reset_primary_ime_cursor_area();
+                        self.clear_primary_ime_preedit();
+                    }
+                    if removed || cursor_was_in_child {
+                        self.mark_primary_dirty();
+                    }
+                }
                 Ok(())
             }
             RenderCommand::SetChildFrameStyle {
