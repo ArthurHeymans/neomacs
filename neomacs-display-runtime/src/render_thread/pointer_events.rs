@@ -1553,37 +1553,39 @@ impl RenderApp {
     }
 
     pub(super) fn handle_mouse_wheel(&mut self, window_id: WindowId, delta: MouseScrollDelta) {
+        if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
+            let (dx, dy, pixel_precise) = match delta {
+                MouseScrollDelta::LineDelta(x, y) => (x, y, false),
+                MouseScrollDelta::PixelDelta(pos) => (
+                    (pos.x / window_state.native.scale_factor) as f32,
+                    (pos.y / window_state.native.scale_factor) as f32,
+                    true,
+                ),
+            };
+            let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
+                window_state,
+                window_state.render.mouse_pos.0,
+                window_state.render.mouse_pos.1,
+            );
+            let (wk_id, wk_rx, wk_ry) =
+                Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
+            self.comms.send_input(InputEvent::MouseScroll {
+                delta_x: dx,
+                delta_y: dy,
+                x: ev_x,
+                y: ev_y,
+                modifiers: self.modifiers,
+                pixel_precise,
+                target_frame_id: target_fid,
+                webkit_id: wk_id,
+                webkit_rel_x: wk_rx,
+                webkit_rel_y: wk_ry,
+            });
+            self.record_idle_dim_activity(window_id);
+            return;
+        }
+
         if !self.frame_windows.is_primary_winit(window_id) {
-            if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
-                let (dx, dy, pixel_precise) = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => (x, y, false),
-                    MouseScrollDelta::PixelDelta(pos) => (
-                        (pos.x / window_state.native.scale_factor) as f32,
-                        (pos.y / window_state.native.scale_factor) as f32,
-                        true,
-                    ),
-                };
-                let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
-                    window_state,
-                    window_state.render.mouse_pos.0,
-                    window_state.render.mouse_pos.1,
-                );
-                let (wk_id, wk_rx, wk_ry) =
-                    Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
-                self.comms.send_input(InputEvent::MouseScroll {
-                    delta_x: dx,
-                    delta_y: dy,
-                    x: ev_x,
-                    y: ev_y,
-                    modifiers: self.modifiers,
-                    pixel_precise,
-                    target_frame_id: target_fid,
-                    webkit_id: wk_id,
-                    webkit_rel_x: wk_rx,
-                    webkit_rel_y: wk_ry,
-                });
-                self.record_idle_dim_activity(window_id);
-            }
             return;
         }
 
