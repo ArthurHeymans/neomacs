@@ -685,6 +685,59 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_cycle_subtree_edit_show_all_v36() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\nBody alpha.\n\n")
+    (insert "** Beta\nBody beta.\n\n")
+    (insert "*** Gamma\nBody gamma.\n\n")
+    (insert "** Delta\nBody delta.\n\n")
+    (let ((snap (lambda ()
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level))
+                           (list needle 'not-found nil nil))))
+                   '("Alpha" "Beta" "Gamma" "Delta")))))
+      (let ((initial (funcall snap)))
+        ;; Hide Alpha subtree
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-fold-hide-subtree)
+        (let ((after-hide (funcall snap)))
+          ;; Edit under hidden Alpha
+          (end-of-line)
+          (insert "\n** Epsilon\nBody epsilon.\n")
+          (let ((after-edit (funcall snap)))
+            ;; Show all
+            (org-fold-show-all)
+            (let ((after-show (funcall snap)))
+              ;; Cycle globally
+              (org-global-cycle nil)
+              (let ((after-cycle (funcall snap)))
+                (list initial
+                      after-hide
+                      after-edit
+                      after-show
+                      after-cycle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_subtree_hide_edit_show_font_face_v35_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
