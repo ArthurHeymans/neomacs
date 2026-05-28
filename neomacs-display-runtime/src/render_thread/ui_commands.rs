@@ -407,36 +407,15 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetTitlebarHeight { height } => {
-                self.primary_chrome_mut().titlebar_height = height;
-                self.frame_windows.chrome_defaults.titlebar_height = height;
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.native.chrome.titlebar_height = height;
-                    window_state.render.frame_dirty = true;
-                }
-                self.mark_primary_dirty();
+                self.set_top_level_titlebar_height(height);
                 Ok(())
             }
             RenderCommand::SetShowFps { enabled } => {
-                self.primary_fps_enabled = enabled;
-                if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame.fps.enabled = enabled;
-                    primary_frame.frame_dirty = true;
-                }
-                self.frame_windows.fps_enabled = enabled;
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.render.fps.enabled = enabled;
-                    window_state.render.frame_dirty = true;
-                }
+                self.set_top_level_fps_enabled(enabled);
                 Ok(())
             }
             RenderCommand::SetCornerRadius { radius } => {
-                self.primary_chrome_mut().corner_radius = radius;
-                self.frame_windows.chrome_defaults.corner_radius = radius;
-                for window_state in self.frame_windows.windows.values_mut() {
-                    window_state.native.chrome.corner_radius = radius;
-                    window_state.render.frame_dirty = true;
-                }
-                self.mark_primary_dirty();
+                self.set_top_level_corner_radius(radius);
                 Ok(())
             }
             RenderCommand::SetExtraSpacing {
