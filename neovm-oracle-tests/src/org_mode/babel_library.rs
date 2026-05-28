@@ -1080,6 +1080,53 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_row_filter_map_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Source table
+      (insert "#+NAME: items\n")
+      (insert "| Name | Price | Qty |\n")
+      (insert "|------+-------+-----|\n")
+      (insert "| A | 10 | 3 |\n")
+      (insert "| B | 20 | 1 |\n")
+      (insert "| C | 5 | 8 |\n")
+      (insert "| D | 15 | 2 |\n\n")
+      ;; Filter + map
+      (insert "#+NAME: expensive\n")
+      (insert "#+begin_src emacs-lisp :var tbl=items :results value replace\n")
+      (insert "(let ((filtered (cl-remove-if-not\n")
+      (insert "                 (lambda (row) (>= (cadr row) 10))\n")
+      (insert "                 tbl)))\n")
+      (insert "  (mapcar (lambda (row)\n")
+      (insert "            (list (car row) (cadr row) (caddr row)\n")
+      (insert "                  (* (cadr row) (caddr row))))\n")
+      (insert "          filtered))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "expensive")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_stats_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
