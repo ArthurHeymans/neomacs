@@ -1417,6 +1417,63 @@ fn org_link_abbrev_safety_legacy_follow_matrix_combo() {
                   links
                   (nreverse follow-calls)
                   (buffer-substring-no-properties
-                   (point-min) (point-max))))))))"##,
+                   (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_link_stored_insert_edit_search_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-link)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Section One\nBody one.\n\n")
+    (insert "* Section Two\nBody two.\n\n")
+    (insert "* Section Three\nBody three.\n\n")
+    ;; Store link
+    (goto-char (point-min))
+    (search-forward "Section One")
+    (beginning-of-line)
+    (let ((stored (org-store-link nil)))
+      ;; Insert stored link at end
+      (goto-char (point-max))
+      (insert "\nSee " stored "\n")
+      ;; Parse links
+      (let* ((tree (org-element-parse-buffer))
+             (links
+              (org-element-map tree 'link
+                (lambda (lk)
+                  (list (org-element-property :type lk)
+                        (org-element-property :path lk)
+                        (org-element-property :raw-link lk)
+                        (org-element-property :search-option lk))))))
+        ;; Search for "Section Two"
+        (goto-char (point-min))
+        (org-link-search "Section Two")
+        (let ((after-search-pos (point))
+              (after-search-line (line-number-at-pos)))
+          ;; Edit: insert a new heading
+          (goto-char (point-max))
+          (insert "\n* Section Four\nBody four.\n")
+          ;; Re-parse
+          (let* ((tree2 (org-element-parse-buffer))
+                 (links2
+                  (org-element-map tree2 'link
+                    (lambda (lk)
+                      (list (org-element-property :type lk)
+                            (org-element-property :path lk)
+                            (org-element-property :raw-link lk)
+                            (org-element-property :search-option lk))))))
+            (list stored
+                  links
+                  after-search-pos
+                  after-search-line
+                  links2
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
     );
 }
