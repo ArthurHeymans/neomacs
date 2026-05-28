@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_subtree_edit_show_font_face_level_v7_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-cycle-level-faces t)
+          (org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* DONE Root\n")
+      (insert "** TODO Alpha\n")
+      (insert "*** DONE Beta\n")
+      (insert "**** TODO Gamma\n")
+      (insert "** NEXT Sibling\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Hide Beta subtree
+      (goto-char (point-min))
+      (search-forward "Beta")
+      (beginning-of-line)
+      (org-fold-hide-subtree)
+      ;; Edit while hidden
+      (end-of-line)
+      (insert "\n**** TODO Inserted under Beta\nInserted body.\n")
+      ;; Show all
+      (org-fold-show-all)
+      (font-lock-ensure (point-min) (point-max))
+      ;; Check
+      (let ((probe (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level)
+                                 (get-text-property (line-beginning-position) 'face))
+                           (list needle 'not-found nil nil nil))))))
+        (let ((headings (mapcar probe
+                                '("Root" "Alpha" "Beta" "Gamma" "Inserted" "SIBLING")))
+              (merged nil))
+          (dolist (line (split-string
+                         (buffer-substring-no-properties
+                          (point-min) (point-max))
+                         "\n" t))
+            (when (string-match-p "^\\*+ .*\\*+ " line)
+              (push line merged)))
+          (list headings
+                (nreverse merged)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_subtree_hide_edit_show_font_level_visibility_v6_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
