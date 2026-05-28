@@ -271,7 +271,6 @@ impl RenderApp {
                             self.with_primary_chrome_interaction_mut(|chrome| {
                                 chrome.menu_bar_active = None;
                             });
-                            self.mark_primary_dirty();
                         }
                         Key::Named(NamedKey::ArrowDown) => {
                             if let Some(menu) = self.primary_popup_menu_mut() {
@@ -305,7 +304,6 @@ impl RenderApp {
                                         self.with_primary_chrome_interaction_mut(|chrome| {
                                             chrome.menu_bar_active = None;
                                         });
-                                        self.mark_primary_dirty();
                                     }
                                 } else {
                                     self.comms
@@ -314,7 +312,6 @@ impl RenderApp {
                                     self.with_primary_chrome_interaction_mut(|chrome| {
                                         chrome.menu_bar_active = None;
                                     });
-                                    self.mark_primary_dirty();
                                 }
                             }
                         }
