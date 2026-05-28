@@ -524,3 +524,63 @@ fn org_timestamp_parse_shift_range_element_extract_combo() {
                 shifted-ts))))))"##,
     );
 }
+
+#[test]
+fn org_planning_timestamp_shift_edit_recurring_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Weekly Review\n")
+    (insert "SCHEDULED: <2026-05-25 Sun +1w>\n")
+    (insert "DEADLINE: <2026-05-28 Wed -2d>\n")
+    (insert "Body.\n\n")
+    (insert "* DONE One-shot\n")
+    (insert "SCHEDULED: <2026-05-20 Wed>\n")
+    (insert "CLOSED: [2026-05-21 Thu 10:00]\n")
+    (insert "Body.\n\n")
+    ;; Parse timestamps
+    (let ((snap (lambda ()
+                  (org-element-map (org-element-parse-buffer) 'timestamp
+                    (lambda (ts)
+                      (list (org-element-property :raw-value ts)
+                            (org-element-property :type ts)
+                            (org-element-property :day-start ts)
+                            (org-element-property :month-start ts)
+                            (org-element-property :year-start ts)
+                            (org-element-property :repeater-type ts)
+                            (org-element-property :repeater-value ts)
+                            (org-element-property :repeater-unit ts)
+                            (org-element-property :warning-type ts)
+                            (org-element-property :warning-value ts)))))))
+      (let ((initial (funcall snap)))
+        ;; Shift SCHEDULED of Weekly Review by 1 day
+        (goto-char (point-min))
+        (search-forward "Weekly Review")
+        (forward-line 1)
+        (beginning-of-line)
+        (org-timestamp-change 1 'day)
+        (let ((after-shift1 (funcall snap)))
+          ;; Shift DEADLINE by 2 days
+          (forward-line 1)
+          (beginning-of-line)
+          (org-timestamp-change 2 'day)
+          (let ((after-shift2 (funcall snap)))
+            ;; Edit: change TODO to DONE
+            (goto-char (point-min))
+            (search-forward "TODO Weekly")
+            (replace-match "DONE Weekly")
+            (let ((after-edit (buffer-substring-no-properties
+                               (point-min) (point-max))))
+              (list initial
+                    after-shift1
+                    after-shift2
+                    after-edit
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
