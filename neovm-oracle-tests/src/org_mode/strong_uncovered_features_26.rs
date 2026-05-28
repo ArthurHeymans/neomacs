@@ -175,11 +175,14 @@ fn uf26_html_export() {
     assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
-  (insert "#+TITLE: Test\n* H1\nBody *bold* /italic/")
-  (condition-case nil
-      (org-html-export-as-html)
-    (error nil))
-  (buffer-string))"##,
+  (let ((org-export-time-stamp-file nil))
+    (insert "#+TITLE: Test\n* H1\nBody *bold* /italic/")
+    (condition-case nil
+        (org-html-export-as-html)
+      (error nil))
+    (replace-regexp-in-string
+     "org[0-9a-f]\\{7\\}" "orgXXXXXXX"
+     (buffer-string))))"##,
     );
 }
 
@@ -193,11 +196,14 @@ fn uf26_latex_export() {
     assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
-  (insert "#+TITLE: Test\n* H1\nBody *bold* /italic/")
-  (condition-case nil
-      (org-latex-export-as-latex)
-    (error nil))
-  (buffer-string))"##,
+  (let ((org-export-time-stamp-file nil))
+    (insert "#+TITLE: Test\n* H1\nBody *bold* /italic/")
+    (condition-case nil
+        (org-latex-export-as-latex)
+      (error nil))
+    (replace-regexp-in-string
+     "org[0-9a-f]\\{7\\}" "orgXXXXXXX"
+     (buffer-string))))"##,
     );
 }
 

@@ -791,7 +791,7 @@ fn dh3_dynamic_block() {
     assert_oracle_parity(
         r##"(with-temp-buffer
   (org-mode)
-  (insert "#+BEGIN: clocktable :maxlevel 2\n#+END:")
+  (insert "#+BEGIN: clocktable :maxlevel 2 :header \"#+CAPTION: Clock summary at [fixed]\n\"\n#+END:")
   (goto-char (point-min))
   (org-dblock-update)
   (buffer-string))"##,

@@ -7,7 +7,7 @@
 use colored::Colorize;
 use std::io::Write;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Maximum virtual address space (in bytes) for each spawned oracle Emacs
@@ -240,7 +240,11 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
 // Oracle (GNU Emacs) subprocess evaluation
 // ---------------------------------------------------------------------------
 
-fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
+fn run_oracle_eval_inner_with_tmpdir(
+    form: &str,
+    load_files: &[&str],
+    shared_tmpdir: Option<&Path>,
+) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
     let oracle_bin = oracle_emacs_path();
     let lisp_dir = project_lisp_dir();
@@ -264,6 +268,9 @@ fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, Stri
             "--eval",
             EVAL_PROGRAM_WITH_NORMALIZER,
         ]);
+    if let Some(dir) = shared_tmpdir {
+        cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
+    }
 
     unsafe {
         cmd.pre_exec(move || {
@@ -292,6 +299,10 @@ fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, Stri
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
+    run_oracle_eval_inner_with_tmpdir(form, load_files, None)
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -367,7 +378,11 @@ pub(crate) fn run_oracle_eval_with_load_raw(
 // Neomacs binary subprocess evaluation
 // ---------------------------------------------------------------------------
 
-fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
+fn run_neomacs_binary_eval_inner_with_tmpdir(
+    form: &str,
+    load_files: &[&str],
+    shared_tmpdir: Option<&Path>,
+) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
     let lisp_dir = project_lisp_dir();
     let neomacs_bin = neomacs_binary_path();
@@ -382,6 +397,9 @@ fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<Stri
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
         .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
         .args(["--batch", "-Q", "--eval", EVAL_PROGRAM_WITH_NORMALIZER]);
+    if let Some(dir) = shared_tmpdir {
+        cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
+    }
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         unsafe {
@@ -412,6 +430,10 @@ fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<Stri
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
+    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None)
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -523,6 +545,19 @@ pub(crate) fn assert_oracle_parity(form: &str) {
         eprintln!("oracle-timing: oracle-done {:.3?}", oracle_t0.elapsed());
     }
     eprintln!("total: {:.3?}", t0.elapsed());
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
+}
+
+pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
+    ensure_nonempty_form(form).expect("form should not be empty");
+    let tmpdir = tempfile::Builder::new()
+        .prefix("neovm-oracle-case-")
+        .tempdir()
+        .expect("shared oracle tempdir should be created");
+    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()))
+        .expect("neomacs binary eval should run");
+    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()))
+        .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 

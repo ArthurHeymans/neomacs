@@ -2,7 +2,10 @@
 //!
 //! Every test returns concrete structured data to surface divergences.
 
-use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{
+    assert_oracle_parity, assert_oracle_parity_with_shared_tempdir,
+    return_if_neovm_enable_oracle_proptest_not_set,
+};
 
 // ═══════════════════════════════════════════════════════════════════════
 // org-agenda-list
@@ -11,9 +14,10 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf25_agenda_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(let ((org-agenda-files '("/tmp/test.org")))
-  (with-temp-file "/tmp/test.org"
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let* ((file (expand-file-name "test.org" (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+       (org-agenda-files (list file)))
+  (with-temp-file file
     (insert "* TODO T\nSCHEDULED: <2026-01-15>\n* DONE D"))
   (condition-case nil
       (org-agenda-list)
@@ -29,9 +33,10 @@ fn uf25_agenda_list() {
 #[test]
 fn uf25_todo_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(let ((org-agenda-files '("/tmp/test.org")))
-  (with-temp-file "/tmp/test.org"
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let* ((file (expand-file-name "test.org" (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+       (org-agenda-files (list file)))
+  (with-temp-file file
     (insert "* TODO T1\n* DONE D1\n* TODO T2"))
   (condition-case nil
       (org-todo-list)
@@ -47,9 +52,10 @@ fn uf25_todo_list() {
 #[test]
 fn uf25_tags_view() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(let ((org-agenda-files '("/tmp/test.org")))
-  (with-temp-file "/tmp/test.org"
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let* ((file (expand-file-name "test.org" (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+       (org-agenda-files (list file)))
+  (with-temp-file file
     (insert "* T1 :work:\n* T2 :home:\n* T3 :work:"))
   (condition-case nil
       (org-tags-view nil "work")
@@ -65,9 +71,10 @@ fn uf25_tags_view() {
 #[test]
 fn uf25_search_view() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(let ((org-agenda-files '("/tmp/test.org")))
-  (with-temp-file "/tmp/test.org"
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let* ((file (expand-file-name "test.org" (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+       (org-agenda-files (list file)))
+  (with-temp-file file
     (insert "* T1 keyword\n* T2 other\n* T3 keyword"))
   (condition-case nil
       (org-search-view nil "keyword")

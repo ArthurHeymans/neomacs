@@ -2,7 +2,10 @@
 //!
 //! Every test returns concrete structured data to surface divergences.
 
-use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{
+    assert_oracle_parity, assert_oracle_parity_with_shared_tempdir,
+    return_if_neovm_enable_oracle_proptest_not_set,
+};
 
 // ═══════════════════════════════════════════════════════════════════════
 // org-collect-keywords
@@ -301,13 +304,14 @@ fn uf27_table_iter_buf() {
 #[test]
 fn uf27_table_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(with-temp-buffer
-  (org-mode)
-  (insert "| a | b |\n| 1 | 2 |")
-  (condition-case nil
-      (org-table-export "/tmp/test.csv" "orgtbl-to-csv")
-    (error nil)))"##,
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let ((file (expand-file-name "test.csv" (getenv "NEOVM_ORACLE_TEST_TMPDIR"))))
+  (with-temp-buffer
+    (org-mode)
+    (insert "| a | b |\n| 1 | 2 |")
+    (condition-case nil
+        (org-table-export file "orgtbl-to-csv")
+      (error nil))))"##,
     );
 }
 
@@ -318,15 +322,16 @@ fn uf27_table_export() {
 #[test]
 fn uf27_table_import() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    assert_oracle_parity(
-        r##"(with-temp-file "/tmp/test.csv"
-  (insert "a,b\n1,2\n3,4"))
-(with-temp-buffer
-  (org-mode)
-  (condition-case nil
-      (org-table-import "/tmp/test.csv" nil)
-    (error nil))
-  (buffer-string))"##,
+    assert_oracle_parity_with_shared_tempdir(
+        r##"(let ((file (expand-file-name "test.csv" (getenv "NEOVM_ORACLE_TEST_TMPDIR"))))
+  (with-temp-file file
+    (insert "a,b\n1,2\n3,4"))
+  (with-temp-buffer
+    (org-mode)
+    (condition-case nil
+        (org-table-import file nil)
+      (error nil))
+    (buffer-string)))"##,
     );
 }
 

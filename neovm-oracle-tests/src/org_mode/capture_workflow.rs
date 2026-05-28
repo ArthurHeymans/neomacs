@@ -1,5 +1,5 @@
-use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_oracle_parity, assert_oracle_parity_with_shared_tempdir};
 
 #[test]
 fn org_capture_table_line_and_plain_append_combo() {
@@ -261,12 +261,12 @@ fn org_capture_clock_target_resume_and_links_combo() {
 fn org_capture_kill_finalize_goto_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    assert_oracle_parity_with_shared_tempdir(
         r##"(progn
   (require 'org)
   (require 'org-capture)
-  (let* ((file (make-temp-file "org-capture-life" nil ".org"
-                               "* Inbox\nOld line\n* Done\n"))
+  (let* ((root (file-name-as-directory (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+         (file (expand-file-name "org-capture-life.org" root))
          (org-capture-templates
           `(("e" "Entry" entry
              (file+headline ,file "Inbox")
@@ -274,6 +274,8 @@ fn org_capture_kill_finalize_goto_marker_combo() {
              :empty-lines 0))))
     (unwind-protect
         (progn
+          (with-temp-file file
+            (insert "* Inbox\nOld line\n* Done\n"))
           (org-capture-string "transient body" "e")
           (let ((capture-state
                  (list (buffer-name)
@@ -312,8 +314,8 @@ fn org_capture_kill_finalize_goto_marker_combo() {
                         goto-line
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))
-      (dolist (buf '("CAPTURE-org-capture-life"
-                     "CAPTURE-org-capture-life.org"))
+      (dolist (buf '("CAPTURE-org-capture-life.org"
+                     "org-capture-life.org"))
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
@@ -387,12 +389,12 @@ fn org_capture_prompt_placeholders_history_tags_props_combo() {
 fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    assert_oracle_parity_with_shared_tempdir(
         r##"(progn
   (require 'org)
   (require 'org-capture)
-  (let* ((file (make-temp-file "org-capture-hooks" nil ".org"
-                               "* Project [0/1]\n** Inbox\n- [ ] Existing\n** Archive\n"))
+  (let* ((root (file-name-as-directory (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+         (file (expand-file-name "org-capture-hooks.org" root))
          (events nil)
          (answers '("Hooked Title"))
          (org-overriding-default-time (encode-time 0 15 11 27 5 2026))
@@ -444,6 +446,8 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
                       events))))))
     (unwind-protect
         (progn
+          (with-temp-file file
+            (insert "* Project [0/1]\n** Inbox\n- [ ] Existing\n** Archive\n"))
           (with-current-buffer (find-file-noselect file)
             (org-mode)
             (goto-char (point-min))
@@ -510,8 +514,8 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
                              "[stamp]"
                              (buffer-substring-no-properties
                               (point-min) (point-max)))))))))))
-      (dolist (buf '("CAPTURE-org-capture-hooks"
-                     "CAPTURE-org-capture-hooks.org"))
+      (dolist (buf '("CAPTURE-org-capture-hooks.org"
+                     "org-capture-hooks.org"))
         (when (get-buffer buf) (kill-buffer buf)))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
@@ -522,15 +526,14 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
 fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    assert_oracle_parity_with_shared_tempdir(
         r##"(progn
   (require 'org)
   (require 'org-capture)
   (require 'org-refile)
-  (let* ((inbox (make-temp-file "org-capture-refile-inbox" nil ".org"
-                                "#+TITLE: Inbox\n* Inbox\n"))
-         (projects (make-temp-file "org-capture-refile-projects" nil ".org"
-                                   "#+TITLE: Projects\n* Projects\n** Alpha\n** Beta\n"))
+  (let* ((root (file-name-as-directory (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
+         (inbox (expand-file-name "org-capture-refile-inbox.org" root))
+         (projects (expand-file-name "org-capture-refile-projects.org" root))
          (events nil)
          (org-refile-targets `((,projects . (:maxlevel . 2))))
          (org-refile-use-outline-path 'title)
@@ -551,6 +554,10 @@ fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
                       events))))))
     (unwind-protect
         (progn
+          (with-temp-file inbox
+            (insert "#+TITLE: Inbox\n* Inbox\n"))
+          (with-temp-file projects
+            (insert "#+TITLE: Projects\n* Projects\n** Alpha\n** Beta\n"))
           (org-refile-cache-clear)
           (with-current-buffer (find-file-noselect projects)
             (org-mode))

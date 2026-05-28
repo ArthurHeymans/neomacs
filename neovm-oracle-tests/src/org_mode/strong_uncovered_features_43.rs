@@ -164,9 +164,15 @@ fn uf43_footnote_action() {
   (org-mode)
   (insert "Text[fn:1]\n\n[fn:1] Def")
   (goto-char (point-min))
+  (search-forward "[fn:1]")
+  (goto-char (match-beginning 0))
   (condition-case nil
       (org-footnote-action)
-    (error nil)))"##,
+    (error nil))
+  (list (point)
+        (buffer-substring-no-properties
+         (line-beginning-position)
+         (line-end-position))))"##,
     );
 }
 

@@ -1,5 +1,5 @@
-use crate::common::assert_oracle_parity;
 use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_oracle_parity, assert_oracle_parity_with_shared_tempdir};
 
 #[test]
 fn org_mobile_files_index_checksums_combo() {
@@ -354,12 +354,12 @@ fn org_mobile_push_agenda_index_checksums_hooks_combo() {
 fn org_mobile_apply_refile_delete_archive_flag_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    assert_oracle_parity(
+    assert_oracle_parity_with_shared_tempdir(
         r##"(progn
   (require 'org)
   (require 'org-archive)
   (require 'org-mobile)
-  (let* ((root (make-temp-file "org-mobile-actions" t))
+  (let* ((root (file-name-as-directory (getenv "NEOVM_ORACLE_TEST_TMPDIR")))
          (org-directory root)
          (file (expand-file-name "tasks.org" root))
          (capture (expand-file-name "mobileorg.org" root))
@@ -422,8 +422,7 @@ fn org_mobile_apply_refile_delete_archive_flag_combo() {
                                  (org-entry-get nil "ARCHIVE_TIME")))
                           nil nil)))))))
       (dolist (path (list file capture))
-        (when (get-file-buffer path) (kill-buffer (get-file-buffer path))))
-      (delete-directory root t))))"##,
+        (when (get-file-buffer path) (kill-buffer (get-file-buffer path)))))))"##,
     );
 }
 
