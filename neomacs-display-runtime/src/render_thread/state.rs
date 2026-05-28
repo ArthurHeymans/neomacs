@@ -741,31 +741,6 @@ impl RenderApp {
             .map(|window_state| &window_state.native.window)
     }
 
-    pub(super) fn primary_surface(&self) -> Option<&wgpu::Surface<'static>> {
-        self.primary_window_state()
-            .map(|window_state| &window_state.native.surface)
-    }
-
-    pub(super) fn primary_surface_config_mut(&mut self) -> Option<&mut wgpu::SurfaceConfiguration> {
-        self.primary_window_state_mut()
-            .map(|window_state| &mut window_state.native.surface_config)
-    }
-
-    pub(super) fn configure_primary_surface(&mut self, width: u32, height: u32) {
-        if let (Some(window_state), Some(gpu)) =
-            (self.frame_windows.primary_window_mut(), &self.gpu)
-        {
-            let native = &mut window_state.native;
-            native.width = width;
-            native.height = height;
-            native.surface_config.width = width;
-            native.surface_config.height = height;
-            native
-                .surface
-                .configure(&gpu.device, &native.surface_config);
-        }
-    }
-
     pub(super) fn primary_native_size(&self) -> (u32, u32) {
         self.primary_window_state()
             .map_or((self.width, self.height), |window_state| {

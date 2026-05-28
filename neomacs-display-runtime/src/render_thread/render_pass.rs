@@ -1030,8 +1030,4 @@ impl RenderApp {
             output.present();
         }
     }
-
-    pub(super) fn render(&mut self) {
-        self.render_frame_window(self.frame_windows.primary_event_frame_id());
-    }
 }

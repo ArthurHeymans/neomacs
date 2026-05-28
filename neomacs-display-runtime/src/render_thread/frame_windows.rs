@@ -622,6 +622,14 @@ impl GuiFrameWindowManager {
         self.winit_to_emacs.get(&winit_id).copied()
     }
 
+    pub fn event_frame_for_winit(&self, winit_id: WindowId) -> Option<u64> {
+        if self.is_primary_winit(winit_id) {
+            Some(self.primary_event_frame_id())
+        } else {
+            self.emacs_frame_for_winit(winit_id)
+        }
+    }
+
     /// Get a window state by Emacs frame_id.
     pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
         if self.is_primary_frame_id(emacs_frame_id) {
