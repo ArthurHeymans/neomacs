@@ -796,7 +796,6 @@ impl RenderApp {
                             index: idx as i32,
                             emacs_frame_id: primary_event_frame_id,
                         });
-                        self.mark_primary_dirty();
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -804,7 +803,6 @@ impl RenderApp {
                         self.with_primary_chrome_interaction_mut(|chrome| {
                             chrome.compact_bar_menu_active = None;
                         });
-                        self.mark_primary_dirty();
                     }
                 } else if menu_bar_height > 0.0 && self.primary_mouse_pos().1 < menu_bar_height {
                     if let Some(idx) = self
@@ -820,7 +818,6 @@ impl RenderApp {
                             index: idx as i32,
                             emacs_frame_id: primary_event_frame_id,
                         });
-                        self.mark_primary_dirty();
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
@@ -828,7 +825,6 @@ impl RenderApp {
                         self.with_primary_chrome_interaction_mut(|chrome| {
                             chrome.menu_bar_active = None;
                         });
-                        self.mark_primary_dirty();
                     }
                 } else if tab_bar_height > 0.0
                     && self.primary_mouse_pos().1 >= tab_bar_y
@@ -853,7 +849,6 @@ impl RenderApp {
                             emacs_frame_id: primary_event_frame_id,
                         });
                     }
-                    self.mark_primary_dirty();
                 } else if tool_bar_height > 0.0
                     && self.primary_mouse_pos().1 < self.toolbar_y_origin() + tool_bar_height
                     && self.primary_mouse_pos().1 >= self.toolbar_y_origin()
@@ -879,7 +874,6 @@ impl RenderApp {
                             emacs_frame_id: primary_event_frame_id,
                         });
                     }
-                    self.mark_primary_dirty();
                 } else {
                     let idx = self.primary_popup_menu().map_or(-1, |menu| {
                         menu.hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
@@ -892,7 +886,6 @@ impl RenderApp {
                             chrome.menu_bar_active = None;
                             chrome.compact_bar_menu_active = None;
                         });
-                        self.mark_primary_dirty();
                     } else {
                         let (depth, local_idx) =
                             self.primary_popup_menu().map_or((-1, -1), |menu| {
@@ -921,7 +914,6 @@ impl RenderApp {
                                     chrome.menu_bar_active = None;
                                     chrome.compact_bar_menu_active = None;
                                 });
-                                self.mark_primary_dirty();
                             }
                         } else {
                             self.comms
@@ -931,7 +923,6 @@ impl RenderApp {
                                 chrome.menu_bar_active = None;
                                 chrome.compact_bar_menu_active = None;
                             });
-                            self.mark_primary_dirty();
                         }
                     }
                 }
@@ -943,7 +934,6 @@ impl RenderApp {
                     chrome.menu_bar_active = None;
                     chrome.compact_bar_menu_active = None;
                 });
-                self.mark_primary_dirty();
             }
             return;
         }
@@ -1009,7 +999,6 @@ impl RenderApp {
                         emacs_frame_id: primary_event_frame_id,
                     });
                 }
-                self.mark_primary_dirty();
                 return;
             }
             if let Some(idx) = self
@@ -1022,7 +1011,6 @@ impl RenderApp {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
-                self.mark_primary_dirty();
                 return;
             }
         }
@@ -1048,7 +1036,6 @@ impl RenderApp {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
-                self.mark_primary_dirty();
                 return;
             }
         }
@@ -1071,7 +1058,6 @@ impl RenderApp {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
-                self.mark_primary_dirty();
             } else {
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_press_captured = true;
@@ -1089,7 +1075,6 @@ impl RenderApp {
                 chrome.tab_bar_pressed = None;
                 chrome.tab_bar_press_captured = false;
             });
-            self.mark_primary_dirty();
             return;
         }
 
@@ -1111,7 +1096,6 @@ impl RenderApp {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
-                self.mark_primary_dirty();
             } else {
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_press_captured = true;
@@ -1130,7 +1114,6 @@ impl RenderApp {
             self.with_primary_chrome_interaction_mut(|chrome| {
                 chrome.compact_bar_tool_pressed = None;
             });
-            self.mark_primary_dirty();
             return;
         }
 
@@ -1143,7 +1126,6 @@ impl RenderApp {
                 chrome.toolbar_pressed = None;
                 chrome.toolbar_press_captured = false;
             });
-            self.mark_primary_dirty();
             return;
         }
 
@@ -1497,7 +1479,6 @@ impl RenderApp {
         }
 
         if self.menu_bar_height() > 0.0 {
-            let old_hover = self.primary_chrome_interaction().menu_bar_hovered;
             let mut send_menu_bar_click = None;
             if ly < self.menu_bar_height() {
                 let new_hover = self.menu_bar_hit_test(lx, ly);
@@ -1521,14 +1502,9 @@ impl RenderApp {
                     emacs_frame_id: primary_event_frame_id,
                 });
             }
-            if self.primary_chrome_interaction().menu_bar_hovered != old_hover {
-                self.mark_primary_dirty();
-            }
         }
 
         if self.compact_bar_height() > 0.0 {
-            let old_menu_hover = self.primary_chrome_interaction().compact_bar_menu_hovered;
-            let old_tool_hover = self.primary_chrome_interaction().compact_bar_tool_hovered;
             let mut send_menu_bar_click = None;
             if ly < self.compact_bar_height() {
                 let new_menu_hover = self.compact_bar_menu_hit_test(lx, ly);
@@ -1560,16 +1536,9 @@ impl RenderApp {
                     emacs_frame_id: primary_event_frame_id,
                 });
             }
-            let chrome = self.primary_chrome_interaction();
-            if chrome.compact_bar_menu_hovered != old_menu_hover
-                || chrome.compact_bar_tool_hovered != old_tool_hover
-            {
-                self.mark_primary_dirty();
-            }
         }
 
         if self.tab_bar_height() > 0.0 {
-            let old_hover = self.primary_chrome_interaction().tab_bar_hovered;
             if ly >= self.tab_bar_y() && ly < self.tab_bar_y() + self.tab_bar_height() {
                 let new_hover = self.tab_bar_hit_test(lx, ly);
                 self.with_primary_chrome_interaction_mut(|chrome| {
@@ -1580,13 +1549,9 @@ impl RenderApp {
                     chrome.tab_bar_hovered = None;
                 });
             }
-            if self.primary_chrome_interaction().tab_bar_hovered != old_hover {
-                self.mark_primary_dirty();
-            }
         }
 
         if self.tool_bar_height() > 0.0 {
-            let old_hover = self.primary_chrome_interaction().toolbar_hovered;
             let toolbar_y = self.toolbar_y_origin();
             if ly < toolbar_y + self.tool_bar_height() && ly >= toolbar_y {
                 let new_hover = self.toolbar_hit_test(lx, ly - toolbar_y);
@@ -1597,9 +1562,6 @@ impl RenderApp {
                 self.with_primary_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_hovered = None;
                 });
-            }
-            if self.primary_chrome_interaction().toolbar_hovered != old_hover {
-                self.mark_primary_dirty();
             }
         }
 
