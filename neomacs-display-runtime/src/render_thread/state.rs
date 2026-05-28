@@ -710,6 +710,14 @@ impl RenderApp {
             })
     }
 
+    pub(super) fn set_primary_scale_factor(&mut self, scale_factor: f64) {
+        if let Some(window_state) = self.primary_window_state_mut() {
+            window_state.set_scale_factor(scale_factor);
+        } else {
+            self.scale_factor = effective_window_scale_factor(scale_factor);
+        }
+    }
+
     pub(super) fn primary_chrome(&self) -> &WindowChrome {
         self.primary_window_state()
             .map_or(&self.chrome, |window_state| &window_state.native.chrome)
@@ -736,6 +744,13 @@ impl RenderApp {
         } else {
             self.mouse_hidden_for_typing = hidden;
         }
+    }
+
+    pub(super) fn primary_ime_enabled(&self) -> bool {
+        self.primary_window_state()
+            .map_or(self.ime_enabled, |window_state| {
+                window_state.native.ime_enabled
+            })
     }
 
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {

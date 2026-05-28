@@ -536,10 +536,7 @@ impl RenderApp {
                     scale_factor,
                     effective_scale
                 );
-                self.scale_factor = effective_scale;
-                if let Some(window_state) = self.primary_window_state_mut() {
-                    window_state.set_scale_factor(scale_factor);
-                }
+                self.set_primary_scale_factor(scale_factor);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.set_scale_factor(effective_scale as f32);
                 }

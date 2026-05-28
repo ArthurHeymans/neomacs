@@ -55,13 +55,7 @@ impl RenderApp {
 
     /// Update IME cursor area only when IME is active and the rectangle changed.
     pub(super) fn update_ime_cursor_area_if_needed(&mut self, target: &CursorTarget) {
-        if !self
-            .primary_window_state()
-            .map_or(self.ime_enabled, |window_state| {
-                window_state.native.ime_enabled
-            })
-            && !self.primary_ime_preedit_active()
-        {
+        if !self.primary_ime_enabled() && !self.primary_ime_preedit_active() {
             return;
         }
         let area = self.ime_cursor_area_for_target(target);

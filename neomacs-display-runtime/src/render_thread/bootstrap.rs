@@ -256,13 +256,16 @@ impl RenderApp {
             return;
         }
 
-        self.width = width;
-        self.height = height;
-
         if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
             if let Some(primary_state) = self.primary_window_state_mut() {
                 primary_state.handle_resize(&device, width, height);
+            } else {
+                self.width = width;
+                self.height = height;
             }
+        } else {
+            self.width = width;
+            self.height = height;
         }
 
         // Resize renderer
