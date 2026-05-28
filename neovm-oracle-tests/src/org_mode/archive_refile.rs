@@ -770,3 +770,65 @@ Task B body
       (when (file-exists-p file) (delete-file file)))))"##,
     );
 }
+
+#[test]
+fn org_refile_multi_target_edit_refile_back_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-refile)
+  (let* ((root (make-temp-file "org-refile-multi-" t))
+         (file-a (expand-file-name "a.org" root))
+         (file-b (expand-file-name "b.org" root))
+         (org-refile-targets `((,file-b :maxlevel . 2))))
+    (unwind-protect
+        (progn
+          (with-temp-file file-a
+            (insert "* Source heading\n")
+            (insert "Body of source.\n\n")
+            (insert "* Another source\n")
+            (insert "Another body.\n"))
+          (with-temp-file file-b
+            (insert "* Target heading\n")
+            (insert "** Sub target\n"))
+          (let* ((buf-a (find-file-noselect file-a))
+                 (buf-b (find-file-noselect file-b)))
+            ;; Refile source heading to file-b
+            (with-current-buffer buf-a
+              (org-mode)
+              (goto-char (point-min))
+              (search-forward "Source heading")
+              (beginning-of-line)
+              (org-refile nil nil (list "Target heading" file-b nil nil)))
+            ;; Read both files
+            (let ((a-after1 (with-current-buffer buf-a
+                              (buffer-substring-no-properties
+                               (point-min) (point-max))))
+                  (b-after1 (with-current-buffer buf-b
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+              ;; Edit in b: add a sub-heading
+              (with-current-buffer buf-b
+                (goto-char (point-max))
+                (insert "*** New under target\nNew body.\n"))
+              ;; Refile another source to file-b
+              (with-current-buffer buf-a
+                (goto-char (point-min))
+                (search-forward "Another source")
+                (beginning-of-line)
+                (org-refile nil nil (list "Target heading" file-b nil nil)))
+              (let ((a-after2 (with-current-buffer buf-a
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max))))
+                    (b-after2 (with-current-buffer buf-b
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+                (list a-after1 b-after1 a-after2 b-after2))))))
+      (dolist (f (list file-a file-b))
+        (when (get-file-buffer f) (kill-buffer (get-file-buffer f)))
+        (when (file-exists-p f) (delete-file f)))
+      (delete-directory root t))))"##,
+    );
+}
