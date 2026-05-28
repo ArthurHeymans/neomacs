@@ -504,7 +504,6 @@ impl RenderApp {
                     self.set_primary_tool_bar(gui_tool_bar);
                     self.set_primary_compact_bar(gui_compact_bar);
                 }
-                primary_fallback_updated = true;
             }
             if primary_fallback_updated {
                 self.mark_primary_dirty();
