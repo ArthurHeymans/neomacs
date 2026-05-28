@@ -340,7 +340,7 @@ impl RenderApp {
         }
     }
 
-    fn render_secondary_frame_window(
+    fn render_frame_window_contents_to_surface(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
@@ -438,7 +438,7 @@ impl RenderApp {
             };
 
             if let Some(current_view) = current_view {
-                Self::render_secondary_frame_contents(
+                Self::render_frame_window_contents(
                     renderer,
                     faces,
                     native,
@@ -506,7 +506,7 @@ impl RenderApp {
             if render.transitions.has_active() {
                 render.frame_dirty = true;
             }
-            Self::render_secondary_frame_overlays(
+            Self::render_frame_window_overlays(
                 renderer,
                 faces,
                 native,
@@ -523,7 +523,7 @@ impl RenderApp {
                 scroll_indicators_enabled,
             );
         } else {
-            Self::render_secondary_frame_contents(
+            Self::render_frame_window_contents(
                 renderer,
                 faces,
                 native,
@@ -566,7 +566,7 @@ impl RenderApp {
         renderer.resize(old_width, old_height);
     }
 
-    fn render_secondary_frame_overlays(
+    fn render_frame_window_overlays(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
@@ -812,7 +812,7 @@ impl RenderApp {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_secondary_frame_contents(
+    fn render_frame_window_contents(
         renderer: &mut WgpuRenderer,
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
@@ -849,7 +849,7 @@ impl RenderApp {
             return;
         }
 
-        Self::render_secondary_frame_overlays(
+        Self::render_frame_window_overlays(
             renderer,
             faces,
             native,
@@ -890,7 +890,7 @@ impl RenderApp {
         };
         window_state.render.transitions.policy = self.transition_policy;
 
-        Self::render_secondary_frame_window(
+        Self::render_frame_window_contents_to_surface(
             renderer,
             &self.faces,
             window_state,
