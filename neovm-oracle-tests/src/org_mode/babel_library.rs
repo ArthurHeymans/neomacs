@@ -1080,6 +1080,48 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_type_check_coerce_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Type checks
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (type-of 42) (type-of 3.14) (type-of \"hi\")\n")
+      (insert "      (type-of '(1 2)) (type-of [1 2]) (type-of t)\n")
+      (insert "      (type-of nil) (type-of (make-hash-table)))\n")
+      (insert "#+end_src\n\n")
+      ;; Type coercion
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(list (string-to-number \"42\") (string-to-number \"3.14\")\n")
+      (insert "      (number-to-string 42) (number-to-string 3.14)\n")
+      (insert "      (int-to-string 42) (string-to-int \"42\")\n")
+      (insert "      (float 42) (truncate 3.7) (round 3.7))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 2)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_string_predicates_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
