@@ -306,3 +306,53 @@ fn org_babel_export_inline_result_html_deep_state_combo() {
                 "sec:org[[:alnum:]-]+" "sec:org-id" html))))))))"##,
     );
 }
+
+#[test]
+fn org_babel_tangle_edit_retangle_multi_block_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-tangle)
+  (require 'ob-emacs-lisp)
+  (let* ((root (make-temp-file "org-tangle-" t))
+         (tangle-file (expand-file-name "out.el" root))
+         (file (expand-file-name "src.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "#+PROPERTY: header-args :tangle " tangle-file "\n\n")
+            (insert "#+NAME: setup\n")
+            (insert "#+begin_src emacs-lisp\n")
+            (insert "(setq my-var 42)\n")
+            (insert "#+end_src\n\n")
+            (insert "#+NAME: compute\n")
+            (insert "#+begin_src emacs-lisp\n")
+            (insert "(+ my-var 8)\n")
+            (insert "#+end_src\n"))
+          ;; Tangle
+          (with-current-buffer (find-file-noselect file)
+            (org-mode)
+            (org-babel-tangle)
+            (let ((tangled1 (when (file-exists-p tangle-file)
+                              (with-temp-file tangle-file
+                                (insert-file-contents tangle-file)
+                                (buffer-string)))))
+              ;; Edit: change compute block
+              (goto-char (point-min))
+              (search-forward "(+ my-var 8)")
+              (replace-match "(* my-var 10)")
+              ;; Re-tangle
+              (org-babel-tangle)
+              (let ((tangled2 (when (file-exists-p tangle-file)
+                                (with-temp-file tangle-file
+                                  (insert-file-contents tangle-file)
+                                  (buffer-string)))))
+                (list tangled1 tangled2
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))
+      (delete-directory root t))))"##,
+    );
+}
