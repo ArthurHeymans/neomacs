@@ -71,6 +71,31 @@ fn buffer_replace_match_backref_does_not_copy_source_properties() {
     assert!(items[2].is_nil());
 }
 
+#[test]
+fn replace_match_buffer_replacement_leaves_point_at_replacement_end() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert "&amp;")
+  (goto-char 1)
+  (looking-at "&amp;")
+  (replace-match "&#38;" t t)
+  (let ((after-first (point)))
+    (goto-char 1)
+    (looking-at "&#38;")
+    (replace-match "&" t t)
+    (list after-first (point) (buffer-string))))"#,
+        )
+        .expect("replace-match point form should evaluate");
+    let items = list_to_vec(&result).expect("expected list result");
+    assert_eq!(items.len(), 3);
+    assert_int(items[0], 6);
+    assert_int(items[1], 2);
+    assert_str(items[2], "&");
+}
+
 fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
     SEARCH_TEST_CTX.with(|slot| {
         let mut new_ctx = Box::new(crate::emacs_core::eval::Context::new());

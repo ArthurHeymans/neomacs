@@ -1834,6 +1834,12 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             buf.set_undo_list(undo_list);
         }
     }
+    // GNU `src/search.c:Freplace_match` records the caller's old point while
+    // editing, then "officially" moves point to NEWPOINT, the end of the
+    // replacement text.  Lisp parsers such as `xml-parse-string` depend on
+    // this to continue after an expanded entity rather than re-reading the
+    // replacement from its beginning.
+    let _ = buffers.goto_buffer_byte(current_id, newend);
     update_match_data_after_buffer_replace(match_data, oldstart, oldend, newend);
     Ok(Value::NIL)
 }
