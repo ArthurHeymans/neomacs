@@ -1080,6 +1080,53 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_assoc_list_transform_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Alist creation and transform
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let* ((al (list (cons 'x 10) (cons 'y 20) (cons 'z 30)))\n")
+      (insert "       (doubled (mapcar (lambda (p) (cons (car p) (* 2 (cdr p)))) al)))\n")
+      (insert "  (list al\n")
+      (insert "        doubled\n")
+      (insert "        (assq 'y al)\n")
+      (insert "        (assoc 'z doubled)\n")
+      (insert "        (mapcar #'cdr al)))\n")
+      (insert "#+end_src\n\n")
+      ;; Nested alist
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "(let ((db (list (cons 'users (list (cons 'a 1) (cons 'b 2)))\n")
+      (insert "               (cons 'scores (list 10 20 30)))))\n")
+      (insert "  (list (cdr (assoc 'users db))\n")
+      (insert "        (cdr (assoc 'scores db))\n")
+      (insert "        (cdr (assoc 'a (cdr (assoc 'users db))))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute all
+      (dotimes (_ 2)
+        (goto-char (point-min))
+        (search-forward "begin_src")
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_mapcar_cl_loop_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
