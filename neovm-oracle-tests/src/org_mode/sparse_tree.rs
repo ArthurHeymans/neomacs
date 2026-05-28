@@ -429,3 +429,60 @@ fn org_occur_highlight_count_visibility_deep_state_combo() {
                    (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_sparse_tree_tag_todo_match_edit_occur_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-occur)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha :work:\nBody alpha.\n\n")
+    (insert "** DONE Beta :home:\nBody beta.\n\n")
+    (insert "*** TODO Gamma :work:urgent:\nBody gamma.\n\n")
+    (insert "** WAIT Delta :home:\nBody delta.\n\n")
+    (insert "* DONE Epsilon :work:\nBody epsilon.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (pos)
+                    (save-excursion
+                      (goto-char pos)
+                      (list (buffer-substring-no-properties
+                             (line-beginning-position) (line-end-position))
+                            (invisible-p pos))))
+                  (let ((positions nil))
+                    (goto-char (point-min))
+                    (while (not (eobp))
+                      (push (point) positions)
+                      (forward-line 1))
+                    (nreverse positions)))))))
+      ;; Sparse tree for TODO
+      (let ((before-vis (funcall vis)))
+        (org-match-sparse-tree nil "TODO")
+        (let ((after-match-vis (funcall vis)))
+          ;; Edit: add tag to Gamma
+          (goto-char (point-min))
+          (search-forward "Gamma")
+          (org-toggle-tag "extra" 'on)
+          ;; Occur for "Body"
+          (goto-char (point-min))
+          (occur "Body")
+          (let ((occur-count (length org-occur-highlights))
+                (occur-text
+                 (when (get-buffer "*Occur*")
+                   (with-current-buffer "*Occur*"
+                     (buffer-substring-no-properties
+                      (point-min) (point-max))))))
+            ;; Remove highlights
+            (org-remove-occur-highlights)
+            (list before-vis
+                  after-match-vis
+                  occur-count
+                  occur-text
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
