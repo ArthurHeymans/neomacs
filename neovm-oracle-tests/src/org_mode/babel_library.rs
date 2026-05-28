@@ -1080,6 +1080,54 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_execute_table_var_column_filter_deep_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Input table
+      (insert "#+NAME: input\n")
+      (insert "| City | Temp |\n")
+      (insert("|------+------|\n")
+      (insert "| A | 15 |\n")
+      (insert "| B | 28 |\n")
+      (insert "| C | 22 |\n")
+      (insert "| D | 30 |\n")
+      (insert "| E | 18 |\n\n")
+      ;; Filter warm, compute
+      (insert "#+NAME: warm\n")
+      (insert "#+begin_src emacs-lisp :var tbl=input :results value replace\n")
+      (insert "(let ((warm (cl-remove-if-not\n")
+      (insert "              (lambda (r) (>= (cadr r) 20))\n")
+      (insert "              tbl)))\n")
+      (insert "  (list :cities (mapcar #'car warm)\n")
+      (insert "        :count (length warm)\n")
+      (insert "        :avg (/ (apply #'+ (mapcar #'cadr warm))\n")
+      (insert "                (length warm))))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (goto-char (point-min))
+      (search-forward "warm")
+      (org-babel-execute-src-block)
+      ;; Read results
+      (let ((results nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results))
+        (list (nreverse results)
+              (buffer-substring-no-properties
+               (point-min) (point-max))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_table_column_compute_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
