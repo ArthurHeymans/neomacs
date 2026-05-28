@@ -193,8 +193,8 @@ impl RenderApp {
             self.effects.cursor_wake.enabled,
             self.renderer.as_ref(),
         );
-        if self.primary_window_state().is_none() && self.tick_cursor_blink() {
-            self.mark_primary_dirty();
+        if self.primary_window_state().is_none() {
+            self.tick_cursor_blink();
         }
 
         // Tick cursor animation

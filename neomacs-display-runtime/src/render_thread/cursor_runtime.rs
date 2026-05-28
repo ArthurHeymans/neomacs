@@ -78,25 +78,6 @@ impl RenderApp {
         window_state.update_ime_cursor_area(area);
     }
 
-    pub(super) fn tick_frame_window_cursor_blink(
-        window_state: &mut GuiFrameWindowState,
-        now: std::time::Instant,
-    ) -> bool {
-        if !window_state.render.cursor.blink_enabled
-            || window_state.render.cursor.target_cloned().is_none()
-        {
-            return false;
-        }
-        if now.duration_since(window_state.render.cursor.last_blink_toggle)
-            < window_state.render.cursor.blink_interval
-        {
-            return false;
-        }
-        window_state.render.cursor.blink_on = !window_state.render.cursor.blink_on;
-        window_state.render.cursor.last_blink_toggle = now;
-        true
-    }
-
     /// Update cursor blink state, returns true if blink toggled.
     pub(super) fn tick_cursor_blink(&mut self) -> bool {
         let cursor_wake_enabled = self.effects.cursor_wake.enabled;
@@ -116,25 +97,8 @@ impl RenderApp {
                 return false;
             }
         };
-        let cursor = &mut primary_frame.cursor;
-        if !cursor.blink_enabled || cursor.target_cloned().is_none() {
-            return false;
-        }
         let now = std::time::Instant::now();
-        if now.duration_since(cursor.last_blink_toggle) >= cursor.blink_interval {
-            let was_off = !cursor.blink_on;
-            cursor.blink_on = !cursor.blink_on;
-            cursor.last_blink_toggle = now;
-            if was_off && cursor.blink_on && cursor_wake_enabled {
-                if let Some(renderer) = renderer {
-                    renderer
-                        .trigger_transient_cursor_wake(&mut primary_frame.renderer_effects, now);
-                }
-            }
-            true
-        } else {
-            false
-        }
+        primary_frame.tick_cursor_blink(now, cursor_wake_enabled, renderer)
     }
 
     pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {

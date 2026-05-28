@@ -311,6 +311,40 @@ impl GuiFrameRenderState {
         dirty
     }
 
+    pub(super) fn tick_cursor_blink(
+        &mut self,
+        now: Instant,
+        cursor_wake_enabled: bool,
+        renderer: Option<&WgpuRenderer>,
+    ) -> bool {
+        if !self.cursor.blink_enabled || self.cursor.target_cloned().is_none() {
+            return false;
+        }
+        if now.duration_since(self.cursor.last_blink_toggle) < self.cursor.blink_interval {
+            return false;
+        }
+        let was_off = !self.cursor.blink_on;
+        self.cursor.blink_on = !self.cursor.blink_on;
+        self.cursor.last_blink_toggle = now;
+        if was_off
+            && self.cursor.blink_on
+            && cursor_wake_enabled
+            && let Some(renderer) = renderer
+        {
+            renderer.trigger_transient_cursor_wake(&mut self.renderer_effects, now);
+        }
+        self.frame_dirty = true;
+        true
+    }
+
+    pub(super) fn force_cursor_blink_on(&mut self) -> bool {
+        if !self.cursor.force_blink_on() {
+            return false;
+        }
+        self.frame_dirty = true;
+        true
+    }
+
     pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
         let mut dirty = self.cursor.tick_size_animation();
         for cursor in self.visual_cursors.values_mut() {
@@ -1057,27 +1091,11 @@ impl GuiFrameWindowManager {
         let primary_winit_id = self.primary_winit_id;
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            let cursor = &mut window_state.render.cursor;
-            if !cursor.blink_enabled || cursor.target_cloned().is_none() {
-                return;
-            }
-            if now.duration_since(cursor.last_blink_toggle) < cursor.blink_interval {
-                return;
-            }
-            let was_off = !cursor.blink_on;
-            cursor.blink_on = !cursor.blink_on;
-            cursor.last_blink_toggle = now;
-            if primary_winit_id == Some(window_state.native.window.id())
-                && was_off
-                && cursor.blink_on
-                && cursor_wake_enabled
-                && let Some(renderer) = renderer
-            {
-                renderer
-                    .trigger_transient_cursor_wake(&mut window_state.render.renderer_effects, now);
-            }
-            window_state.render.frame_dirty = true;
-            dirty = true;
+            dirty |= window_state.render.tick_cursor_blink(
+                now,
+                cursor_wake_enabled && primary_winit_id == Some(window_state.native.window.id()),
+                renderer,
+            );
         });
         dirty
     }
@@ -1237,10 +1255,7 @@ impl GuiFrameWindowManager {
     pub(super) fn force_top_level_cursor_blink_on(&mut self) -> bool {
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            if window_state.render.cursor.force_blink_on() {
-                window_state.render.frame_dirty = true;
-                dirty = true;
-            }
+            dirty |= window_state.render.force_cursor_blink_on();
         });
         dirty
     }

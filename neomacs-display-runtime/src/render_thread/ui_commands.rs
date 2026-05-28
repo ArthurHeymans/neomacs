@@ -79,10 +79,8 @@ impl RenderApp {
                 if !enabled {
                     self.cursor_defaults.blink_on = true;
                     if self.primary_window_state().is_none() {
-                        if let Some(cursor) = self.primary_cursor_mut()
-                            && cursor.force_blink_on()
-                        {
-                            self.mark_primary_dirty();
+                        if let Some(primary_frame) = self.primary_render_state_mut() {
+                            primary_frame.force_cursor_blink_on();
                         }
                     }
                 }
