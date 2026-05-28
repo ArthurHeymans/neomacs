@@ -124,18 +124,6 @@ fn new_manager_count_is_zero() {
 }
 
 #[test]
-fn new_manager_any_dirty_is_false() {
-    let mgr = GuiFrameWindowManager::new();
-    assert!(!mgr.any_dirty());
-}
-
-#[test]
-fn new_manager_dirty_windows_is_empty() {
-    let mut mgr = GuiFrameWindowManager::new();
-    assert!(mgr.dirty_windows().is_empty());
-}
-
-#[test]
 fn clear_primary_mapping_removes_adopted_primary_identity() {
     let mut mgr = GuiFrameWindowManager::new();
     mgr.adopt_primary_frame_id(0x1000);
@@ -529,26 +517,13 @@ fn route_frame_multiple_unmatched_calls_return_false() {
 }
 
 // =======================================================================
-// any_dirty() / dirty_windows() / count() — empty manager
+// count() — empty manager
 // =======================================================================
 
 #[test]
 fn count_on_empty_manager() {
     let mgr = GuiFrameWindowManager::new();
     assert_eq!(mgr.count(), 0);
-}
-
-#[test]
-fn any_dirty_on_empty_manager() {
-    let mgr = GuiFrameWindowManager::new();
-    assert!(!mgr.any_dirty());
-}
-
-#[test]
-fn dirty_windows_on_empty_manager() {
-    let mut mgr = GuiFrameWindowManager::new();
-    let dirty = mgr.dirty_windows();
-    assert!(dirty.is_empty());
 }
 
 // =======================================================================

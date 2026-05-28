@@ -688,6 +688,83 @@ impl GuiFrameWindowManager {
         });
     }
 
+    pub(super) fn any_top_level_dirty(&self) -> bool {
+        self.primary_window
+            .as_ref()
+            .is_some_and(|window_state| window_state.render.frame_dirty)
+            || self
+                .windows
+                .values()
+                .any(|window_state| window_state.render.frame_dirty)
+    }
+
+    pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
+        self.primary_window
+            .as_ref()
+            .is_some_and(|window_state| window_state.render.renderer_effects.needs_redraw())
+            || self
+                .windows
+                .values()
+                .any(|window_state| window_state.render.renderer_effects.needs_redraw())
+    }
+
+    pub(super) fn any_top_level_transitions_active(&self) -> bool {
+        self.primary_window
+            .as_ref()
+            .is_some_and(|window_state| window_state.render.transitions.has_active())
+            || self
+                .windows
+                .values()
+                .any(|window_state| window_state.render.transitions.has_active())
+    }
+
+    pub(super) fn mark_active_top_level_visuals_dirty(&mut self) -> bool {
+        let mut dirty = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            if window_state.render.renderer_effects.needs_redraw()
+                || window_state.render.transitions.has_active()
+            {
+                window_state.render.frame_dirty = true;
+                dirty = true;
+            }
+        });
+        dirty
+    }
+
+    pub(super) fn any_top_level_cursor_animating(&self) -> bool {
+        self.primary_window
+            .as_ref()
+            .is_some_and(|window_state| window_state.render.cursor.is_animating())
+            || self
+                .windows
+                .values()
+                .any(|window_state| window_state.render.cursor.is_animating())
+    }
+
+    pub(super) fn any_top_level_idle_dim_active(&self) -> bool {
+        self.primary_window
+            .as_ref()
+            .is_some_and(|window_state| window_state.render.idle_dim.active)
+            || self
+                .windows
+                .values()
+                .any(|window_state| window_state.render.idle_dim.active)
+    }
+
+    pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
+        self.for_each_top_level_window(|window_state| {
+            if window_state.render.frame_dirty {
+                window_state.native.window.request_redraw();
+            }
+        });
+    }
+
+    pub(super) fn request_redraw_for_top_level_windows(&self) {
+        self.for_each_top_level_window(|window_state| {
+            window_state.native.window.request_redraw();
+        });
+    }
+
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
         self.chrome_defaults.titlebar_height = height;
         self.for_each_top_level_window_mut(|window_state| {
@@ -849,23 +926,9 @@ impl GuiFrameWindowManager {
         false // Not handled — belongs to primary window
     }
 
-    /// Check if any secondary window needs redrawing.
-    pub fn any_dirty(&self) -> bool {
-        self.windows.values().any(|ws| ws.render.frame_dirty)
-    }
-
     /// Return number of secondary windows.
     pub fn count(&self) -> usize {
         self.windows.len()
-    }
-
-    /// Iterate over all windows that need rendering.
-    pub fn dirty_windows(&mut self) -> Vec<u64> {
-        self.windows
-            .iter()
-            .filter(|(_, ws)| ws.render.frame_dirty)
-            .map(|(&id, _)| id)
-            .collect()
     }
 }
 

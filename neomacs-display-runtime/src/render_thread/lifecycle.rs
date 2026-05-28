@@ -299,13 +299,11 @@ impl RenderApp {
             self.mark_primary_dirty();
         }
 
-        // Keep dirty if frame-owned renderer effects are still active.
-        if self.primary_renderer_effects_need_redraw() {
-            self.mark_primary_dirty();
-        }
-
-        // Keep dirty if transitions are active
-        if self.primary_transitions_active() {
+        // Keep dirty if frame-owned renderer effects or transitions are active.
+        self.frame_windows.mark_active_top_level_visuals_dirty();
+        if self.primary_window_state().is_none()
+            && (self.primary_renderer_effects_need_redraw() || self.primary_transitions_active())
+        {
             self.mark_primary_dirty();
         }
 
@@ -328,47 +326,50 @@ impl RenderApp {
         }
 
         // Request redraw when we have new frame data, cursor blink toggled,
-        // or webkit/video content changed
-        for frame_id in self.frame_windows.dirty_windows() {
-            if let Some(state) = self.frame_windows.get(frame_id) {
-                state.native.window.request_redraw();
-            }
-        }
+        // or webkit/video content changed.
+        self.frame_windows
+            .request_redraw_for_dirty_top_level_windows();
 
-        if self.primary_dirty() || has_active_content {
+        let top_level_dirty = self.frame_windows.any_top_level_dirty();
+        let primary_fallback_dirty = self.primary_window_state().is_none() && self.primary_dirty();
+        if top_level_dirty || primary_fallback_dirty || has_active_content {
             tracing::debug!(
-                frame_dirty = self.primary_dirty(),
+                top_level_dirty,
+                primary_fallback_dirty,
                 has_active_content,
-                renderer_effects_need_redraw = self.primary_renderer_effects_need_redraw(),
-                cursor_animating = self.primary_cursor().animating,
-                cursor_size_animating = self.primary_cursor().size_animating,
-                idle_dim_active = self
-                    .primary_render_state()
-                    .is_some_and(|frame| frame.idle_dim.active),
-                transitions_active = self.primary_transitions_active(),
+                renderer_effects_need_redraw = self
+                    .frame_windows
+                    .any_top_level_renderer_effects_need_redraw(),
+                cursor_animating = self.frame_windows.any_top_level_cursor_animating(),
+                idle_dim_active = self.frame_windows.any_top_level_idle_dim_active(),
+                transitions_active = self.frame_windows.any_top_level_transitions_active(),
                 "requesting redraw"
             );
-            if let Some(window) = self.primary_window() {
-                window.request_redraw();
+            if has_active_content {
+                self.frame_windows.request_redraw_for_top_level_windows();
+            }
+            if primary_fallback_dirty || has_active_content {
+                if let Some(window) = self.primary_window() {
+                    window.request_redraw();
+                }
             }
         }
 
         // Use WaitUntil with smart timeouts instead of Poll to save CPU.
         // Window events (key, mouse, resize) still wake immediately.
         let now = std::time::Instant::now();
-        let next_wake = if self.primary_dirty()
-            || has_active_content
-            || self.frame_windows.any_dirty()
-            || self.primary_cursor().animating
-            || self.primary_cursor().size_animating
-            || self.primary_renderer_effects_need_redraw()
+        let top_level_active = self.frame_windows.any_top_level_dirty()
+            || self.frame_windows.any_top_level_cursor_animating()
             || self
                 .frame_windows
-                .windows
-                .values()
-                .any(|ws| ws.render.cursor.is_animating())
-            || self.primary_transitions_active()
-        {
+                .any_top_level_renderer_effects_need_redraw()
+            || self.frame_windows.any_top_level_transitions_active();
+        let primary_fallback_active = self.primary_window_state().is_none()
+            && (self.primary_dirty()
+                || self.primary_cursor().is_animating()
+                || self.primary_renderer_effects_need_redraw()
+                || self.primary_transitions_active());
+        let next_wake = if top_level_active || primary_fallback_active || has_active_content {
             // Active rendering: cap at ~240fps to avoid spinning
             now + std::time::Duration::from_millis(4)
         } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
