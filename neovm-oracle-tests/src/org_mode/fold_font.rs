@@ -685,6 +685,65 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_all_prop_inherit_edit_cycle_v39() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project :project:\n")
+    (insert ":PROPERTIES:\n:Owner: Alice\n:CATEGORY: work\n:END:\n")
+    (insert "** Module A\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:END:\n")
+    (insert "*** Component X\nBody X.\n\n")
+    (insert "*** Component Y\nBody Y.\n\n")
+    (insert "** Module B\n")
+    (insert ":PROPERTIES:\n:Effort: 3h\n:END:\n")
+    (insert "*** Component Z\nBody Z.\n\n")
+    (let ((snap (lambda (tag)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level)
+                                 (org-entry-get nil "Owner" 'inherit)
+                                 (org-entry-get nil "CATEGORY" 'inherit))
+                           (list needle 'not-found nil nil nil nil))))
+                   '("Project" "Module A" "Component X" "Module B" "Component Z")))))
+      (let ((initial (funcall snap 'initial)))
+        ;; Hide all
+        (org-fold-hide-all)
+        (let ((after-hide (funcall snap 'hide)))
+          ;; Edit: insert under hidden Project
+          (goto-char (point-min))
+          (search-forward "Project")
+          (end-of-line)
+          (insert "\n** Module C\n:PROPERTIES:\n:Effort: 1h\n:END:\n*** Component W\nBody W.\n")
+          (let ((after-edit (funcall snap 'edit)))
+            ;; Show all
+            (org-fold-show-all)
+            (let ((after-show (funcall snap 'show)))
+              ;; Cycle globally
+              (org-global-cycle nil)
+              (let ((after-cycle (funcall snap 'cycle)))
+                (list initial
+                      after-hide
+                      after-edit
+                      after-show
+                      after-cycle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_subtree_prop_drawer_edit_cycle_show_v38() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
