@@ -973,3 +973,59 @@ fn org_clock_agenda_multi_file_scope_deep_state_combo() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_clock_logbook_edit_report_table_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-edit-" t))
+         (file (expand-file-name "clocks.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Project\n")
+            (insert "** Task A\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:30] =>  1:30\n")
+            (insert "CLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "** Task B\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 15:30] =>  1:30\n")
+            (insert ":END:\n"))
+          (let* ((buf (find-file-noselect file))
+                 (table1 (with-current-buffer buf
+                           (org-mode)
+                           (org-clock-get-table-data
+                            nil '(:maxlevel 2 :scope buffer))))
+                 (rows1 (mapcar (lambda (row)
+                                  (list (nth 0 row)
+                                        (substring-no-properties (nth 1 row))
+                                        (nth 4 row)))
+                                (nth 2 table1))))
+            ;; Edit: add new clock to Task B
+            (with-current-buffer buf
+              (goto-char (point-min))
+              (search-forward "Task B")
+              (end-of-line)
+              (insert "\nCLOCK: [2026-05-28 Wed 16:00]--[2026-05-28 Wed 17:00] =>  1:00\n")
+              ;; Re-read table
+              (let* ((table2 (org-clock-get-table-data
+                              nil '(:maxlevel 2 :scope buffer)))
+                     (rows2 (mapcar (lambda (row)
+                                      (list (nth 0 row)
+                                            (substring-no-properties (nth 1 row))
+                                            (nth 4 row)))
+                                    (nth 2 table2))))
+                (list (nth 1 table1) rows1
+                      (nth 1 table2) rows2
+                      (buffer-substring-no-properties
+                       (point-min) (point-max)))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
+    );
+}
