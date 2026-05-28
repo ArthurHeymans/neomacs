@@ -143,10 +143,10 @@ impl RenderApp {
                     );
                 }
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
-                let secondary_ime_preedit_active = self
-                    .frame_windows
-                    .get_by_winit(window_id)
-                    .is_some_and(|ws| ws.render.ime_preedit_active);
+                let ime_preedit_active = self.frame_windows.get_by_winit(window_id).map_or_else(
+                    || is_primary && self.primary_ime_preedit_active(),
+                    |ws| ws.render.ime_preedit_active,
+                );
                 if self.primary_popup_menu().is_some() && state == ElementState::Pressed {
                     match logical_key.as_ref() {
                         Key::Named(NamedKey::Escape) => {
@@ -236,9 +236,7 @@ impl RenderApp {
                         }
                         _ => {}
                     }
-                } else if (is_primary && self.primary_ime_preedit_active())
-                    || (!is_primary && secondary_ime_preedit_active)
-                {
+                } else if ime_preedit_active {
                     tracing::debug!(
                         "IME preedit active, suppressing KeyboardInput: {:?}",
                         logical_key
