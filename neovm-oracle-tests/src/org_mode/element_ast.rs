@@ -543,3 +543,107 @@ fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
              (point-min) (point-max))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body.\n\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (hl)
+                (list (org-element-property :raw-value hl)
+                      (org-element-property :level hl)
+                      (org-element-property :todo-keyword hl)))))
+           (properties
+            (org-element-map tree 'property-drawer
+              (lambda (pd)
+                (org-element-map pd 'node-property
+                  (lambda (np)
+                    (list (org-element-property :key np)
+                          (org-element-property :value np))))))))
+      (list headlines properties
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_element_parse_scheduled_deadline_closed_no_clock() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert "CLOSED: [2026-05-27 Tue 14:30]\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body.\n\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (hl)
+                (list (org-element-property :raw-value hl)
+                      (org-element-property :level hl)
+                      (org-element-property :todo-keyword hl)))))
+           (properties
+            (org-element-map tree 'property-drawer
+              (lambda (pd)
+                (org-element-map pd 'node-property
+                  (lambda (np)
+                    (list (org-element-property :key np)
+                          (org-element-property :value np))))))))
+      (list headlines properties
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
+
+#[test]
+fn org_element_parse_scheduled_deadline_clock_no_closed() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "CLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\n")
+    (insert "Body.\n\n")
+    (let* ((tree (org-element-parse-buffer))
+           (headlines
+            (org-element-map tree 'headline
+              (lambda (hl)
+                (list (org-element-property :raw-value hl)
+                      (org-element-property :level hl)
+                      (org-element-property :todo-keyword hl)))))
+           (properties
+            (org-element-map tree 'property-drawer
+              (lambda (pd)
+                (org-element-map pd 'node-property
+                  (lambda (np)
+                    (list (org-element-property :key np)
+                          (org-element-property :value np))))))))
+      (list headlines properties
+            (buffer-substring-no-properties
+             (point-min) (point-max))))))"##,
+    );
+}
