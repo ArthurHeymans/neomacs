@@ -1546,10 +1546,8 @@ impl RenderApp {
         self.set_primary_mouse_pos((lx, ly));
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
-        if let Some(primary_state) = self.primary_window_state_mut() {
-            primary_state.set_mouse_hidden_for_typing(false);
-        } else if self.primary_mouse_hidden_for_typing() {
-            self.set_primary_mouse_hidden_for_typing(false);
+        if self.mouse_hidden_for_typing {
+            self.mouse_hidden_for_typing = false;
         }
 
         let edge = self.detect_resize_edge(lx, ly);

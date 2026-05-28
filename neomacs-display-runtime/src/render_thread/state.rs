@@ -788,21 +788,6 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn primary_mouse_hidden_for_typing(&self) -> bool {
-        self.primary_window_state()
-            .map_or(self.mouse_hidden_for_typing, |window_state| {
-                window_state.native.mouse_hidden_for_typing
-            })
-    }
-
-    pub(super) fn set_primary_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if let Some(window_state) = self.primary_window_state_mut() {
-            window_state.set_mouse_hidden_for_typing(hidden);
-        } else {
-            self.mouse_hidden_for_typing = hidden;
-        }
-    }
-
     pub(super) fn primary_ime_enabled(&self) -> bool {
         self.primary_window_state()
             .map_or(self.ime_enabled, |window_state| {
