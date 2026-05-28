@@ -1,6 +1,8 @@
 use super::RenderApp;
-use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
+use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 use crate::thread_comm::InputEvent;
+#[cfg(feature = "neo-term")]
+use std::collections::HashMap;
 
 #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
 use crate::backend::wpe::sys::platform as plat;
@@ -10,6 +12,65 @@ use crate::render_thread::state::WebKitImportPolicy;
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 impl RenderApp {
+    #[cfg(feature = "neo-term")]
+    fn expanded_terminal_glyphs_for_frame(
+        frame: &FrameGlyphBuffer,
+        terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
+    ) -> Vec<FrameGlyph> {
+        let cell_w = frame.char_width;
+        let cell_h = frame.char_height;
+        let font_size = frame.font_pixel_size;
+        let ascent = cell_h * 0.8;
+        let mut extra_glyphs = Vec::new();
+
+        for glyph in &frame.glyphs {
+            let FrameGlyph::Terminal {
+                terminal_id,
+                x,
+                y,
+                width,
+                height,
+            } = glyph
+            else {
+                continue;
+            };
+            let Some(content) = terminal_contents.get(terminal_id) else {
+                continue;
+            };
+
+            extra_glyphs.push(FrameGlyph::Stretch {
+                window_id: 0,
+                row_role: GlyphRowRole::Text,
+                clip_rect: None,
+                slot_id: DisplaySlotId::from_pixels(0, *x, *y, cell_w, cell_h),
+                bidi_level: 0,
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
+                bg: content.default_bg,
+                face_id: 0,
+                stipple_id: 0,
+                stipple_fg: None,
+            });
+
+            Self::expand_terminal_cells(
+                content,
+                *x,
+                *y,
+                cell_w,
+                cell_h,
+                ascent,
+                font_size,
+                false,
+                1.0,
+                &mut extra_glyphs,
+            );
+        }
+
+        extra_glyphs
+    }
+
     #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
     pub(super) fn pump_glib(&mut self) {
         unsafe {
@@ -332,58 +393,43 @@ impl RenderApp {
             }
         }
 
-        // Expand FrameGlyph::Terminal entries (placed by C redisplay) into cells
-        let mut extra_glyphs = Vec::new();
-        if let Some(frame) = self.primary_current_frame() {
-            for glyph in &frame.glyphs {
-                if let FrameGlyph::Terminal {
-                    terminal_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                } = glyph
-                {
-                    if let Some(view) = self.terminal_manager.get(*terminal_id) {
-                        if let Some(content) = view.content() {
-                            extra_glyphs.push(FrameGlyph::Stretch {
-                                window_id: 0,
-                                row_role: GlyphRowRole::Text,
-                                clip_rect: None,
-                                slot_id: DisplaySlotId::from_pixels(0, *x, *y, cell_w, cell_h),
-                                bidi_level: 0,
-                                x: *x,
-                                y: *y,
-                                width: *width,
-                                height: *height,
-                                bg: content.default_bg,
-                                face_id: 0,
-                                stipple_id: 0,
-                                stipple_fg: None,
-                            });
+        let terminal_contents: HashMap<_, _> = self
+            .terminal_manager
+            .ids()
+            .into_iter()
+            .filter_map(|id| {
+                self.terminal_manager
+                    .get(id)
+                    .and_then(|view| view.content().map(|content| (id, content.clone())))
+            })
+            .collect();
 
-                            Self::expand_terminal_cells(
-                                content,
-                                *x,
-                                *y,
-                                cell_w,
-                                cell_h,
-                                ascent,
-                                font_size,
-                                false,
-                                1.0,
-                                &mut extra_glyphs,
-                            );
-                        }
-                    }
+        self.frame_windows
+            .for_each_top_level_window_mut(|window_state| {
+                let Some(frame) = window_state.render.current_frame.as_mut() else {
+                    return;
+                };
+                let extra_glyphs =
+                    Self::expanded_terminal_glyphs_for_frame(frame, &terminal_contents);
+                if !extra_glyphs.is_empty() {
+                    frame.glyphs.extend(extra_glyphs);
+                    window_state.render.frame_dirty = true;
+                }
+            });
+
+        if self.primary_window_state().is_none() {
+            let mut primary_dirty = false;
+            if let Some(frame) = self.primary_current_frame_mut() {
+                let extra_glyphs =
+                    Self::expanded_terminal_glyphs_for_frame(frame, &terminal_contents);
+                if !extra_glyphs.is_empty() {
+                    frame.glyphs.extend(extra_glyphs);
+                    primary_dirty = true;
                 }
             }
-        }
-        if !extra_glyphs.is_empty() {
-            if let Some(frame) = self.primary_current_frame_mut() {
-                frame.glyphs.extend(extra_glyphs);
+            if primary_dirty {
+                self.mark_primary_dirty();
             }
-            self.mark_primary_dirty();
         }
 
         // Render Window-mode terminals as overlays covering the frame body.
@@ -602,5 +648,95 @@ impl RenderApp {
                 color: fg,
             });
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "neo-term")]
+mod tests {
+    use super::*;
+    use crate::core::frame_glyphs::FrameGlyphBuffer;
+    use crate::core::types::Color;
+    use crate::terminal::content::{RenderCell, RenderCursor, TerminalContent};
+    use alacritty_terminal::term::cell::Flags as CellFlags;
+
+    #[test]
+    fn terminal_glyph_expansion_uses_frame_metrics() {
+        let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
+        frame.char_width = 10.0;
+        frame.char_height = 20.0;
+        frame.font_pixel_size = 18.0;
+        frame.glyphs.push(FrameGlyph::Terminal {
+            terminal_id: 7,
+            x: 30.0,
+            y: 40.0,
+            width: 50.0,
+            height: 20.0,
+        });
+        let mut contents = HashMap::new();
+        contents.insert(
+            7,
+            TerminalContent {
+                cells: vec![RenderCell {
+                    col: 1,
+                    row: 0,
+                    c: 'x',
+                    fg: Color::WHITE,
+                    bg: Color::BLACK,
+                    flags: CellFlags::empty(),
+                }],
+                cols: 2,
+                rows: 1,
+                cursor: RenderCursor {
+                    col: 0,
+                    row: 0,
+                    visible: false,
+                },
+                default_bg: Color::BLACK,
+                default_fg: Color::WHITE,
+            },
+        );
+
+        let glyphs = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
+
+        assert!(matches!(
+            glyphs.first(),
+            Some(FrameGlyph::Stretch {
+                x: 30.0,
+                y: 40.0,
+                width: 50.0,
+                height: 20.0,
+                ..
+            })
+        ));
+        assert!(matches!(
+            glyphs.get(1),
+            Some(FrameGlyph::Char {
+                char: 'x',
+                x: 40.0,
+                y: 40.0,
+                width: 10.0,
+                height: 20.0,
+                font_size: 18.0,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn terminal_glyph_expansion_ignores_missing_terminal_content() {
+        let mut frame = FrameGlyphBuffer::with_size(120.0, 80.0);
+        frame.glyphs.push(FrameGlyph::Terminal {
+            terminal_id: 7,
+            x: 30.0,
+            y: 40.0,
+            width: 50.0,
+            height: 20.0,
+        });
+        let contents = HashMap::new();
+
+        let glyphs = RenderApp::expanded_terminal_glyphs_for_frame(&frame, &contents);
+
+        assert!(glyphs.is_empty());
     }
 }
