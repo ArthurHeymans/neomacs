@@ -1376,3 +1376,41 @@ fn org_src_edit_exit_writeback_preserve_structure_deep_state_combo() {
           (list edit-mode edit-buf after-first-edit after-second-edit blocks)))))))"##,
     );
 }
+
+#[test]
+fn org_src_block_edit_tangle_multi_lang_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-tangle)
+  (let* ((root (make-temp-file "org-tangle-" t))
+         (tangle-dir root))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert "#+PROPERTY: header-args :tangle (concat (file-name-directory (buffer-file-name)) \"out.el\")\n\n")
+          (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n")
+          (insert "#+begin_src emacs-lisp\n(* 3 4)\n#+end_src\n\n")
+          ;; Edit first block
+          (goto-char (point-min))
+          (search-forward "(+ 1 2)")
+          (org-edit-src-code)
+          (erase-buffer)
+          (insert "(+ 10 20)\n(+ 30 40)\n")
+          (org-edit-src-exit)
+          ;; Parse blocks
+          (let ((blocks
+                 (org-element-map (org-element-parse-buffer) 'src-block
+                   (lambda (sb)
+                     (list (org-element-property :language sb)
+                           (org-element-property :value sb)
+                           (org-element-property :parameters sb)))))
+                (edit-mode major-mode))
+            (list edit-mode blocks
+                  (buffer-substring-no-properties
+                   (point-min) (point-max)))))
+      (delete-directory root t))))"##,
+    );
+}
