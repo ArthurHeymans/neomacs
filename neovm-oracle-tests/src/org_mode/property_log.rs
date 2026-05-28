@@ -797,3 +797,53 @@ fn org_property_inherit_set_delete_globally_deep_state_combo() {
                             full-buf))))))))))))"##,
     );
 }
+
+#[test]
+fn org_property_set_delete_multivalue_deep_state_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-use-property-inheritance t))
+      (org-mode)
+      (insert "* Root\n")
+      (insert ":PROPERTIES:\n:Owner: Ada\n:CATEGORY: main\n:END:\n")
+      (insert "** Child A\n")
+      (insert ":PROPERTIES:\n:Effort: 2:00\n:END:\n")
+      (insert "*** Grandchild\n")
+      (insert "** Child B\n")
+      (let ((snap (lambda ()
+                    (list (org-entry-get nil "Owner")
+                          (org-entry-get nil "Owner" 'inherit)
+                          (org-entry-get nil "CATEGORY")
+                          (org-entry-get nil "CATEGORY" 'inherit)
+                          (org-entry-get nil "Effort")
+                          (org-entry-get nil "Effort" 'inherit)))))
+        (goto-char (point-min))
+        (search-forward "Root")
+        (let ((root (funcall snap)))
+          (search-forward "Child A")
+          (let ((child-a (funcall snap)))
+            (search-forward "Grandchild")
+            (let ((grandchild (funcall snap)))
+              ;; Set new property on Child A
+              (goto-char (point-min))
+              (search-forward "Child A")
+              (beginning-of-line)
+              (org-set-property "Status" "active")
+              ;; Get all properties
+              (let ((all-a (org-entry-properties nil 'standard)))
+                ;; Delete Owner globally
+                (org-delete-property-globally "Owner")
+                ;; Check after delete
+                (goto-char (point-min))
+                (search-forward "Grandchild")
+                (let ((owner-after (org-entry-get nil "Owner" 'inherit))
+                      (buf (buffer-substring-no-properties
+                            (point-min) (point-max))))
+                  (list root child-a grandchild all-a
+                        owner-after buf))))))))))"##,
+    );
+}
