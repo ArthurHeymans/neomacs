@@ -847,3 +847,63 @@ fn org_property_set_delete_multivalue_deep_state_combo() {
                         owner-after buf))))))))))"##,
     );
 }
+
+#[test]
+fn org_property_inherit_clock_edit_delete_global_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project :project:\n")
+    (insert ":PROPERTIES:\n:Owner: Alice\n:Budget: 100h\n:END:\n")
+    (insert "** Task Alpha\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:Assigned: Bob\n:END:\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** Task Beta\n")
+    (insert ":PROPERTIES:\n:Effort: 3h\n:END:\n")
+    (insert "Body beta.\n\n")
+    (let ((snap (lambda (name)
+                  (save-excursion
+                    (goto-char (point-min))
+                    (search-forward name)
+                    (list name
+                          (org-entry-get nil "Owner" 'inherit)
+                          (org-entry-get nil "Budget" 'inherit)
+                          (org-entry-get nil "Effort")
+                          (org-entry-get nil "Assigned" 'inherit))))))
+      (let ((alpha (funcall snap "Alpha"))
+            (beta (funcall snap "Beta")))
+        ;; Edit: set new property on Alpha
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-set-property "Status" "active")
+        ;; Delete Owner globally
+        (org-delete-property-globally "Owner")
+        ;; Check after
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (let ((alpha-after
+               (list "Alpha"
+                     (org-entry-get nil "Owner" 'inherit)
+                     (org-entry-get nil "Budget" 'inherit)
+                     (org-entry-get nil "Effort")
+                     (org-entry-get nil "Assigned" 'inherit)
+                     (org-entry-get nil "Status"))))
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (let ((beta-after
+                 (list "Beta"
+                       (org-entry-get nil "Owner" 'inherit)
+                       (org-entry-get nil "Budget" 'inherit)
+                       (org-entry-get nil "Effort"))))
+            (list alpha beta alpha-after beta-after
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
