@@ -1080,6 +1080,65 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_variable_propagation_edit_reexecute_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Seed
+      (insert "#+NAME: seed\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((x 10) (y 20) (z 30))\n")
+      (insert "#+end_src\n\n")
+      ;; Transform A
+      (insert "#+NAME: transform-a\n")
+      (insert "#+begin_src emacs-lisp :var data=seed :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (* 2 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Transform B
+      (insert "#+NAME: transform-b\n")
+      (insert "#+begin_src emacs-lisp :var data=transform-a :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (+ 100 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("seed" "transform-a" "transform-b"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read results
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Edit: change seed values
+        (goto-char (point-min))
+        (search-forward "'((x 10) (y 20) (z 30))")
+        (replace-match "'((x 5) (y 15) (z 25))")
+        ;; Re-execute chain
+        (dolist (name '("seed" "transform-a" "transform-b"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((results2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) results2))
+          (list (nreverse results1)
+                (nreverse results2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_execute_edit_code_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
