@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_interest_edit_reexecute_v17() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: principals
+      (insert "#+NAME: principals\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((p1 1000) (p2 2000) (p3 1500) (p4 3000) (p5 500))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: with interest (5%)
+      (insert "#+NAME: interest\n")
+      (insert "#+begin_src emacs-lisp :var data=principals :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* 1.05 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("principals" "interest"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: principals")
+      (forward-line 1)
+      (let ((principals1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: interest")
+        (forward-line 1)
+        (let ((interest1 (org-babel-read-result)))
+          ;; Edit: change p4 from 3000 to 5000
+          (goto-char (point-min))
+          (search-forward "(p4 3000)")
+          (replace-match "(p4 5000)")
+          ;; Re-execute
+          (dolist (name '("principals" "interest"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: principals")
+          (forward-line 1)
+          (let ((principals2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: interest")
+            (forward-line 1)
+            (let ((interest2 (org-babel-read-result)))
+              (list principals1 interest1 principals2 interest2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_grade_edit_reexecute_v16() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
