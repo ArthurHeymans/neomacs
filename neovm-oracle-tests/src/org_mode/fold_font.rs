@@ -685,6 +685,58 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_all_edit_cycle_tag_prop_clock_v45() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Epic-1 :epic:\n")
+    (insert ":PROPERTIES:\n:Owner: Alice\n:CATEGORY: dev\n:END:\n")
+    (insert "** DONE Story-A :frontend:urgent:\n")
+    (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:30] =>  2:30\n:END:\n")
+    (insert ":PROPERTIES:\n:Effort: 3h\n:Points: 5\n:END:\n")
+    (insert "Story A body.\n\n")
+    (insert "** TODO Story-B :backend:\n")
+    (insert ":PROPERTIES:\n:Effort: 5h\n:Points: 8\n:END:\n")
+    (insert "Story B body.\n\n")
+    (let ((snap (lambda (tag)
+                  (mapcar
+                   (lambda (needle)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (if (search-forward needle nil t)
+                           (list needle
+                                 (line-number-at-pos)
+                                 (invisible-p (point))
+                                 (org-outline-level)
+                                 (org-entry-get nil "Owner" 'inherit)
+                                 (org-entry-get nil "CATEGORY" 'inherit)
+                                 (org-entry-get nil "Points"))
+                           (list needle 'not-found nil nil nil nil nil))))
+                   '("Epic-1" "Story-A" "Story-B")))))
+      (let ((initial (funcall snap 'initial)))
+        (org-fold-hide-all)
+        (let ((after-hide (funcall snap 'hide)))
+          (goto-char (point-min))
+          (search-forward "Epic-1")
+          (end-of-line)
+          (insert "\n** WAIT Story-C :devops:\n:PROPERTIES:\n:Effort: 2h\n:Points: 3\n:END:\nStory C body.\n")
+          (let ((after-edit (funcall snap 'edit)))
+            (org-fold-show-all)
+            (let ((after-show (funcall snap 'show)))
+              (org-global-cycle nil)
+              (let ((after-cycle (funcall snap 'cycle)))
+                (list initial after-hide after-edit after-show after-cycle
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_all_edit_cycle_tag_clock_v44() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
