@@ -728,3 +728,66 @@ fn org_navigate_multi_level_cycle_edit_fold_deep() {
                          (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_complex_tree_fold_edit_show_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* R\n")
+    (insert "** R1\n")
+    (insert "*** R1a\nBody.\n\n")
+    (insert "*** R1b\nBody.\n\n")
+    (insert "** R2\n")
+    (insert "*** R2a\nBody.\n\n")
+    (insert "*** R2b\nBody.\n\n")
+    (insert "** R3\n")
+    (insert "*** R3a\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At R1a
+      (goto-char (point-min))
+      (search-forward "R1a")
+      (beginning-of-line)
+      (let ((at-r1a (funcall track)))
+        ;; Forward to R1b
+        (org-forward-heading-same-level 1)
+        (let ((at-r1b (funcall track)))
+          ;; Up to R1
+          (org-up-heading-safe)
+          (let ((at-r1 (funcall track)))
+            ;; Forward to R2
+            (org-forward-heading-same-level 1)
+            (let ((at-r2 (funcall track)))
+              ;; Forward to R3
+              (org-forward-heading-same-level 1)
+              (let ((at-r3 (funcall track)))
+                ;; Down to R3a
+                (org-next-visible-heading 1)
+                (let ((at-r3a (funcall track)))
+                  ;; Edit: insert R2c under R2
+                  (goto-char (point-min))
+                  (search-forward "R2b")
+                  (end-of-line)
+                  (insert "\n*** R2c\nBody.\n")
+                  ;; Fold R1 subtree
+                  (goto-char (point-min))
+                  (search-forward "R1")
+                  (beginning-of-line)
+                  (org-fold-subtree)
+                  (let ((after-fold (funcall track)))
+                    (list at-r1a at-r1b at-r1 at-r2 at-r3 at-r3a
+                          after-fold
+                          (buffer-substring-no-properties
+                           (point-min) (point-max))))))))))))))"##,
+    );
+}
