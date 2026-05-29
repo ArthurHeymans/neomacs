@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_all_edit_cycle_tag_prop_clock_font_v53() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Product :product:\n")
+      (insert ":PROPERTIES:\n:Owner: Gina\n:CATEGORY: eng\n:END:\n")
+      (insert "** DONE API :backend:api:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 08:00]--[2026-05-28 Wed 12:00] =>  4:00\n:END:\n")
+      (insert ":PROPERTIES:\n:Effort: 5h\n:Tier: P0\n:END:\n")
+      (insert "API body.\n\n")
+      (insert "** TODO UI :frontend:ui:\n")
+      (insert ":PROPERTIES:\n:Effort: 8h\n:Tier: P1\n:END:\n")
+      (insert "UI body.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda (tag)
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (line-number-at-pos)
+                                   (invisible-p (point))
+                                   (org-outline-level)
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (org-entry-get nil "Owner" 'inherit)
+                                   (org-entry-get nil "CATEGORY" 'inherit)
+                                   (org-entry-get nil "Tier"))
+                             (list needle 'not-found nil nil nil nil nil nil))))
+                     '("Product" "API" "UI")))))
+        (let ((initial (funcall snap 'initial)))
+          (org-fold-hide-all)
+          (let ((after-hide (funcall snap 'hide)))
+            (goto-char (point-min))
+            (search-forward "Product")
+            (end-of-line)
+            (insert "\n** WAIT Docs :docs:writing:\n:PROPERTIES:\n:Effort: 3h\n:Tier: P2\n:END:\nDocs body.\n")
+            (let ((after-edit (funcall snap 'edit)))
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-show (funcall snap 'show)))
+                (org-global-cycle nil)
+                (let ((after-cycle (funcall snap 'cycle)))
+                  (list initial after-hide after-edit after-show after-cycle
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v52() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
