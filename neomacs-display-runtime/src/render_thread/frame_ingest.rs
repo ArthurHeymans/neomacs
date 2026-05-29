@@ -465,10 +465,8 @@ impl RenderApp {
                 }
             }
 
-            let mut primary_fallback_updated = false;
             if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
-                self.primary_child_frames_mut().update_frame(frame);
-                primary_fallback_updated = true;
+                self.update_primary_child_frame(frame);
             } else if parent_id == 0 && self.frame_windows.is_primary_frame_id(frame_id) {
                 if gui_menu_bar.is_none() {
                     self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_menu_bar());
@@ -504,9 +502,6 @@ impl RenderApp {
                     self.set_primary_tool_bar(gui_tool_bar);
                     self.set_primary_compact_bar(gui_compact_bar);
                 }
-            }
-            if primary_fallback_updated {
-                self.mark_primary_dirty();
             }
         }
 

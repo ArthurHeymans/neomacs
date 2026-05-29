@@ -726,6 +726,14 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn update_primary_child_frame(&mut self, frame: FrameGlyphBuffer) {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.update_child_frame(frame);
+        } else {
+            self.pending_primary_child_frames.update_frame(frame);
+        }
+    }
+
     pub(super) fn primary_transitions_active(&self) -> bool {
         self.primary_render_state()
             .is_some_and(|frame| frame.transitions.has_active())

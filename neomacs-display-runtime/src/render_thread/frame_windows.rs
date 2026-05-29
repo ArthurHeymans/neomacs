@@ -503,6 +503,11 @@ impl GuiFrameRenderState {
         }
         removed
     }
+
+    pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) {
+        self.child_frames.update_frame(frame);
+        self.frame_dirty = true;
+    }
 }
 
 impl GuiFrameWindowState {
