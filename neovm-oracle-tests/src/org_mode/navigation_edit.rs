@@ -604,3 +604,67 @@ fn org_navigate_level_jump_fold_edit_reparse_deep() {
                          (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_siblings_descendants_edit_fold_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Alpha\n")
+    (insert "** Beta\n")
+    (insert "*** Gamma\nBody.\n\n")
+    (insert "*** Delta\nBody.\n\n")
+    (insert "** Epsilon\n")
+    (insert "*** Zeta\nBody.\n\n")
+    (insert "* Eta\n")
+    (insert "** Theta\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At Gamma
+      (goto-char (point-min))
+      (search-forward "Gamma")
+      (beginning-of-line)
+      (let ((at-gamma (funcall track)))
+        ;; Next sibling: Delta
+        (org-forward-heading-same-level 1)
+        (let ((at-delta (funcall track)))
+          ;; Up to Beta
+          (org-up-heading-safe)
+          (let ((at-beta (funcall track)))
+            ;; Forward to Epsilon
+            (org-forward-heading-same-level 1)
+            (let ((at-epsilon (funcall track)))
+              ;; Down to Zeta
+              (org-next-visible-heading 1)
+              (let ((at-zeta (funcall track)))
+                ;; Jump to Eta
+                (goto-char (point-min))
+                (search-forward "Eta")
+                (beginning-of-line)
+                (let ((at-eta (funcall track)))
+                  ;; Edit: insert under Epsilon
+                  (goto-char (point-min))
+                  (search-forward "Epsilon")
+                  (end-of-line)
+                  (insert "\n*** Iota\nBody.\n")
+                  ;; Fold Alpha subtree
+                  (goto-char (point-min))
+                  (search-forward "Alpha")
+                  (beginning-of-line)
+                  (org-fold-subtree)
+                  (let ((after-fold (funcall track)))
+                    (list at-gamma at-delta at-beta at-epsilon at-zeta
+                          at-eta after-fold
+                          (buffer-substring-no-properties
+                           (point-min) (point-max))))))))))))))"##,
+    );
+}
