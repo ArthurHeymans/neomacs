@@ -1186,9 +1186,9 @@ impl RenderApp {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
             let duration_ms = self.effects.click_halo.duration_ms;
-            if let Some(primary_frame) = self.primary_render_state_mut() {
-                primary_frame.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
-            }
+            self.with_unmanaged_primary_render(|r| {
+                r.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
+            });
         }
     }
 
