@@ -23,14 +23,14 @@ impl RenderApp {
             Key::Named(NamedKey::ArrowDown) => {
                 let menu = render.popup_menu.as_mut()?;
                 if menu.move_hover(1) {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::ArrowUp) => {
                 let menu = render.popup_menu.as_mut()?;
                 if menu.move_hover(-1) {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
@@ -42,7 +42,7 @@ impl RenderApp {
                     let global_idx = panel.item_indices[hi as usize];
                     if menu.all_items[global_idx].submenu {
                         if menu.open_submenu() {
-                            render.frame_dirty = true;
+                            render.mark_dirty();
                         }
                         None
                     } else {
@@ -59,14 +59,14 @@ impl RenderApp {
             Key::Named(NamedKey::ArrowRight) => {
                 let menu = render.popup_menu.as_mut()?;
                 if menu.open_submenu() {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::ArrowLeft) => {
                 let menu = render.popup_menu.as_mut()?;
                 if menu.close_submenu() {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
@@ -74,7 +74,7 @@ impl RenderApp {
                 let menu = render.popup_menu.as_mut()?;
                 menu.active_panel_mut().hover_index = -1;
                 if menu.move_hover(1) {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
@@ -83,7 +83,7 @@ impl RenderApp {
                 let len = menu.active_panel().item_indices.len() as i32;
                 menu.active_panel_mut().hover_index = len;
                 if menu.move_hover(-1) {
-                    render.frame_dirty = true;
+                    render.mark_dirty();
                 }
                 None
             }
@@ -159,7 +159,7 @@ impl RenderApp {
                                     std::time::Instant::now(),
                                 );
                             }
-                            ws.render.frame_dirty = true;
+                            ws.render.mark_dirty();
                         }
                         let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
                             size.width,

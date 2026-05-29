@@ -252,6 +252,10 @@ impl GuiFrameRenderState {
         self.popup_menu = None;
         self.chrome_interaction.menu_bar_active = None;
         self.chrome_interaction.compact_bar_menu_active = None;
+        self.mark_dirty();
+    }
+
+    pub(super) fn mark_dirty(&mut self) {
         self.frame_dirty = true;
     }
 

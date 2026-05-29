@@ -105,7 +105,7 @@ impl RenderApp {
         render.current_frame = Some(frame);
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
         render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
-        render.frame_dirty = true;
+        render.mark_dirty();
         cursor_sync
     }
 
@@ -148,7 +148,7 @@ impl RenderApp {
             );
             let (had_target, target_moved) = render.cursor.set_target(new_target.clone());
             if target_moved {
-                render.frame_dirty = true;
+                render.mark_dirty();
             }
             Some(CursorSyncOutcome {
                 target: new_target,
@@ -449,7 +449,7 @@ impl RenderApp {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
                     window_state.render.child_frames.update_frame(frame);
                     let cursor_sync = Self::sync_frame_window_cursor(window_state, cursor_config);
-                    window_state.render.frame_dirty = true;
+                    window_state.render.mark_dirty();
                     if let Some(cursor_sync) = cursor_sync {
                         Self::update_frame_window_cursor_side_effects(
                             renderer,

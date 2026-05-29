@@ -47,7 +47,7 @@ impl RenderApp {
                 if let Some(primary_state) = self.primary_window_state_mut() {
                     primary_state.native.window.set_title(&title);
                     if !primary_state.native.chrome.decorations_enabled {
-                        primary_state.render.frame_dirty = true;
+                        primary_state.render.mark_dirty();
                     }
                 }
                 Ok(())

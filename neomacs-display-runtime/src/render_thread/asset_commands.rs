@@ -386,7 +386,7 @@ impl RenderApp {
                     let removed_unmanaged_primary =
                         self.remove_unmanaged_primary_floating_webkit(id);
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                        window_state.render.frame_dirty = true;
+                        window_state.render.mark_dirty();
                     } else if self.frame_windows.is_primary_frame_id(emacs_frame_id)
                         && !removed_unmanaged_primary
                     {

@@ -244,7 +244,7 @@ impl RenderApp {
             self.frame_windows
                 .for_each_top_level_window_mut(|window_state| {
                     if !window_state.render.floating_webkits.is_empty() {
-                        window_state.render.frame_dirty = true;
+                        window_state.render.mark_dirty();
                     }
                 });
         }

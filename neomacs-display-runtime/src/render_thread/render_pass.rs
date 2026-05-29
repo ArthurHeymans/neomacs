@@ -560,7 +560,7 @@ impl RenderApp {
                 );
             });
             if render.renderer_effects.needs_redraw() {
-                render.frame_dirty = true;
+                render.mark_dirty();
             }
 
             if let Some(current_bg) = current_bg {
@@ -579,7 +579,7 @@ impl RenderApp {
                 native.height,
             );
             if render.transitions.has_active() {
-                render.frame_dirty = true;
+                render.mark_dirty();
             }
             Self::render_frame_window_overlays_with_toolbar_resources(
                 renderer,
@@ -818,7 +818,7 @@ impl RenderApp {
             native.width,
             native.height,
         ) {
-            render.frame_dirty = true;
+            render.mark_dirty();
         }
 
         if renderer.effects.typing_speed.enabled {
@@ -903,7 +903,7 @@ impl RenderApp {
             }
         });
         if render.renderer_effects.needs_redraw() {
-            render.frame_dirty = true;
+            render.mark_dirty();
         }
 
         #[cfg(feature = "wpe-webkit")]
@@ -923,7 +923,7 @@ impl RenderApp {
             );
         });
         if render.renderer_effects.needs_redraw() {
-            render.frame_dirty = true;
+            render.mark_dirty();
         }
     }
 
@@ -988,7 +988,7 @@ impl RenderApp {
             toolbar_padding,
         );
         if renderer_effects_still_active {
-            render.frame_dirty = true;
+            render.mark_dirty();
         }
     }
 

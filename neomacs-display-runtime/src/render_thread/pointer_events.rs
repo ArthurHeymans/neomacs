@@ -368,7 +368,7 @@ impl RenderApp {
                                     .chrome_interaction
                                     .compact_bar_menu_active = None;
                             }
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if let Some(menu_bar) = window_state.render.menu_bar.as_ref()
                             && menu_bar.height > 0.0
@@ -390,7 +390,7 @@ impl RenderApp {
                                 window_state.render.popup_menu = None;
                                 window_state.render.chrome_interaction.menu_bar_active = None;
                             }
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if let Some(tab_bar) = window_state
                             .render
@@ -421,7 +421,7 @@ impl RenderApp {
                                     emacs_frame_id: window_state.render.emacs_frame_id,
                                 });
                             }
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if let Some(tool_bar) = window_state.render.tool_bar.as_ref()
                             && y >= Self::frame_window_toolbar_y_origin(window_state)
@@ -453,7 +453,7 @@ impl RenderApp {
                                     emacs_frame_id: window_state.render.emacs_frame_id,
                                 });
                             }
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else {
                             let idx = window_state
@@ -485,7 +485,7 @@ impl RenderApp {
                                             menu.all_items[global_idx].submenu
                                         });
                                     if is_submenu {
-                                        window_state.render.frame_dirty = true;
+                                        window_state.render.mark_dirty();
                                     } else {
                                         event = Some(InputEvent::MenuSelection { index: -1 });
                                         window_state.render.dismiss_all_chrome_menus();
@@ -538,7 +538,7 @@ impl RenderApp {
                                     emacs_frame_id: window_state.render.emacs_frame_id,
                                 });
                             }
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         }
                         if !handled_chrome
@@ -558,7 +558,7 @@ impl RenderApp {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
                             });
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
@@ -573,7 +573,7 @@ impl RenderApp {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
                             });
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
@@ -595,7 +595,7 @@ impl RenderApp {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
                             });
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                         }
                         handled_chrome = true;
                     } else if !handled_chrome
@@ -619,7 +619,7 @@ impl RenderApp {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
                             });
-                            window_state.render.frame_dirty = true;
+                            window_state.render.mark_dirty();
                         }
                         handled_chrome = true;
                     }
@@ -662,7 +662,7 @@ impl RenderApp {
                             .render
                             .chrome_interaction
                             .toolbar_press_captured = false;
-                        window_state.render.frame_dirty = true;
+                        window_state.render.mark_dirty();
                         handled_chrome = true;
                     }
                 }
@@ -1355,7 +1355,7 @@ impl RenderApp {
             dirty |= window_state.render.update_popup_hover(lx, ly);
 
             if dirty {
-                window_state.render.frame_dirty = true;
+                window_state.render.mark_dirty();
             }
 
             window_state.set_mouse_hidden_for_typing(false);
