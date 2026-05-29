@@ -900,3 +900,60 @@ fn org_element_parse_clock_logbook_edit_reparse_deep() {
                  (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_multi_heading_tag_prop_edit_reparse() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO A :work:\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:Owner: X\n:END:\n")
+    (insert "Body A.\n\n")
+    (insert "** DONE B :home:\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:Owner: Y\n:END:\n")
+    (insert "Body B.\n\n")
+    (insert "*** TODO C :work:urgent:\n")
+    (insert ":PROPERTIES:\n:Effort: 30m\n:END:\n")
+    (insert "Body C.\n\n")
+    (insert "* NEXT D :errands:\n")
+    (insert ":PROPERTIES:\n:Effort: 45m\n:Owner: Z\n:END:\n")
+    (insert "Body D.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)
+                                (org-element-property :todo-keyword hl)
+                                (org-element-property :tags hl))))
+                      (org-element-map tree 'property-drawer
+                        (lambda (pd)
+                          (org-element-map pd 'node-property
+                            (lambda (np)
+                              (list (org-element-property :key np)
+                                    (org-element-property :value np)))))))))))
+      (let ((initial (funcall snap)))
+        (goto-char (point-min))
+        (search-forward "Body A.")
+        (beginning-of-line)
+        (org-up-heading-safe)
+        (org-toggle-tag "review" 'on)
+        (goto-char (point-min))
+        (search-forward "NEXT D")
+        (beginning-of-line)
+        (org-set-property "Status" "pending")
+        (goto-char (point-min))
+        (search-forward "DONE B")
+        (beginning-of-line)
+        (org-delete-property "Owner")
+        (let ((after-edit (funcall snap)))
+          (list initial after-edit
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
