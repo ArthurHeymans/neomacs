@@ -191,7 +191,7 @@ impl RenderApp {
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }
-                    self.mark_primary_dirty();
+                    self.mark_unmanaged_primary_resize_dirty();
                     let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
                         size.width,
                         size.height,
