@@ -469,11 +469,13 @@ impl Buffer {
             new_byte_len,
             new_char_len,
         );
-        self.text.adjust_text_props_for_delete(start_char, end_char);
         self.text
-            .adjust_text_props_for_insert(start_char, new_char_len);
+            .adjust_text_props_for_replace(start_char, old_char_len, new_char_len);
         if text.has_intervals() {
             self.text.text_props_append_shifted(text.intervals(), start);
+        } else if new_char_len > 0 {
+            self.text
+                .text_props_set_properties(start, start + new_byte_len, Vec::new());
         }
         self.overlays
             .adjust_for_replace(start, old_byte_len, new_byte_len);

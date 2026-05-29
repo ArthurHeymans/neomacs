@@ -1717,6 +1717,18 @@ impl TextPropertyTable {
         self.intervals.delete_range(start, end);
     }
 
+    pub fn adjust_for_replace(&mut self, start: usize, old_len: usize, new_len: usize) {
+        match new_len.cmp(&old_len) {
+            std::cmp::Ordering::Greater => {
+                self.adjust_for_insert(start, new_len - old_len);
+            }
+            std::cmp::Ordering::Less => {
+                self.adjust_for_delete(start, start + old_len - new_len);
+            }
+            std::cmp::Ordering::Equal => {}
+        }
+    }
+
     pub fn intervals_snapshot(&self) -> Vec<PropertyInterval> {
         self.intervals
             .runs()

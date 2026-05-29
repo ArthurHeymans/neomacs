@@ -97,6 +97,29 @@ fn replace_match_buffer_replacement_leaves_point_at_replacement_end() {
 }
 
 #[test]
+fn replace_match_preserves_raw_nil_boundaries_for_later_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert (concat (make-string 46 ?x) "abc" (make-string 31 ?x)))
+  (put-text-property 1 25 'face 'org-table)
+  (goto-char 47)
+  (looking-at "abc")
+  (replace-match "abcde" t t)
+  (put-text-property 43 54 'face 'org-table)
+  (prin1-to-string (buffer-string)))"#,
+        )
+        .expect("replace-match interval shape form should evaluate");
+    let printed = result.as_utf8_str().unwrap().to_owned();
+    assert!(
+        printed.contains("42 46 (face org-table) 46 51 (face org-table) 51 53 (face org-table)"),
+        "raw nil boundaries inside later property range should be preserved: {printed}"
+    );
+}
+
+#[test]
 fn replace_match_after_change_end_uses_replacement_length() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::emacs_core::eval::Context::new();

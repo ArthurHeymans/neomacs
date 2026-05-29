@@ -678,6 +678,40 @@ fn adjust_delete_removes_multiple_nodes_without_rebuilding_tree() {
 }
 
 // -----------------------------------------------------------------------
+// replace_range interval offset
+// -----------------------------------------------------------------------
+
+#[test]
+fn adjust_replace_growth_then_clear_preserves_gnu_nil_boundaries() {
+    crate::test_utils::init_test_tracing();
+    let face = Value::symbol("face");
+    let org_table = Value::symbol("org-table");
+    let mut table = TextPropertyTable::new();
+
+    table.put_property_for_object_len(0, 24, 80, face, org_table);
+
+    // GNU `replace_range' calls `offset_intervals' once with the net
+    // replacement delta, then `graft_intervals_into_buffer' clears the
+    // inserted text when the replacement string has no intervals.
+    table.adjust_for_replace(46, 3, 5);
+    table.set_properties_for_object_len(46, 51, 82, Vec::new());
+
+    table.put_property_for_object_len(42, 53, 82, face, org_table);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![
+            (0, 24, false),
+            (24, 42, true),
+            (42, 46, false),
+            (46, 51, false),
+            (51, 53, false),
+            (53, 82, true),
+        ]
+    );
+}
+
+// -----------------------------------------------------------------------
 // GNU raw interval boundaries vs semantic property changes
 // -----------------------------------------------------------------------
 

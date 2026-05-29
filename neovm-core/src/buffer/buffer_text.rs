@@ -753,6 +753,13 @@ impl BufferText {
             .adjust_for_delete(start, end);
     }
 
+    pub fn adjust_text_props_for_replace(&self, start: usize, old_len: usize, new_len: usize) {
+        self.storage
+            .borrow_mut()
+            .text_props
+            .adjust_for_replace(start, old_len, new_len);
+    }
+
     pub fn trace_text_prop_roots(&self, roots: &mut Vec<Value>) {
         self.storage.borrow().text_props.trace_roots(roots);
     }
