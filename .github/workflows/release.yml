@@ -17,8 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Linux x86_64 ──────────────────────────────────────────────────────
   build-linux:
-    name: build Linux
+    name: build Linux x86_64
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -34,36 +35,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            git \
-            pkg-config \
-            cmake \
-            m4 \
-            libssl-dev \
-            fontconfig \
-            libfontconfig1-dev \
-            libfreetype-dev \
-            libharfbuzz-dev \
-            libgstreamer1.0-dev \
+            build-essential git pkg-config cmake m4 \
+            libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
+            libharfbuzz-dev libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libwayland-dev \
-            wayland-protocols \
-            libxcb1-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxi-dev \
-            libxcursor-dev \
-            mesa-vulkan-drivers \
-            libvulkan-dev \
-            libdbus-1-dev \
-            libsystemd-dev \
-            libsqlite3-dev \
-            libxml2-dev \
-            gnutls-bin \
-            libgnutls28-dev \
-            rpm
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev wayland-protocols \
+            libxcb1-dev libxrandr-dev libxinerama-dev \
+            libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
+            libdbus-1-dev libsystemd-dev libsqlite3-dev \
+            libxml2-dev gnutls-bin libgnutls28-dev rpm
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -100,6 +81,21 @@ jobs:
       - name: Build release binaries
         run: cargo xtask fresh-build --release
 
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Package tarball (x86_64-unknown-linux-gnu)
+        run: |
+          TARGET=x86_64-unknown-linux-gnu
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp LICENSE "$STAGING/"
+          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+
       - name: Package AppImage
         run: ./scripts/package-appimage.sh --skip-build --no-smoke
 
@@ -112,15 +108,85 @@ jobs:
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-packages
+          name: linux-x86_64
           path: |
+            dist/*.tar.gz
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
           if-no-files-found: error
 
+  # ── Linux aarch64 ─────────────────────────────────────────────────────
+  build-linux-aarch64:
+    name: build Linux aarch64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies (apt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git pkg-config cmake m4 \
+            libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
+            libharfbuzz-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev wayland-protocols \
+            libxcb1-dev libxrandr-dev libxinerama-dev \
+            libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
+            libdbus-1-dev libsystemd-dev libsqlite3-dev \
+            libxml2-dev gnutls-bin libgnutls28-dev
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-aarch64
+          cache-bin: false
+          save-if: true
+          cache-on-failure: true
+
+      - name: Build release binaries
+        run: cargo xtask fresh-build --release
+
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Package tarball (aarch64-unknown-linux-gnu)
+        run: |
+          TARGET=aarch64-unknown-linux-gnu
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp LICENSE "$STAGING/"
+          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+
+      - name: Upload Linux aarch64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ── macOS aarch64 (Apple Silicon) ─────────────────────────────────────
   build-macos:
-    name: build macOS
+    name: build macOS aarch64
     runs-on: macos-latest
     timeout-minutes: 120
     env:
@@ -140,6 +206,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
+          targets: aarch64-apple-darwin
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
@@ -149,18 +216,160 @@ jobs:
           save-if: true
           cache-on-failure: true
 
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Build release binaries
+        run: cargo xtask fresh-build --release
+
+      - name: Package tarball (aarch64-apple-darwin)
+        run: |
+          TARGET=aarch64-apple-darwin
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp LICENSE "$STAGING/"
+          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+
       - name: Build and package .app + .dmg
         run: ./scripts/package-macos-app.sh --no-smoke
 
-      - name: Upload .dmg artifact
+      - name: Upload macOS aarch64 artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg
-          path: dist/*.dmg
+          name: macos-aarch64
+          path: |
+            dist/*.tar.gz
+            dist/*.dmg
           if-no-files-found: error
 
+  # ── macOS x86_64 (Intel) ──────────────────────────────────────────────
+  build-macos-x86_64:
+    name: build macOS x86_64
+    runs-on: macos-13
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      GSTREAMER_VERSION: 1.26.9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies (brew)
+        run: brew install pkg-config gstreamer
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-apple-darwin
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-x86_64
+          cache-bin: false
+          save-if: true
+          cache-on-failure: true
+
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Build release binaries
+        run: cargo xtask fresh-build --release
+
+      - name: Package tarball (x86_64-apple-darwin)
+        run: |
+          TARGET=x86_64-apple-darwin
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp LICENSE "$STAGING/"
+          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+
+      - name: Upload macOS x86_64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x86_64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ── macOS universal (aarch64 + x86_64 via lipo) ────────────────────────
+  build-macos-universal:
+    name: build macOS universal
+    runs-on: macos-latest
+    timeout-minutes: 30
+    needs: [build-macos, build-macos-x86_64]
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download aarch64 build
+        uses: actions/download-artifact@v5
+        with:
+          name: macos-aarch64
+          path: dist-aarch64
+
+      - name: Download x86_64 build
+        uses: actions/download-artifact@v5
+        with:
+          name: macos-x86_64
+          path: dist-x86_64
+
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Extract binaries
+        run: |
+          TAR_AARCH64=$(ls dist-aarch64/neomacs-*-aarch64-apple-darwin.tar.gz)
+          TAR_X8664=$(ls dist-x86_64/neomacs-*-x86_64-apple-darwin.tar.gz)
+          tar xzf "$TAR_AARCH64" -C dist-aarch64
+          tar xzf "$TAR_X8664" -C dist-x86_64
+          STAGING_AARCH64=$(ls -d dist-aarch64/neomacs-*-aarch64-apple-darwin)
+          STAGING_X8664=$(ls -d dist-x86_64/neomacs-*-x86_64-apple-darwin)
+          echo "STAGING_AARCH64=$STAGING_AARCH64" >> "$GITHUB_ENV"
+          echo "STAGING_X8664=$STAGING_X8664" >> "$GITHUB_ENV"
+
+      - name: Create universal binary and package
+        run: |
+          TARGET=universal-apple-darwin
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          # Merge binaries with lipo
+          lipo -create \
+            "$STAGING_AARCH64/neomacs" \
+            "$STAGING_X8664/neomacs" \
+            -output "$STAGING/neomacs"
+          # Ship aarch64 pdump as default (most common modern Mac).
+          # The x86_64 binary falls back to .elc bootstrap if pdump
+          # fingerprint mismatches.
+          cp "$STAGING_AARCH64/neomacs.pdump" "$STAGING/"
+          cp -r "$STAGING_AARCH64/lisp" "$STAGING/"
+          cp -r "$STAGING_AARCH64/etc" "$STAGING/"
+          cp "$STAGING_AARCH64/LICENSE" "$STAGING/"
+          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
+
+      - name: Upload macOS universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ── Windows x86_64 ────────────────────────────────────────────────────
   build-windows:
-    name: build Windows
+    name: build Windows x86_64
     runs-on: windows-latest
     timeout-minutes: 180
     env:
@@ -177,6 +386,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
 
       - name: Restore GStreamer SDK cache
         id: cache-gstreamer
@@ -231,6 +441,23 @@ jobs:
           source scripts/windows-gstreamer-env.sh
           cargo xtask fresh-build --release
 
+      - name: Set version env (bash)
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Package zip (x86_64-pc-windows-msvc)
+        shell: bash
+        run: |
+          TARGET=x86_64-pc-windows-msvc
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs.exe "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp LICENSE "$STAGING/"
+          zip -r "dist/${STAGING}.zip" "$STAGING"
+
       - name: Package .exe installer
         shell: bash
         timeout-minutes: 20
@@ -238,16 +465,25 @@ jobs:
           source scripts/windows-gstreamer-env.sh
           ./scripts/package-windows-installer.sh --skip-build --no-smoke
 
-      - name: Upload .exe artifact
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe
-          path: dist/*.exe
+          name: windows-x86_64
+          path: |
+            dist/*.zip
+            dist/*.exe
           if-no-files-found: error
 
+  # ── GitHub Release ────────────────────────────────────────────────────
   create-release:
     name: create release
-    needs: [build-linux, build-macos, build-windows]
+    needs:
+      - build-linux
+      - build-linux-aarch64
+      - build-macos
+      - build-macos-x86_64
+      - build-macos-universal
+      - build-windows
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
