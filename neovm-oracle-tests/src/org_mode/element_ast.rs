@@ -1359,3 +1359,81 @@ fn org_element_parse_nine_heading_tag_prop_edit_reparse_v7() {
                  (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_ten_heading_tag_prop_edit_reparse_v8() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Enterprise :enterprise:\n")
+    (insert ":PROPERTIES:\n:CEO: Alice\n:CATEGORY: biz\n:END:\n")
+    (insert "Body Enterprise.\n\n")
+    (insert "** DONE Engineering :eng:\n")
+    (insert ":PROPERTIES:\n:Effort: 200h\n:Budget: 2M\n:END:\n")
+    (insert "Body Eng.\n\n")
+    (insert "** TODO Sales :sales:\n")
+    (insert ":PROPERTIES:\n:Effort: 150h\n:Budget: 1M\n:END:\n")
+    (insert "Body Sales.\n\n")
+    (insert "** WAIT Support :support:\n")
+    (insert ":PROPERTIES:\n:Effort: 80h\n:Budget: 500k\n:Owner: Bob\n:END:\n")
+    (insert "Body Support.\n\n")
+    (insert "** NEXT Finance :finance:\n")
+    (insert ":PROPERTIES:\n:Effort: 100h\n:Budget: 800k\n:Owner: Carol\n:END:\n")
+    (insert "Body Finance.\n\n")
+    (insert "** CANCEL Legal :legal:\n")
+    (insert ":PROPERTIES:\n:Effort: 40h\n:Budget: 200k\n:END:\n")
+    (insert "Body Legal.\n\n")
+    (insert "** TODO HR :hr:\n")
+    (insert ":PROPERTIES:\n:Effort: 60h\n:Budget: 300k\n:Owner: Dave\n:END:\n")
+    (insert "Body HR.\n\n")
+    (insert "** DONE IT :it:\n")
+    (insert ":PROPERTIES:\n:Effort: 120h\n:Budget: 600k\n:Owner: Eve\n:END:\n")
+    (insert "Body IT.\n\n")
+    (insert "** TODO Marketing :marketing:\n")
+    (insert ":PROPERTIES:\n:Effort: 90h\n:Budget: 400k\n:Owner: Frank\n:END:\n")
+    (insert "Body Marketing.\n\n")
+    (insert "* DONE Vision :vision:\n")
+    (insert ":PROPERTIES:\n:CEO: Alice\n:CATEGORY: strategy\n:END:\n")
+    (insert "Body Vision.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)
+                                (org-element-property :todo-keyword hl)
+                                (org-element-property :tags hl))))
+                      (org-element-map tree 'property-drawer
+                        (lambda (pd)
+                          (org-element-map pd 'node-property
+                            (lambda (np)
+                              (list (org-element-property :key np)
+                                    (org-element-property :value np)))))))))))
+      (let ((initial (funcall snap)))
+        ;; Toggle tag on Enterprise
+        (goto-char (point-min))
+        (search-forward "Body Enterprise.")
+        (beginning-of-line)
+        (org-up-heading-safe)
+        (org-toggle-tag "review" 'on)
+        ;; Set property on Finance
+        (goto-char (point-min))
+        (search-forward "NEXT Finance")
+        (beginning-of-line)
+        (org-set-property "Status" "active")
+        ;; Delete Owner from Support
+        (goto-char (point-min))
+        (search-forward "WAIT Support")
+        (beginning-of-line)
+        (org-delete-property "Owner")
+        (let ((after-edit (funcall snap)))
+          (list initial after-edit
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
