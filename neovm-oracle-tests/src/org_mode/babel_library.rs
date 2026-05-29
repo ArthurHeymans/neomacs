@@ -1080,6 +1080,68 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_sort_index_edit_reexecute_v6() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: raw data
+      (insert "#+NAME: raw\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((c 30) (a 10) (d 40) (b 20))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: sorted and indexed
+      (insert "#+NAME: indexed\n")
+      (insert "#+begin_src emacs-lisp :var data=raw :results value replace\n")
+      (insert "(let ((sorted (sort (copy-sequence data) (lambda (x y) (< (cadr x) (cadr y))))))\n")
+      (insert "  (let ((i 0))\n")
+      (insert "    (mapcar (lambda (r) (setq i (1+ i)) (list i (car r) (cadr r))) sorted)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("raw" "indexed"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: raw")
+      (forward-line 1)
+      (let ((raw1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: indexed")
+        (forward-line 1)
+        (let ((indexed1 (org-babel-read-result)))
+          ;; Edit: change c from 30 to 5
+          (goto-char (point-min))
+          (search-forward "(c 30)")
+          (replace-match "(c 5)")
+          ;; Re-execute
+          (dolist (name '("raw" "indexed"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: raw")
+          (forward-line 1)
+          (let ((raw2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: indexed")
+            (forward-line 1)
+            (let ((indexed2 (org-babel-read-result)))
+              (list raw1 indexed1 raw2 indexed2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_filter_edit_reexecute_v5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
