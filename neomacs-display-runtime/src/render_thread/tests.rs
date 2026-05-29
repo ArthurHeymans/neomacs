@@ -149,7 +149,7 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     assert!(app.primary_render_state().is_none());
     assert!(app.primary_current_frame().is_none());
     assert!(!app.primary_dirty());
-    assert!(app.primary_window_destroyed);
+    assert!(app.frame_windows.primary_window().is_none());
     assert_eq!(app.frame_windows.primary_frame_id(), None);
 }
 
@@ -166,7 +166,7 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
     assert!(app.primary_window_state().is_none());
     assert!(app.primary_render_state().is_none());
     assert!(!app.primary_dirty());
-    assert!(app.primary_window_destroyed);
+    assert!(app.frame_windows.primary_window().is_none());
     assert_eq!(app.frame_windows.primary_frame_id(), None);
     assert!(app.frame_windows.pending_destroys.is_empty());
 }

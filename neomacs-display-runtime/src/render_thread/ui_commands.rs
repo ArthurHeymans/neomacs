@@ -23,12 +23,12 @@ pub(super) fn toolbar_visual_config_for_height(height: f32) -> (u32, u32) {
 
 impl RenderApp {
     pub(super) fn set_toolbar_visual_config(&mut self, icon_size: u32, padding: u32) {
-        if self.toolbar_icon_size == icon_size && self.toolbar_padding == padding {
+        if self.toolbar.icon_size == icon_size && self.toolbar.padding == padding {
             return;
         }
-        self.toolbar_icon_size = icon_size;
-        self.toolbar_padding = padding;
-        for (_name, id) in self.toolbar_icon_textures.drain() {
+        self.toolbar.icon_size = icon_size;
+        self.toolbar.padding = padding;
+        for (_name, id) in self.toolbar.icon_textures.drain() {
             if let Some(renderer) = self.renderer.as_mut() {
                 renderer.free_image(id);
             }
@@ -44,14 +44,15 @@ impl RenderApp {
         for item in items {
             if !item.is_separator
                 && !item.icon_name.is_empty()
-                && !self.toolbar_icon_textures.contains_key(&item.icon_name)
+                && !self.toolbar.icon_textures.contains_key(&item.icon_name)
                 && let Some(svg_data) =
                     crate::backend::wgpu::toolbar_icons::get_icon_svg(&item.icon_name)
                 && let Some(renderer) = self.renderer.as_mut()
             {
-                let icon_size = self.toolbar_icon_size;
+                let icon_size = self.toolbar.icon_size;
                 let id = renderer.load_image_data(svg_data, icon_size, icon_size, 0, 0);
-                self.toolbar_icon_textures
+                self.toolbar
+                    .icon_textures
                     .insert(item.icon_name.clone(), id);
                 tracing::debug!(
                     "Loaded toolbar icon '{}' as image_id={}",
@@ -367,11 +368,11 @@ impl RenderApp {
                 shadow_offset,
                 shadow_opacity,
             } => {
-                self.child_frame_corner_radius = corner_radius;
-                self.child_frame_shadow_enabled = shadow_enabled;
-                self.child_frame_shadow_layers = shadow_layers;
-                self.child_frame_shadow_offset = shadow_offset;
-                self.child_frame_shadow_opacity = shadow_opacity;
+                self.child_frame_style.corner_radius = corner_radius;
+                self.child_frame_style.shadow_enabled = shadow_enabled;
+                self.child_frame_style.shadow_layers = shadow_layers;
+                self.child_frame_style.shadow_offset = shadow_offset;
+                self.child_frame_style.shadow_opacity = shadow_opacity;
                 self.mark_top_level_frame_windows_dirty();
                 Ok(())
             }

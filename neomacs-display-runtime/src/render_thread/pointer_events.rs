@@ -444,8 +444,8 @@ impl RenderApp {
                                 window_state,
                                 x,
                                 y,
-                                self.toolbar_padding,
-                                self.toolbar_icon_size,
+                                self.toolbar.padding,
+                                self.toolbar.icon_size,
                             ) {
                                 window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
                                 event = Some(InputEvent::ToolBarClick {
@@ -546,8 +546,8 @@ impl RenderApp {
                                 window_state,
                                 x,
                                 y,
-                                self.toolbar_padding,
-                                self.toolbar_icon_size,
+                                self.toolbar.padding,
+                                self.toolbar.icon_size,
                             )
                         {
                             window_state
@@ -611,8 +611,8 @@ impl RenderApp {
                             window_state,
                             x,
                             y,
-                            self.toolbar_padding,
-                            self.toolbar_icon_size,
+                            self.toolbar.padding,
+                            self.toolbar.icon_size,
                         ) {
                             window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
                             event = Some(InputEvent::ToolBarClick {
@@ -1184,8 +1184,8 @@ impl RenderApp {
         position: PhysicalPosition<f64>,
     ) {
         self.record_idle_dim_activity(window_id);
-        let toolbar_padding = self.toolbar_padding;
-        let toolbar_icon_size = self.toolbar_icon_size;
+        let toolbar_padding = self.toolbar.padding;
+        let toolbar_icon_size = self.toolbar.icon_size;
         let modifiers = self.modifiers;
         if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             let mut event = None;

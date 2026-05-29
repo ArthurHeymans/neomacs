@@ -204,8 +204,8 @@ impl RenderApp {
         toolbar_hit_test_items(
             &tool_bar.items,
             tool_bar.height,
-            self.toolbar_padding,
-            self.toolbar_icon_size,
+            self.toolbar.padding,
+            self.toolbar.icon_size,
             x,
             y,
         )
@@ -280,8 +280,8 @@ impl RenderApp {
         toolbar_hit_test_items(
             &compact_bar.tool_items,
             compact_bar.height,
-            self.toolbar_padding,
-            self.toolbar_icon_size,
+            self.toolbar.padding,
+            self.toolbar.icon_size,
             x,
             y,
         )

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
 use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
-use super::state::{FpsCounter, GuiChromeInteractionState, TypingSpeedState, WindowChrome};
+use super::state::{ChildFrameStyle, FpsCounter, GuiChromeInteractionState, ToolbarResources, TypingSpeedState, WindowChrome};
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
@@ -24,9 +24,7 @@ struct GuiFrameToolBarOverlay<'a> {
     height: f32,
     fg: (f32, f32, f32),
     bg: (f32, f32, f32),
-    icon_textures: &'a HashMap<String, u32>,
-    icon_size: u32,
-    padding: u32,
+    toolbar: &'a ToolbarResources,
 }
 
 struct GuiFrameCompactBarOverlay<'a> {
@@ -37,9 +35,7 @@ struct GuiFrameCompactBarOverlay<'a> {
     menu_bg: (f32, f32, f32),
     tool_fg: (f32, f32, f32),
     tool_bg: (f32, f32, f32),
-    icon_textures: &'a HashMap<String, u32>,
-    icon_size: u32,
-    padding: u32,
+    toolbar: &'a ToolbarResources,
 }
 
 struct GuiFrameImeOverlay<'a> {
@@ -204,11 +200,11 @@ impl RenderApp {
                     tool_bar.height,
                     tool_bar.fg,
                     tool_bar.bg,
-                    tool_bar.icon_textures,
+                    &tool_bar.toolbar.icon_textures,
                     overlays.chrome_interaction.toolbar_hovered,
                     overlays.chrome_interaction.toolbar_pressed,
-                    tool_bar.icon_size,
-                    tool_bar.padding,
+                    tool_bar.toolbar.icon_size,
+                    tool_bar.toolbar.padding,
                     width,
                     height,
                 );
@@ -228,13 +224,13 @@ impl RenderApp {
                     compact_bar.menu_bg,
                     compact_bar.tool_fg,
                     compact_bar.tool_bg,
-                    compact_bar.icon_textures,
+                    &compact_bar.toolbar.icon_textures,
                     overlays.chrome_interaction.compact_bar_menu_hovered,
                     overlays.chrome_interaction.compact_bar_menu_active,
                     overlays.chrome_interaction.compact_bar_tool_hovered,
                     overlays.chrome_interaction.compact_bar_tool_pressed,
-                    compact_bar.icon_size,
-                    compact_bar.padding,
+                    compact_bar.toolbar.icon_size,
+                    compact_bar.toolbar.padding,
                     glyph_atlas,
                     width,
                     height,
@@ -345,15 +341,9 @@ impl RenderApp {
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
-        toolbar_icon_textures: &HashMap<String, u32>,
-        toolbar_icon_size: u32,
-        toolbar_padding: u32,
+        toolbar: &ToolbarResources,
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
     ) -> Option<(
@@ -365,15 +355,9 @@ impl RenderApp {
             faces,
             window_state,
             bg_gradient,
-            child_frame_corner_radius,
-            child_frame_shadow_enabled,
-            child_frame_shadow_layers,
-            child_frame_shadow_offset,
-            child_frame_shadow_opacity,
+            child_frame_style,
             scroll_indicators_enabled,
-            toolbar_icon_textures,
-            toolbar_icon_size,
-            toolbar_padding,
+            toolbar,
             extra_line_spacing,
             extra_letter_spacing,
             None,
@@ -386,15 +370,9 @@ impl RenderApp {
         faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
-        toolbar_icon_textures: &HashMap<String, u32>,
-        toolbar_icon_size: u32,
-        toolbar_padding: u32,
+        toolbar: &ToolbarResources,
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
         output: Option<wgpu::SurfaceTexture>,
@@ -526,15 +504,9 @@ impl RenderApp {
                     animated_cursor,
                     bg_gradient,
                     false,
-                    child_frame_corner_radius,
-                    child_frame_shadow_enabled,
-                    child_frame_shadow_layers,
-                    child_frame_shadow_offset,
-                    child_frame_shadow_opacity,
+                    child_frame_style,
                     scroll_indicators_enabled,
-                    toolbar_icon_textures,
-                    toolbar_icon_size,
-                    toolbar_padding,
+                    toolbar,
                 );
             }
 
@@ -594,15 +566,9 @@ impl RenderApp {
                 &frame,
                 cursor_visible,
                 animated_cursor,
-                child_frame_corner_radius,
-                child_frame_shadow_enabled,
-                child_frame_shadow_layers,
-                child_frame_shadow_offset,
-                child_frame_shadow_opacity,
+                child_frame_style,
                 scroll_indicators_enabled,
-                toolbar_icon_textures,
-                toolbar_icon_size,
-                toolbar_padding,
+                toolbar,
             );
         } else {
             Self::render_frame_window_contents(
@@ -617,15 +583,9 @@ impl RenderApp {
                 animated_cursor,
                 bg_gradient,
                 true,
-                child_frame_corner_radius,
-                child_frame_shadow_enabled,
-                child_frame_shadow_layers,
-                child_frame_shadow_offset,
-                child_frame_shadow_opacity,
+                child_frame_style,
                 scroll_indicators_enabled,
-                toolbar_icon_textures,
-                toolbar_icon_size,
-                toolbar_padding,
+                toolbar,
             );
             renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
                 detect_frame_transitions(
@@ -655,13 +615,10 @@ impl RenderApp {
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
         cursor_visible: bool,
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
     ) {
+        let empty_toolbar = ToolbarResources::default();
         Self::render_frame_window_overlays_with_toolbar_resources(
             renderer,
             faces,
@@ -671,15 +628,9 @@ impl RenderApp {
             frame,
             cursor_visible,
             animated_cursor,
-            child_frame_corner_radius,
-            child_frame_shadow_enabled,
-            child_frame_shadow_layers,
-            child_frame_shadow_offset,
-            child_frame_shadow_opacity,
+            child_frame_style,
             scroll_indicators_enabled,
-            &HashMap::new(),
-            24,
-            5,
+            &empty_toolbar,
         );
     }
 
@@ -693,15 +644,9 @@ impl RenderApp {
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
         cursor_visible: bool,
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
-        toolbar_icon_textures: &HashMap<String, u32>,
-        toolbar_icon_size: u32,
-        toolbar_padding: u32,
+        toolbar: &ToolbarResources,
     ) {
         Self::render_frame_content_overlays(
             renderer,
@@ -712,11 +657,7 @@ impl RenderApp {
             frame,
             cursor_visible,
             animated_cursor,
-            child_frame_corner_radius,
-            child_frame_shadow_enabled,
-            child_frame_shadow_layers,
-            child_frame_shadow_offset,
-            child_frame_shadow_opacity,
+            child_frame_style,
             scroll_indicators_enabled,
         );
 
@@ -762,9 +703,7 @@ impl RenderApp {
                         height: tool_bar.height,
                         fg: tool_bar.fg,
                         bg: tool_bar.bg,
-                        icon_textures: toolbar_icon_textures,
-                        icon_size: toolbar_icon_size,
-                        padding: toolbar_padding,
+                        toolbar,
                     }),
                 compact_bar: render.compact_bar.as_ref().map(|compact_bar| {
                     GuiFrameCompactBarOverlay {
@@ -775,9 +714,7 @@ impl RenderApp {
                         menu_bg: compact_bar.menu_bg,
                         tool_fg: compact_bar.tool_fg,
                         tool_bg: compact_bar.tool_bg,
-                        icon_textures: toolbar_icon_textures,
-                        icon_size: toolbar_icon_size,
-                        padding: toolbar_padding,
+                        toolbar,
                     }
                 }),
                 popup_menu: render.popup_menu.as_ref(),
@@ -876,11 +813,7 @@ impl RenderApp {
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
         cursor_visible: bool,
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
     ) {
         renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
@@ -897,11 +830,11 @@ impl RenderApp {
                         native.height,
                         cursor_visible,
                         animated_cursor.filter(|ac| ac.frame_id == child_id),
-                        child_frame_corner_radius,
-                        child_frame_shadow_enabled,
-                        child_frame_shadow_layers,
-                        child_frame_shadow_offset,
-                        child_frame_shadow_opacity,
+                        child_frame_style.corner_radius,
+                        child_frame_style.shadow_enabled,
+                        child_frame_style.shadow_layers,
+                        child_frame_style.shadow_offset,
+                        child_frame_style.shadow_opacity,
                     );
                 }
             }
@@ -944,15 +877,9 @@ impl RenderApp {
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
         include_overlays: bool,
-        child_frame_corner_radius: f32,
-        child_frame_shadow_enabled: bool,
-        child_frame_shadow_layers: u32,
-        child_frame_shadow_offset: f32,
-        child_frame_shadow_opacity: f32,
+        child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
-        toolbar_icon_textures: &HashMap<String, u32>,
-        toolbar_icon_size: u32,
-        toolbar_padding: u32,
+        toolbar: &ToolbarResources,
     ) {
         Self::render_frame_root_glyphs(
             renderer,
@@ -981,15 +908,9 @@ impl RenderApp {
             frame,
             cursor_visible,
             animated_cursor,
-            child_frame_corner_radius,
-            child_frame_shadow_enabled,
-            child_frame_shadow_layers,
-            child_frame_shadow_offset,
-            child_frame_shadow_opacity,
+            child_frame_style,
             scroll_indicators_enabled,
-            toolbar_icon_textures,
-            toolbar_icon_size,
-            toolbar_padding,
+            toolbar,
         );
         if renderer_effects_still_active {
             render.mark_dirty();
@@ -1022,15 +943,9 @@ impl RenderApp {
             &self.faces,
             window_state,
             bg_gradient,
-            self.child_frame_corner_radius,
-            self.child_frame_shadow_enabled,
-            self.child_frame_shadow_layers,
-            self.child_frame_shadow_offset,
-            self.child_frame_shadow_opacity,
+            &self.child_frame_style,
             self.scroll_indicators_enabled,
-            &self.toolbar_icon_textures,
-            self.toolbar_icon_size,
-            self.toolbar_padding,
+            &self.toolbar,
             self.extra_line_spacing,
             self.extra_letter_spacing,
         ) {

@@ -182,11 +182,6 @@ impl RenderApp {
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.frame_windows.take_primary_window();
                     self.frame_windows.clear_primary_mapping();
-                    #[cfg(test)]
-                    {
-                        self.primary_render_state_for_tests = None;
-                    }
-                    self.primary_window_destroyed = true;
                 } else {
                     self.frame_windows.request_destroy(emacs_frame_id);
                 }

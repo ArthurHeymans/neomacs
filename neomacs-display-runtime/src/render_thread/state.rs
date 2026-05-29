@@ -262,6 +262,42 @@ impl GuiChromeInteractionState {
     }
 }
 
+pub(super) struct ChildFrameStyle {
+    pub(super) corner_radius: f32,
+    pub(super) shadow_enabled: bool,
+    pub(super) shadow_layers: u32,
+    pub(super) shadow_offset: f32,
+    pub(super) shadow_opacity: f32,
+}
+
+impl Default for ChildFrameStyle {
+    fn default() -> Self {
+        Self {
+            corner_radius: 8.0,
+            shadow_enabled: true,
+            shadow_layers: 4,
+            shadow_offset: 2.0,
+            shadow_opacity: 0.3,
+        }
+    }
+}
+
+pub(super) struct ToolbarResources {
+    pub(super) icon_textures: HashMap<String, u32>,
+    pub(super) icon_size: u32,
+    pub(super) padding: u32,
+}
+
+impl Default for ToolbarResources {
+    fn default() -> Self {
+        Self {
+            icon_textures: HashMap::new(),
+            icon_size: 24,
+            padding: 5,
+        }
+    }
+}
+
 pub(super) struct RenderGpuContext {
     pub(super) instance: wgpu::Instance,
     pub(super) adapter: wgpu::Adapter,
@@ -271,12 +307,9 @@ pub(super) struct RenderGpuContext {
 
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
-    pub(super) primary_window_destroyed: bool,
 
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
-    #[cfg(test)]
-    pub(super) primary_render_state_for_tests: Option<GuiFrameRenderState>,
 
     pub(super) faces: HashMap<u32, Face>,
 
@@ -305,18 +338,10 @@ pub(super) struct RenderApp {
 
     pub(super) frame_windows: GuiFrameWindowManager,
 
-    pub(super) child_frame_corner_radius: f32,
-    pub(super) child_frame_shadow_enabled: bool,
-    pub(super) child_frame_shadow_layers: u32,
-    pub(super) child_frame_shadow_offset: f32,
-    pub(super) child_frame_shadow_opacity: f32,
-
-    pub(super) toolbar_icon_textures: HashMap<String, u32>,
-    pub(super) toolbar_icon_size: u32,
-    pub(super) toolbar_padding: u32,
+    pub(super) child_frame_style: ChildFrameStyle,
+    pub(super) toolbar: ToolbarResources,
 
     pub(super) scroll_indicators_enabled: bool,
-    pub(super) primary_fps_enabled: bool,
 
     pub(super) extra_line_spacing: f32,
     pub(super) extra_letter_spacing: f32,
@@ -364,11 +389,8 @@ impl RenderApp {
 
         Self {
             comms,
-            primary_window_destroyed: false,
             gpu: None,
             renderer: None,
-            #[cfg(test)]
-            primary_render_state_for_tests: None,
             faces: HashMap::new(),
             modifiers: 0,
             image_dimensions,
@@ -386,16 +408,9 @@ impl RenderApp {
             #[cfg(feature = "neo-term")]
             shared_terminals,
             frame_windows,
-            child_frame_corner_radius: 8.0,
-            child_frame_shadow_enabled: true,
-            child_frame_shadow_layers: 4,
-            child_frame_shadow_offset: 2.0,
-            child_frame_shadow_opacity: 0.3,
-            toolbar_icon_textures: HashMap::new(),
-            toolbar_icon_size: 24,
-            toolbar_padding: 5,
+            child_frame_style: ChildFrameStyle::default(),
+            toolbar: ToolbarResources::default(),
             scroll_indicators_enabled: false,
-            primary_fps_enabled: false,
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
             shared_monitors: Some(shared_monitors),
@@ -444,8 +459,6 @@ impl RenderApp {
     pub(super) fn set_primary_render_state_for_tests(&mut self, render: GuiFrameRenderState) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.render = render;
-        } else {
-            self.primary_render_state_for_tests = Some(render);
         }
     }
 
@@ -487,7 +500,6 @@ impl RenderApp {
     }
 
     pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
-        self.primary_fps_enabled = enabled;
         self.frame_windows.set_top_level_fps_enabled(enabled);
     }
 
@@ -498,7 +510,7 @@ impl RenderApp {
     }
 
     pub(super) fn primary_fps_enabled(&self) -> bool {
-        self.primary_fps_enabled
+        self.frame_windows.fps_enabled
     }
 
     pub(super) fn primary_char_width(&self) -> f32 {
@@ -586,24 +598,12 @@ impl RenderApp {
         if let Some(frame) = self.primary_render_state() {
             return &frame.child_frames;
         }
-        #[cfg(test)]
-        {
-            if let Some(frame) = self.primary_render_state_for_tests.as_ref() {
-                return &frame.child_frames;
-            }
-        }
         panic!("primary child frames")
     }
 
     pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
         if self.frame_windows.primary_window_mut().is_some() {
             return &mut self.frame_windows.primary_window_mut().unwrap().render.child_frames;
-        }
-        #[cfg(test)]
-        {
-            if let Some(frame) = self.primary_render_state_for_tests.as_mut() {
-                return &mut frame.child_frames;
-            }
         }
         panic!("primary child frames mut")
     }

@@ -199,7 +199,7 @@ fn compact_bar_tool_hit_test_offsets_after_menu_items() {
         tool_fg: (0.0, 0.0, 0.0),
         tool_bg: (0.0, 0.0, 0.0),
     });
-    let x = app.compact_bar_menu_width() + app.toolbar_padding as f32 + 1.0;
+    let x = app.compact_bar_menu_width() + app.toolbar.padding as f32 + 1.0;
 
     assert_eq!(app.compact_bar_tool_hit_test(x, 12.0), Some(9));
     assert_eq!(app.compact_bar_tool_hit_test(1.0, 12.0), None);

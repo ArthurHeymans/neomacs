@@ -93,8 +93,7 @@ impl RenderApp {
             );
             self.resumed_seen = true;
         }
-        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| ws.native.is_none())
-            && !self.primary_window_destroyed;
+        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| ws.native.is_none());
         if needs_native {
             let (width, height, title, decorations_enabled) = {
                 let primary = self.frame_windows.primary_window().unwrap();
@@ -302,8 +301,6 @@ impl RenderApp {
         drop(self.renderer.take());
         // Drop adopted primary state (surface holds wl_surface proxy if on Wayland)
         drop(self.frame_windows.take_primary_window());
-        #[cfg(test)]
-        drop(self.primary_render_state_for_tests.take());
         // Drop multi-window state (secondary surfaces)
         self.frame_windows.destroy_all();
         // Leak the adapter to prevent eglTerminate crash on Wayland.

@@ -87,17 +87,7 @@ impl RenderApp {
         let primary_frame = if let Some(window_state) = self.frame_windows.primary_window_mut() {
             &mut window_state.render
         } else {
-            #[cfg(test)]
-            {
-                let Some(primary_frame) = self.primary_render_state_for_tests.as_mut() else {
-                    return false;
-                };
-                primary_frame
-            }
-            #[cfg(not(test))]
-            {
-                return false;
-            }
+            return false;
         };
         let now = std::time::Instant::now();
         primary_frame.tick_cursor_blink(now, cursor_wake_enabled, renderer)
