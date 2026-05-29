@@ -668,3 +668,63 @@ fn org_navigate_siblings_descendants_edit_fold_deep() {
                            (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_multi_level_cycle_edit_fold_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\n")
+    (insert "** A1\n")
+    (insert "*** A1a\nBody.\n\n")
+    (insert "*** A1b\nBody.\n\n")
+    (insert "** A2\n")
+    (insert "*** A2a\nBody.\n\n")
+    (insert "* B\n")
+    (insert "** B1\n")
+    (insert "*** B1a\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At A1a
+      (goto-char (point-min))
+      (search-forward "A1a")
+      (beginning-of-line)
+      (let ((at-a1a (funcall track)))
+        ;; Next sibling: A1b
+        (org-forward-heading-same-level 1)
+        (let ((at-a1b (funcall track)))
+          ;; Up to A1
+          (org-up-heading-safe)
+          (let ((at-a1 (funcall track)))
+            ;; Forward to A2
+            (org-forward-heading-same-level 1)
+            (let ((at-a2 (funcall track)))
+              ;; Down to A2a
+              (org-next-visible-heading 1)
+              (let ((at-a2a (funcall track)))
+                ;; Edit: insert under A2
+                (goto-char (point-min))
+                (search-forward "A2")
+                (end-of-line)
+                (insert "\n*** A2b\nBody.\n")
+                ;; Fold A subtree
+                (goto-char (point-min))
+                (search-forward "^\\* A$")
+                (beginning-of-line)
+                (org-fold-subtree)
+                (let ((after-fold (funcall track)))
+                  (list at-a1a at-a1b at-a1 at-a2 at-a2a
+                        after-fold
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
