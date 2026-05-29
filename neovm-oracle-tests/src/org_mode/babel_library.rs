@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_double_edit_reexecute_v4() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: numbers
+      (insert "#+NAME: nums\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((n1 4) (n2 7) (n3 2) (n4 9) (n5 5))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: compute
+      (insert "#+NAME: comp\n")
+      (insert "#+begin_src emacs-lisp :var data=nums :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (+ 10 (cadr r)) (* 2 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("nums" "comp"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: nums")
+      (forward-line 1)
+      (let ((nums1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: comp")
+        (forward-line 1)
+        (let ((comp1 (org-babel-read-result)))
+          ;; Edit: change n3 from 2 to 20
+          (goto-char (point-min))
+          (search-forward "(n3 2)")
+          (replace-match "(n3 20)")
+          ;; Re-execute
+          (dolist (name '("nums" "comp"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: nums")
+          (forward-line 1)
+          (let ((nums2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: comp")
+            (forward-line 1)
+            (let ((comp2 (org-babel-read-result)))
+              (list nums1 comp1 nums2 comp2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_intermediate_read_edit_reexecute_v3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
