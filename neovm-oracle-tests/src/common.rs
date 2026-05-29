@@ -159,6 +159,18 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; mapconcat, while GNU reuses uninitialised stack memory.  Both are
          ;; non-deterministic across builds, so squash them to 0 for parity.
          ((fixnump v) (if (> (abs v) 1000000000000) 0 v))
+         ;; Org clocktable caption embeds the wall-clock time of the run.
+         ;; The Neomacs and GNU oracle processes start seconds apart, so the
+         ;; timestamp differs even though both produce identical clocktable
+         ;; output.  Replace with a canonical placeholder.
+         ;; Use make-string to build the leading '#' without writing
+         ;; the quote-hash sequence inside the Rust raw-string literal.
+         ((stringp v)
+          (let ((hash (make-string 1 35)))
+            (replace-regexp-in-string
+             (concat hash "\\+CAPTION: Clock summary at \\[[^]]+\\]")
+             (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
+             v)))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
