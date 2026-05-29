@@ -78,9 +78,9 @@ impl RenderApp {
                     std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
                     self.cursor_defaults.blink_on = true;
-                    self.with_unmanaged_primary_render(|r| {
-                        r.force_cursor_blink_on();
-                    });
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                        primary_frame.force_cursor_blink_on();
+                    }
                 }
                 self.sync_top_level_cursor_config_from_defaults_without_dirty();
                 if !enabled {
@@ -207,15 +207,9 @@ impl RenderApp {
                     .get(emacs_frame_id)
                     .map(|window_state| {
                         let (fs, lh, cw) = window_state.render.font_metrics();
-                        (
-                            fs,
-                            lh,
-                            cw,
-                            window_state.native.width as f32
-                                / window_state.native.scale_factor as f32,
-                            window_state.native.height as f32
-                                / window_state.native.scale_factor as f32,
-                        )
+                        let (screen_w, screen_h) = window_state.native_size();
+                        let scale = window_state.scale_factor() as f32;
+                        (fs, lh, cw, screen_w as f32 / scale, screen_h as f32 / scale)
                     })
                     .or_else(|| {
                         if !self.frame_windows.is_primary_frame_id(emacs_frame_id) {
@@ -362,9 +356,7 @@ impl RenderApp {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
-                if self.primary_window_state().is_none() {
-                    self.remove_primary_child_frame(frame_id);
-                }
+                self.remove_primary_child_frame(frame_id);
                 Ok(())
             }
             RenderCommand::SetChildFrameStyle {

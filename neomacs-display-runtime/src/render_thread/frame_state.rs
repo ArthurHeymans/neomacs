@@ -47,16 +47,14 @@ impl RenderApp {
                 }
             });
 
-        if self.primary_window_state().is_none() {
-            if let Some(frame) = self.primary_current_frame() {
-                for (face_id, face) in &frame.faces {
-                    faces.entry(*face_id).or_insert_with(|| face.clone());
-                }
+        if let Some(frame) = self.primary_current_frame() {
+            for (face_id, face) in &frame.faces {
+                faces.entry(*face_id).or_insert_with(|| face.clone());
             }
-            for entry in self.primary_child_frames().frames.values() {
-                for (face_id, face) in &entry.frame.faces {
-                    faces.entry(*face_id).or_insert_with(|| face.clone());
-                }
+        }
+        for entry in self.primary_child_frames().frames.values() {
+            for (face_id, face) in &entry.frame.faces {
+                faces.entry(*face_id).or_insert_with(|| face.clone());
             }
         }
 
@@ -64,22 +62,24 @@ impl RenderApp {
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             let face_count = self.faces.len();
-            self.with_unmanaged_primary_render(|r| {
+            if let Some(primary_frame) = self.primary_render_state_mut() {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),
                     face_count
                 );
-                r.glyph_atlas.clear();
-            });
+                if let Some(atlas) = primary_frame.glyph_atlas.as_mut() {
+                    atlas.clear();
+                }
+            }
             self.frame_windows.clear_top_level_glyph_atlases();
         }
     }
 
     fn apply_primary_fallback_visual_cursor_animations(&mut self) {
-        self.with_unmanaged_primary_render(|r| {
-            r.apply_visual_cursor_animations();
-        });
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.apply_visual_cursor_animations();
+        }
     }
 }
 

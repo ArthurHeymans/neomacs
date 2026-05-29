@@ -402,8 +402,8 @@ impl RenderApp {
         y: f32,
     ) -> u32 {
         Self::titlebar_hit_test_for_chrome(
-            &window_state.native.chrome,
-            window_state.native.width as f32 / window_state.native.scale_factor as f32,
+            window_state.chrome(),
+            window_state.native_size().0 as f32 / window_state.scale_factor() as f32,
             x,
             y,
         )

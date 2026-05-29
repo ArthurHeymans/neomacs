@@ -45,8 +45,8 @@ impl RenderApp {
             RenderCommand::SetWindowTitle { title } => {
                 self.primary_chrome_mut().title = title.clone();
                 if let Some(primary_state) = self.primary_window_state_mut() {
-                    primary_state.native.window.set_title(&title);
-                    if !primary_state.native.chrome.decorations_enabled {
+                    primary_state.set_title(title);
+                    if !primary_state.chrome().decorations_enabled {
                         primary_state.render.mark_dirty();
                     }
                 }
@@ -88,10 +88,8 @@ impl RenderApp {
             }
             RenderCommand::SetWindowSize { width, height } => {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
-                if let Some(primary_state) = self.primary_window_state() {
+                if let Some(primary_state) = self.primary_window_state_mut() {
                     primary_state.request_inner_size(width, height);
-                } else {
-                    self.primary_native_fallback.set_size(width, height);
                 }
                 Ok(())
             }
@@ -107,13 +105,9 @@ impl RenderApp {
                     width,
                     height
                 );
-                if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.apply_geometry_hints(geometry_hints);
                     window_state.request_inner_size(width, height);
-                } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_native_fallback
-                        .set_geometry_hints(geometry_hints);
-                    self.primary_native_fallback.set_size(width, height);
                 } else {
                     tracing::warn!(
                         "ResizeWindow requested for unknown frame_id=0x{:x}",
@@ -134,11 +128,8 @@ impl RenderApp {
                     geometry_hints.width_inc,
                     geometry_hints.height_inc
                 );
-                if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.apply_geometry_hints(geometry_hints);
-                } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_native_fallback
-                        .set_geometry_hints(geometry_hints);
                 } else {
                     tracing::warn!(
                         "SetFrameGeometryHints requested for unknown frame_id=0x{:x}",
@@ -148,7 +139,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowDecorated { decorated } => {
-                self.primary_native_fallback.chrome.decorations_enabled = decorated;
+                self.primary_chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.set_top_level_decorations(decorated);
                 Ok(())
             }

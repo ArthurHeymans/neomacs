@@ -62,7 +62,7 @@ pub(crate) struct GuiFrameRenderState {
     /// Child frames rendered as overlays in this window.
     pub child_frames: ChildFrameManager,
     /// Glyph atlas rasterized at this window's current scale factor.
-    pub glyph_atlas: WgpuGlyphAtlas,
+    pub glyph_atlas: Option<WgpuGlyphAtlas>,
     /// Whether this window needs a redraw.
     pub frame_dirty: bool,
     /// Last known pointer position in this frame's logical coordinates.
@@ -105,9 +105,20 @@ pub(crate) struct GuiFrameRenderState {
 }
 
 /// Per-window state for a top-level GUI frame.
+///
+/// `native` is `None` until the winit window is created (at `resumed`),
+/// allowing the render state to exist and accumulate overlay data eagerly.
 pub(crate) struct GuiFrameWindowState {
-    pub native: GuiFrameNativeWindowState,
+    pub native: Option<GuiFrameNativeWindowState>,
     pub render: GuiFrameRenderState,
+    pub pending_width: u32,
+    pub pending_height: u32,
+    pub pending_scale_factor: f64,
+    pub pending_mouse_hidden_for_typing: bool,
+    pub pending_ime_enabled: bool,
+    pub(super) pending_last_ime_cursor_area: Option<ImeCursorArea>,
+    pub(super) pending_chrome: WindowChrome,
+    pub pending_geometry_hints: Option<GuiFrameGeometryHints>,
 }
 
 impl GuiFrameRenderState {
@@ -121,7 +132,7 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             current_frame: None,
             child_frames: ChildFrameManager::new(),
-            glyph_atlas: WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32),
+            glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
             frame_dirty: false,
             mouse_pos: (0.0, 0.0),
             cursor: CursorState::default(),
@@ -148,16 +159,52 @@ impl GuiFrameRenderState {
         }
     }
 
+    pub(super) fn new_without_device(emacs_frame_id: u64, fps_enabled: bool) -> Self {
+        Self {
+            emacs_frame_id,
+            current_frame: None,
+            child_frames: ChildFrameManager::new(),
+            glyph_atlas: None,
+            frame_dirty: false,
+            mouse_pos: (0.0, 0.0),
+            cursor: CursorState::default(),
+            visual_cursors: HashMap::new(),
+            menu_bar: None,
+            tool_bar: None,
+            compact_bar: None,
+            chrome_interaction: GuiChromeInteractionState::default(),
+            popup_menu: None,
+            tooltip: None,
+            visual_bell_start: None,
+            fps: FpsCounter {
+                enabled: fps_enabled,
+                ..FpsCounter::default()
+            },
+            typing_speed: TypingSpeedState::default(),
+            idle_dim: IdleDimState::default(),
+            ime_preedit_active: false,
+            ime_preedit_text: String::new(),
+            transitions: TransitionState::default(),
+            renderer_effects: RendererFrameEffects::default(),
+            #[cfg(feature = "wpe-webkit")]
+            floating_webkits: Vec::new(),
+        }
+    }
+
+    pub(super) fn populate_glyph_atlas(&mut self, device: &wgpu::Device, scale_factor: f64) {
+        if self.glyph_atlas.is_none() {
+            self.glyph_atlas = Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
+        }
+    }
+
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
         self.current_frame.clone()
     }
 
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
-        (
-            self.glyph_atlas.default_font_size(),
-            self.glyph_atlas.default_line_height(),
-            self.glyph_atlas.default_char_width(),
-        )
+        self.glyph_atlas.as_ref().map_or((13.0, 17.0, 13.0 * 0.6), |atlas| {
+            (atlas.default_font_size(), atlas.default_line_height(), atlas.default_char_width())
+        })
     }
 
     pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
@@ -599,93 +646,132 @@ impl GuiFrameWindowState {
         if width == 0 || height == 0 {
             return;
         }
-        self.native.width = width;
-        self.native.height = height;
-        self.native.surface_config.width = width;
-        self.native.surface_config.height = height;
-        self.native
-            .surface
-            .configure(device, &self.native.surface_config);
-        clear_frame_transition_textures(&mut self.render.transitions);
-        self.render.frame_dirty = true;
+        if let Some(native) = &mut self.native {
+            native.width = width;
+            native.height = height;
+            native.surface_config.width = width;
+            native.surface_config.height = height;
+            native.surface.configure(device, &native.surface_config);
+            clear_frame_transition_textures(&mut self.render.transitions);
+            self.render.frame_dirty = true;
+        } else {
+            self.pending_width = width;
+            self.pending_height = height;
+        }
     }
 
     pub fn set_scale_factor(&mut self, scale_factor: f64) {
         let effective_scale = effective_window_scale_factor(scale_factor);
-        self.native.scale_factor = effective_scale;
-        self.render
-            .glyph_atlas
-            .set_scale_factor(effective_scale as f32);
-        self.render.frame_dirty = true;
+        if let Some(native) = &mut self.native {
+            native.scale_factor = effective_scale;
+            if let Some(atlas) = self.render.glyph_atlas.as_mut() {
+                atlas.set_scale_factor(effective_scale as f32);
+            }
+            self.render.frame_dirty = true;
+        } else {
+            self.pending_scale_factor = effective_scale;
+        }
     }
 
     pub(super) fn set_title(&mut self, title: String) {
-        self.native.chrome.title = title.clone();
-        self.native.window.set_title(&title);
-        if !self.native.chrome.decorations_enabled {
-            self.render.frame_dirty = true;
+        if let Some(native) = &mut self.native {
+            native.chrome.title = title.clone();
+            native.window.set_title(&title);
+            if !native.chrome.decorations_enabled {
+                self.render.frame_dirty = true;
+            }
+        } else {
+            self.pending_chrome.title = title;
         }
     }
 
     pub(super) fn set_fullscreen_mode(&mut self, mode: u32) {
+        let native = match self.native.as_mut() {
+            Some(n) => n,
+            None => return,
+        };
         match mode {
             3 => {
-                self.native
-                    .window
-                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
-                self.native.chrome.is_fullscreen = true;
+                native.window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                native.chrome.is_fullscreen = true;
             }
             4 => {
-                self.native.window.set_maximized(true);
-                self.native.chrome.is_fullscreen = false;
+                native.window.set_maximized(true);
+                native.chrome.is_fullscreen = false;
             }
             _ => {
-                self.native.window.set_fullscreen(None);
-                self.native.window.set_maximized(false);
-                self.native.chrome.is_fullscreen = false;
+                native.window.set_fullscreen(None);
+                native.window.set_maximized(false);
+                native.chrome.is_fullscreen = false;
             }
         }
         self.render.frame_dirty = true;
     }
 
-    pub(super) fn request_inner_size(&self, width: u32, height: u32) {
-        let size = window_size_from_emacs_pixels(width, height);
-        let _ = self.native.window.request_inner_size(size);
+    pub(super) fn request_inner_size(&mut self, width: u32, height: u32) {
+        if let Some(native) = self.native.as_ref() {
+            let size = window_size_from_emacs_pixels(width, height);
+            let _ = native.window.request_inner_size(size);
+        } else {
+            self.pending_width = width;
+            self.pending_height = height;
+        }
     }
 
-    pub(super) fn apply_geometry_hints(&self, geometry_hints: GuiFrameGeometryHints) {
-        apply_window_geometry_hints(&self.native.window, geometry_hints);
+    pub(super) fn apply_geometry_hints(&mut self, geometry_hints: GuiFrameGeometryHints) {
+        if let Some(native) = self.native.as_ref() {
+            apply_window_geometry_hints(&native.window, geometry_hints);
+        } else {
+            self.pending_geometry_hints = Some(geometry_hints);
+        }
     }
 
     pub(super) fn set_decorations(&mut self, decorated: bool) {
-        self.native.chrome.decorations_enabled = decorated;
-        self.native.window.set_decorations(decorated);
-        self.render.frame_dirty = true;
+        if let Some(native) = self.native.as_mut() {
+            native.chrome.decorations_enabled = decorated;
+            native.window.set_decorations(decorated);
+            self.render.frame_dirty = true;
+        } else {
+            self.pending_chrome.decorations_enabled = decorated;
+        }
     }
 
     pub(super) fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if self.native.mouse_hidden_for_typing != hidden {
-            self.native.window.set_cursor_visible(!hidden);
-            self.native.mouse_hidden_for_typing = hidden;
+        if let Some(native) = self.native.as_mut() {
+            if native.mouse_hidden_for_typing != hidden {
+                native.window.set_cursor_visible(!hidden);
+                native.mouse_hidden_for_typing = hidden;
+            }
+        } else {
+            self.pending_mouse_hidden_for_typing = hidden;
         }
     }
 
     pub(super) fn reset_ime_cursor_area(&mut self) {
-        self.native.last_ime_cursor_area = None;
-        self.native
-            .window
-            .set_ime_cursor_area(PhysicalPosition::new(0.0, 0.0), PhysicalSize::new(1.0, 1.0));
+        if let Some(native) = self.native.as_mut() {
+            native.last_ime_cursor_area = None;
+            native.window.set_ime_cursor_area(
+                PhysicalPosition::new(0.0, 0.0),
+                PhysicalSize::new(1.0, 1.0),
+            );
+        } else {
+            self.pending_last_ime_cursor_area = None;
+        }
     }
 
     pub(super) fn update_ime_cursor_area(&mut self, area: ImeCursorArea) {
-        if self.native.last_ime_cursor_area == Some(area) {
-            return;
+        if let Some(native) = self.native.as_mut() {
+            if native.last_ime_cursor_area == Some(area) {
+                return;
+            }
+            native.window.set_ime_cursor_area(
+                PhysicalPosition::new(area.x as f64, area.y as f64),
+                PhysicalSize::new(area.width as f64, area.height as f64),
+            );
+            native.last_ime_cursor_area = Some(area);
+        } else {
+            self.pending_last_ime_cursor_area = Some(area);
         }
-        self.native.window.set_ime_cursor_area(
-            PhysicalPosition::new(area.x as f64, area.y as f64),
-            PhysicalSize::new(area.width as f64, area.height as f64),
-        );
-        self.native.last_ime_cursor_area = Some(area);
     }
 
     pub(super) fn clear_ime_preedit(&mut self) {
@@ -709,39 +795,43 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn drag_resize_for_current_edge(&self) -> bool {
-        let Some(dir) = self.native.chrome.resize_edge else {
+        let native = match self.native.as_ref() {
+            Some(n) => n,
+            None => return false,
+        };
+        let Some(dir) = native.chrome.resize_edge else {
             return false;
         };
-        let _ = self.native.window.drag_resize_window(dir);
+        let _ = native.window.drag_resize_window(dir);
         true
     }
 
     pub(super) fn handle_titlebar_action(&mut self, action: u32) -> bool {
+        let native = match self.native.as_mut() {
+            Some(n) => n,
+            None => return false,
+        };
         match action {
             1 => {
                 let now = Instant::now();
                 if now
-                    .duration_since(self.native.chrome.last_titlebar_click)
+                    .duration_since(native.chrome.last_titlebar_click)
                     .as_millis()
                     < 400
                 {
-                    self.native
-                        .window
-                        .set_maximized(!self.native.window.is_maximized());
+                    native.window.set_maximized(!native.window.is_maximized());
                 } else {
-                    let _ = self.native.window.drag_window();
+                    let _ = native.window.drag_window();
                 }
-                self.native.chrome.last_titlebar_click = now;
+                native.chrome.last_titlebar_click = now;
                 true
             }
             3 => {
-                self.native
-                    .window
-                    .set_maximized(!self.native.window.is_maximized());
+                native.window.set_maximized(!native.window.is_maximized());
                 true
             }
             4 => {
-                self.native.window.set_minimized(true);
+                native.window.set_minimized(true);
                 true
             }
             _ => false,
@@ -749,7 +839,90 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn drag_window(&self) {
-        let _ = self.native.window.drag_window();
+        if let Some(native) = self.native.as_ref() {
+            let _ = native.window.drag_window();
+        }
+    }
+
+    pub fn native_size(&self) -> (u32, u32) {
+        self.native.as_ref().map_or(
+            (self.pending_width, self.pending_height),
+            |n| (n.width, n.height),
+        )
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        self.native.as_ref().map_or(self.pending_scale_factor, |n| n.scale_factor)
+    }
+
+    pub(super) fn chrome(&self) -> &WindowChrome {
+        self.native.as_ref().map_or(&self.pending_chrome, |n| &n.chrome)
+    }
+
+    pub(super) fn chrome_mut(&mut self) -> &mut WindowChrome {
+        if self.native.is_some() {
+            &mut self.native.as_mut().unwrap().chrome
+        } else {
+            &mut self.pending_chrome
+        }
+    }
+
+    pub fn ime_enabled(&self) -> bool {
+        self.native.as_ref().map_or(self.pending_ime_enabled, |n| n.ime_enabled)
+    }
+
+    pub fn set_ime_enabled(&mut self, enabled: bool) {
+        if let Some(native) = self.native.as_mut() {
+            native.ime_enabled = enabled;
+        } else {
+            self.pending_ime_enabled = enabled;
+        }
+    }
+
+    pub fn mouse_hidden_for_typing(&self) -> bool {
+        self.native.as_ref().map_or(self.pending_mouse_hidden_for_typing, |n| n.mouse_hidden_for_typing)
+    }
+
+    pub fn set_mouse_hidden_for_typing_pending(&mut self, hidden: bool) {
+        self.pending_mouse_hidden_for_typing = hidden;
+    }
+
+    pub fn request_redraw(&self) {
+        if let Some(native) = self.native.as_ref() {
+            native.window.request_redraw();
+        }
+    }
+
+    pub fn window(&self) -> Option<&Arc<Window>> {
+        self.native.as_ref().map(|n| &n.window)
+    }
+
+    pub(super) fn last_ime_cursor_area(&self) -> Option<ImeCursorArea> {
+        self.native.as_ref().and_then(|n| n.last_ime_cursor_area).or(self.pending_last_ime_cursor_area)
+    }
+
+    pub(super) fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
+        if let Some(native) = self.native.as_mut() {
+            native.last_ime_cursor_area = area;
+        } else {
+            self.pending_last_ime_cursor_area = area;
+        }
+    }
+
+    pub fn geometry_hints(&self) -> Option<GuiFrameGeometryHints> {
+        self.pending_geometry_hints
+    }
+
+    pub fn set_geometry_hints(&mut self, hints: GuiFrameGeometryHints) {
+        if let Some(native) = self.native.as_ref() {
+            apply_window_geometry_hints(&native.window, hints);
+        }
+        self.pending_geometry_hints = Some(hints);
+    }
+
+    pub fn set_pending_size(&mut self, width: u32, height: u32) {
+        self.pending_width = width;
+        self.pending_height = height;
     }
 }
 
@@ -822,6 +995,9 @@ impl GuiFrameWindowManager {
 
     pub fn adopt_primary_frame_id(&mut self, emacs_frame_id: u64) {
         self.primary_emacs_frame_id = Some(emacs_frame_id);
+        if let Some(primary) = self.primary_window.as_mut() {
+            primary.render.set_emacs_frame_id(emacs_frame_id);
+        }
         self.sync_primary_mapping();
     }
 
@@ -855,9 +1031,25 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
-        self.primary_winit_id = Some(window_state.native.window.id());
+        if let Some(native) = window_state.native.as_ref() {
+            self.primary_winit_id = Some(native.window.id());
+        }
         self.primary_window = Some(window_state);
         self.sync_primary_mapping();
+    }
+
+    pub(super) fn set_primary_pending(&mut self, window_state: GuiFrameWindowState) {
+        self.primary_window = Some(window_state);
+        self.sync_primary_mapping();
+    }
+
+    pub(super) fn populate_primary_native(&mut self, native: GuiFrameNativeWindowState) {
+        if let Some(window_state) = self.primary_window.as_mut() {
+            let winit_id = native.window.id();
+            self.primary_winit_id = Some(winit_id);
+            window_state.native = Some(native);
+            self.sync_primary_mapping();
+        }
     }
 
     pub(super) fn take_primary_window(&mut self) -> Option<GuiFrameWindowState> {
@@ -997,10 +1189,17 @@ impl GuiFrameWindowManager {
                     );
 
                     self.winit_to_emacs.insert(winit_id, req.emacs_frame_id);
+                    let chrome = WindowChrome {
+                        title: req.title.clone(),
+                        titlebar_hover: 0,
+                        resize_edge: None,
+                        last_titlebar_click: Instant::now(),
+                        ..self.chrome_defaults.clone()
+                    };
                     self.windows.insert(
                         req.emacs_frame_id,
                         GuiFrameWindowState {
-                            native: GuiFrameNativeWindowState {
+                            native: Some(GuiFrameNativeWindowState {
                                 window,
                                 surface,
                                 surface_config: config,
@@ -1010,20 +1209,22 @@ impl GuiFrameWindowManager {
                                 mouse_hidden_for_typing: false,
                                 ime_enabled: false,
                                 last_ime_cursor_area: None,
-                                chrome: WindowChrome {
-                                    title: req.title.clone(),
-                                    titlebar_hover: 0,
-                                    resize_edge: None,
-                                    last_titlebar_click: Instant::now(),
-                                    ..self.chrome_defaults.clone()
-                                },
-                            },
+                                chrome: chrome.clone(),
+                            }),
                             render: GuiFrameRenderState::new(
                                 req.emacs_frame_id,
                                 device,
                                 scale_factor,
                                 self.fps_enabled,
                             ),
+                            pending_width: phys.width,
+                            pending_height: phys.height,
+                            pending_scale_factor: scale_factor,
+                            pending_mouse_hidden_for_typing: false,
+                            pending_ime_enabled: false,
+                            pending_last_ime_cursor_area: None,
+                            pending_chrome: chrome,
+                            pending_geometry_hints: None,
                         },
                     );
                 }
@@ -1043,9 +1244,10 @@ impl GuiFrameWindowManager {
         let pending = std::mem::take(&mut self.pending_destroys);
         for frame_id in pending {
             if let Some(state) = self.windows.remove(&frame_id) {
-                self.winit_to_emacs.remove(&state.native.window.id());
+                if let Some(native) = state.native {
+                    self.winit_to_emacs.remove(&native.window.id());
+                }
                 tracing::info!("Destroyed window for frame {}", frame_id);
-                // Window and surface are dropped here
             }
         }
     }
@@ -1188,9 +1390,10 @@ impl GuiFrameWindowManager {
         let primary_winit_id = self.primary_winit_id;
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
+            let is_primary = window_state.native.as_ref().is_some_and(|n| primary_winit_id == Some(n.window.id()));
             dirty |= window_state.render.tick_cursor_blink(
                 now,
-                cursor_wake_enabled && primary_winit_id == Some(window_state.native.window.id()),
+                cursor_wake_enabled && is_primary,
                 renderer,
             );
         });
@@ -1250,21 +1453,21 @@ impl GuiFrameWindowManager {
     pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
         self.for_each_top_level_window(|window_state| {
             if window_state.render.frame_dirty {
-                window_state.native.window.request_redraw();
+                window_state.request_redraw();
             }
         });
     }
 
     pub(super) fn request_redraw_for_top_level_windows(&self) {
         self.for_each_top_level_window(|window_state| {
-            window_state.native.window.request_redraw();
+            window_state.request_redraw();
         });
     }
 
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
         self.chrome_defaults.titlebar_height = height;
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.native.chrome.titlebar_height = height;
+            window_state.chrome_mut().titlebar_height = height;
             window_state.render.frame_dirty = true;
         });
     }
@@ -1272,7 +1475,7 @@ impl GuiFrameWindowManager {
     pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
         self.chrome_defaults.corner_radius = radius;
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.native.chrome.corner_radius = radius;
+            window_state.chrome_mut().corner_radius = radius;
             window_state.render.frame_dirty = true;
         });
     }
@@ -1359,7 +1562,9 @@ impl GuiFrameWindowManager {
 
     pub(super) fn clear_top_level_glyph_atlases(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.glyph_atlas.clear();
+            if let Some(atlas) = window_state.render.glyph_atlas.as_mut() {
+                atlas.clear();
+            }
         });
     }
 

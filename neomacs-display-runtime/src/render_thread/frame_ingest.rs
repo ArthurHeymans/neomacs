@@ -248,9 +248,6 @@ impl RenderApp {
 
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
-        if self.primary_window_state().is_none() {
-            self.primary_child_frames_mut().tick();
-        }
         self.frame_windows.tick_top_level_child_frames();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             let frame_id = display_state.frame_id;
@@ -494,19 +491,12 @@ impl RenderApp {
                         gui_compact_bar,
                         cursor_config,
                     );
-                } else {
-                    self.set_primary_current_frame(Some(frame));
-                    self.set_primary_menu_bar(gui_menu_bar);
-                    self.set_primary_tool_bar(gui_tool_bar);
-                    self.set_primary_compact_bar(gui_compact_bar);
                 }
             }
         }
 
         let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             let cursor_sync = Self::sync_render_cursor(primary_frame, cursor_config);
             primary_frame
                 .sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));

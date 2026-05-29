@@ -143,7 +143,6 @@ impl RenderApp {
 
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
-                let mut sent_resize = false;
                 if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
                     if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
                         ws.handle_resize(&device, size.width, size.height);
@@ -161,36 +160,18 @@ impl RenderApp {
                             }
                             ws.render.mark_dirty();
                         }
+                        let scale_factor = ws.scale_factor();
                         let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
                             size.width,
                             size.height,
-                            ws.native.scale_factor,
+                            scale_factor,
                         );
                         self.comms.send_input(InputEvent::WindowResize {
                             width: emacs_w,
                             height: emacs_h,
                             emacs_frame_id: emacs_fid,
                         });
-                        sent_resize = true;
                     }
-                }
-                if is_primary && !sent_resize {
-                    self.primary_native_fallback
-                        .set_size(size.width, size.height);
-                    if let Some(renderer) = &mut self.renderer {
-                        renderer.resize(size.width, size.height);
-                    }
-                    self.mark_unmanaged_primary_resize_dirty();
-                    let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
-                        size.width,
-                        size.height,
-                        self.primary_native_fallback.scale_factor,
-                    );
-                    self.comms.send_input(InputEvent::WindowResize {
-                        width: emacs_w,
-                        height: emacs_h,
-                        emacs_frame_id: emacs_fid,
-                    });
                 }
             }
 
@@ -411,8 +392,8 @@ impl RenderApp {
             WindowEvent::Ime(ime_event) => match ime_event {
                 winit::event::Ime::Enabled => {
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-                        window_state.native.ime_enabled = true;
-                        window_state.native.last_ime_cursor_area = None;
+                        window_state.set_ime_enabled(true);
+                        window_state.reset_ime_cursor_area();
                         if let Some(target) = window_state.render.cursor.target_cloned() {
                             Self::update_frame_window_ime_cursor_area_if_needed(
                                 window_state,
@@ -430,7 +411,7 @@ impl RenderApp {
                 }
                 winit::event::Ime::Disabled => {
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-                        window_state.native.ime_enabled = false;
+                        window_state.set_ime_enabled(false);
                         window_state.clear_ime_preedit();
                     } else if self.frame_windows.is_primary_winit(window_id) {
                         self.set_primary_ime_enabled(false);
@@ -501,7 +482,7 @@ impl RenderApp {
                     tracing::info!(
                         "Scale factor changed for frame 0x{:x}: previous_effective={} raw={} effective={}",
                         ws.render.emacs_frame_id,
-                        ws.native.scale_factor,
+                        ws.scale_factor(),
                         scale_factor,
                         effective_scale
                     );
@@ -511,15 +492,6 @@ impl RenderApp {
                             renderer.set_scale_factor(effective_scale as f32);
                         }
                     }
-                } else if is_primary {
-                    tracing::info!(
-                        "Scale factor changed: previous_effective={} raw={} effective={}",
-                        self.primary_native_fallback.scale_factor,
-                        scale_factor,
-                        effective_scale
-                    );
-                    self.primary_native_fallback
-                        .set_scale_factor(effective_scale);
                 }
             }
 

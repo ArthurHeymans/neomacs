@@ -87,61 +87,70 @@ impl RenderApp {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
                 self.primary_window().is_some(),
-                self.primary_native_fallback.width,
-                self.primary_native_fallback.height,
-                self.primary_native_fallback.chrome.title
+                self.primary_native_size().0,
+                self.primary_native_size().1,
+                self.primary_chrome().title
             );
             self.resumed_seen = true;
         }
-        if self.primary_window().is_none() && !self.primary_window_destroyed {
+        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| ws.native.is_none())
+            && !self.primary_window_destroyed;
+        if needs_native {
+            let (width, height, title, decorations_enabled) = {
+                let primary = self.frame_windows.primary_window().unwrap();
+                (
+                    primary.pending_width,
+                    primary.pending_height,
+                    primary.pending_chrome.title.clone(),
+                    primary.pending_chrome.decorations_enabled,
+                )
+            };
             let attrs = Window::default_attributes()
-                .with_title(&self.primary_native_fallback.chrome.title)
-                .with_inner_size(window_size_from_emacs_pixels(
-                    self.primary_native_fallback.width,
-                    self.primary_native_fallback.height,
-                ))
-                .with_decorations(self.primary_native_fallback.chrome.decorations_enabled)
+                .with_title(&title)
+                .with_inner_size(window_size_from_emacs_pixels(width, height))
+                .with_decorations(decorations_enabled)
                 .with_transparent(true);
 
             tracing::info!(
                 "Render thread creating primary window: emacs_pixels={}x{} title={:?}",
-                self.primary_native_fallback.width,
-                self.primary_native_fallback.height,
-                self.primary_native_fallback.chrome.title
+                width,
+                height,
+                title
             );
             match event_loop.create_window(attrs) {
                 Ok(window) => {
                     let window = Arc::new(window);
 
                     let raw_scale_factor = window.scale_factor();
-                    self.primary_native_fallback
-                        .set_scale_factor(effective_window_scale_factor(raw_scale_factor));
+                    let effective_scale = effective_window_scale_factor(raw_scale_factor);
+                    {
+                        let primary = self.frame_windows.primary_window_mut().unwrap();
+                        primary.pending_scale_factor = effective_scale;
+                    }
                     tracing::info!(
                         "Display scale factor: raw={} effective={}",
                         raw_scale_factor,
-                        self.primary_native_fallback.scale_factor
+                        effective_scale
                     );
 
                     let phys = window.inner_size();
-                    self.primary_native_fallback
-                        .set_size(phys.width, phys.height);
+                    {
+                        let primary = self.frame_windows.primary_window_mut().unwrap();
+                        primary.pending_width = phys.width;
+                        primary.pending_height = phys.height;
+                    }
                     tracing::info!(
                         "Render thread: window created (physical {}x{})",
-                        self.primary_native_fallback.width,
-                        self.primary_native_fallback.height
+                        phys.width,
+                        phys.height
                     );
 
-                    // Initialize wgpu with the window
                     self.init_wgpu(event_loop, window.clone());
-                    self.frame_windows.adopt_primary_winit_id(window.id());
 
-                    // Enable IME input for CJK and compose support
-                    window.set_ime_allowed(true);
-                    if let Some(geometry_hints) = self.primary_native_fallback.geometry_hints {
+                    if let Some(geometry_hints) = self.frame_windows.primary_window().unwrap().pending_geometry_hints {
                         apply_window_geometry_hints(&window, geometry_hints);
                     }
 
-                    // Set window icon from project SVG.
                     crate::window_icon::apply_window_icon(&window);
                 }
                 Err(e) => {
@@ -163,13 +172,11 @@ impl RenderApp {
             self.about_to_wait_seen = true;
         }
         self.refresh_monitor_snapshot(event_loop, true);
-        // Check for shutdown
         if self.process_commands() {
             event_loop.exit();
             return;
         }
 
-        // Process multi-window creates/destroys
         if let Some(gpu) = &self.gpu {
             self.frame_windows.process_creates(
                 event_loop,
@@ -180,63 +187,38 @@ impl RenderApp {
         }
         self.frame_windows.process_destroys();
 
-        // Get latest frame from Emacs
         self.poll_frame();
 
-        // Pump GLib for WebKit
         self.pump_glib();
 
-        // Update cursor blink state
         let now = std::time::Instant::now();
         self.frame_windows.tick_top_level_cursor_blinks(
             now,
             self.effects.cursor_wake.enabled,
             self.renderer.as_ref(),
         );
-        if self.primary_window_state().is_none() {
-            self.tick_cursor_blink();
-        }
 
-        // Tick cursor animation
         self.frame_windows.tick_top_level_cursor_animations();
-        self.with_unmanaged_primary_render(|r| {
-            r.tick_cursor_animation();
-        });
 
-        // Tick cursor size transition (runs after position animation, overrides w/h)
         self.frame_windows.tick_top_level_cursor_size_animations();
-        self.with_unmanaged_primary_render(|r| {
-            r.tick_cursor_size_animation();
-        });
 
         if self.effects.idle_dim.enabled {
             let idle_dim_config = self.effects.idle_dim.clone();
             self.frame_windows.tick_top_level_idle_dim(&idle_dim_config);
-            self.with_unmanaged_primary_render(|r| {
-                r.tick_idle_dim(&idle_dim_config);
-            });
         } else {
             self.frame_windows.clear_top_level_idle_dim();
-            self.with_unmanaged_primary_render(|r| r.clear_idle_dim());
         }
 
-        // Keep dirty if cursor pulse is active (needs continuous redraw)
         if self.effects.cursor_pulse.enabled && self.effects.cursor_glow.enabled {
             self.mark_top_level_frame_windows_dirty();
         }
 
-        // Keep dirty if frame-owned renderer effects or transitions are active.
         self.frame_windows.mark_active_top_level_visuals_dirty();
-        self.with_unmanaged_primary_render(|r| {
-            r.mark_active_visuals_dirty();
-        });
 
-        // Check for terminal PTY activity
         if self.has_terminal_activity() {
             self.mark_top_level_frame_windows_dirty();
         }
 
-        // Determine if continuous rendering is needed
         let has_active_content = self.has_webkit_needing_redraw() || self.has_playing_videos();
 
         #[cfg(feature = "wpe-webkit")]
@@ -249,17 +231,13 @@ impl RenderApp {
                 });
         }
 
-        // Request redraw when we have new frame data, cursor blink toggled,
-        // or webkit/video content changed.
         self.frame_windows
             .request_redraw_for_dirty_top_level_windows();
 
         let top_level_dirty = self.frame_windows.any_top_level_dirty();
-        let primary_fallback_dirty = self.primary_window_state().is_none() && self.primary_dirty();
-        if top_level_dirty || primary_fallback_dirty || has_active_content {
+        if top_level_dirty || has_active_content {
             tracing::debug!(
                 top_level_dirty,
-                primary_fallback_dirty,
                 has_active_content,
                 renderer_effects_need_redraw = self
                     .frame_windows
@@ -272,15 +250,13 @@ impl RenderApp {
             if has_active_content {
                 self.frame_windows.request_redraw_for_top_level_windows();
             }
-            if primary_fallback_dirty || has_active_content {
+            if has_active_content {
                 if let Some(window) = self.primary_window() {
                     window.request_redraw();
                 }
             }
         }
 
-        // Use WaitUntil with smart timeouts instead of Poll to save CPU.
-        // Window events (key, mouse, resize) still wake immediately.
         let now = std::time::Instant::now();
         let top_level_active = self.frame_windows.any_top_level_dirty()
             || self.frame_windows.any_top_level_cursor_animating()
@@ -288,21 +264,11 @@ impl RenderApp {
                 .frame_windows
                 .any_top_level_renderer_effects_need_redraw()
             || self.frame_windows.any_top_level_transitions_active();
-        let primary_fallback_active = self.primary_window_state().is_none()
-            && (self.primary_dirty()
-                || self.primary_cursor().is_animating()
-                || self.primary_renderer_effects_need_redraw()
-                || self.primary_transitions_active());
-        let next_wake = if top_level_active || primary_fallback_active || has_active_content {
-            // Active rendering: cap at ~240fps to avoid spinning
+        let next_wake = if top_level_active || has_active_content {
             now + std::time::Duration::from_millis(4)
         } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
-            // Idle with cursor blink: wake at next toggle time
             next_blink
         } else if self.poll_when_idle {
-            // Compatibility mode for legacy RenderThread callers that do not
-            // own a winit EventLoopProxy and therefore cannot wake this loop
-            // when they enqueue frames or commands.
             now + std::time::Duration::from_millis(16)
         } else {
             event_loop.set_control_flow(ControlFlow::Wait);

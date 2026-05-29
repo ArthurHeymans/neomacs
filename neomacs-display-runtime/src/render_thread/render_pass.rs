@@ -402,7 +402,11 @@ impl RenderApp {
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
     )> {
-        let GuiFrameWindowState { native, render } = window_state;
+        let GuiFrameWindowState { native, render, .. } = window_state;
+        let native = match native {
+            Some(n) => n,
+            None => return None,
+        };
         Self::update_fps_counter(&mut render.fps);
         let Some(frame_for_decision) = render.current_frame_clone() else {
             return None;
@@ -727,7 +731,7 @@ impl RenderApp {
         Self::render_frame_chrome_overlays(
             renderer,
             surface_view,
-            &mut render.glyph_atlas,
+            &mut render.glyph_atlas.as_mut().unwrap(),
             GuiFrameChromeOverlays {
                 native_chrome: &native.chrome,
                 titlebar_background: Some((
@@ -810,7 +814,7 @@ impl RenderApp {
         if Self::render_frame_fps_overlay(
             renderer,
             surface_view,
-            &mut render.glyph_atlas,
+            &mut render.glyph_atlas.as_mut().unwrap(),
             &mut render.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
@@ -826,7 +830,7 @@ impl RenderApp {
                 renderer,
                 surface_view,
                 frame,
-                &mut render.glyph_atlas,
+                &mut render.glyph_atlas.as_mut().unwrap(),
                 &mut render.typing_speed,
                 &mut render.frame_dirty,
             );
@@ -850,7 +854,7 @@ impl RenderApp {
             renderer.render_frame_glyphs(
                 surface_view,
                 frame,
-                &mut render.glyph_atlas,
+                &mut render.glyph_atlas.as_mut().unwrap(),
                 faces,
                 native.width,
                 native.height,
@@ -887,7 +891,7 @@ impl RenderApp {
                         &child_entry.frame,
                         child_entry.abs_x,
                         child_entry.abs_y,
-                        &mut render.glyph_atlas,
+                        &mut render.glyph_atlas.as_mut().unwrap(),
                         faces,
                         native.width,
                         native.height,
@@ -916,7 +920,7 @@ impl RenderApp {
                 renderer,
                 surface_view,
                 frame,
-                &mut render.glyph_atlas,
+                &mut render.glyph_atlas.as_mut().unwrap(),
                 native.width,
                 native.height,
                 scroll_indicators_enabled,
@@ -1031,21 +1035,24 @@ impl RenderApp {
             self.extra_letter_spacing,
         ) {
             if is_primary_frame {
+                let (w, h) = self.frame_windows.get(emacs_frame_id)
+                    .map(|ws| ws.native_size())
+                    .unwrap_or((0, 0));
                 surface_readback::maybe_log_first_frame_surface_readback(
                     &mut self.debug_first_frame_readback_pending,
                     &output.texture,
                     renderer,
                     &frame,
-                    window_state.native.width,
-                    window_state.native.height,
+                    w,
+                    h,
                 );
                 surface_readback::maybe_log_debug_surface_readback(
                     &mut self.debug_surface_readback_frames_remaining,
                     &output.texture,
                     renderer,
                     &frame,
-                    window_state.native.width,
-                    window_state.native.height,
+                    w,
+                    h,
                 );
             }
             output.present();

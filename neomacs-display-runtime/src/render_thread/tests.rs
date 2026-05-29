@@ -172,7 +172,7 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
 }
 
 #[test]
-fn pre_bootstrap_primary_resize_updates_native_fallback_size() {
+fn pre_bootstrap_primary_resize_updates_pending_size() {
     let mut app = make_test_app();
     let geometry_hints = GuiFrameGeometryHints {
         base_width: 24,
@@ -192,8 +192,9 @@ fn pre_bootstrap_primary_resize_updates_native_fallback_size() {
     .expect("pre-bootstrap primary resize");
 
     assert_eq!(app.primary_native_size(), (1024, 768));
+    let primary = app.frame_windows.primary_window().unwrap();
     assert_eq!(
-        app.primary_native_fallback.geometry_hints,
+        primary.pending_geometry_hints,
         Some(geometry_hints)
     );
 }

@@ -425,9 +425,9 @@ impl RenderApp {
                 );
             });
 
-        self.with_unmanaged_primary_render(|r| {
-            Self::expand_terminal_glyphs_for_render_state(r, &terminal_contents);
-        });
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            Self::expand_terminal_glyphs_for_render_state(primary_frame, &terminal_contents);
+        }
 
         // Render Window-mode terminals as overlays covering the frame body.
         let mut win_glyphs = Vec::new();

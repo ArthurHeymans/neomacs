@@ -19,14 +19,16 @@ impl RenderApp {
             (0.0, 0.0)
         };
 
+        let scale_factor = window_state.scale_factor();
+
         ImeCursorArea {
-            x: ((target.x as f64 + ime_off_x) * window_state.native.scale_factor).round() as i32,
+            x: ((target.x as f64 + ime_off_x) * scale_factor).round() as i32,
             y: ((target.y as f64 + target.height as f64 + ime_off_y)
-                * window_state.native.scale_factor)
+                * scale_factor)
                 .round() as i32,
-            width: ((target.width as f64 * window_state.native.scale_factor).max(1.0)).round()
+            width: ((target.width as f64 * scale_factor).max(1.0)).round()
                 as u32,
-            height: ((target.height as f64 * window_state.native.scale_factor).max(1.0)).round()
+            height: ((target.height as f64 * scale_factor).max(1.0)).round()
                 as u32,
         }
     }
@@ -70,7 +72,7 @@ impl RenderApp {
         window_state: &mut GuiFrameWindowState,
         target: &CursorTarget,
     ) {
-        if !window_state.native.ime_enabled && !window_state.render.ime_preedit_active {
+        if !window_state.ime_enabled() && !window_state.render.ime_preedit_active {
             return;
         }
 
@@ -102,11 +104,7 @@ impl RenderApp {
     }
 
     pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
-        let mut next = if self.primary_window_state().is_none() {
-            self.primary_cursor().next_blink_deadline()
-        } else {
-            None
-        };
+        let mut next: Option<std::time::Instant> = None;
         self.frame_windows
             .for_each_top_level_window(|window_state| {
                 if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {

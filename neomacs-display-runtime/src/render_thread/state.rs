@@ -15,12 +15,11 @@ use neomacs_display_protocol::glyph_matrix::{
 };
 use neomacs_display_protocol::{EffectsConfig, TransitionPolicy};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
-use neovm_core::window::GuiFrameGeometryHints;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
 use super::frame_windows::{
-    GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
+    GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
 };
 
 #[cfg(feature = "wpe-webkit")]
@@ -211,79 +210,6 @@ impl Default for WindowChrome {
     }
 }
 
-/// Native state kept only until the primary frame has an adopted winit window.
-#[derive(Clone)]
-pub(super) struct PrimaryNativeFallbackState {
-    pub(super) width: u32,
-    pub(super) height: u32,
-    pub(super) scale_factor: f64,
-    pub(super) mouse_hidden_for_typing: bool,
-    pub(super) ime_enabled: bool,
-    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
-    pub(super) chrome: WindowChrome,
-    pub(super) geometry_hints: Option<GuiFrameGeometryHints>,
-}
-
-impl PrimaryNativeFallbackState {
-    fn new(width: u32, height: u32, title: String) -> Self {
-        Self {
-            width,
-            height,
-            scale_factor: 1.0,
-            mouse_hidden_for_typing: false,
-            ime_enabled: false,
-            last_ime_cursor_area: None,
-            chrome: WindowChrome {
-                title,
-                ..WindowChrome::default()
-            },
-            geometry_hints: None,
-        }
-    }
-
-    pub(super) fn set_size(&mut self, width: u32, height: u32) {
-        self.width = width;
-        self.height = height;
-    }
-
-    pub(super) fn set_geometry_hints(&mut self, hints: GuiFrameGeometryHints) {
-        self.geometry_hints = Some(hints);
-    }
-
-    pub(super) fn set_scale_factor(&mut self, scale: f64) {
-        self.scale_factor = scale;
-    }
-}
-
-/// Render state kept only until the primary frame has an adopted render state.
-pub(super) struct PrimaryRenderFallbackState {
-    pub(super) child_frames: ChildFrameManager,
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
-    pub(super) menu_bar: Option<GuiMenuBarState>,
-    pub(super) tool_bar: Option<GuiToolBarState>,
-    pub(super) compact_bar: Option<GuiCompactBarState>,
-    pub(super) popup_menu: Option<PopupMenuState>,
-    pub(super) tooltip: Option<TooltipState>,
-    pub(super) visual_bell_start: Option<Instant>,
-}
-
-impl PrimaryRenderFallbackState {
-    fn new() -> Self {
-        Self {
-            child_frames: ChildFrameManager::new(),
-            #[cfg(feature = "wpe-webkit")]
-            floating_webkits: Vec::new(),
-            menu_bar: None,
-            tool_bar: None,
-            compact_bar: None,
-            popup_menu: None,
-            tooltip: None,
-            visual_bell_start: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ImeCursorArea {
     pub(super) x: i32,
@@ -346,32 +272,23 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
     pub(super) primary_window_destroyed: bool,
-    pub(super) primary_native_fallback: PrimaryNativeFallbackState,
 
-    // Shared wgpu context used by the primary surface and secondary windows.
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
     #[cfg(test)]
     pub(super) primary_render_state_for_tests: Option<GuiFrameRenderState>,
 
-    // Face cache built from frame data
     pub(super) faces: HashMap<u32, Face>,
 
-    // Current modifier state (NEOMACS_*_MASK flags)
     pub(super) modifiers: u32,
 
-    // Shared image dimensions (written here, read from main thread)
     pub(super) image_dimensions: SharedImageDimensions,
 
-    // Cursor defaults applied to primary and secondary frame runtime cursors.
     pub(super) cursor_defaults: CursorState,
 
-    // All visual effect configurations
     pub(super) effects: EffectsConfig,
 
-    // Transition defaults applied to primary and secondary frame render state.
     pub(super) transition_policy: TransitionPolicy,
-    // WebKit state (video cache is managed by renderer)
     #[cfg(feature = "wpe-webkit")]
     pub(super) wpe_backend: Option<WpeBackend>,
 
@@ -381,38 +298,29 @@ pub(super) struct RenderApp {
     #[cfg(feature = "wpe-webkit")]
     pub(super) webkit_import_policy: WebKitImportPolicy,
 
-    // Terminal manager (neo-term)
     #[cfg(feature = "neo-term")]
     pub(super) terminal_manager: crate::terminal::TerminalManager,
     #[cfg(feature = "neo-term")]
     pub(super) shared_terminals: crate::terminal::SharedTerminals,
 
-    // Top-level GUI frame windows.
     pub(super) frame_windows: GuiFrameWindowManager,
-    // Primary render state received before primary frame render state exists.
-    pub(super) primary_render_fallback: PrimaryRenderFallbackState,
-    // Child frame visual style
+
     pub(super) child_frame_corner_radius: f32,
     pub(super) child_frame_shadow_enabled: bool,
     pub(super) child_frame_shadow_layers: u32,
     pub(super) child_frame_shadow_offset: f32,
     pub(super) child_frame_shadow_opacity: f32,
 
-    // Primary toolbar visual defaults and GPU texture handles.
     pub(super) toolbar_icon_textures: HashMap<String, u32>,
     pub(super) toolbar_icon_size: u32,
     pub(super) toolbar_padding: u32,
 
-    // UI overlay state
     pub(super) scroll_indicators_enabled: bool,
     pub(super) primary_fps_enabled: bool,
 
-    /// Extra line spacing in pixels (added between rows)
     pub(super) extra_line_spacing: f32,
-    /// Extra letter spacing in pixels (added between characters)
     pub(super) extra_letter_spacing: f32,
 
-    /// Shared monitor info (populated in resumed(), read from FFI thread)
     pub(super) shared_monitors: Option<SharedMonitorInfo>,
     pub(super) monitors_populated: bool,
     pub(super) last_monitor_snapshot: Vec<MonitorInfo>,
@@ -437,10 +345,26 @@ impl RenderApp {
         #[cfg(feature = "wpe-webkit")]
         let webkit_import_policy = WebKitImportPolicy::from_env();
 
+        let mut frame_windows = GuiFrameWindowManager::new();
+        frame_windows.set_primary_pending(GuiFrameWindowState {
+            native: None,
+            render: GuiFrameRenderState::new_without_device(0, false),
+            pending_width: width,
+            pending_height: height,
+            pending_scale_factor: 1.0,
+            pending_mouse_hidden_for_typing: false,
+            pending_ime_enabled: false,
+            pending_last_ime_cursor_area: None,
+            pending_chrome: WindowChrome {
+                title,
+                ..WindowChrome::default()
+            },
+            pending_geometry_hints: None,
+        });
+
         Self {
             comms,
             primary_window_destroyed: false,
-            primary_native_fallback: PrimaryNativeFallbackState::new(width, height, title),
             gpu: None,
             renderer: None,
             #[cfg(test)]
@@ -461,8 +385,7 @@ impl RenderApp {
             terminal_manager: crate::terminal::TerminalManager::new(),
             #[cfg(feature = "neo-term")]
             shared_terminals,
-            frame_windows: GuiFrameWindowManager::new(),
-            primary_render_fallback: PrimaryRenderFallbackState::new(),
+            frame_windows,
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
             child_frame_shadow_layers: 4,
@@ -510,33 +433,11 @@ impl RenderApp {
     }
 
     pub(super) fn primary_render_state(&self) -> Option<&GuiFrameRenderState> {
-        self.primary_window_state()
-            .map(|window_state| &window_state.render)
-            .or_else(|| {
-                #[cfg(test)]
-                {
-                    self.primary_render_state_for_tests.as_ref()
-                }
-                #[cfg(not(test))]
-                {
-                    None
-                }
-            })
+        self.frame_windows.primary_window().map(|ws| &ws.render)
     }
 
     pub(super) fn primary_render_state_mut(&mut self) -> Option<&mut GuiFrameRenderState> {
-        if let Some(window_state) = self.frame_windows.primary_window_mut() {
-            Some(&mut window_state.render)
-        } else {
-            #[cfg(test)]
-            {
-                self.primary_render_state_for_tests.as_mut()
-            }
-            #[cfg(not(test))]
-            {
-                None
-            }
-        }
+        self.frame_windows.primary_window_mut().map(|ws| &mut ws.render)
     }
 
     #[cfg(test)]
@@ -575,40 +476,19 @@ impl RenderApp {
 
     pub(super) fn mark_top_level_frame_windows_dirty(&mut self) {
         self.frame_windows.mark_top_level_dirty();
-        self.mark_unmanaged_primary_dirty();
-    }
-
-    pub(super) fn with_unmanaged_primary_render<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut GuiFrameRenderState),
-    {
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            f(primary_frame);
-        }
     }
 
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
-        self.primary_native_fallback.chrome.titlebar_height = height;
         self.frame_windows.set_top_level_titlebar_height(height);
-        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
-        self.primary_native_fallback.chrome.corner_radius = radius;
         self.frame_windows.set_top_level_corner_radius(radius);
-        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
         self.primary_fps_enabled = enabled;
         self.frame_windows.set_top_level_fps_enabled(enabled);
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            primary_frame.set_fps_enabled(enabled);
-        }
     }
 
     pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
@@ -618,13 +498,13 @@ impl RenderApp {
     }
 
     pub(super) fn primary_fps_enabled(&self) -> bool {
-        self.primary_render_state()
-            .map_or(self.primary_fps_enabled, |frame| frame.fps.enabled)
+        self.primary_fps_enabled
     }
 
     pub(super) fn primary_char_width(&self) -> f32 {
         self.primary_render_state()
-            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width())
+            .and_then(|frame| frame.glyph_atlas.as_ref())
+            .map_or(8.0, |atlas| atlas.default_char_width())
     }
 
     pub(super) fn primary_popup_menu(&self) -> Option<&PopupMenuState> {
@@ -640,80 +520,50 @@ impl RenderApp {
     pub(super) fn set_primary_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_popup_menu(popup_menu);
-        } else {
-            self.primary_render_fallback.popup_menu = popup_menu;
         }
     }
 
     pub(super) fn hide_top_level_popup_menus(&mut self) {
         self.frame_windows.hide_top_level_popup_menus();
-        if self.primary_window_state().is_none() {
-            self.set_primary_popup_menu(None);
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.set_popup_menu(None);
         }
     }
 
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_tooltip(tooltip);
-        } else {
-            self.primary_render_fallback.tooltip = tooltip;
         }
     }
 
     pub(super) fn set_primary_menu_bar(&mut self, menu_bar: Option<GuiMenuBarState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_menu_bar(menu_bar);
-        } else {
-            self.primary_render_fallback.menu_bar = menu_bar;
         }
     }
 
     pub(super) fn set_primary_tool_bar(&mut self, tool_bar: Option<GuiToolBarState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_tool_bar(tool_bar);
-        } else {
-            self.primary_render_fallback.tool_bar = tool_bar;
         }
     }
 
     pub(super) fn set_primary_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_compact_bar(compact_bar);
-        } else {
-            self.primary_render_fallback.compact_bar = compact_bar;
         }
     }
 
     pub(super) fn hide_top_level_tooltips(&mut self) {
         self.frame_windows.hide_top_level_tooltips();
-        if self.primary_window_state().is_none() {
-            self.set_primary_tooltip(None);
+        if let Some(primary_frame) = self.primary_render_state_mut() {
+            primary_frame.set_tooltip(None);
         }
-    }
-
-    fn mark_unmanaged_primary_dirty(&mut self) {
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
-    }
-
-    pub(super) fn mark_unmanaged_primary_popup_dirty(&mut self) {
-        self.mark_unmanaged_primary_dirty();
-    }
-
-    pub(super) fn mark_unmanaged_primary_chrome_dirty(&mut self) {
-        self.mark_unmanaged_primary_dirty();
-    }
-
-    pub(super) fn mark_unmanaged_primary_resize_dirty(&mut self) {
-        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_visual_bell_start(start);
-        } else {
-            self.primary_render_fallback.visual_bell_start = start;
         }
     }
 
@@ -739,26 +589,29 @@ impl RenderApp {
     }
 
     pub(super) fn primary_child_frames(&self) -> &ChildFrameManager {
-        self.primary_render_state()
-            .map_or(&self.primary_render_fallback.child_frames, |frame| {
-                &frame.child_frames
-            })
+        if let Some(frame) = self.primary_render_state() {
+            return &frame.child_frames;
+        }
+        #[cfg(test)]
+        {
+            if let Some(frame) = self.primary_render_state_for_tests.as_ref() {
+                return &frame.child_frames;
+            }
+        }
+        panic!("primary child frames")
     }
 
     pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
-        if let Some(window_state) = self.frame_windows.primary_window_mut() {
-            &mut window_state.render.child_frames
-        } else if cfg!(test) {
-            #[cfg(test)]
-            {
-                if let Some(primary_frame) = self.primary_render_state_for_tests.as_mut() {
-                    return &mut primary_frame.child_frames;
-                }
-            }
-            &mut self.primary_render_fallback.child_frames
-        } else {
-            &mut self.primary_render_fallback.child_frames
+        if self.frame_windows.primary_window_mut().is_some() {
+            return &mut self.frame_windows.primary_window_mut().unwrap().render.child_frames;
         }
+        #[cfg(test)]
+        {
+            if let Some(frame) = self.primary_render_state_for_tests.as_mut() {
+                return &mut frame.child_frames;
+            }
+        }
+        panic!("primary child frames mut")
     }
 
     pub(super) fn remove_primary_child_frame(&mut self, frame_id: u64) -> bool {
@@ -773,19 +626,13 @@ impl RenderApp {
             }
             changed
         } else {
-            self.primary_render_fallback
-                .child_frames
-                .remove_frame(frame_id)
+            false
         }
     }
 
     pub(super) fn update_primary_child_frame(&mut self, frame: FrameGlyphBuffer) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.update_child_frame(frame);
-        } else {
-            self.primary_render_fallback
-                .child_frames
-                .update_frame(frame);
         }
     }
 
@@ -809,25 +656,19 @@ impl RenderApp {
     pub(super) fn sync_top_level_transition_policy_from_default(&mut self) {
         self.frame_windows
             .sync_top_level_transition_policy(self.transition_policy);
-        if self.primary_window_state().is_none() {
-            self.sync_primary_transition_policy_from_default();
-        }
+        self.sync_primary_transition_policy_from_default();
     }
 
     pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
         self.frame_windows.clear_top_level_crossfade_transitions();
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.transitions.crossfades.clear();
         }
     }
 
     pub(super) fn clear_top_level_scroll_transitions(&mut self) {
         self.frame_windows.clear_top_level_scroll_transitions();
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.transitions.scroll_slides.clear();
         }
     }
@@ -853,18 +694,11 @@ impl RenderApp {
     }
 
     pub(super) fn primary_window(&self) -> Option<&Arc<Window>> {
-        self.primary_window_state()
-            .map(|window_state| &window_state.native.window)
+        self.frame_windows.primary_window().and_then(|ws| ws.window())
     }
 
     pub(super) fn primary_native_size(&self) -> (u32, u32) {
-        self.primary_window_state().map_or(
-            (
-                self.primary_native_fallback.width,
-                self.primary_native_fallback.height,
-            ),
-            |window_state| (window_state.native.width, window_state.native.height),
-        )
+        self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size())
     }
 
     pub(super) fn primary_logical_size(&self) -> (f32, f32) {
@@ -874,47 +708,31 @@ impl RenderApp {
     }
 
     pub(super) fn primary_scale_factor(&self) -> f64 {
-        self.primary_window_state()
-            .map_or(self.primary_native_fallback.scale_factor, |window_state| {
-                window_state.native.scale_factor
-            })
+        self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor())
     }
 
     pub(super) fn set_primary_scale_factor(&mut self, scale_factor: f64) {
-        if let Some(window_state) = self.primary_window_state_mut() {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.set_scale_factor(scale_factor);
-        } else {
-            self.primary_native_fallback.scale_factor = effective_window_scale_factor(scale_factor);
         }
     }
 
     pub(super) fn primary_chrome(&self) -> &WindowChrome {
-        self.primary_window_state()
-            .map_or(&self.primary_native_fallback.chrome, |window_state| {
-                &window_state.native.chrome
-            })
+        self.frame_windows.primary_window().expect("primary window state").chrome()
     }
 
     pub(super) fn primary_chrome_mut(&mut self) -> &mut WindowChrome {
-        if let Some(window_state) = self.frame_windows.primary_window_mut() {
-            &mut window_state.native.chrome
-        } else {
-            &mut self.primary_native_fallback.chrome
-        }
+        let ws = self.frame_windows.primary_window_mut().expect("primary window state");
+        ws.chrome_mut()
     }
 
     pub(super) fn primary_ime_enabled(&self) -> bool {
-        self.primary_window_state()
-            .map_or(self.primary_native_fallback.ime_enabled, |window_state| {
-                window_state.native.ime_enabled
-            })
+        self.frame_windows.primary_window().map_or(false, |ws| ws.ime_enabled())
     }
 
     pub(super) fn clear_primary_mouse_hidden_for_typing(&mut self) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.set_mouse_hidden_for_typing(false);
-        } else {
-            self.primary_native_fallback.mouse_hidden_for_typing = false;
         }
     }
 
@@ -928,17 +746,13 @@ impl RenderApp {
 
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
-            window_state.native.ime_enabled = enabled;
-        } else {
-            self.primary_native_fallback.ime_enabled = enabled;
+            window_state.set_ime_enabled(enabled);
         }
     }
 
     pub(super) fn reset_primary_ime_cursor_area(&mut self) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
-            window_state.native.last_ime_cursor_area = None;
-        } else {
-            self.primary_native_fallback.last_ime_cursor_area = None;
+            window_state.reset_ime_cursor_area();
         }
     }
 
@@ -1001,16 +815,12 @@ impl RenderApp {
     pub(super) fn sync_top_level_cursor_config_from_defaults(&mut self) {
         self.frame_windows
             .sync_top_level_cursor_config(&self.cursor_defaults, true);
-        if self.primary_window_state().is_none() {
-            self.sync_primary_cursor_config_from_defaults();
-        }
+        self.sync_primary_cursor_config_from_defaults();
     }
 
     pub(super) fn sync_top_level_cursor_config_from_defaults_without_dirty(&mut self) {
         self.frame_windows
             .sync_top_level_cursor_config(&self.cursor_defaults, false);
-        if self.primary_window_state().is_none() {
-            self.sync_primary_cursor_config_from_defaults();
-        }
+        self.sync_primary_cursor_config_from_defaults();
     }
 }

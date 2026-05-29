@@ -8,10 +8,8 @@ use crate::backend::wpe::WpeWebView;
 
 impl RenderApp {
     #[cfg(feature = "wpe-webkit")]
-    fn remove_unmanaged_primary_floating_webkit(&mut self, id: u32) -> bool {
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
+    fn remove_primary_floating_webkit(&mut self, id: u32) -> bool {
+        if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.remove_floating_webkit(id)
         } else {
             false
@@ -205,12 +203,12 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
-                    self.primary_render_fallback
-                        .floating_webkits
-                        .retain(|w| w.webkit_id != id);
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                    }
                     self.frame_windows
                         .destroy_floating_webkit_from_top_level_windows(id);
-                    let _ = self.remove_unmanaged_primary_floating_webkit(id);
+                    let _ = self.remove_primary_floating_webkit(id);
                     if let Some(ref mut renderer) = self.renderer {
                         renderer.remove_webkit_view(id);
                     }
@@ -351,19 +349,17 @@ impl RenderApp {
                         width,
                         height,
                     };
-                    self.primary_render_fallback
-                        .floating_webkits
-                        .retain(|w| w.webkit_id != id);
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                    }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
-                    let _ = self.remove_unmanaged_primary_floating_webkit(id);
+                    let _ = self.remove_primary_floating_webkit(id);
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.push_floating_webkit(overlay);
                     } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                         if let Some(primary_frame) = self.primary_render_state_mut() {
                             primary_frame.push_floating_webkit(overlay);
-                        } else {
-                            self.primary_render_fallback.floating_webkits.push(overlay);
                         }
                     } else {
                         tracing::warn!(
@@ -378,20 +374,20 @@ impl RenderApp {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
-                    self.primary_render_fallback
-                        .floating_webkits
-                        .retain(|w| w.webkit_id != id);
+                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                    }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
-                    let removed_unmanaged_primary =
-                        self.remove_unmanaged_primary_floating_webkit(id);
+                    let removed_primary =
+                        self.remove_primary_floating_webkit(id);
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.mark_dirty();
                     } else if self.frame_windows.is_primary_frame_id(emacs_frame_id)
-                        && !removed_unmanaged_primary
+                        && !removed_primary
                     {
                         tracing::debug!(
-                            "WebKitRemoveFloating requested for primary frame without matching unmanaged overlay"
+                            "WebKitRemoveFloating requested for primary frame without matching overlay"
                         );
                     } else {
                         tracing::warn!(

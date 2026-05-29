@@ -1,9 +1,7 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
-use crate::render_thread::frame_windows::{
-    GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState,
-};
+use crate::render_thread::frame_windows::GuiFrameNativeWindowState;
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::WgpuRenderer;
@@ -23,11 +21,9 @@ use crate::backend::wpe::WpeBackend;
 use crate::backend::wpe::sys::platform as plat;
 
 impl RenderApp {
-    /// Initialize wgpu with the window
     pub(super) fn init_wgpu(&mut self, event_loop: &ActiveEventLoop, window: Arc<Window>) {
         tracing::info!("Initializing wgpu for render thread");
 
-        // GLES presentation needs the compositor/display handle, especially on Wayland.
         let instance_descriptor =
             crate::wgpu_instance_descriptor_with_display(event_loop.owned_display_handle());
         tracing::info!(
@@ -36,7 +32,6 @@ impl RenderApp {
         );
         let instance = wgpu::Instance::new(instance_descriptor);
 
-        // Create surface from window
         let surface = match instance.create_surface(window.clone()) {
             Ok(s) => s,
             Err(e) => {
@@ -45,7 +40,6 @@ impl RenderApp {
             }
         };
 
-        // Request adapter
         let adapter =
             match pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: crate::gpu_power_preference(),
@@ -68,7 +62,6 @@ impl RenderApp {
             adapter_info.backend
         );
 
-        // Request device and queue
         let (device, queue) =
             match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("Neomacs Render Thread Device"),
@@ -88,7 +81,10 @@ impl RenderApp {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
-        // Configure surface
+        let phys = window.inner_size();
+        let raw_scale_factor = window.scale_factor();
+        let effective_scale = super::state::effective_window_scale_factor(raw_scale_factor);
+
         let caps = surface.get_capabilities(&adapter);
         let format = caps
             .formats
@@ -97,7 +93,6 @@ impl RenderApp {
             .find(|f| f.is_srgb())
             .unwrap_or(caps.formats[0]);
 
-        // Prefer PreMultiplied alpha for window transparency support
         let alpha_mode = if caps
             .alpha_modes
             .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
@@ -111,61 +106,44 @@ impl RenderApp {
             &mut self.debug_first_frame_readback_pending,
             self.debug_surface_readback_frames_remaining > 0,
         );
+
+        {
+            let primary = self.frame_windows.primary_window_mut().unwrap();
+            primary.pending_width = phys.width;
+            primary.pending_height = phys.height;
+            primary.pending_scale_factor = effective_scale;
+        }
+
+        let (pending_width, pending_height, pending_scale_factor) = {
+            let primary = self.frame_windows.primary_window().unwrap();
+            (primary.pending_width, primary.pending_height, primary.pending_scale_factor)
+        };
+
         let config = wgpu::SurfaceConfiguration {
             usage: surface_usage,
             format,
-            width: self.primary_native_fallback.width,
-            height: self.primary_native_fallback.height,
-            present_mode: wgpu::PresentMode::Fifo, // VSync
+            width: pending_width,
+            height: pending_height,
+            present_mode: wgpu::PresentMode::Fifo,
             alpha_mode,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
 
-        // Create renderer with existing device and surface format
         let renderer = WgpuRenderer::with_device(
             device.clone(),
             queue.clone(),
-            self.primary_native_fallback.width,
-            self.primary_native_fallback.height,
+            pending_width,
+            pending_height,
             format,
-            self.primary_native_fallback.scale_factor as f32,
+            pending_scale_factor as f32,
         );
-
-        // Create adopted-primary frame render state with its own glyph atlas.
-        let primary_frame_id = self.frame_windows.primary_frame_id().unwrap_or(0);
-        let mut primary_frame = GuiFrameRenderState::new(
-            primary_frame_id,
-            &device,
-            self.primary_native_fallback.scale_factor,
-            self.primary_fps_enabled(),
-        );
-        primary_frame.set_popup_menu(self.primary_render_fallback.popup_menu.take());
-        primary_frame.set_tooltip(self.primary_render_fallback.tooltip.take());
-        primary_frame.set_visual_bell_start(self.primary_render_fallback.visual_bell_start.take());
-        primary_frame.cursor.copy_config_from(&self.cursor_defaults);
-        primary_frame.transitions.policy = self.transition_policy;
-        primary_frame.child_frames = std::mem::replace(
-            &mut self.primary_render_fallback.child_frames,
-            crate::render_thread::child_frames::ChildFrameManager::new(),
-        );
-        #[cfg(feature = "wpe-webkit")]
-        {
-            primary_frame.floating_webkits =
-                std::mem::take(&mut self.primary_render_fallback.floating_webkits);
-            if !primary_frame.floating_webkits.is_empty() {
-                primary_frame.mark_dirty();
-            }
-        }
-        primary_frame.set_menu_bar(self.primary_render_fallback.menu_bar.take());
-        primary_frame.set_tool_bar(self.primary_render_fallback.tool_bar.take());
-        primary_frame.set_compact_bar(self.primary_render_fallback.compact_bar.take());
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",
-            self.primary_native_fallback.width,
-            self.primary_native_fallback.height,
+            pending_width,
+            pending_height,
             format
         );
 
@@ -176,21 +154,30 @@ impl RenderApp {
             queue: queue.clone(),
         });
         self.renderer = Some(renderer);
-        self.frame_windows.set_primary_window(GuiFrameWindowState {
-            native: GuiFrameNativeWindowState {
-                window,
-                surface,
-                surface_config: config,
-                width: self.primary_native_fallback.width,
-                height: self.primary_native_fallback.height,
-                scale_factor: self.primary_native_fallback.scale_factor,
-                mouse_hidden_for_typing: self.primary_native_fallback.mouse_hidden_for_typing,
-                ime_enabled: self.primary_native_fallback.ime_enabled,
-                last_ime_cursor_area: self.primary_native_fallback.last_ime_cursor_area,
-                chrome: self.primary_native_fallback.chrome.clone(),
+
+        self.frame_windows.populate_primary_native(GuiFrameNativeWindowState {
+            window,
+            surface,
+            surface_config: config,
+            width: pending_width,
+            height: pending_height,
+            scale_factor: pending_scale_factor,
+            mouse_hidden_for_typing: false,
+            ime_enabled: false,
+            last_ime_cursor_area: None,
+            chrome: {
+                let primary = self.frame_windows.primary_window().unwrap();
+                primary.pending_chrome.clone()
             },
-            render: primary_frame,
         });
+
+        {
+            let primary = self.frame_windows.primary_window_mut().unwrap();
+            primary.render.populate_glyph_atlas(&device, pending_scale_factor);
+            primary.render.cursor.copy_config_from(&self.cursor_defaults);
+            primary.render.transitions.policy = self.transition_policy;
+        }
+
         let pending_tool_items = self
             .primary_render_state()
             .as_ref()
@@ -208,18 +195,15 @@ impl RenderApp {
             self.ensure_toolbar_icon_textures(items);
         }
 
-        // Initialize WPE backend for WebKit
         #[cfg(feature = "wpe-webkit")]
         {
             use crate::backend::wgpu::get_render_node_from_adapter_info;
 
-            // Get DRM render node from adapter to ensure WebKit uses the same GPU
             let render_node = get_render_node_from_adapter_info(&adapter_info)
                 .map(|p| p.to_string_lossy().into_owned());
 
             tracing::info!("Initializing WPE backend (render_node: {:?})", render_node);
 
-            // SAFETY: We pass null for egl_display_hint as WPE Platform API doesn't use it
             match unsafe {
                 WpeBackend::new_with_device(std::ptr::null_mut(), render_node.as_deref())
             } {
@@ -233,12 +217,10 @@ impl RenderApp {
             }
         }
 
-        // All GPU caches (image, video, webkit) are managed by the renderer
         #[cfg(feature = "video")]
         tracing::info!("Video cache initialized");
     }
 
-    /// Handle surface resize
     pub(super) fn handle_resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
@@ -247,19 +229,13 @@ impl RenderApp {
         if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
             if let Some(primary_state) = self.primary_window_state_mut() {
                 primary_state.handle_resize(&device, width, height);
-            } else {
-                self.primary_native_fallback.set_size(width, height);
             }
-        } else {
-            self.primary_native_fallback.set_size(width, height);
         }
 
-        // Resize renderer
         if let Some(renderer) = &mut self.renderer {
             renderer.resize(width, height);
         }
 
-        // Trigger resize padding transition
         if self.effects.resize_padding.enabled {
             if let (Some(renderer), Some(primary_state)) = (
                 self.renderer.as_ref(),
@@ -272,9 +248,6 @@ impl RenderApp {
             }
         }
 
-        // Force immediate re-render with old frame at new surface size.
-        // Ensures the window always shows content during resize
-        // (background fills new area, old glyphs stay at their positions).
         self.mark_primary_dirty();
 
         tracing::debug!("Surface resized to {}x{}", width, height);

@@ -105,7 +105,7 @@ impl RenderApp {
     }
 
     fn frame_window_char_width(window_state: &GuiFrameWindowState) -> f32 {
-        window_state.render.glyph_atlas.default_char_width()
+        window_state.render.glyph_atlas.as_ref().map_or(8.0, |atlas| atlas.default_char_width())
     }
 
     fn frame_window_menu_bar_hit_test(
@@ -331,7 +331,7 @@ impl RenderApp {
                     }
 
                     if !handled_chrome
-                        && !window_state.native.chrome.decorations_enabled
+                        && !window_state.chrome().decorations_enabled
                         && (self.modifiers & NEOMACS_SUPER_MASK) != 0
                     {
                         window_state.drag_window();
@@ -865,7 +865,7 @@ impl RenderApp {
                                 menu.all_items[global_idx].submenu
                             });
                             if is_submenu {
-                                self.mark_unmanaged_primary_popup_dirty();
+                                self.mark_primary_dirty();
                             } else {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
@@ -1172,9 +1172,9 @@ impl RenderApp {
             let now = std::time::Instant::now();
             let mouse_pos = self.primary_mouse_pos();
             let duration_ms = self.effects.click_halo.duration_ms;
-            self.with_unmanaged_primary_render(|r| {
-                r.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
-            });
+            if let Some(primary_frame) = self.primary_render_state_mut() {
+                primary_frame.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
+            }
         }
     }
 
@@ -1189,40 +1189,46 @@ impl RenderApp {
         let modifiers = self.modifiers;
         if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
             let mut event = None;
-            let lx = (position.x / window_state.native.scale_factor) as f32;
-            let ly = (position.y / window_state.native.scale_factor) as f32;
+            let scale = window_state.scale_factor();
+            let (native_w, native_h) = window_state.native_size();
+            let lx = (position.x / scale) as f32;
+            let ly = (position.y / scale) as f32;
             window_state.render.set_mouse_pos((lx, ly));
             let mut dirty = false;
 
             let edge = Self::detect_resize_edge_for_chrome(
-                &window_state.native.chrome,
-                window_state.native.width as f32 / window_state.native.scale_factor as f32,
-                window_state.native.height as f32 / window_state.native.scale_factor as f32,
+                window_state.chrome(),
+                native_w as f32 / scale as f32,
+                native_h as f32 / scale as f32,
                 lx,
                 ly,
             );
-            if edge != window_state.native.chrome.resize_edge {
-                window_state.native.chrome.resize_edge = edge;
+            if edge != window_state.chrome().resize_edge {
+                window_state.chrome_mut().resize_edge = edge;
                 let icon = match edge {
                     Some(dir) => winit::window::CursorIcon::from(dir),
                     None => winit::window::CursorIcon::Default,
                 };
-                if !window_state.native.chrome.decorations_enabled {
-                    window_state.native.window.set_cursor(icon);
+                if !window_state.chrome().decorations_enabled {
+                    if let Some(window) = window_state.window() {
+                        window.set_cursor(icon);
+                    }
                 }
             }
 
-            if !window_state.native.chrome.decorations_enabled {
+            if !window_state.chrome().decorations_enabled {
                 let new_hover = Self::frame_window_titlebar_hit_test(window_state, lx, ly);
-                if new_hover != window_state.native.chrome.titlebar_hover {
-                    window_state.native.chrome.titlebar_hover = new_hover;
+                if new_hover != window_state.chrome().titlebar_hover {
+                    window_state.chrome_mut().titlebar_hover = new_hover;
                     dirty = true;
-                    if window_state.native.chrome.resize_edge.is_none() {
+                    if window_state.chrome().resize_edge.is_none() {
                         let icon = match new_hover {
                             2..=4 => winit::window::CursorIcon::Pointer,
                             _ => winit::window::CursorIcon::Default,
                         };
-                        window_state.native.window.set_cursor(icon);
+                        if let Some(window) = window_state.window() {
+                            window.set_cursor(icon);
+                        }
                     }
                 }
             }
@@ -1390,7 +1396,7 @@ impl RenderApp {
             let new_hover = self.titlebar_hit_test(lx, ly);
             if new_hover != self.primary_chrome().titlebar_hover {
                 self.primary_chrome_mut().titlebar_hover = new_hover;
-                self.mark_unmanaged_primary_chrome_dirty();
+                self.mark_primary_dirty();
                 if self.primary_chrome().resize_edge.is_none() {
                     if let Some(window) = self.primary_window() {
                         use winit::window::CursorIcon;
@@ -1507,11 +1513,12 @@ impl RenderApp {
 
     pub(super) fn handle_mouse_wheel(&mut self, window_id: WindowId, delta: MouseScrollDelta) {
         if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
+            let scale = window_state.scale_factor();
             let (dx, dy, pixel_precise) = match delta {
                 MouseScrollDelta::LineDelta(x, y) => (x, y, false),
                 MouseScrollDelta::PixelDelta(pos) => (
-                    (pos.x / window_state.native.scale_factor) as f32,
-                    (pos.y / window_state.native.scale_factor) as f32,
+                    (pos.x / scale) as f32,
+                    (pos.y / scale) as f32,
                     true,
                 ),
             };

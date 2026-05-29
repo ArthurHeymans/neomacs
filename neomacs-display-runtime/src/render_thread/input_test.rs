@@ -32,7 +32,10 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
         #[cfg(feature = "neo-term")]
         Arc::new(Mutex::new(HashMap::new())),
     );
-    app.primary_native_fallback.scale_factor = scale_factor;
+    {
+        let primary = app.frame_windows.primary_window_mut().unwrap();
+        primary.pending_scale_factor = scale_factor;
+    }
     app
 }
 
