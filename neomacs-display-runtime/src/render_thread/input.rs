@@ -250,9 +250,7 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
-        let char_width = self
-            .primary_render_state()
-            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
+        let char_width = self.primary_char_width();
         let items = self
             .primary_compact_bar()
             .map_or([].as_slice(), |compact_bar| {
@@ -263,9 +261,7 @@ impl RenderApp {
 
     pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
         let compact_bar = self.primary_compact_bar()?;
-        let char_width = self
-            .primary_render_state()
-            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
+        let char_width = self.primary_char_width();
         menu_bar_hit_test_items(
             &compact_bar.menu_items,
             compact_bar.height,
@@ -297,18 +293,14 @@ impl RenderApp {
         if y < tab_bar.y || y >= tab_bar.y + tab_bar.height {
             return None;
         }
-        let char_width = self
-            .primary_render_state()
-            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
+        let char_width = self.primary_char_width();
         tab_bar_hit_test_items(&tab_bar.items, tab_bar.height, char_width, x, y - tab_bar.y)
     }
 
     /// Hit-test menu bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<u32> {
         let menu_bar = self.primary_menu_bar()?;
-        let char_width = self
-            .primary_render_state()
-            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width());
+        let char_width = self.primary_char_width();
         menu_bar_hit_test_items(&menu_bar.items, menu_bar.height, char_width, x, _y)
     }
 

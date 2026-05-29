@@ -609,6 +609,11 @@ impl RenderApp {
             .map_or(self.primary_fps_enabled, |frame| frame.fps.enabled)
     }
 
+    pub(super) fn primary_char_width(&self) -> f32 {
+        self.primary_render_state()
+            .map_or(8.0, |frame| frame.glyph_atlas.default_char_width())
+    }
+
     pub(super) fn primary_popup_menu(&self) -> Option<&PopupMenuState> {
         self.primary_render_state()
             .and_then(|frame| frame.popup_menu.as_ref())
