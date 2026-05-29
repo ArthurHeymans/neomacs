@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_discount_edit_reexecute_v13() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: prices
+      (insert "#+NAME: prices\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((item1 100) (item2 200) (item3 150) (item4 300) (item5 50))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: discounted
+      (insert "#+NAME: discounted\n")
+      (insert "#+begin_src emacs-lisp :var data=prices :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* 0.8 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("prices" "discounted"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: prices")
+      (forward-line 1)
+      (let ((prices1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: discounted")
+        (forward-line 1)
+        (let ((discounted1 (org-babel-read-result)))
+          ;; Edit: change item4 from 300 to 500
+          (goto-char (point-min))
+          (search-forward "(item4 300)")
+          (replace-match "(item4 500)")
+          ;; Re-execute
+          (dolist (name '("prices" "discounted"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: prices")
+          (forward-line 1)
+          (let ((prices2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: discounted")
+            (forward-line 1)
+            (let ((discounted2 (org-babel-read-result)))
+              (list prices1 discounted1 prices2 discounted2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_percent_edit_reexecute_v12() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
