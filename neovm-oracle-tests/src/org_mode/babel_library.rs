@@ -1080,6 +1080,68 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_intermediate_read_edit_reexecute_v2() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: generate data
+      (insert "#+NAME: gen\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((p 2) (q 5) (r 8) (s 3) (t 7))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: transform
+      (insert "#+NAME: xform\n")
+      (insert "#+begin_src emacs-lisp :var data=gen :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (+ 100 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("gen" "xform"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read intermediate
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: gen")
+      (forward-line 1)
+      (let ((gen-result (org-babel-read-result)))
+        ;; Read final
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: xform")
+        (forward-line 1)
+        (let ((xform-result (org-babel-read-result)))
+          ;; Edit: change r from 8 to 20
+          (goto-char (point-min))
+          (search-forward "(r 8)")
+          (replace-match "(r 20)")
+          ;; Re-execute
+          (dolist (name '("gen" "xform"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: gen")
+          (forward-line 1)
+          (let ((gen-result2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: xform")
+            (forward-line 1)
+            (let ((xform-result2 (org-babel-read-result)))
+              (list gen-result xform-result
+                    gen-result2 xform-result2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_intermediate_results_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
