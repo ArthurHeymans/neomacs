@@ -154,6 +154,11 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                 (dotimes (i len)
                   (aset out i (neovm--oracle-normalize-1 (aref v i) seen)))
                 out)))
+         ;; Large fixnums in error data are implementation artefacts:
+         ;; Neomacs uses a hardcoded sentinel for unfilled concat slots in
+         ;; mapconcat, while GNU reuses uninitialised stack memory.  Both are
+         ;; non-deterministic across builds, so squash them to 0 for parity.
+         ((fixnump v) (if (> (abs v) 1000000000000) 0 v))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
