@@ -1080,6 +1080,69 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_four_stage_chain_filter_sort_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: raw scores
+      (insert "#+NAME: scores\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((\"Alice\" 85) (\"Bob\" 92) (\"Carol\" 78) (\"Dave\" 95) (\"Eve\" 88))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: sorted
+      (insert "#+NAME: sorted\n")
+      (insert "#+begin_src emacs-lisp :var data=scores :results value replace\n")
+      (insert "(sort (copy-sequence data) (lambda (x y) (> (cadr x) (cadr y))))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 3: ranked
+      (insert "#+NAME: ranked\n")
+      (insert "#+begin_src emacs-lisp :var data=sorted :results value replace\n")
+      (insert "(let ((i 0))\n  (mapcar (lambda (r) (setq i (1+ i)) (list i (car r) (cadr r))) data))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 4: top3
+      (insert "#+NAME: top3\n")
+      (insert "#+begin_src emacs-lisp :var data=ranked :results value replace\n")
+      (insert "(seq-take data 3)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute chain
+      (dolist (name '("scores" "sorted" "ranked" "top3"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Edit: change Carol score to 99
+        (goto-char (point-min))
+        (search-forward "(\"Carol\" 78)")
+        (replace-match "(\"Carol\" 99)")
+        ;; Re-execute
+        (dolist (name '("scores" "sorted" "ranked" "top3"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((results2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) results2))
+          (list (nreverse results1)
+                (nreverse results2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_three_stage_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
