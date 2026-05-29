@@ -1491,11 +1491,7 @@ impl RenderApp {
             }
         }
 
-        let handled_primary_popup = self.primary_render_state_mut().is_some_and(|render| {
-            let had_popup = render.popup_menu.is_some();
-            render.update_popup_hover(lx, ly);
-            had_popup
-        });
+        let handled_primary_popup = self.update_primary_popup_hover(lx, ly);
         if handled_primary_popup {
             return;
         }

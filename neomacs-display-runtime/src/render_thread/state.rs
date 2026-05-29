@@ -918,6 +918,14 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn update_primary_popup_hover(&mut self, lx: f32, ly: f32) -> bool {
+        self.primary_render_state_mut().is_some_and(|render| {
+            let had_popup = render.popup_menu.is_some();
+            render.update_popup_hover(lx, ly);
+            had_popup
+        })
+    }
+
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.ime_enabled = enabled;
