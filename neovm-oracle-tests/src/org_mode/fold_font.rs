@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v58() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Search :search:\n")
+      (insert ":PROPERTIES:\n:Owner: Larry\n:CATEGORY: engine\n:END:\n")
+      (insert "** DONE Index :indexer:core:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 03:00]--[2026-05-28 Wed 07:00] =>  4:00\n:END:\n")
+      (insert ":PROPERTIES:\n:Effort: 6h\n:Relevance: critical\n:END:\n")
+      (insert "Index body.\n\n")
+      (insert "** TODO Crawl :spider:edge:\n")
+      (insert ":PROPERTIES:\n:Effort: 4h\n:Relevance: high\n:END:\n")
+      (insert "Crawl body.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda (tag)
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (line-number-at-pos)
+                                   (invisible-p (point))
+                                   (org-outline-level)
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (org-entry-get nil "Owner" 'inherit)
+                                   (org-entry-get nil "CATEGORY" 'inherit)
+                                   (org-entry-get nil "Relevance"))
+                             (list needle 'not-found nil nil nil nil nil nil))))
+                     '("Search" "Index" "Crawl")))))
+        (let ((initial (funcall snap 'initial)))
+          (org-fold-hide-all)
+          (let ((after-hide (funcall snap 'hide)))
+            (goto-char (point-min))
+            (search-forward "Search")
+            (end-of-line)
+            (insert "\n** WAIT Rank :ranker:ml:\n:PROPERTIES:\n:Effort: 8h\n:Relevance: high\n:END:\nRank body.\n")
+            (let ((after-edit (funcall snap 'edit)))
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-show (funcall snap 'show)))
+                (org-global-cycle nil)
+                (let ((after-cycle (funcall snap 'cycle)))
+                  (list initial after-hide after-edit after-show after-cycle
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v57() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
