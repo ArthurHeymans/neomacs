@@ -1454,3 +1454,59 @@ fn org_table_formula_multi_col_sort_edit_recalc_v2() {
                  (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_table_formula_sort_edit_resort_recalc_v3() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | A | B | C | Total |\n")
+    (insert "|------+------+---+---+-------|\n")
+    (insert "| Zara | 60 | 70 | 80 | |\n")
+    (insert "| Adam | 90 | 85 | 95 | |\n")
+    (insert "| Yuki | 75 | 80 | 70 | |\n")
+    (insert "| Bill | 88 | 92 | 86 | |\n")
+    (insert "| Xena | 70 | 65 | 75 | |\n")
+    (insert "#+TBLFM: $5=vsum($2..$4)\n")
+    (org-table-recalculate-buffer-tables)
+    (let ((initial (org-table-to-lisp)))
+      ;; Sort by Name alpha
+      (goto-char (point-min))
+      (search-forward "Name")
+      (beginning-of-line)
+      (org-table-sort-lines nil ?a)
+      (let ((sorted-alpha (org-table-to-lisp)))
+        ;; Sort by Total numeric desc
+        (goto-char (point-min))
+        (search-forward "Total")
+        (beginning-of-line)
+        (org-table-sort-lines t ?n)
+        (let ((sorted-total (org-table-to-lisp)))
+          ;; Edit: change Zara A from 60 to 95
+          (goto-char (point-min))
+          (search-forward "Zara")
+          (org-table-goto-column 2)
+          (org-table-get-field nil "95")
+          (org-table-recalculate-buffer-tables)
+          (let ((after-edit (org-table-to-lisp))
+                (zara-total (progn
+                              (goto-char (point-min))
+                              (search-forward "Zara")
+                              (org-table-goto-column 5)
+                              (org-table-get-field))))
+            ;; Re-sort by Total desc
+            (goto-char (point-min))
+            (search-forward "Total")
+            (beginning-of-line)
+            (org-table-sort-lines t ?n)
+            (let ((resorted (org-table-to-lisp)))
+              (list initial sorted-alpha sorted-total
+                    after-edit zara-total resorted
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
