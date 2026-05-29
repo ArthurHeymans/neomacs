@@ -849,3 +849,54 @@ fn org_element_parse_separate_scheduled_deadline_clock_edit() {
                    (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_clock_logbook_edit_reparse_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO Alpha\n")
+    (insert ":PROPERTIES:\n:Effort: 3h\n:END:\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:Owner: Bob\n:END:\n")
+    (insert "Body beta.\n\n")
+    (insert "*** TODO Gamma :work:urgent:\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body gamma.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)
+                                (org-element-property :todo-keyword hl)
+                                (org-element-property :tags hl))))
+                      (org-element-map tree 'property-drawer
+                        (lambda (pd)
+                          (org-element-map pd 'node-property
+                            (lambda (np)
+                              (list (org-element-property :key np)
+                                    (org-element-property :value np)))))))))))
+      (let ((initial (funcall snap)))
+        ;; Edit: toggle tag
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-toggle-tag "review" 'on)
+        ;; Edit: set property
+        (goto-char (point-min))
+        (search-forward "Gamma")
+        (beginning-of-line)
+        (org-set-property "Status" "in-progress")
+        (let ((after-edit (funcall snap)))
+          (list initial after-edit
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
