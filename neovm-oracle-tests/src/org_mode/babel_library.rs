@@ -1080,6 +1080,67 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_three_format_execute_edit_reexecute_v9() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Scalar: sum
+      (insert "#+NAME: sum\n")
+      (insert "#+begin_src emacs-lisp :results scalar replace\n")
+      (insert "(apply #'+ (mapcar #'cadr '((a 5) (b 10) (c 15) (d 20))))\n")
+      (insert "#+end_src\n\n")
+      ;; List: names
+      (insert "#+NAME: names\n")
+      (insert "#+begin_src emacs-lisp :results list replace\n")
+      (insert "'(\"Alice\" \"Bob\" \"Carol\" \"Dave\")\n")
+      (insert "#+end_src\n\n")
+      ;; Table: data
+      (insert "#+NAME: data\n")
+      (insert "#+begin_src emacs-lisp :results table replace\n")
+      (insert "(list '(\"X\" \"Y\") 'hline '(1 2) '(3 4) '(5 6))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("sum" "names" "data"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      (let ((r1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) r1))
+        ;; Edit: change sum expression
+        (goto-char (point-min))
+        (search-forward "(a 5) (b 10) (c 15) (d 20)")
+        (replace-match "(a 10) (b 20) (c 30) (d 40)")
+        ;; Edit: change names
+        (goto-char (point-min))
+        (search-forward "'(\"Alice\" \"Bob\" \"Carol\" \"Dave\")")
+        (replace-match "'(\"Eve\" \"Frank\")")
+        ;; Re-execute
+        (dolist (name '("sum" "names" "data"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((r2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) r2))
+          (list (nreverse r1) (nreverse r2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_weighted_sum_edit_reexecute_v8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
