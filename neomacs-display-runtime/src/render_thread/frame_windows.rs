@@ -221,6 +221,23 @@ impl GuiFrameRenderState {
         self.frame_dirty = true;
     }
 
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) fn push_floating_webkit(&mut self, overlay: FloatingWebKit) {
+        self.floating_webkits.push(overlay);
+        self.frame_dirty = true;
+    }
+
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) fn remove_floating_webkit(&mut self, id: u32) -> bool {
+        let old_len = self.floating_webkits.len();
+        self.floating_webkits.retain(|w| w.webkit_id != id);
+        let removed = self.floating_webkits.len() != old_len;
+        if removed {
+            self.frame_dirty = true;
+        }
+        removed
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
@@ -1306,25 +1323,14 @@ impl GuiFrameWindowManager {
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn remove_floating_webkit_from_top_level_windows(&mut self, id: u32) {
         self.for_each_top_level_window_mut(|window_state| {
-            let old_len = window_state.render.floating_webkits.len();
-            window_state
-                .render
-                .floating_webkits
-                .retain(|webkit| webkit.webkit_id != id);
-            if window_state.render.floating_webkits.len() != old_len {
-                window_state.render.frame_dirty = true;
-            }
+            window_state.render.remove_floating_webkit(id);
         });
     }
 
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn destroy_floating_webkit_from_top_level_windows(&mut self, id: u32) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state
-                .render
-                .floating_webkits
-                .retain(|webkit| webkit.webkit_id != id);
-            window_state.render.frame_dirty = true;
+            window_state.render.remove_floating_webkit(id);
         });
     }
 

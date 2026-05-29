@@ -12,14 +12,10 @@ impl RenderApp {
         if self.primary_window_state().is_none()
             && let Some(primary_frame) = self.primary_render_state_mut()
         {
-            let old_len = primary_frame.floating_webkits.len();
-            primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
-            if primary_frame.floating_webkits.len() != old_len {
-                primary_frame.frame_dirty = true;
-                return true;
-            }
+            primary_frame.remove_floating_webkit(id)
+        } else {
+            false
         }
-        false
     }
 
     pub(super) fn handle_asset_command(&mut self, cmd: RenderCommand) -> Result<(), RenderCommand> {
@@ -362,12 +358,10 @@ impl RenderApp {
                         .remove_floating_webkit_from_top_level_windows(id);
                     let _ = self.remove_unmanaged_primary_floating_webkit(id);
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
-                        window_state.render.floating_webkits.push(overlay);
-                        window_state.render.frame_dirty = true;
+                        window_state.render.push_floating_webkit(overlay);
                     } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                         if let Some(primary_frame) = self.primary_render_state_mut() {
-                            primary_frame.floating_webkits.push(overlay);
-                            primary_frame.frame_dirty = true;
+                            primary_frame.push_floating_webkit(overlay);
                         } else {
                             self.primary_render_fallback.floating_webkits.push(overlay);
                         }
