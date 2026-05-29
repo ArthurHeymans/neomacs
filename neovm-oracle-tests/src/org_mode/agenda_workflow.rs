@@ -1908,3 +1908,52 @@ fn org_agenda_single_day_todo_filter_edit_reagenda_v2() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_single_day_multi_todo_edit_reagenda_v2() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-sday2-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgendaSday2*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO A1\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE A2\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO A3\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT A4\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO A5\nSCHEDULED: <2026-05-28 Wed>\n"))
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((before (replace-regexp-in-string
+                           (regexp-quote root) "<root>"
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+              (org-agenda-quit)
+              ;; Edit: A1->DONE, A3->DONE
+              (with-current-buffer (find-file-noselect file)
+                (goto-char (point-min))
+                (search-forward "TODO A1")
+                (replace-match "DONE A1")
+                (goto-char (point-min))
+                (search-forward "TODO A3")
+                (replace-match "DONE A3"))
+              (org-agenda-list nil "2026-05-28" 1)
+              (with-current-buffer org-agenda-buffer-name
+                (let ((after (replace-regexp-in-string
+                              (regexp-quote root) "<root>"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+                  (org-agenda-quit)
+                  (list before after))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
