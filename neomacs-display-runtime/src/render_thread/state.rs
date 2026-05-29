@@ -562,25 +562,19 @@ impl RenderApp {
 
     pub(super) fn mark_top_level_frame_windows_dirty(&mut self) {
         self.frame_windows.mark_top_level_dirty();
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
         self.primary_native_fallback.chrome.titlebar_height = height;
         self.frame_windows.set_top_level_titlebar_height(height);
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
         self.primary_native_fallback.chrome.corner_radius = radius;
         self.frame_windows.set_top_level_corner_radius(radius);
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
@@ -669,22 +663,22 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn mark_unmanaged_primary_popup_dirty(&mut self) {
+    fn mark_unmanaged_primary_dirty(&mut self) {
         if self.primary_window_state().is_none() {
             self.mark_primary_dirty();
         }
+    }
+
+    pub(super) fn mark_unmanaged_primary_popup_dirty(&mut self) {
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn mark_unmanaged_primary_chrome_dirty(&mut self) {
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn mark_unmanaged_primary_resize_dirty(&mut self) {
-        if self.primary_window_state().is_none() {
-            self.mark_primary_dirty();
-        }
+        self.mark_unmanaged_primary_dirty();
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
