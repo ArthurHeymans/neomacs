@@ -1863,14 +1863,57 @@ pub(crate) fn builtin_replace_match(
     if is_buffer_replace {
         // Try to compute the match region for before-change signalling.
         let subexp = if args.len() >= 5 && !args[4].is_nil() {
-            expect_int(&args[4]).unwrap_or(0) as usize
+            match expect_int(&args[4]) {
+                Ok(n) if n >= 0 => n as usize,
+                _ => {
+                    return builtin_replace_match_with_state_and_flags(
+                        &eval.obarray,
+                        &mut eval.buffers,
+                        &mut eval.match_data,
+                        &args,
+                        case_symbols_as_words,
+                    );
+                }
+            }
         } else {
             0usize
         };
         if let Some(ref md) = eval.match_data {
             if md.searched_string.is_none() {
-                if let Some(Some((oldstart, oldend))) = md.groups.get(subexp) {
-                    let (oldstart, oldend) = (*oldstart, *oldend);
+                if md.groups.get(subexp).is_some_and(|group| group.is_some()) {
+                    let newtext_lisp = expect_lisp_string(&args[0])?;
+                    let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
+                    let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
+                    let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);
+                    let missing_subexp_error = super::regex::REPLACE_MATCH_SUBEXP_MISSING;
+                    let (oldstart, oldend, new_end, old_len) = {
+                        let buf = eval.buffers.current_buffer().ok_or_else(|| {
+                            signal("error", vec![Value::string("No current buffer")])
+                        })?;
+                        let (oldstart, oldend, replacement) =
+                            crate::emacs_core::search::compute_buffer_replacement_lisp_string(
+                                buf,
+                                newtext_lisp,
+                                fixedcase,
+                                literal,
+                                subexp,
+                                &eval.match_data,
+                            )
+                            .map_err(|msg| {
+                                if msg == missing_subexp_error {
+                                    signal(
+                                        "error",
+                                        vec![Value::string(missing_subexp_error), raw_subexp],
+                                    )
+                                } else {
+                                    signal("error", vec![Value::string(msg)])
+                                }
+                            })?;
+                        let old_len = super::editfns::current_buffer_byte_span_char_len(
+                            eval, oldstart, oldend,
+                        );
+                        (oldstart, oldend, oldstart + replacement.sbytes(), old_len)
+                    };
                     super::editfns::signal_before_change(eval, oldstart, oldend)?;
                     let result = builtin_replace_match_with_state_and_flags(
                         &eval.obarray,
@@ -1879,17 +1922,6 @@ pub(crate) fn builtin_replace_match(
                         &args,
                         case_symbols_as_words,
                     )?;
-                    // After the replacement the new end = oldstart + replacement_len.
-                    // Compute new buffer size at that region from match_data update.
-                    let new_end = eval
-                        .match_data
-                        .as_ref()
-                        .and_then(|md| md.groups.first())
-                        .and_then(|g| g.as_ref())
-                        .map(|(_, e)| *e)
-                        .unwrap_or(oldstart);
-                    let old_len =
-                        super::editfns::current_buffer_byte_span_char_len(eval, oldstart, oldend);
                     super::editfns::signal_after_change(eval, oldstart, new_end, old_len)?;
                     return Ok(result);
                 }

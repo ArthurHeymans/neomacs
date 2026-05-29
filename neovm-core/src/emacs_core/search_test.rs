@@ -96,6 +96,94 @@ fn replace_match_buffer_replacement_leaves_point_at_replacement_end() {
     assert_str(items[2], "&");
 }
 
+#[test]
+fn replace_match_after_change_end_uses_replacement_length() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert "* TODO Wed-task
+SCHEDULED: <2026-05-27 Wed>
+")
+  (setq hook-log nil)
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq hook-log (list beg end old-len)))))
+  (goto-char 1)
+  (search-forward "TODO Wed-task")
+  (replace-match "DONE Wed-task" t t)
+  (list hook-log (buffer-string)))"#,
+        )
+        .expect("replace-match after-change form should evaluate");
+    let items = list_to_vec(&result).expect("expected list result");
+    assert_eq!(items.len(), 2);
+    let hook = list_to_vec(&items[0]).expect("expected hook list");
+    assert_eq!(hook.len(), 3);
+    assert_int(hook[0], 3);
+    assert_int(hook[1], 16);
+    assert_int(hook[2], 13);
+    assert_str(items[1], "* DONE Wed-task\nSCHEDULED: <2026-05-27 Wed>\n");
+}
+
+#[test]
+fn replace_match_after_change_uses_restored_integer_match_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert "alpha one")
+  (goto-char 1)
+  (search-forward "alpha")
+  (let ((saved (match-data t))
+        hook-log)
+    (set-match-data saved)
+    (setq after-change-functions
+          (list (lambda (beg end old-len)
+                  (setq hook-log (list beg end old-len)))))
+    (replace-match "omega" t t)
+    (list hook-log (buffer-string))))"#,
+        )
+        .expect("replace-match restored match data form should evaluate");
+    let items = list_to_vec(&result).expect("expected list result");
+    assert_eq!(items.len(), 2);
+    let hook = list_to_vec(&items[0]).expect("expected hook list");
+    assert_eq!(hook.len(), 3);
+    assert_int(hook[0], 1);
+    assert_int(hook[1], 6);
+    assert_int(hook[2], 5);
+    assert_str(items[1], "omega one");
+}
+
+#[test]
+fn replace_match_after_change_reports_multibyte_char_positions() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev
+        .eval_str(
+            r#"(progn
+  (insert "ab")
+  (setq hook-log nil)
+  (setq after-change-functions
+        (list (lambda (beg end old-len)
+                (setq hook-log (list beg end old-len)))))
+  (goto-char 1)
+  (looking-at "a")
+  (replace-match "éé" t t)
+  (list hook-log (buffer-string)))"#,
+        )
+        .expect("replace-match multibyte after-change form should evaluate");
+    let items = list_to_vec(&result).expect("expected list result");
+    assert_eq!(items.len(), 2);
+    let hook = list_to_vec(&items[0]).expect("expected hook list");
+    assert_eq!(hook.len(), 3);
+    assert_int(hook[0], 1);
+    assert_int(hook[1], 3);
+    assert_int(hook[2], 1);
+    assert_str(items[1], "ééb");
+}
+
 fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
     SEARCH_TEST_CTX.with(|slot| {
         let mut new_ctx = Box::new(crate::emacs_core::eval::Context::new());

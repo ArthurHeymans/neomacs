@@ -3989,12 +3989,7 @@ impl<'a> Vm<'a> {
     }
 
     fn builtin_replace_match_shared(&mut self, args: &[Value]) -> EvalResult {
-        crate::emacs_core::builtins::search::builtin_replace_match_with_state(
-            &self.ctx.obarray,
-            &mut self.ctx.buffers,
-            &mut self.ctx.match_data,
-            args,
-        )
+        crate::emacs_core::builtins::search::builtin_replace_match(&mut *self.ctx, args.to_vec())
     }
 
     fn builtin_find_charset_region_shared(&mut self, args: &[Value]) -> EvalResult {
