@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_tax_edit_reexecute_v15() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: incomes
+      (insert "#+NAME: incomes\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((w1 50000) (w2 75000) (w3 60000) (w4 90000) (w5 45000))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: taxed
+      (insert "#+NAME: taxed\n")
+      (insert "#+begin_src emacs-lisp :var data=incomes :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* 0.75 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("incomes" "taxed"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: incomes")
+      (forward-line 1)
+      (let ((incomes1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: taxed")
+        (forward-line 1)
+        (let ((taxed1 (org-babel-read-result)))
+          ;; Edit: change w4 from 90000 to 120000
+          (goto-char (point-min))
+          (search-forward "(w4 90000)")
+          (replace-match "(w4 120000)")
+          ;; Re-execute
+          (dolist (name '("incomes" "taxed"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: incomes")
+          (forward-line 1)
+          (let ((incomes2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: taxed")
+            (forward-line 1)
+            (let ((taxed2 (org-babel-read-result)))
+              (list incomes1 taxed1 incomes2 taxed2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_ratio_edit_reexecute_v14() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
