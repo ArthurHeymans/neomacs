@@ -904,7 +904,7 @@ impl RenderApp {
                                 menu.all_items[global_idx].submenu
                             });
                             if is_submenu {
-                                self.mark_primary_dirty();
+                                self.mark_unmanaged_primary_popup_dirty();
                             } else {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
@@ -1431,7 +1431,7 @@ impl RenderApp {
             let new_hover = self.titlebar_hit_test(lx, ly);
             if new_hover != self.primary_chrome().titlebar_hover {
                 self.primary_chrome_mut().titlebar_hover = new_hover;
-                self.mark_primary_dirty();
+                self.mark_unmanaged_primary_chrome_dirty();
                 if self.primary_chrome().resize_edge.is_none() {
                     if let Some(window) = self.primary_window() {
                         use winit::window::CursorIcon;

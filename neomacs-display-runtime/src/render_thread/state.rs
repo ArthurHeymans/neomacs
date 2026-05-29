@@ -656,6 +656,18 @@ impl RenderApp {
         }
     }
 
+    pub(super) fn mark_unmanaged_primary_popup_dirty(&mut self) {
+        if self.primary_window_state().is_none() {
+            self.mark_primary_dirty();
+        }
+    }
+
+    pub(super) fn mark_unmanaged_primary_chrome_dirty(&mut self) {
+        if self.primary_window_state().is_none() {
+            self.mark_primary_dirty();
+        }
+    }
+
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_visual_bell_start(start);
