@@ -1483,6 +1483,7 @@ mod strong_combo_complex_35;
 mod strong_combo_complex_36;
 mod strong_combo_complex_37;
 mod strong_combo_complex_38;
+mod strong_combo_complex_39;
 mod strong_combo_complex_4;
 mod strong_combo_complex_5;
 mod strong_combo_complex_6;
