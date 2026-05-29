@@ -242,6 +242,35 @@ impl PrimaryNativeFallbackState {
     }
 }
 
+/// Render state kept only until the primary frame has an adopted render state.
+pub(super) struct PrimaryRenderFallbackState {
+    pub(super) child_frames: ChildFrameManager,
+    #[cfg(feature = "wpe-webkit")]
+    pub(super) floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
+    pub(super) menu_bar: Option<GuiMenuBarState>,
+    pub(super) tool_bar: Option<GuiToolBarState>,
+    pub(super) compact_bar: Option<GuiCompactBarState>,
+    pub(super) popup_menu: Option<PopupMenuState>,
+    pub(super) tooltip: Option<TooltipState>,
+    pub(super) visual_bell_start: Option<Instant>,
+}
+
+impl PrimaryRenderFallbackState {
+    fn new() -> Self {
+        Self {
+            child_frames: ChildFrameManager::new(),
+            #[cfg(feature = "wpe-webkit")]
+            floating_webkits: Vec::new(),
+            menu_bar: None,
+            tool_bar: None,
+            compact_bar: None,
+            popup_menu: None,
+            tooltip: None,
+            visual_bell_start: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ImeCursorArea {
     pub(super) x: i32,
@@ -347,13 +376,8 @@ pub(super) struct RenderApp {
 
     // Top-level GUI frame windows.
     pub(super) frame_windows: GuiFrameWindowManager,
-    // Child frames received before primary frame render state exists.
-    pub(super) pending_primary_child_frames: ChildFrameManager,
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) pending_primary_floating_webkits: Vec<crate::core::scene::FloatingWebKit>,
-    pub(super) pending_primary_menu_bar: Option<GuiMenuBarState>,
-    pub(super) pending_primary_tool_bar: Option<GuiToolBarState>,
-    pub(super) pending_primary_compact_bar: Option<GuiCompactBarState>,
+    // Primary render state received before primary frame render state exists.
+    pub(super) primary_render_fallback: PrimaryRenderFallbackState,
     // Child frame visual style
     pub(super) child_frame_corner_radius: f32,
     pub(super) child_frame_shadow_enabled: bool,
@@ -369,9 +393,6 @@ pub(super) struct RenderApp {
     // UI overlay state
     pub(super) scroll_indicators_enabled: bool,
     pub(super) primary_fps_enabled: bool,
-    pub(super) pending_primary_popup_menu: Option<PopupMenuState>,
-    pub(super) pending_primary_tooltip: Option<TooltipState>,
-    pub(super) pending_primary_visual_bell_start: Option<Instant>,
 
     /// Extra line spacing in pixels (added between rows)
     pub(super) extra_line_spacing: f32,
@@ -428,12 +449,7 @@ impl RenderApp {
             #[cfg(feature = "neo-term")]
             shared_terminals,
             frame_windows: GuiFrameWindowManager::new(),
-            pending_primary_child_frames: ChildFrameManager::new(),
-            #[cfg(feature = "wpe-webkit")]
-            pending_primary_floating_webkits: Vec::new(),
-            pending_primary_menu_bar: None,
-            pending_primary_tool_bar: None,
-            pending_primary_compact_bar: None,
+            primary_render_fallback: PrimaryRenderFallbackState::new(),
             child_frame_corner_radius: 8.0,
             child_frame_shadow_enabled: true,
             child_frame_shadow_layers: 4,
@@ -444,9 +460,6 @@ impl RenderApp {
             toolbar_padding: 5,
             scroll_indicators_enabled: false,
             primary_fps_enabled: false,
-            pending_primary_popup_menu: None,
-            pending_primary_tooltip: None,
-            pending_primary_visual_bell_start: None,
             extra_line_spacing: 0.0,
             extra_letter_spacing: 0.0,
             shared_monitors: Some(shared_monitors),
@@ -606,7 +619,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_popup_menu(popup_menu);
         } else {
-            self.pending_primary_popup_menu = popup_menu;
+            self.primary_render_fallback.popup_menu = popup_menu;
         }
     }
 
@@ -621,7 +634,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_tooltip(tooltip);
         } else {
-            self.pending_primary_tooltip = tooltip;
+            self.primary_render_fallback.tooltip = tooltip;
         }
     }
 
@@ -629,7 +642,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_menu_bar(menu_bar);
         } else {
-            self.pending_primary_menu_bar = menu_bar;
+            self.primary_render_fallback.menu_bar = menu_bar;
         }
     }
 
@@ -637,7 +650,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_tool_bar(tool_bar);
         } else {
-            self.pending_primary_tool_bar = tool_bar;
+            self.primary_render_fallback.tool_bar = tool_bar;
         }
     }
 
@@ -645,7 +658,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_compact_bar(compact_bar);
         } else {
-            self.pending_primary_compact_bar = compact_bar;
+            self.primary_render_fallback.compact_bar = compact_bar;
         }
     }
 
@@ -672,7 +685,7 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_visual_bell_start(start);
         } else {
-            self.pending_primary_visual_bell_start = start;
+            self.primary_render_fallback.visual_bell_start = start;
         }
     }
 
@@ -699,7 +712,7 @@ impl RenderApp {
 
     pub(super) fn primary_child_frames(&self) -> &ChildFrameManager {
         self.primary_render_state()
-            .map_or(&self.pending_primary_child_frames, |frame| {
+            .map_or(&self.primary_render_fallback.child_frames, |frame| {
                 &frame.child_frames
             })
     }
@@ -714,9 +727,9 @@ impl RenderApp {
                     return &mut primary_frame.child_frames;
                 }
             }
-            &mut self.pending_primary_child_frames
+            &mut self.primary_render_fallback.child_frames
         } else {
-            &mut self.pending_primary_child_frames
+            &mut self.primary_render_fallback.child_frames
         }
     }
 
@@ -732,7 +745,9 @@ impl RenderApp {
             }
             changed
         } else {
-            self.pending_primary_child_frames.remove_frame(frame_id)
+            self.primary_render_fallback
+                .child_frames
+                .remove_frame(frame_id)
         }
     }
 
@@ -740,7 +755,9 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.update_child_frame(frame);
         } else {
-            self.pending_primary_child_frames.update_frame(frame);
+            self.primary_render_fallback
+                .child_frames
+                .update_frame(frame);
         }
     }
 

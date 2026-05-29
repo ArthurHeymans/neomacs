@@ -209,7 +209,8 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
-                    self.pending_primary_floating_webkits
+                    self.primary_render_fallback
+                        .floating_webkits
                         .retain(|w| w.webkit_id != id);
                     self.frame_windows
                         .destroy_floating_webkit_from_top_level_windows(id);
@@ -354,7 +355,8 @@ impl RenderApp {
                         width,
                         height,
                     };
-                    self.pending_primary_floating_webkits
+                    self.primary_render_fallback
+                        .floating_webkits
                         .retain(|w| w.webkit_id != id);
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
@@ -367,7 +369,7 @@ impl RenderApp {
                             primary_frame.floating_webkits.push(overlay);
                             primary_frame.frame_dirty = true;
                         } else {
-                            self.pending_primary_floating_webkits.push(overlay);
+                            self.primary_render_fallback.floating_webkits.push(overlay);
                         }
                     } else {
                         tracing::warn!(
@@ -382,7 +384,8 @@ impl RenderApp {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
-                    self.pending_primary_floating_webkits
+                    self.primary_render_fallback
+                        .floating_webkits
                         .retain(|w| w.webkit_id != id);
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);

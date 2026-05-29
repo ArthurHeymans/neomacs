@@ -141,9 +141,9 @@ impl RenderApp {
             self.primary_native_fallback.scale_factor,
             self.primary_fps_enabled(),
         );
-        primary_frame.popup_menu = self.pending_primary_popup_menu.take();
-        primary_frame.tooltip = self.pending_primary_tooltip.take();
-        primary_frame.visual_bell_start = self.pending_primary_visual_bell_start.take();
+        primary_frame.popup_menu = self.primary_render_fallback.popup_menu.take();
+        primary_frame.tooltip = self.primary_render_fallback.tooltip.take();
+        primary_frame.visual_bell_start = self.primary_render_fallback.visual_bell_start.take();
         if primary_frame.popup_menu.is_some()
             || primary_frame.tooltip.is_some()
             || primary_frame.visual_bell_start.is_some()
@@ -153,20 +153,20 @@ impl RenderApp {
         primary_frame.cursor.copy_config_from(&self.cursor_defaults);
         primary_frame.transitions.policy = self.transition_policy;
         primary_frame.child_frames = std::mem::replace(
-            &mut self.pending_primary_child_frames,
+            &mut self.primary_render_fallback.child_frames,
             crate::render_thread::child_frames::ChildFrameManager::new(),
         );
         #[cfg(feature = "wpe-webkit")]
         {
             primary_frame.floating_webkits =
-                std::mem::take(&mut self.pending_primary_floating_webkits);
+                std::mem::take(&mut self.primary_render_fallback.floating_webkits);
             if !primary_frame.floating_webkits.is_empty() {
                 primary_frame.frame_dirty = true;
             }
         }
-        primary_frame.menu_bar = self.pending_primary_menu_bar.take();
-        primary_frame.tool_bar = self.pending_primary_tool_bar.take();
-        primary_frame.compact_bar = self.pending_primary_compact_bar.take();
+        primary_frame.menu_bar = self.primary_render_fallback.menu_bar.take();
+        primary_frame.tool_bar = self.primary_render_fallback.tool_bar.take();
+        primary_frame.compact_bar = self.primary_render_fallback.compact_bar.take();
         if primary_frame.menu_bar.is_some()
             || primary_frame.tool_bar.is_some()
             || primary_frame.compact_bar.is_some()
