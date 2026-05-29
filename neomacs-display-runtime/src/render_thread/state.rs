@@ -897,6 +897,14 @@ impl RenderApp {
             })
     }
 
+    pub(super) fn clear_primary_mouse_hidden_for_typing(&mut self) {
+        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+            window_state.set_mouse_hidden_for_typing(false);
+        } else {
+            self.primary_native_fallback.mouse_hidden_for_typing = false;
+        }
+    }
+
     pub(super) fn set_primary_ime_enabled(&mut self, enabled: bool) {
         if let Some(window_state) = self.frame_windows.primary_window_mut() {
             window_state.native.ime_enabled = enabled;
