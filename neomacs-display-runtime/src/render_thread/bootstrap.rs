@@ -248,12 +248,10 @@ impl RenderApp {
             if let Some(primary_state) = self.primary_window_state_mut() {
                 primary_state.handle_resize(&device, width, height);
             } else {
-                self.primary_native_fallback.width = width;
-                self.primary_native_fallback.height = height;
+                self.primary_native_fallback.set_size(width, height);
             }
         } else {
-            self.primary_native_fallback.width = width;
-            self.primary_native_fallback.height = height;
+            self.primary_native_fallback.set_size(width, height);
         }
 
         // Resize renderer
