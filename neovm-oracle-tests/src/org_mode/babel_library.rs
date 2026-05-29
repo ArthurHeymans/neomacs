@@ -1080,6 +1080,68 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_scalar_list_table_edit_reexecute_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Scalar
+      (insert "#+NAME: count\n")
+      (insert "#+begin_src emacs-lisp :results scalar replace\n")
+      (insert "(+ 10 20 30)\n")
+      (insert "#+end_src\n\n")
+      ;; List
+      (insert "#+NAME: items\n")
+      (insert "#+begin_src emacs-lisp :results list replace\n")
+      (insert "'(alpha beta gamma delta epsilon)\n")
+      (insert "#+end_src\n\n")
+      ;; Table
+      (insert "#+NAME: matrix\n")
+      (insert "#+begin_src emacs-lisp :results table replace\n")
+      (insert "(list '(\"X\" \"Y\" \"Z\") 'hline '(1 2 3) '(4 5 6) '(7 8 9))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("count" "items" "matrix"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Edit: change scalar
+        (goto-char (point-min))
+        (search-forward "(+ 10 20 30)")
+        (replace-match "(+ 100 200)")
+        ;; Edit: change list
+        (goto-char (point-min))
+        (search-forward "'(alpha beta gamma delta epsilon)")
+        (replace-match "'(one two three)")
+        ;; Re-execute
+        (dolist (name '("count" "items" "matrix"))
+          (goto-char (point-min))
+          (search-forward name)
+          (org-babel-execute-src-block))
+        (let ((results2 nil))
+          (goto-char (point-min))
+          (while (re-search-forward "#\\+RESULTS:" nil t)
+            (forward-line 1)
+            (push (org-babel-read-result) results2))
+          (list (nreverse results1)
+                (nreverse results2)
+                (buffer-substring-no-properties
+                 (point-min) (point-max)))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_nested_variable_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
