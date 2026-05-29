@@ -1080,6 +1080,80 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_three_stage_intermediate_read_back_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: raw
+      (insert "#+NAME: raw\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((m 4) (n 7) (o 2) (p 9))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: doubled
+      (insert "#+NAME: doubled\n")
+      (insert "#+begin_src emacs-lisp :var data=raw :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (* 2 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 3: added
+      (insert "#+NAME: added\n")
+      (insert "#+begin_src emacs-lisp :var data=doubled :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (+ 50 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("raw" "doubled" "added"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read all intermediates
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: raw")
+      (forward-line 1)
+      (let ((raw1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: doubled")
+        (forward-line 1)
+        (let ((doubled1 (org-babel-read-result)))
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: added")
+          (forward-line 1)
+          (let ((added1 (org-babel-read-result)))
+            ;; Edit: change o from 2 to 15
+            (goto-char (point-min))
+            (search-forward "(o 2)")
+            (replace-match "(o 15)")
+            ;; Re-execute
+            (dolist (name '("raw" "doubled" "added"))
+              (goto-char (point-min))
+              (search-forward name)
+              (org-babel-execute-src-block))
+            ;; Re-read
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: raw")
+            (forward-line 1)
+            (let ((raw2 (org-babel-read-result)))
+              (goto-char (point-min))
+              (search-forward "#+RESULTS: doubled")
+              (forward-line 1)
+              (let ((doubled2 (org-babel-read-result)))
+                (goto-char (point-min))
+                (search-forward "#+RESULTS: added")
+                (forward-line 1)
+                (let ((added2 (org-babel-read-result)))
+                  (list raw1 doubled1 added1
+                        raw2 doubled2 added2
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_intermediate_read_edit_reexecute_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
