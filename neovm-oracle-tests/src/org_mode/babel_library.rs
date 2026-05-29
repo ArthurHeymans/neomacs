@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_rank_edit_reexecute_v19() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: heights
+      (insert "#+NAME: heights\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((a 180) (b 165) (c 190) (d 155) (e 175))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: ranked
+      (insert "#+NAME: ranked\n")
+      (insert "#+begin_src emacs-lisp :var data=heights :results value replace\n")
+      (insert "(let ((sorted (sort (copy-sequence data) (lambda (x y) (> (cadr x) (cadr y))))))\n  (let ((i 0))\n    (mapcar (lambda (r) (setq i (1+ i)) (list i (car r) (cadr r))) sorted)))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("heights" "ranked"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: heights")
+      (forward-line 1)
+      (let ((heights1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: ranked")
+        (forward-line 1)
+        (let ((ranked1 (org-babel-read-result)))
+          ;; Edit: change d from 155 to 195
+          (goto-char (point-min))
+          (search-forward "(d 155)")
+          (replace-match "(d 195)")
+          ;; Re-execute
+          (dolist (name '("heights" "ranked"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: heights")
+          (forward-line 1)
+          (let ((heights2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: ranked")
+            (forward-line 1)
+            (let ((ranked2 (org-babel-read-result)))
+              (list heights1 ranked1 heights2 ranked2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_weighted_avg_edit_reexecute_v18() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
