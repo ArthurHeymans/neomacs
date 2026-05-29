@@ -634,12 +634,7 @@ impl RenderApp {
                     native.height,
                 );
             });
-            if render.renderer_effects.needs_redraw() {
-                render.frame_dirty = true;
-            }
-            if render.transitions.has_active() {
-                render.frame_dirty = true;
-            }
+            render.mark_active_visuals_dirty();
         }
 
         renderer.set_scale_factor(old_scale_factor);
