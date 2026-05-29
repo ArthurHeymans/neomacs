@@ -685,6 +685,62 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_all_edit_cycle_font_face_v47() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO Sprint :sprint:\n")
+      (insert ":PROPERTIES:\n:Owner: Alice\n:END:\n")
+      (insert "** DONE Story-A :fe:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 11:00] =>  2:00\n:END:\n")
+      (insert ":PROPERTIES:\n:Effort: 3h\n:Points: 5\n:END:\n")
+      (insert "Story A body.\n\n")
+      (insert "** TODO Story-B :be:\n")
+      (insert ":PROPERTIES:\n:Effort: 5h\n:Points: 8\n:END:\n")
+      (insert "Story B body.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda (tag)
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (line-number-at-pos)
+                                   (invisible-p (point))
+                                   (org-outline-level)
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (org-entry-get nil "Owner" 'inherit))
+                             (list needle 'not-found nil nil nil nil))))
+                     '("Sprint" "Story-A" "Story-B")))))
+        (let ((initial (funcall snap 'initial)))
+          (org-fold-hide-all)
+          (let ((after-hide (funcall snap 'hide)))
+            (goto-char (point-min))
+            (search-forward "Sprint")
+            (end-of-line)
+            (insert "\n** WAIT Story-C :devops:\n:PROPERTIES:\n:Effort: 2h\n:Points: 3\n:END:\nStory C body.\n")
+            (let ((after-edit (funcall snap 'edit)))
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-show (funcall snap 'show)))
+                (org-global-cycle nil)
+                (let ((after-cycle (funcall snap 'cycle)))
+                  (list initial after-hide after-edit after-show after-cycle
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_all_edit_cycle_multi_tag_prop_clock_v46() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
