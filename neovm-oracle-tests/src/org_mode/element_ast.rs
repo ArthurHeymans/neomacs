@@ -788,3 +788,64 @@ fn org_element_parse_tag_property_drawer_edit_reparse_deep() {
                  (point-min) (point-max)))))))))"##,
     );
 }
+
+#[test]
+fn org_element_parse_separate_scheduled_deadline_clock_edit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-element)
+  (with-temp-buffer
+    (org-mode)
+    ;; Alpha has only SCHEDULED
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert ":PROPERTIES:\n:Effort: 2h\n:END:\n")
+    (insert "Body alpha.\n\n")
+    ;; Beta has only DEADLINE
+    (insert "** DONE Beta\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Body beta.\n\n")
+    ;; Gamma has SCHEDULED only
+    (insert "** TODO Gamma\n")
+    (insert "SCHEDULED: <2026-05-29 Thu>\n")
+    (insert "Body gamma.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)
+                                (org-element-property :todo-keyword hl))))
+                      (org-element-map tree 'planning
+                        (lambda (pl)
+                          (list (org-element-property :type pl)
+                                (let ((ts (org-element-property :timestamp pl)))
+                                  (and ts (org-element-property :raw-value ts))))))
+                      (org-element-map tree 'property-drawer
+                        (lambda (pd)
+                          (org-element-map pd 'node-property
+                            (lambda (np)
+                              (list (org-element-property :key np)
+                                    (org-element-property :value np)))))))))))
+      (let ((initial (funcall snap)))
+        ;; Edit: add tag to Alpha
+        (goto-char (point-min))
+        (search-forward "Alpha")
+        (beginning-of-line)
+        (org-toggle-tag "work" 'on)
+        (let ((after-tag (funcall snap)))
+          ;; Edit: set property on Beta
+          (goto-char (point-min))
+          (search-forward "Beta")
+          (beginning-of-line)
+          (org-set-property "Status" "verified")
+          (let ((after-prop (funcall snap)))
+            (list initial after-tag after-prop
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
