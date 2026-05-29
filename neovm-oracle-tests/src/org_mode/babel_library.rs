@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_mapcar_edit_reexecute_v10() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: raw
+      (insert "#+NAME: raw\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((a 2) (b 5) (c 8) (d 3) (e 7))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: squared
+      (insert "#+NAME: squared\n")
+      (insert "#+begin_src emacs-lisp :var data=raw :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* (cadr r) (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("raw" "squared"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: raw")
+      (forward-line 1)
+      (let ((raw1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: squared")
+        (forward-line 1)
+        (let ((squared1 (org-babel-read-result)))
+          ;; Edit: change d from 3 to 12
+          (goto-char (point-min))
+          (search-forward "(d 3)")
+          (replace-match "(d 12)")
+          ;; Re-execute
+          (dolist (name '("raw" "squared"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: raw")
+          (forward-line 1)
+          (let ((raw2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: squared")
+            (forward-line 1)
+            (let ((squared2 (org-babel-read-result)))
+              (list raw1 squared1 raw2 squared2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_three_format_execute_edit_reexecute_v9() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
