@@ -158,8 +158,7 @@ impl RenderApp {
             })
         } else {
             render.cursor.clear_target();
-            render.ime_preedit_active = false;
-            render.ime_preedit_text.clear();
+            render.clear_ime_preedit();
             None
         }
     }

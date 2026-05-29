@@ -268,6 +268,14 @@ impl GuiFrameRenderState {
         self.mark_dirty();
     }
 
+    pub(super) fn set_emacs_frame_id(&mut self, frame_id: u64) {
+        self.emacs_frame_id = frame_id;
+    }
+
+    pub(super) fn set_mouse_pos(&mut self, pos: (f32, f32)) {
+        self.mouse_pos = pos;
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),

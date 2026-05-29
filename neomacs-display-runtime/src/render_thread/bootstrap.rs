@@ -141,15 +141,9 @@ impl RenderApp {
             self.primary_native_fallback.scale_factor,
             self.primary_fps_enabled(),
         );
-        primary_frame.popup_menu = self.primary_render_fallback.popup_menu.take();
-        primary_frame.tooltip = self.primary_render_fallback.tooltip.take();
-        primary_frame.visual_bell_start = self.primary_render_fallback.visual_bell_start.take();
-        if primary_frame.popup_menu.is_some()
-            || primary_frame.tooltip.is_some()
-            || primary_frame.visual_bell_start.is_some()
-        {
-            primary_frame.frame_dirty = true;
-        }
+        primary_frame.set_popup_menu(self.primary_render_fallback.popup_menu.take());
+        primary_frame.set_tooltip(self.primary_render_fallback.tooltip.take());
+        primary_frame.set_visual_bell_start(self.primary_render_fallback.visual_bell_start.take());
         primary_frame.cursor.copy_config_from(&self.cursor_defaults);
         primary_frame.transitions.policy = self.transition_policy;
         primary_frame.child_frames = std::mem::replace(
@@ -161,18 +155,12 @@ impl RenderApp {
             primary_frame.floating_webkits =
                 std::mem::take(&mut self.primary_render_fallback.floating_webkits);
             if !primary_frame.floating_webkits.is_empty() {
-                primary_frame.frame_dirty = true;
+                primary_frame.mark_dirty();
             }
         }
-        primary_frame.menu_bar = self.primary_render_fallback.menu_bar.take();
-        primary_frame.tool_bar = self.primary_render_fallback.tool_bar.take();
-        primary_frame.compact_bar = self.primary_render_fallback.compact_bar.take();
-        if primary_frame.menu_bar.is_some()
-            || primary_frame.tool_bar.is_some()
-            || primary_frame.compact_bar.is_some()
-        {
-            primary_frame.frame_dirty = true;
-        }
+        primary_frame.set_menu_bar(self.primary_render_fallback.menu_bar.take());
+        primary_frame.set_tool_bar(self.primary_render_fallback.tool_bar.take());
+        primary_frame.set_compact_bar(self.primary_render_fallback.compact_bar.take());
 
         tracing::info!(
             "wgpu initialized: {}x{}, format: {:?}",

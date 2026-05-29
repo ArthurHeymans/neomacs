@@ -351,7 +351,7 @@ impl RenderApp {
                             {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
-                                window_state.render.popup_menu = None;
+                                window_state.render.set_popup_menu(None);
                                 window_state
                                     .render
                                     .chrome_interaction
@@ -362,7 +362,7 @@ impl RenderApp {
                                 });
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
-                                window_state.render.popup_menu = None;
+                                window_state.render.set_popup_menu(None);
                                 window_state
                                     .render
                                     .chrome_interaction
@@ -379,7 +379,7 @@ impl RenderApp {
                             {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
-                                window_state.render.popup_menu = None;
+                                window_state.render.set_popup_menu(None);
                                 window_state.render.chrome_interaction.menu_bar_active = Some(idx);
                                 event = Some(InputEvent::MenuBarClick {
                                     index: idx as i32,
@@ -387,7 +387,7 @@ impl RenderApp {
                                 });
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
-                                window_state.render.popup_menu = None;
+                                window_state.render.set_popup_menu(None);
                                 window_state.render.chrome_interaction.menu_bar_active = None;
                             }
                             window_state.render.mark_dirty();
@@ -402,7 +402,7 @@ impl RenderApp {
                         {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
-                            window_state.render.popup_menu = None;
+                            window_state.render.set_popup_menu(None);
                             window_state.render.chrome_interaction.menu_bar_active = None;
                             window_state
                                 .render
@@ -430,7 +430,7 @@ impl RenderApp {
                         {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
-                            window_state.render.popup_menu = None;
+                            window_state.render.set_popup_menu(None);
                             window_state.render.chrome_interaction.menu_bar_active = None;
                             window_state
                                 .render
@@ -1191,7 +1191,7 @@ impl RenderApp {
             let mut event = None;
             let lx = (position.x / window_state.native.scale_factor) as f32;
             let ly = (position.y / window_state.native.scale_factor) as f32;
-            window_state.render.mouse_pos = (lx, ly);
+            window_state.render.set_mouse_pos((lx, ly));
             let mut dirty = false;
 
             let edge = Self::detect_resize_edge_for_chrome(
