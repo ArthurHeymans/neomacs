@@ -28,6 +28,7 @@ mod core_upstream;
 mod core_upstream_2;
 mod core_upstream_3;
 mod crypt_workflow;
+mod cycle_divergence;
 mod datetree_workflow;
 mod delta_navigation;
 mod display_state;
