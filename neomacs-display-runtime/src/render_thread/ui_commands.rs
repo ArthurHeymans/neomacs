@@ -78,11 +78,9 @@ impl RenderApp {
                     std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
                     self.cursor_defaults.blink_on = true;
-                    if self.primary_window_state().is_none() {
-                        if let Some(primary_frame) = self.primary_render_state_mut() {
-                            primary_frame.force_cursor_blink_on();
-                        }
-                    }
+                    self.with_unmanaged_primary_render(|r| {
+                        r.force_cursor_blink_on();
+                    });
                 }
                 self.sync_top_level_cursor_config_from_defaults_without_dirty();
                 if !enabled {

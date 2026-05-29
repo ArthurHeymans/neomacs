@@ -64,26 +64,22 @@ impl RenderApp {
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             let face_count = self.faces.len();
-            if self.primary_window_state().is_none()
-                && let Some(primary_frame) = self.primary_render_state_mut()
-            {
+            self.with_unmanaged_primary_render(|r| {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),
                     face_count
                 );
-                primary_frame.glyph_atlas.clear();
-            }
+                r.glyph_atlas.clear();
+            });
             self.frame_windows.clear_top_level_glyph_atlases();
         }
     }
 
     fn apply_primary_fallback_visual_cursor_animations(&mut self) {
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            primary_frame.apply_visual_cursor_animations();
-        }
+        self.with_unmanaged_primary_render(|r| {
+            r.apply_visual_cursor_animations();
+        });
     }
 }
 
