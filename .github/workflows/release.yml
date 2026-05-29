@@ -94,6 +94,7 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          mkdir -p dist
           tar czf "dist/${STAGING}.tar.gz" "$STAGING"
 
       - name: Package AppImage
@@ -175,6 +176,7 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          mkdir -p dist
           tar czf "dist/${STAGING}.tar.gz" "$STAGING"
 
       - name: Upload Linux aarch64 artifacts
@@ -232,6 +234,7 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          mkdir -p dist
           tar czf "dist/${STAGING}.tar.gz" "$STAGING"
 
       - name: Build and package .app + .dmg
@@ -294,6 +297,7 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          mkdir -p dist
           tar czf "dist/${STAGING}.tar.gz" "$STAGING"
 
       - name: Build and package .app + .dmg
@@ -477,6 +481,7 @@ jobs:
           cp -r lisp "$STAGING/"
           cp -r etc "$STAGING/"
           cp COPYING "$STAGING/"
+          mkdir -p dist
           zip -r "dist/${STAGING}.zip" "$STAGING"
 
       - name: Package .exe installer
