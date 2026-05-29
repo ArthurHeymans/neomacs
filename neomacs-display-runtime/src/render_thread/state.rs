@@ -547,7 +547,7 @@ impl RenderApp {
 
     pub(super) fn set_primary_current_frame(&mut self, frame: Option<FrameGlyphBuffer>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.current_frame = frame;
+            primary_frame.set_current_frame(frame);
         }
     }
 
@@ -711,7 +711,7 @@ impl RenderApp {
 
     pub(super) fn set_primary_mouse_pos(&mut self, mouse_pos: (f32, f32)) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.mouse_pos = mouse_pos;
+            primary_frame.set_mouse_pos(mouse_pos);
         }
     }
 

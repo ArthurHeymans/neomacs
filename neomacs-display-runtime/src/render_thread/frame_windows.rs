@@ -280,6 +280,13 @@ impl GuiFrameRenderState {
         self.mouse_pos = pos;
     }
 
+    pub(super) fn set_current_frame(
+        &mut self,
+        frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
+    ) {
+        self.current_frame = frame;
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),

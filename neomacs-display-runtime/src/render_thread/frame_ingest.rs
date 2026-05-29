@@ -102,7 +102,7 @@ impl RenderApp {
         render.set_menu_bar(menu_bar);
         render.set_tool_bar(tool_bar);
         render.set_compact_bar(compact_bar);
-        render.current_frame = Some(frame);
+        render.set_current_frame(Some(frame));
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
         render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
         render.mark_dirty();
