@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_intermediate_read_edit_reexecute_v3() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: generate data
+      (insert "#+NAME: data\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((u 6) (v 3) (w 9) (x 1) (y 4))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: transform
+      (insert "#+NAME: result\n")
+      (insert "#+begin_src emacs-lisp :var data=data :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* 3 (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("data" "result"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read intermediate
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: data")
+      (forward-line 1)
+      (let ((data1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: result")
+        (forward-line 1)
+        (let ((result1 (org-babel-read-result)))
+          ;; Edit: change w from 9 to 15
+          (goto-char (point-min))
+          (search-forward "(w 9)")
+          (replace-match "(w 15)")
+          ;; Re-execute
+          (dolist (name '("data" "result"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: data")
+          (forward-line 1)
+          (let ((data2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: result")
+            (forward-line 1)
+            (let ((result2 (org-babel-read-result)))
+              (list data1 result1 data2 result2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_four_stage_intermediate_read_back_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
