@@ -791,3 +791,70 @@ fn org_navigate_complex_tree_fold_edit_show_deep() {
                            (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_ten_heading_tree_fold_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* T1\n")
+    (insert "** T1a\n")
+    (insert "*** T1a1\nBody.\n\n")
+    (insert "*** T1a2\nBody.\n\n")
+    (insert "** T1b\n")
+    (insert "*** T1b1\nBody.\n\n")
+    (insert "* T2\n")
+    (insert "** T2a\n")
+    (insert "*** T2a1\nBody.\n\n")
+    (insert "** T2b\n")
+    (insert "*** T2b1\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At T1a1
+      (goto-char (point-min))
+      (search-forward "T1a1")
+      (beginning-of-line)
+      (let ((at-t1a1 (funcall track)))
+        ;; Forward to T1a2
+        (org-forward-heading-same-level 1)
+        (let ((at-t1a2 (funcall track)))
+          ;; Up to T1a
+          (org-up-heading-safe)
+          (let ((at-t1a (funcall track)))
+            ;; Forward to T1b
+            (org-forward-heading-same-level 1)
+            (let ((at-t1b (funcall track)))
+              ;; Down to T1b1
+              (org-next-visible-heading 1)
+              (let ((at-t1b1 (funcall track)))
+                ;; Jump to T2a1
+                (goto-char (point-min))
+                (search-forward "T2a1")
+                (beginning-of-line)
+                (let ((at-t2a1 (funcall track)))
+                  ;; Edit: insert T1b2 under T1b
+                  (goto-char (point-min))
+                  (search-forward "T1b1")
+                  (end-of-line)
+                  (insert "\n*** T1b2\nBody.\n")
+                  ;; Fold T1 subtree
+                  (goto-char (point-min))
+                  (search-forward "T1")
+                  (beginning-of-line)
+                  (org-fold-subtree)
+                  (let ((after-fold (funcall track)))
+                    (list at-t1a1 at-t1a2 at-t1a at-t1b at-t1b1 at-t2a1
+                          after-fold
+                          (buffer-substring-no-properties
+                           (point-min) (point-max))))))))))))))"##,
+    );
+}
