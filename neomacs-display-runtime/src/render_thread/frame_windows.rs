@@ -926,16 +926,16 @@ impl GuiFrameWindowState {
     }
 }
 
+const PRIMARY_PENDING_KEY: u64 = 0;
+
 /// Manages top-level GUI frame windows in the render thread.
 ///
-/// Secondary windows live directly in `windows`. The adopted primary process
-/// window is stored separately because it has bootstrap/shutdown semantics, but
-/// it uses the same `GuiFrameWindowState` representation as every other
-/// top-level GUI frame.
+/// All top-level windows (including the adopted primary process window) live in
+/// `windows`.  The primary starts under the sentinel key `PRIMARY_PENDING_KEY`
+/// (0) and is re-keyed to its adopted `emacs_frame_id` once
+/// `adopt_primary_frame_id` is called.
 pub(crate) struct GuiFrameWindowManager {
-    /// Adopted process-primary top-level GUI frame window.
-    pub primary_window: Option<GuiFrameWindowState>,
-    /// Emacs frame_id → native window-backed state for secondary top-level frames.
+    /// Emacs frame_id → native window-backed state for all top-level frames.
     pub windows: HashMap<u64, GuiFrameWindowState>,
     /// Winit WindowId → Emacs frame_id (reverse mapping for event dispatch)
     pub winit_to_emacs: HashMap<WindowId, u64>,
@@ -965,7 +965,6 @@ pub(crate) struct PendingWindow {
 impl GuiFrameWindowManager {
     pub fn new() -> Self {
         Self {
-            primary_window: None,
             windows: HashMap::new(),
             winit_to_emacs: HashMap::new(),
             primary_emacs_frame_id: None,
@@ -994,9 +993,13 @@ impl GuiFrameWindowManager {
     }
 
     pub fn adopt_primary_frame_id(&mut self, emacs_frame_id: u64) {
+        let old_key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
         self.primary_emacs_frame_id = Some(emacs_frame_id);
-        if let Some(primary) = self.primary_window.as_mut() {
-            primary.render.set_emacs_frame_id(emacs_frame_id);
+        if let Some(window_state) = self.windows.remove(&old_key) {
+            self.windows.insert(emacs_frame_id, window_state);
+        }
+        if let Some(ws) = self.windows.get_mut(&emacs_frame_id) {
+            ws.render.set_emacs_frame_id(emacs_frame_id);
         }
         self.sync_primary_mapping();
     }
@@ -1023,28 +1026,32 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn primary_window(&self) -> Option<&GuiFrameWindowState> {
-        self.primary_window.as_ref()
+        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        self.windows.get(&key)
     }
 
     pub(super) fn primary_window_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
-        self.primary_window.as_mut()
+        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        self.windows.get_mut(&key)
     }
 
     pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
         if let Some(native) = window_state.native.as_ref() {
             self.primary_winit_id = Some(native.window.id());
         }
-        self.primary_window = Some(window_state);
+        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        self.windows.insert(key, window_state);
         self.sync_primary_mapping();
     }
 
     pub(super) fn set_primary_pending(&mut self, window_state: GuiFrameWindowState) {
-        self.primary_window = Some(window_state);
+        self.windows.insert(PRIMARY_PENDING_KEY, window_state);
         self.sync_primary_mapping();
     }
 
     pub(super) fn populate_primary_native(&mut self, native: GuiFrameNativeWindowState) {
-        if let Some(window_state) = self.primary_window.as_mut() {
+        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        if let Some(window_state) = self.windows.get_mut(&key) {
             let winit_id = native.window.id();
             self.primary_winit_id = Some(winit_id);
             window_state.native = Some(native);
@@ -1053,11 +1060,11 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn take_primary_window(&mut self) -> Option<GuiFrameWindowState> {
-        let state = self.primary_window.take();
+        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
         if let Some(winit_id) = self.primary_winit_id.take() {
             self.winit_to_emacs.remove(&winit_id);
         }
-        state
+        self.windows.remove(&key)
     }
 
     pub fn is_primary_winit(&self, winit_id: WindowId) -> bool {
@@ -1113,7 +1120,7 @@ impl GuiFrameWindowManager {
     ) {
         let pending = std::mem::take(&mut self.pending_creates);
         for req in pending {
-            if self.windows.contains_key(&req.emacs_frame_id) {
+            if self.windows.contains_key(&req.emacs_frame_id) || req.emacs_frame_id == PRIMARY_PENDING_KEY {
                 tracing::warn!("Window for frame {} already exists", req.emacs_frame_id);
                 continue;
             }
@@ -1259,8 +1266,6 @@ impl GuiFrameWindowManager {
         self.winit_to_emacs.clear();
         self.primary_winit_id = None;
         self.primary_emacs_frame_id = None;
-        self.primary_window = None;
-        // Drop all window states (surfaces, etc.)
         self.windows.clear();
     }
 
@@ -1280,7 +1285,8 @@ impl GuiFrameWindowManager {
     /// Get a window state by Emacs frame_id.
     pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
         if self.is_primary_frame_id(emacs_frame_id) {
-            self.primary_window.as_ref()
+            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+            self.windows.get(&key)
         } else {
             self.windows.get(&emacs_frame_id)
         }
@@ -1289,7 +1295,8 @@ impl GuiFrameWindowManager {
     /// Get a mutable window state by Emacs frame_id.
     pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut GuiFrameWindowState> {
         if self.is_primary_frame_id(emacs_frame_id) {
-            self.primary_window.as_mut()
+            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+            self.windows.get_mut(&key)
         } else {
             self.windows.get_mut(&emacs_frame_id)
         }
@@ -1298,7 +1305,8 @@ impl GuiFrameWindowManager {
     /// Get a window state by winit WindowId.
     pub fn get_by_winit(&self, winit_id: WindowId) -> Option<&GuiFrameWindowState> {
         if self.primary_winit_id == Some(winit_id) {
-            return self.primary_window.as_ref();
+            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+            return self.windows.get(&key);
         }
         self.winit_to_emacs
             .get(&winit_id)
@@ -1308,7 +1316,8 @@ impl GuiFrameWindowManager {
     /// Get a mutable window state by winit WindowId.
     pub fn get_by_winit_mut(&mut self, winit_id: WindowId) -> Option<&mut GuiFrameWindowState> {
         if self.primary_winit_id == Some(winit_id) {
-            return self.primary_window.as_mut();
+            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+            return self.windows.get_mut(&key);
         }
         self.winit_to_emacs
             .get(&winit_id)
@@ -1317,9 +1326,6 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn for_each_top_level_window(&self, mut f: impl FnMut(&GuiFrameWindowState)) {
-        if let Some(window_state) = self.primary_window.as_ref() {
-            f(window_state);
-        }
         for window_state in self.windows.values() {
             f(window_state);
         }
@@ -1329,9 +1335,6 @@ impl GuiFrameWindowManager {
         &mut self,
         mut f: impl FnMut(&mut GuiFrameWindowState),
     ) {
-        if let Some(window_state) = self.primary_window.as_mut() {
-            f(window_state);
-        }
         for window_state in self.windows.values_mut() {
             f(window_state);
         }
@@ -1344,33 +1347,21 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn any_top_level_dirty(&self) -> bool {
-        self.primary_window
-            .as_ref()
-            .is_some_and(|window_state| window_state.render.frame_dirty)
-            || self
-                .windows
-                .values()
-                .any(|window_state| window_state.render.frame_dirty)
+        self.windows
+            .values()
+            .any(|window_state| window_state.render.frame_dirty)
     }
 
     pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
-        self.primary_window
-            .as_ref()
-            .is_some_and(|window_state| window_state.render.renderer_effects.needs_redraw())
-            || self
-                .windows
-                .values()
-                .any(|window_state| window_state.render.renderer_effects.needs_redraw())
+        self.windows
+            .values()
+            .any(|window_state| window_state.render.renderer_effects.needs_redraw())
     }
 
     pub(super) fn any_top_level_transitions_active(&self) -> bool {
-        self.primary_window
-            .as_ref()
-            .is_some_and(|window_state| window_state.render.transitions.has_active())
-            || self
-                .windows
-                .values()
-                .any(|window_state| window_state.render.transitions.has_active())
+        self.windows
+            .values()
+            .any(|window_state| window_state.render.transitions.has_active())
     }
 
     pub(super) fn mark_active_top_level_visuals_dirty(&mut self) -> bool {
@@ -1431,23 +1422,15 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn any_top_level_cursor_animating(&self) -> bool {
-        self.primary_window
-            .as_ref()
-            .is_some_and(|window_state| window_state.render.cursor.is_animating())
-            || self
-                .windows
-                .values()
-                .any(|window_state| window_state.render.cursor.is_animating())
+        self.windows
+            .values()
+            .any(|window_state| window_state.render.cursor.is_animating())
     }
 
     pub(super) fn any_top_level_idle_dim_active(&self) -> bool {
-        self.primary_window
-            .as_ref()
-            .is_some_and(|window_state| window_state.render.idle_dim.active)
-            || self
-                .windows
-                .values()
-                .any(|window_state| window_state.render.idle_dim.active)
+        self.windows
+            .values()
+            .any(|window_state| window_state.render.idle_dim.active)
     }
 
     pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
@@ -1588,7 +1571,6 @@ impl GuiFrameWindowManager {
         });
     }
 
-    /// Return number of secondary windows.
     pub fn count(&self) -> usize {
         self.windows.len()
     }

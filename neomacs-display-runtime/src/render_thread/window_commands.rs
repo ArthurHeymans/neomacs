@@ -195,9 +195,6 @@ impl RenderApp {
             RenderCommand::AdoptPrimaryFrame { emacs_frame_id } => {
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
-                if let Some(primary_frame) = self.primary_render_state_mut() {
-                    primary_frame.set_emacs_frame_id(emacs_frame_id);
-                }
                 Ok(())
             }
             other => Err(other),
