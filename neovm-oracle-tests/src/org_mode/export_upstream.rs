@@ -769,3 +769,51 @@ fn org_export_tags_property_planning_edit_reexport_deep() {
                      (point-min) (point-max)))))))))))"##,
     );
 }
+
+#[test]
+fn org_export_footnote_citation_edit_reexport_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: FootnoteExport\n\n")
+    (insert "* Introduction\n")
+    (insert "This is a claim[fn:1] with evidence[fn:2].\n\n")
+    (insert "* Methods\n")
+    (insert "We used approach[fn:1] as described.\n\n")
+    (insert "[fn:1] First footnote text.\n")
+    (insert "[fn:2] Second footnote text.\n\n")
+    (let* ((snap (lambda ()
+                   (let ((tree (org-element-parse-buffer)))
+                     (list
+                      ;; Footnotes
+                      (org-element-map tree 'footnote-reference
+                        (lambda (fn)
+                          (list (org-element-property :label fn)
+                                (org-element-property :footnote-begin fn))))
+                      ;; Headlines
+                      (org-element-map tree 'headline
+                        (lambda (hl)
+                          (list (org-element-property :raw-value hl)
+                                (org-element-property :level hl)))))))))
+      (let ((before (funcall snap)))
+        ;; Edit: add footnote 3
+        (goto-char (point-max))
+        (insert "[fn:3] Third footnote added later.\n")
+        ;; Add reference
+        (goto-char (point-min))
+        (search-forward "approach[fn:1]")
+        (end-of-line)
+        (insert " See also[fn:3].")
+        (let ((after (funcall snap)))
+          ;; Export
+          (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
+            (list before after html
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
