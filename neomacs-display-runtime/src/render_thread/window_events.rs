@@ -372,7 +372,7 @@ impl RenderApp {
             WindowEvent::RedrawRequested => {
                 if let Some(emacs_fid) = self.frame_windows.event_frame_for_winit(window_id) {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
-                        window_state.render.frame_dirty = false;
+                        window_state.render.set_dirty(false);
                     }
                     self.render_frame_window(emacs_fid);
                 }

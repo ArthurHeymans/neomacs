@@ -964,7 +964,7 @@ impl RenderApp {
         let renderer_effects_still_active = render.renderer_effects.needs_redraw();
 
         if !include_overlays {
-            render.frame_dirty = renderer_effects_still_active;
+            render.set_dirty(renderer_effects_still_active);
             return;
         }
 
