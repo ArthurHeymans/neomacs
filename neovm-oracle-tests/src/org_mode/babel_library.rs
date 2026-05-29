@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_weighted_avg_edit_reexecute_v18() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: measurements
+      (insert "#+NAME: measures\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((t1 10 2) (t2 20 3) (t3 15 1) (t4 25 4) (t5 5 1))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: weighted avg
+      (insert "#+NAME: wavg\n")
+      (insert "#+begin_src emacs-lisp :var data=measures :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (caddr r) (/ (* 1.0 (cadr r)) (caddr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("measures" "wavg"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: measures")
+      (forward-line 1)
+      (let ((measures1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: wavg")
+        (forward-line 1)
+        (let ((wavg1 (org-babel-read-result)))
+          ;; Edit: change t4 from (25 4) to (25 2)
+          (goto-char (point-min))
+          (search-forward "(t4 25 4)")
+          (replace-match "(t4 25 2)")
+          ;; Re-execute
+          (dolist (name '("measures" "wavg"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: measures")
+          (forward-line 1)
+          (let ((measures2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: wavg")
+            (forward-line 1)
+            (let ((wavg2 (org-babel-read-result)))
+              (list measures1 wavg1 measures2 wavg2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_interest_edit_reexecute_v17() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
