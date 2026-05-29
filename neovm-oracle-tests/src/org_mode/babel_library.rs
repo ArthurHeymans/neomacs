@@ -1080,6 +1080,65 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_intermediate_results_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: generate pairs
+      (insert "#+NAME: pairs\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((x 10) (y 20) (z 30) (w 40))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: compute
+      (insert "#+NAME: computed\n")
+      (insert "#+begin_src emacs-lisp :var data=pairs :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* (cadr r) (cadr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("pairs" "computed"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      (let ((results1 nil))
+        (goto-char (point-min))
+        (while (re-search-forward "#\\+RESULTS:" nil t)
+          (forward-line 1)
+          (push (org-babel-read-result) results1))
+        ;; Read intermediate: check pairs result
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: pairs")
+        (forward-line 1)
+        (let ((pairs-result (org-babel-read-result)))
+          ;; Edit: change y from 20 to 25
+          (goto-char (point-min))
+          (search-forward "(y 20)")
+          (replace-match "(y 25)")
+          ;; Re-execute
+          (dolist (name '("pairs" "computed"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          (let ((results2 nil))
+            (goto-char (point-min))
+            (while (re-search-forward "#\\+RESULTS:" nil t)
+              (forward-line 1)
+              (push (org-babel-read-result) results2))
+            (list (nreverse results1)
+                  pairs-result
+                  (nreverse results2)
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_four_stage_chain_filter_sort_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
