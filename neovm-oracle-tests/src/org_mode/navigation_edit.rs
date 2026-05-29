@@ -927,3 +927,76 @@ fn org_navigate_twelve_heading_tree_fold_edit_deep() {
                            (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Q1\n")
+    (insert "** Q1A\n")
+    (insert "*** Q1A1\nBody.\n\n")
+    (insert "*** Q1A2\nBody.\n\n")
+    (insert "** Q1B\n")
+    (insert "*** Q1B1\nBody.\n\n")
+    (insert "*** Q1B2\nBody.\n\n")
+    (insert "* Q2\n")
+    (insert "** Q2A\n")
+    (insert "*** Q2A1\nBody.\n\n")
+    (insert "** Q2B\n")
+    (insert "*** Q2B1\nBody.\n\n")
+    (insert "** Q2C\n")
+    (insert "*** Q2C1\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At Q1A1
+      (goto-char (point-min))
+      (search-forward "Q1A1")
+      (beginning-of-line)
+      (let ((at-q1a1 (funcall track)))
+        ;; Forward to Q1A2
+        (org-forward-heading-same-level 1)
+        (let ((at-q1a2 (funcall track)))
+          ;; Up to Q1A
+          (org-up-heading-safe)
+          (let ((at-q1a (funcall track)))
+            ;; Forward to Q1B
+            (org-forward-heading-same-level 1)
+            (let ((at-q1b (funcall track)))
+              ;; Down to Q1B1
+              (org-next-visible-heading 1)
+              (let ((at-q1b1 (funcall track)))
+                ;; Forward to Q1B2
+                (org-forward-heading-same-level 1)
+                (let ((at-q1b2 (funcall track)))
+                  ;; Jump to Q2C1
+                  (goto-char (point-min))
+                  (search-forward "Q2C1")
+                  (beginning-of-line)
+                  (let ((at-q2c1 (funcall track)))
+                    ;; Edit: insert Q1B3 under Q1B
+                    (goto-char (point-min))
+                    (search-forward "Q1B2")
+                    (end-of-line)
+                    (insert "\n*** Q1B3\nBody.\n")
+                    ;; Fold Q1 subtree
+                    (goto-char (point-min))
+                    (search-forward "Q1")
+                    (beginning-of-line)
+                    (org-fold-subtree)
+                    (let ((after-fold (funcall track)))
+                      (list at-q1a1 at-q1a2 at-q1a at-q1b at-q1b1 at-q1b2 at-q2c1
+                            after-fold
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))))))))))))))))"##,
+    );
+}
