@@ -518,7 +518,8 @@ impl RenderApp {
                         scale_factor,
                         effective_scale
                     );
-                    self.primary_native_fallback.scale_factor = effective_scale;
+                    self.primary_native_fallback
+                        .set_scale_factor(effective_scale);
                 }
             }
 

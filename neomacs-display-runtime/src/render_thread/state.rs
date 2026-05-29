@@ -249,6 +249,10 @@ impl PrimaryNativeFallbackState {
     pub(super) fn set_geometry_hints(&mut self, hints: GuiFrameGeometryHints) {
         self.geometry_hints = Some(hints);
     }
+
+    pub(super) fn set_scale_factor(&mut self, scale: f64) {
+        self.scale_factor = scale;
+    }
 }
 
 /// Render state kept only until the primary frame has an adopted render state.

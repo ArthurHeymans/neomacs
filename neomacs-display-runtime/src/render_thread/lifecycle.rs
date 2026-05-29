@@ -114,8 +114,8 @@ impl RenderApp {
                     let window = Arc::new(window);
 
                     let raw_scale_factor = window.scale_factor();
-                    self.primary_native_fallback.scale_factor =
-                        effective_window_scale_factor(raw_scale_factor);
+                    self.primary_native_fallback
+                        .set_scale_factor(effective_window_scale_factor(raw_scale_factor));
                     tracing::info!(
                         "Display scale factor: raw={} effective={}",
                         raw_scale_factor,
@@ -123,8 +123,8 @@ impl RenderApp {
                     );
 
                     let phys = window.inner_size();
-                    self.primary_native_fallback.width = phys.width;
-                    self.primary_native_fallback.height = phys.height;
+                    self.primary_native_fallback
+                        .set_size(phys.width, phys.height);
                     tracing::info!(
                         "Render thread: window created (physical {}x{})",
                         self.primary_native_fallback.width,
