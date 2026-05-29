@@ -1751,7 +1751,13 @@ fn apply_format_string_prop_spans(result: Value, format_value: Value, spans: &[F
 
         let ordered: Vec<_> = src_interval.ordered_properties().collect();
         for (name, value) in ordered.into_iter().rev() {
-            if table.put_property(result_start, result_end, name, *value) {
+            if table.put_property_for_object_len(
+                result_start,
+                result_end,
+                result_string.schars(),
+                name,
+                *value,
+            ) {
                 touched = true;
             }
         }
@@ -1827,9 +1833,10 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
             }
             let ordered: Vec<_> = interval.ordered_properties().collect();
             for (name, value) in ordered.into_iter().rev() {
-                if table.put_property(
+                if table.put_property_for_object_len(
                     span.result_char_start + interval.start,
                     span.result_char_start + end,
+                    result_string.schars(),
                     name,
                     *value,
                 ) {

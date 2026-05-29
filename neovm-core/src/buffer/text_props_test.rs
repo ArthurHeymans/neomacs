@@ -377,6 +377,72 @@ fn adjust_insert_splits_spanning_interval_around_plain_inserted_text() {
 }
 
 #[test]
+fn adjust_insert_extends_plain_nil_interval_without_raw_split() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 4, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(8, 10, Value::symbol("face"), Value::symbol("tail"));
+
+    table.adjust_for_insert(6, 3);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 4, false), (4, 11, true), (11, 13, false)]
+    );
+    assert!(table.get_property(6, Value::symbol("face")).is_none());
+    assert!(table.get_property(10, Value::symbol("face")).is_none());
+    assert_eq!(
+        table.get_property(11, Value::symbol("face")),
+        Some(Value::symbol("tail"))
+    );
+}
+
+#[test]
+fn adjust_insert_at_nil_boundary_preserves_raw_default_interval() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property(0, 4, Value::symbol("face"), Value::symbol("bold"));
+    table.put_property(8, 10, Value::symbol("face"), Value::symbol("tail"));
+
+    table.adjust_for_insert(8, 2);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 4, false), (4, 8, true), (8, 10, true), (10, 12, false)]
+    );
+    assert!(table.get_property(8, Value::symbol("face")).is_none());
+    assert_eq!(
+        table.get_property(10, Value::symbol("face")),
+        Some(Value::symbol("tail"))
+    );
+}
+
+#[test]
+fn full_object_property_mutation_keeps_trailing_nil_interval_for_inherited_insert() {
+    crate::test_utils::init_test_tracing();
+    let mut table = TextPropertyTable::new();
+    table.put_property_for_object_len(
+        0,
+        9,
+        20,
+        Value::symbol("org-todo-head"),
+        Value::string("TODO"),
+    );
+
+    table.adjust_for_insert(17, 1);
+
+    assert_eq!(
+        table.debug_interval_bounds(),
+        vec![(0, 9, false), (9, 21, true)]
+    );
+    assert!(
+        table
+            .get_property(17, Value::symbol("org-todo-head"))
+            .is_none()
+    );
+}
+
+#[test]
 fn adjust_insert_at_interval_start() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();

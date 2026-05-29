@@ -2015,7 +2015,10 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
     // We match this by iterating the pairs in reverse order, since our
     // `put_property` prepends new properties.
     if args.len() > 1 {
-        let byte_len = s.len();
+        let char_len = new_str
+            .as_lisp_string()
+            .expect("new string must carry LispString payload")
+            .schars();
         let mut table = get_string_text_properties_table_for_value(new_str)
             .unwrap_or_else(|| crate::buffer::text_props::TextPropertyTable::new());
         let pairs = &args[1..];
@@ -2023,7 +2026,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         let chunks: Vec<&[Value]> = pairs.chunks(2).collect();
         for chunk in chunks.iter().rev() {
             if chunk.len() == 2 {
-                table.put_property(0, byte_len, chunk[0], chunk[1]);
+                table.put_property_for_object_len(0, char_len, char_len, chunk[0], chunk[1]);
             }
         }
         set_string_text_properties_table_for_value(new_str, table);

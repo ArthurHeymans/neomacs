@@ -700,32 +700,65 @@ impl IntervalTree {
             return;
         }
 
+        let mut runs = self.runs();
         let tree_len = self.len();
         if pos >= tree_len {
             if tree_len < pos {
-                self.append_default_interval(tree_len, pos);
+                runs.push(IntervalRun::default(tree_len, pos));
             }
-            self.append_default_interval(pos, pos + len);
+            runs.push(IntervalRun::default(pos, pos + len));
+            *self = Self::from_runs_preserving_shape(runs);
             return;
         }
 
-        let Some(target) = self.split_at(pos) else {
-            return;
-        };
+        let mut adjusted = Vec::with_capacity(runs.len() + 2);
+        let mut inserted = false;
 
-        let id = self.push_node(IntervalNode::new(len, pos, Value::NIL));
-        let parent = if let Some(left) = self.nodes[target.0].left {
-            let predecessor = self.rightmost_id(left);
-            self.nodes[predecessor.0].right = Some(id);
-            Some(predecessor)
-        } else {
-            self.nodes[target.0].left = Some(id);
-            Some(target)
-        };
+        for run in runs {
+            if run.end <= pos {
+                adjusted.push(run);
+                continue;
+            }
 
-        self.nodes[id.0].parent = parent;
-        self.add_length_to_ancestors(parent, len as isize);
-        self.balance_upwards(parent);
+            if run.start >= pos {
+                if !inserted {
+                    adjusted.push(IntervalRun::default(pos, pos + len));
+                    let mut shifted = run;
+                    shifted.start += len;
+                    shifted.end += len;
+                    adjusted.push(shifted);
+                    inserted = true;
+                } else {
+                    let mut shifted = run;
+                    shifted.start += len;
+                    shifted.end += len;
+                    adjusted.push(shifted);
+                }
+                continue;
+            }
+
+            if run.is_empty_plist() {
+                let mut extended = run;
+                extended.end += len;
+                adjusted.push(extended);
+            } else {
+                let right_plist = plist_value_from_pairs(&plist_pairs(run.plist));
+                let mut left = run.clone();
+                left.end = pos;
+                let inserted_run = IntervalRun::default(pos, pos + len);
+                let mut right = run;
+                right.start = pos + len;
+                right.end += len;
+                right.plist = right_plist;
+                right.refresh_cache();
+                adjusted.push(left);
+                adjusted.push(inserted_run);
+                adjusted.push(right);
+            }
+            inserted = true;
+        }
+
+        *self = Self::from_runs_preserving_shape(adjusted);
     }
 
     fn split_at(&mut self, pos: usize) -> Option<IntervalId> {
@@ -1365,6 +1398,32 @@ impl TextPropertyTable {
         changed
     }
 
+    pub fn put_property_for_object_len(
+        &mut self,
+        start: usize,
+        end: usize,
+        object_len: usize,
+        name: Value,
+        value: Value,
+    ) -> bool {
+        if start >= end {
+            return false;
+        }
+
+        self.intervals.ensure_cover(object_len.max(end));
+        self.intervals.split_at(start);
+        self.intervals.split_at(end);
+
+        let mut changed = false;
+        for (_, id) in self.intervals.ids_overlapping(start, end) {
+            if plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value) {
+                self.intervals.nodes[id.0].refresh_cache();
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub(crate) fn from_plist_runs(runs: Vec<(usize, usize, Vec<(Value, Value)>)>) -> Self {
         Self::from_interval_runs_preserving_shape(
             runs.into_iter()
@@ -1534,6 +1593,45 @@ impl TextPropertyTable {
             return;
         } else {
             self.intervals.prune_trailing_empty_intervals();
+        }
+    }
+
+    pub fn set_properties_for_object_len(
+        &mut self,
+        start: usize,
+        end: usize,
+        object_len: usize,
+        plist: Vec<(Value, Value)>,
+    ) {
+        if start >= end {
+            return;
+        }
+        if plist.is_empty() && self.intervals.is_empty() {
+            return;
+        }
+
+        self.intervals.ensure_cover(object_len.max(end));
+        self.intervals.split_at(start);
+        self.intervals.split_at(end);
+
+        let new_plist = plist_value_from_pairs(&plist);
+        let mut cursor = start;
+        let mut first = true;
+        while cursor < end {
+            let Some((node_start, id)) = self.intervals.find_id(cursor) else {
+                break;
+            };
+            let node_end = node_start + self.intervals.node_len(id);
+            self.intervals.set_node_plist(id, new_plist);
+            if first {
+                first = false;
+            } else {
+                self.intervals.merge_interval_left(id);
+            }
+            if node_end <= cursor {
+                break;
+            }
+            cursor = node_end;
         }
     }
 

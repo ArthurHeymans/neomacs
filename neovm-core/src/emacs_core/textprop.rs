@@ -1050,7 +1050,7 @@ pub(crate) fn builtin_put_text_property_in_buffers(
             return Ok(Value::NIL);
         };
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.put_property(char_beg, char_end, prop, val);
+        table.put_property_for_object_len(char_beg, char_end, s.schars(), prop, val);
         save_string_props_for_value(str_val, table);
         return Ok(Value::NIL);
     }
@@ -1276,7 +1276,7 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
         let mut any_changed = false;
         for (name, val) in pairs {
-            if table.put_property(char_beg, char_end, name, val) {
+            if table.put_property_for_object_len(char_beg, char_end, s.schars(), name, val) {
                 any_changed = true;
             }
         }
@@ -1439,7 +1439,13 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
             };
             let existing = table.get_property(seg_start, Value::symbol("face"));
             let merged = merge_face_property(existing, new_face, append)?;
-            table.put_property(seg_start, seg_end, Value::symbol("face"), merged);
+            table.put_property_for_object_len(
+                seg_start,
+                seg_end,
+                s.schars(),
+                Value::symbol("face"),
+                merged,
+            );
             seg_start = seg_end;
         }
         save_string_props_for_value(str_val, table);
@@ -1661,7 +1667,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
             return Ok(Value::T);
         }
         let mut table = get_string_text_properties_table_for_value(str_val).unwrap_or_default();
-        table.set_properties(char_beg, char_end, pairs);
+        table.set_properties_for_object_len(char_beg, char_end, s.schars(), pairs);
         save_string_props_for_value(str_val, table);
         return Ok(Value::T);
     }

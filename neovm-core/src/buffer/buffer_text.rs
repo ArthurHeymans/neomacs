@@ -507,12 +507,18 @@ impl BufferText {
     ) -> bool {
         // GNU intervals are character-indexed; BufferText owns the conversion
         // from buffer byte offsets into interval positions.
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let (start, end, object_len) = {
+            let storage = self.storage.borrow();
+            (
+                storage.gap.byte_to_char(start),
+                storage.gap.byte_to_char(end),
+                storage.gap.char_count(),
+            )
+        };
         self.storage
             .borrow_mut()
             .text_props
-            .put_property(start, end, name, value)
+            .put_property_for_object_len(start, end, object_len, name, value)
     }
 
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
@@ -594,12 +600,18 @@ impl BufferText {
     }
 
     pub fn text_props_set_properties(&self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let (start, end, object_len) = {
+            let storage = self.storage.borrow();
+            (
+                storage.gap.byte_to_char(start),
+                storage.gap.byte_to_char(end),
+                storage.gap.char_count(),
+            )
+        };
         self.storage
             .borrow_mut()
             .text_props
-            .set_properties(start, end, plist);
+            .set_properties_for_object_len(start, end, object_len, plist);
     }
 
     pub fn text_props_next_change(&self, pos: usize) -> Option<usize> {
