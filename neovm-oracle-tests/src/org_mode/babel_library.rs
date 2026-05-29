@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_filter_edit_reexecute_v5() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: items
+      (insert "#+NAME: items\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((\"Red\" 5) (\"Blue\" 12) (\"Green\" 3) (\"Yellow\" 8) (\"Purple\" 15))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: filtered
+      (insert "#+NAME: big\n")
+      (insert "#+begin_src emacs-lisp :var data=items :results value replace\n")
+      (insert "(seq-filter (lambda (r) (> (cadr r) 6)) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("items" "big"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: items")
+      (forward-line 1)
+      (let ((items1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: big")
+        (forward-line 1)
+        (let ((big1 (org-babel-read-result)))
+          ;; Edit: change Green from 3 to 10
+          (goto-char (point-min))
+          (search-forward "(\"Green\" 3)")
+          (replace-match "(\"Green\" 10)")
+          ;; Re-execute
+          (dolist (name '("items" "big"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: items")
+          (forward-line 1)
+          (let ((items2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: big")
+            (forward-line 1)
+            (let ((big2 (org-babel-read-result)))
+              (list items1 big1 items2 big2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_double_edit_reexecute_v4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
