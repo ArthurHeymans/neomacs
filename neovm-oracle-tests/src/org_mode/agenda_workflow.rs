@@ -1718,3 +1718,51 @@ fn org_agenda_tag_filter_edit_todo_change_reagenda_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_two_day_view_edit_reschedule_multi_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-twoday-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgendaTwoday*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE Beta\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO Gamma\nSCHEDULED: <2026-05-29 Thu>\n")
+            (insert "* NEXT Delta\nSCHEDULED: <2026-05-29 Thu>\n"))
+          ;; Two-day view
+          (org-agenda-list nil "2026-05-28" 2)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((twoday (replace-regexp-in-string
+                           (regexp-quote root) "<root>"
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+              (org-agenda-quit)
+              ;; Edit: reschedule Alpha to Thursday
+              (with-current-buffer (find-file-noselect file)
+                (goto-char (point-min))
+                (search-forward "TODO Alpha")
+                (beginning-of-line)
+                (org-schedule nil '(5 29 2026)))
+              ;; Re-agenda
+              (org-agenda-list nil "2026-05-28" 2)
+              (with-current-buffer org-agenda-buffer-name
+                (let ((after-reschedule (replace-regexp-in-string
+                                         (regexp-quote root) "<root>"
+                                         (buffer-substring-no-properties
+                                          (point-min) (point-max)))))
+                  (org-agenda-quit)
+                  (list twoday after-reschedule))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
