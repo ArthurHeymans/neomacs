@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_percent_edit_reexecute_v12() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: scores
+      (insert "#+NAME: scores\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((s1 80) (s2 65) (s3 90) (s4 45) (s5 70))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: percent
+      (insert "#+NAME: pct\n")
+      (insert "#+begin_src emacs-lisp :var data=scores :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (/ (* 100.0 (cadr r)) 100))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("scores" "pct"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: scores")
+      (forward-line 1)
+      (let ((scores1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: pct")
+        (forward-line 1)
+        (let ((pct1 (org-babel-read-result)))
+          ;; Edit: change s4 from 45 to 88
+          (goto-char (point-min))
+          (search-forward "(s4 45)")
+          (replace-match "(s4 88)")
+          ;; Re-execute
+          (dolist (name '("scores" "pct"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: scores")
+          (forward-line 1)
+          (let ((scores2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: pct")
+            (forward-line 1)
+            (let ((pct2 (org-babel-read-result)))
+              (list scores1 pct1 scores2 pct2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_cumulative_edit_reexecute_v11() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
