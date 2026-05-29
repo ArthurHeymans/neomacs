@@ -463,13 +463,7 @@ impl RenderApp {
                                 .map_or(-1, |menu| menu.hit_test(x, y));
                             if idx >= 0 {
                                 event = Some(InputEvent::MenuSelection { index: idx });
-                                window_state.render.popup_menu = None;
-                                window_state.render.chrome_interaction.menu_bar_active = None;
-                                window_state
-                                    .render
-                                    .chrome_interaction
-                                    .compact_bar_menu_active = None;
-                                window_state.render.frame_dirty = true;
+                                window_state.render.dismiss_all_chrome_menus();
                             } else {
                                 let (depth, local_idx) = window_state
                                     .render
@@ -494,37 +488,18 @@ impl RenderApp {
                                         window_state.render.frame_dirty = true;
                                     } else {
                                         event = Some(InputEvent::MenuSelection { index: -1 });
-                                        window_state.render.popup_menu = None;
-                                        window_state.render.chrome_interaction.menu_bar_active =
-                                            None;
-                                        window_state
-                                            .render
-                                            .chrome_interaction
-                                            .compact_bar_menu_active = None;
-                                        window_state.render.frame_dirty = true;
+                                        window_state.render.dismiss_all_chrome_menus();
                                     }
                                 } else {
                                     event = Some(InputEvent::MenuSelection { index: -1 });
-                                    window_state.render.popup_menu = None;
-                                    window_state.render.chrome_interaction.menu_bar_active = None;
-                                    window_state
-                                        .render
-                                        .chrome_interaction
-                                        .compact_bar_menu_active = None;
-                                    window_state.render.frame_dirty = true;
+                                    window_state.render.dismiss_all_chrome_menus();
                                 }
                             }
                             handled_chrome = true;
                         }
                     } else if state == ElementState::Pressed {
                         event = Some(InputEvent::MenuSelection { index: -1 });
-                        window_state.render.popup_menu = None;
-                        window_state.render.chrome_interaction.menu_bar_active = None;
-                        window_state
-                            .render
-                            .chrome_interaction
-                            .compact_bar_menu_active = None;
-                        window_state.render.frame_dirty = true;
+                        window_state.render.dismiss_all_chrome_menus();
                         handled_chrome = true;
                     }
                     if !handled_chrome {

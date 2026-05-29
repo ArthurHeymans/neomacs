@@ -17,10 +17,7 @@ impl RenderApp {
     ) -> Option<InputEvent> {
         match logical_key.as_ref() {
             Key::Named(NamedKey::Escape) => {
-                render.popup_menu = None;
-                render.chrome_interaction.menu_bar_active = None;
-                render.chrome_interaction.compact_bar_menu_active = None;
-                render.frame_dirty = true;
+                render.dismiss_all_chrome_menus();
                 Some(InputEvent::MenuSelection { index: -1 })
             }
             Key::Named(NamedKey::ArrowDown) => {
@@ -49,19 +46,13 @@ impl RenderApp {
                         }
                         None
                     } else {
-                        render.popup_menu = None;
-                        render.chrome_interaction.menu_bar_active = None;
-                        render.chrome_interaction.compact_bar_menu_active = None;
-                        render.frame_dirty = true;
+                        render.dismiss_all_chrome_menus();
                         Some(InputEvent::MenuSelection {
                             index: global_idx as i32,
                         })
                     }
                 } else {
-                    render.popup_menu = None;
-                    render.chrome_interaction.menu_bar_active = None;
-                    render.chrome_interaction.compact_bar_menu_active = None;
-                    render.frame_dirty = true;
+                    render.dismiss_all_chrome_menus();
                     Some(InputEvent::MenuSelection { index: -1 })
                 }
             }
@@ -112,8 +103,7 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-            window_state.render.typing_speed.key_press_times.push(now);
-            window_state.render.frame_dirty = true;
+            window_state.render.record_typing_keypress(now);
         }
     }
 
@@ -123,8 +113,7 @@ impl RenderApp {
         }
         let now = std::time::Instant::now();
         if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-            window_state.render.idle_dim.last_activity_time = now;
-            window_state.render.frame_dirty = true;
+            window_state.render.record_idle_activity(now);
         }
     }
 
@@ -442,10 +431,7 @@ impl RenderApp {
                 winit::event::Ime::Disabled => {
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.native.ime_enabled = false;
-                        window_state.render.ime_preedit_active = false;
-                        window_state.render.ime_preedit_text.clear();
-                        window_state.native.last_ime_cursor_area = None;
-                        window_state.render.frame_dirty = true;
+                        window_state.clear_ime_preedit();
                     } else if self.frame_windows.is_primary_winit(window_id) {
                         self.set_primary_ime_enabled(false);
                         self.clear_primary_ime_preedit();
@@ -456,9 +442,7 @@ impl RenderApp {
                 winit::event::Ime::Commit(text) => {
                     tracing::debug!("IME Commit: '{}'", text);
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-                        window_state.render.ime_preedit_active = false;
-                        window_state.render.ime_preedit_text.clear();
-                        window_state.render.frame_dirty = true;
+                        window_state.render.clear_ime_preedit();
                     } else if self.frame_windows.is_primary_winit(window_id) {
                         self.clear_primary_ime_preedit();
                     }
@@ -479,15 +463,13 @@ impl RenderApp {
                 winit::event::Ime::Preedit(text, cursor_range) => {
                     tracing::debug!("IME Preedit: '{}' cursor: {:?}", text, cursor_range);
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-                        window_state.render.ime_preedit_active = !text.is_empty();
-                        window_state.render.ime_preedit_text = text.clone();
+                        window_state.render.set_ime_preedit(text.clone());
                         if let Some(target) = window_state.render.cursor.target_cloned() {
                             Self::update_frame_window_ime_cursor_area_if_needed(
                                 window_state,
                                 &target,
                             );
                         }
-                        window_state.render.frame_dirty = true;
                     } else if self.frame_windows.is_primary_winit(window_id) {
                         self.set_primary_ime_preedit(text.clone());
                         if let Some(target) = self.primary_cursor().target_cloned() {

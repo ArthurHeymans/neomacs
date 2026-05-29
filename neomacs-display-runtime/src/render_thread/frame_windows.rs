@@ -238,6 +238,23 @@ impl GuiFrameRenderState {
         removed
     }
 
+    pub(super) fn record_typing_keypress(&mut self, now: Instant) {
+        self.typing_speed.key_press_times.push(now);
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn record_idle_activity(&mut self, now: Instant) {
+        self.idle_dim.last_activity_time = now;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn dismiss_all_chrome_menus(&mut self) {
+        self.popup_menu = None;
+        self.chrome_interaction.menu_bar_active = None;
+        self.chrome_interaction.compact_bar_menu_active = None;
+        self.frame_dirty = true;
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
