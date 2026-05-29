@@ -543,3 +543,64 @@ fn org_navigate_up_down_forward_backward_edit_fold_deep() {
                          (point-min) (point-max))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_level_jump_fold_edit_reparse_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* Project\n")
+    (insert "** Module A\n")
+    (insert "*** Component X\nBody X.\n\n")
+    (insert "*** Component Y\nBody Y.\n\n")
+    (insert "** Module B\n")
+    (insert "*** Component Z\nBody Z.\n\n")
+    (insert "* Archive\n")
+    (insert "** Old stuff\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At Component X
+      (goto-char (point-min))
+      (search-forward "Component X")
+      (beginning-of-line)
+      (let ((at-x (funcall track)))
+        ;; Up to Module A
+        (org-up-heading-safe)
+        (let ((up-to-mod-a (funcall track)))
+          ;; Forward to Module B
+          (org-forward-heading-same-level 1)
+          (let ((fwd-to-mod-b (funcall track)))
+            ;; Down to Component Z
+            (org-next-visible-heading 1)
+            (let ((at-z (funcall track)))
+              ;; Forward to Archive (cross parent)
+              (goto-char (point-min))
+              (search-forward "Archive")
+              (beginning-of-line)
+              (let ((at-archive (funcall track)))
+                ;; Edit: insert under Module B
+                (goto-char (point-min))
+                (search-forward "Module B")
+                (end-of-line)
+                (insert "\n*** Component W\nBody W.\n")
+                ;; Fold Module A
+                (goto-char (point-min))
+                (search-forward "Module A")
+                (beginning-of-line)
+                (org-fold-subtree)
+                (let ((after-fold (funcall track)))
+                  (list at-x up-to-mod-a fwd-to-mod-b at-z at-archive
+                        after-fold
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
