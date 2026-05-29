@@ -648,21 +648,7 @@ impl RenderApp {
                             .toolbar_pressed
                             .is_some()
                     {
-                        window_state.render.chrome_interaction.tab_bar_pressed = None;
-                        window_state
-                            .render
-                            .chrome_interaction
-                            .tab_bar_press_captured = false;
-                        window_state
-                            .render
-                            .chrome_interaction
-                            .compact_bar_tool_pressed = None;
-                        window_state.render.chrome_interaction.toolbar_pressed = None;
-                        window_state
-                            .render
-                            .chrome_interaction
-                            .toolbar_press_captured = false;
-                        window_state.render.mark_dirty();
+                        window_state.render.clear_all_chrome_pressed();
                         handled_chrome = true;
                     }
                 }

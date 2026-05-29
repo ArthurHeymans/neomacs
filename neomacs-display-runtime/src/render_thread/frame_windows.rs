@@ -259,6 +259,15 @@ impl GuiFrameRenderState {
         self.frame_dirty = true;
     }
 
+    pub(super) fn clear_all_chrome_pressed(&mut self) {
+        self.chrome_interaction.tab_bar_pressed = None;
+        self.chrome_interaction.tab_bar_press_captured = false;
+        self.chrome_interaction.compact_bar_tool_pressed = None;
+        self.chrome_interaction.toolbar_pressed = None;
+        self.chrome_interaction.toolbar_press_captured = false;
+        self.mark_dirty();
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
