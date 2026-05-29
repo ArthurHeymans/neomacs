@@ -2062,3 +2062,60 @@ fn org_agenda_single_day_six_tasks_multi_edit_reagenda() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_single_day_seven_tasks_multi_edit_reagenda() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-7task-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgenda7Task*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO G1\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE G2\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO G3\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT G4\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO G5\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* WAIT G6\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO G7\nSCHEDULED: <2026-05-28 Wed>\n"))
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((before (replace-regexp-in-string
+                           (regexp-quote root) "<root>"
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+              (org-agenda-quit)
+              ;; Edit: G1->DONE, G3->DONE, G5->DONE, G7->DONE
+              (with-current-buffer (find-file-noselect file)
+                (goto-char (point-min))
+                (search-forward "TODO G1")
+                (replace-match "DONE G1")
+                (goto-char (point-min))
+                (search-forward "TODO G3")
+                (replace-match "DONE G3")
+                (goto-char (point-min))
+                (search-forward "TODO G5")
+                (replace-match "DONE G5")
+                (goto-char (point-min))
+                (search-forward "TODO G7")
+                (replace-match "DONE G7"))
+              (org-agenda-list nil "2026-05-28" 1)
+              (with-current-buffer org-agenda-buffer-name
+                (let ((after (replace-regexp-in-string
+                              (regexp-quote root) "<root>"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+                  (org-agenda-quit)
+                  (list before after))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
