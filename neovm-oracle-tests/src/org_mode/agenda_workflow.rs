@@ -1863,3 +1863,48 @@ fn org_agenda_week_view_multi_edit_todo_reagenda_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_single_day_todo_filter_edit_reagenda_v2() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-1day-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgenda1Day*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Task-1\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE Task-2\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO Task-3\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT Task-4\nSCHEDULED: <2026-05-28 Wed>\n"))
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((full (replace-regexp-in-string
+                         (regexp-quote root) "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+              (org-agenda-quit)
+              ;; Edit: change Task-3 to DONE
+              (with-current-buffer (find-file-noselect file)
+                (goto-char (point-min))
+                (search-forward "TODO Task-3")
+                (replace-match "DONE Task-3"))
+              (org-agenda-list nil "2026-05-28" 1)
+              (with-current-buffer org-agenda-buffer-name
+                (let ((after (replace-regexp-in-string
+                              (regexp-quote root) "<root>"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+                  (org-agenda-quit)
+                  (list full after))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
