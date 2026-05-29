@@ -103,7 +103,7 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.faces.insert(99, face(99));
 

@@ -44,7 +44,7 @@ impl RenderApp {
             }
             RenderCommand::SetWindowTitle { title } => {
                 self.primary_chrome_mut().title = title.clone();
-                if let Some(primary_state) = self.primary_window_state_mut() {
+                if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.set_title(title);
                     if !primary_state.chrome().decorations_enabled {
                         primary_state.render.mark_dirty();
@@ -69,7 +69,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetWindowFullscreen { mode } => {
-                if let Some(primary_state) = self.primary_window_state_mut() {
+                if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.set_fullscreen_mode(mode);
                 }
                 Ok(())
@@ -88,7 +88,7 @@ impl RenderApp {
             }
             RenderCommand::SetWindowSize { width, height } => {
                 tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
-                if let Some(primary_state) = self.primary_window_state_mut() {
+                if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.request_inner_size(width, height);
                 }
                 Ok(())

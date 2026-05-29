@@ -129,7 +129,7 @@ impl RenderApp {
                 self.cursor_defaults.anim_duration = cursor_duration_ms as f32 / 1000.0;
                 self.cursor_defaults.trail_size = trail_size.clamp(0.0, 1.0);
                 self.transition_policy = transition_policy;
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 if !cursor_enabled {
                     self.cursor_defaults.animating = false;
                 }
@@ -137,10 +137,10 @@ impl RenderApp {
                 self.frame_windows
                     .sync_top_level_transition_policy(self.transition_policy);
                 if !self.transition_policy.crossfade_enabled {
-                    self.clear_top_level_crossfade_transitions();
+                    self.frame_windows.clear_top_level_crossfade_transitions();
                 }
                 if !self.transition_policy.scroll_enabled {
-                    self.clear_top_level_scroll_transitions();
+                    self.frame_windows.clear_top_level_scroll_transitions();
                 }
                 Ok(())
             }
@@ -187,7 +187,7 @@ impl RenderApp {
             }
             RenderCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
-                self.hide_top_level_popup_menus();
+                self.frame_windows.hide_top_level_popup_menus();
                 self.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None);
                 Ok(())
             }
@@ -254,7 +254,7 @@ impl RenderApp {
             }
             RenderCommand::HideTooltip => {
                 tracing::debug!("HideTooltip");
-                self.hide_top_level_tooltips();
+                self.frame_windows.hide_top_level_tooltips();
                 Ok(())
             }
             RenderCommand::VisualBell { emacs_frame_id } => {
@@ -284,7 +284,7 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorEffect(command) => {
@@ -292,24 +292,24 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetScrollIndicators { enabled } => {
                 self.scroll_indicators_enabled = enabled;
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetTitlebarHeight { height } => {
-                self.set_top_level_titlebar_height(height);
+                self.frame_windows.set_top_level_titlebar_height(height);
                 Ok(())
             }
             RenderCommand::SetShowFps { enabled } => {
-                self.set_top_level_fps_enabled(enabled);
+                self.frame_windows.set_top_level_fps_enabled(enabled);
                 Ok(())
             }
             RenderCommand::SetCornerRadius { radius } => {
-                self.set_top_level_corner_radius(radius);
+                self.frame_windows.set_top_level_corner_radius(radius);
                 Ok(())
             }
             RenderCommand::SetExtraSpacing {
@@ -318,7 +318,7 @@ impl RenderApp {
             } => {
                 self.extra_line_spacing = line_spacing;
                 self.extra_letter_spacing = letter_spacing;
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetIndentGuideRainbow { enabled, colors } => {
@@ -334,7 +334,7 @@ impl RenderApp {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.set_indent_guide_rainbow(enabled, linear_colors);
                 }
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetCursorSizeTransition {
@@ -347,7 +347,7 @@ impl RenderApp {
                     self.cursor_defaults.size_animating = false;
                 }
                 self.sync_top_level_cursor_config_from_defaults();
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetLigaturesEnabled { enabled } => {
@@ -373,7 +373,7 @@ impl RenderApp {
                 self.child_frame_style.shadow_layers = shadow_layers;
                 self.child_frame_style.shadow_offset = shadow_offset;
                 self.child_frame_style.shadow_opacity = shadow_opacity;
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetToolBar {
@@ -399,7 +399,7 @@ impl RenderApp {
             }
             RenderCommand::SetToolBarConfig { icon_size, padding } => {
                 self.set_toolbar_visual_config(icon_size, padding);
-                self.mark_top_level_frame_windows_dirty();
+                self.frame_windows.mark_top_level_dirty();
                 Ok(())
             }
             RenderCommand::SetMenuBar {

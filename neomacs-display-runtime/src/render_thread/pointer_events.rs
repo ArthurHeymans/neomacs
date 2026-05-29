@@ -227,7 +227,7 @@ impl RenderApp {
     }
 
     fn glyphs_for_pointer_target(&self, target_fid: u64) -> Option<&[FrameGlyph]> {
-        if let Some(primary_state) = self.primary_window_state() {
+        if let Some(primary_state) = self.frame_windows.primary_window() {
             Self::glyphs_for_frame_window_pointer_target(primary_state, target_fid)
         } else if self.frame_windows.is_primary_frame_id(target_fid) {
             self.primary_current_frame()
@@ -241,7 +241,7 @@ impl RenderApp {
     }
 
     pub(super) fn pointer_target_at(&self, x: f32, y: f32) -> (f32, f32, u64) {
-        if let Some(primary_state) = self.primary_window_state() {
+        if let Some(primary_state) = self.frame_windows.primary_window() {
             return Self::pointer_target_for_frame_window(primary_state, x, y);
         }
         let primary_frame_id = self.frame_windows.primary_event_frame_id();
@@ -259,7 +259,7 @@ impl RenderApp {
     }
 
     fn webkit_target_at(&self, target_fid: u64, ev_x: f32, ev_y: f32) -> (u32, i32, i32) {
-        if let Some(primary_state) = self.primary_window_state() {
+        if let Some(primary_state) = self.frame_windows.primary_window() {
             return Self::webkit_target_for_frame_window(primary_state, target_fid, ev_x, ev_y);
         }
         let mut wk_id = 0u32;
@@ -902,7 +902,7 @@ impl RenderApp {
             && button == MouseButton::Left
             && self.primary_chrome().resize_edge.is_some()
         {
-            if let Some(primary_state) = self.primary_window_state() {
+            if let Some(primary_state) = self.frame_windows.primary_window() {
                 primary_state.drag_resize_for_current_edge();
             }
             return;
@@ -919,7 +919,7 @@ impl RenderApp {
                     });
                 }
                 action => {
-                    if let Some(primary_state) = self.primary_window_state_mut() {
+                    if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                         primary_state.handle_titlebar_action(action);
                     }
                 }
@@ -932,7 +932,7 @@ impl RenderApp {
             && !self.primary_chrome().decorations_enabled
             && (self.modifiers & NEOMACS_SUPER_MASK) != 0
         {
-            if let Some(primary_state) = self.primary_window_state() {
+            if let Some(primary_state) = self.frame_windows.primary_window() {
                 primary_state.drag_window();
             }
             return;

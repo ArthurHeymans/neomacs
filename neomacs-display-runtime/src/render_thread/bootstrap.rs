@@ -227,7 +227,7 @@ impl RenderApp {
         }
 
         if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
-            if let Some(primary_state) = self.primary_window_state_mut() {
+            if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                 primary_state.handle_resize(&device, width, height);
             }
         }

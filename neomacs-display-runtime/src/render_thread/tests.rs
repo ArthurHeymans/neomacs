@@ -145,7 +145,7 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     app.handle_window_command(RenderCommand::DestroyWindow { emacs_frame_id: 0 })
         .expect("destroy primary window");
 
-    assert!(app.primary_window_state().is_none());
+    assert!(app.frame_windows.primary_window().is_none());
     assert!(app.primary_render_state().is_none());
     assert!(app.primary_current_frame().is_none());
     assert!(!app.primary_dirty());
@@ -163,7 +163,7 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
     })
     .expect("destroy adopted primary window");
 
-    assert!(app.primary_window_state().is_none());
+    assert!(app.frame_windows.primary_window().is_none());
     assert!(app.primary_render_state().is_none());
     assert!(!app.primary_dirty());
     assert!(app.frame_windows.primary_window().is_none());
@@ -232,7 +232,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_window_command(RenderCommand::AdoptPrimaryFrame {
@@ -257,7 +257,7 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
@@ -293,7 +293,7 @@ fn primary_toolbar_command_marks_render_state_dirty() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_ui_command(RenderCommand::SetToolBar {
@@ -330,7 +330,7 @@ fn primary_menubar_command_marks_render_state_dirty() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_ui_command(RenderCommand::SetMenuBar {
@@ -363,7 +363,7 @@ fn primary_tooltip_command_marks_render_state_dirty() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_ui_command(RenderCommand::ShowTooltip {
@@ -398,7 +398,7 @@ fn hide_popup_menu_marks_primary_chrome_dirty_without_popup() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = Some(3));
     app.set_primary_dirty(false);
@@ -420,7 +420,7 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_ui_command(RenderCommand::ShowPopupMenu {
@@ -455,7 +455,7 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
 
     app.handle_ui_command(RenderCommand::ShowTooltip {
@@ -490,7 +490,7 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
@@ -553,7 +553,7 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
     app.set_primary_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)));
@@ -586,7 +586,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
         0,
         &device,
         app.primary_scale_factor(),
-        app.primary_fps_enabled(),
+        app.frame_windows.fps_enabled,
     ));
     app.set_primary_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)));
     app.set_primary_dirty(false);

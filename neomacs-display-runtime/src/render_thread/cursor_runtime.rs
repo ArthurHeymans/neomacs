@@ -61,7 +61,7 @@ impl RenderApp {
             return;
         }
         let area = self.ime_cursor_area_for_target(target);
-        let Some(window_state) = self.primary_window_state_mut() else {
+        let Some(window_state) = self.frame_windows.primary_window_mut() else {
             return;
         };
         window_state.update_ime_cursor_area(area);

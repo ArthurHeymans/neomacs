@@ -209,13 +209,13 @@ impl RenderApp {
         }
 
         if self.effects.cursor_pulse.enabled && self.effects.cursor_glow.enabled {
-            self.mark_top_level_frame_windows_dirty();
+            self.frame_windows.mark_top_level_dirty();
         }
 
         self.frame_windows.mark_active_top_level_visuals_dirty();
 
         if self.has_terminal_activity() {
-            self.mark_top_level_frame_windows_dirty();
+            self.frame_windows.mark_top_level_dirty();
         }
 
         let has_active_content = self.has_webkit_needing_redraw() || self.has_playing_videos();

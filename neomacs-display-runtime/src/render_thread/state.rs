@@ -439,14 +439,6 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn primary_window_state(&self) -> Option<&GuiFrameWindowState> {
-        self.frame_windows.primary_window()
-    }
-
-    pub(super) fn primary_window_state_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
-        self.frame_windows.primary_window_mut()
-    }
-
     pub(super) fn primary_render_state(&self) -> Option<&GuiFrameRenderState> {
         self.frame_windows.primary_window().map(|ws| &ws.render)
     }
@@ -487,30 +479,10 @@ impl RenderApp {
         self.set_primary_dirty(true);
     }
 
-    pub(super) fn mark_top_level_frame_windows_dirty(&mut self) {
-        self.frame_windows.mark_top_level_dirty();
-    }
-
-    pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
-        self.frame_windows.set_top_level_titlebar_height(height);
-    }
-
-    pub(super) fn set_top_level_corner_radius(&mut self, radius: f32) {
-        self.frame_windows.set_top_level_corner_radius(radius);
-    }
-
-    pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
-        self.frame_windows.set_top_level_fps_enabled(enabled);
-    }
-
     pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.frame_dirty = dirty;
         }
-    }
-
-    pub(super) fn primary_fps_enabled(&self) -> bool {
-        self.frame_windows.fps_enabled
     }
 
     pub(super) fn primary_char_width(&self) -> f32 {
@@ -535,10 +507,6 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn hide_top_level_popup_menus(&mut self) {
-        self.frame_windows.hide_top_level_popup_menus();
-    }
-
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_tooltip(tooltip);
@@ -561,10 +529,6 @@ impl RenderApp {
         if let Some(primary_frame) = self.primary_render_state_mut() {
             primary_frame.set_compact_bar(compact_bar);
         }
-    }
-
-    pub(super) fn hide_top_level_tooltips(&mut self) {
-        self.frame_windows.hide_top_level_tooltips();
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
@@ -638,14 +602,6 @@ impl RenderApp {
     pub(super) fn primary_renderer_effects_need_redraw(&self) -> bool {
         self.primary_render_state()
             .is_some_and(|frame| frame.renderer_effects.needs_redraw())
-    }
-
-    pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
-        self.frame_windows.clear_top_level_crossfade_transitions();
-    }
-
-    pub(super) fn clear_top_level_scroll_transitions(&mut self) {
-        self.frame_windows.clear_top_level_scroll_transitions();
     }
 
     pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
