@@ -249,149 +249,6 @@ jobs:
             dist/*.dmg
           if-no-files-found: error
 
-  # ── macOS x86_64 (Intel) ──────────────────────────────────────────────
-  build-macos-x86_64:
-    name: build macOS x86_64
-    runs-on: macos-13
-    timeout-minutes: 120
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Install system dependencies (brew)
-        run: brew install pkg-config gstreamer
-
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          targets: x86_64-apple-darwin
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: macos-x86_64
-          cache-bin: false
-          save-if: true
-          cache-on-failure: true
-
-      - name: Set version env
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
-      - name: Build release binaries
-        run: cargo xtask fresh-build --release
-
-      - name: Package tarball (x86_64-apple-darwin)
-        run: |
-          TARGET=x86_64-apple-darwin
-          STAGING="neomacs-${VERSION}-${TARGET}"
-          mkdir -p "$STAGING"
-          cp target/release/neomacs "$STAGING/"
-          cp target/release/neomacs.pdump "$STAGING/"
-          cp -r lisp "$STAGING/"
-          cp -r etc "$STAGING/"
-          cp COPYING "$STAGING/"
-          mkdir -p dist
-          tar czf "dist/${STAGING}.tar.gz" "$STAGING"
-
-      - name: Build and package .app + .dmg
-        run: ./scripts/package-macos-app.sh --no-smoke
-
-      - name: Upload macOS x86_64 artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-x86_64
-          path: |
-            dist/*.tar.gz
-            dist/*.dmg
-          if-no-files-found: error
-
-  # ── macOS universal .dmg (aarch64 + x86_64 via lipo) ──────────────────
-  build-macos-universal:
-    name: build macOS universal .dmg
-    runs-on: macos-latest
-    timeout-minutes: 30
-    needs: [build-macos-aarch64, build-macos-x86_64]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Download aarch64 artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: macos-aarch64
-          path: artifacts-aarch64
-
-      - name: Download x86_64 artifacts
-        uses: actions/download-artifact@v5
-        with:
-          name: macos-x86_64
-          path: artifacts-x86_64
-
-      - name: Set version env
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-
-      - name: Extract tarballs
-        run: |
-          mkdir -p staging-aarch64 staging-x86_64
-          tar xzf artifacts-aarch64/neomacs-*-aarch64-apple-darwin.tar.gz -C staging-aarch64
-          tar xzf artifacts-x86_64/neomacs-*-x86_64-apple-darwin.tar.gz -C staging-x86_64
-          STAGING_AARCH64=$(ls -d staging-aarch64/neomacs-*-aarch64-apple-darwin)
-          STAGING_X8664=$(ls -d staging-x86_64/neomacs-*-x86_64-apple-darwin)
-          echo "STAGING_AARCH64=$STAGING_AARCH64" >> "$GITHUB_ENV"
-          echo "STAGING_X8664=$STAGING_X8664" >> "$GITHUB_ENV"
-
-      - name: Create universal .app bundle and .dmg
-        run: |
-          set -euo pipefail
-          VERSION="${{ env.VERSION }}"
-          APP="$PWD/dist/neomacs.app"
-
-          rm -rf "$APP"
-          mkdir -p "$APP/Contents/MacOS"
-          mkdir -p "$APP/Contents/Resources/neomacs"
-          mkdir -p "$APP/Contents/Frameworks"
-
-          # Merge binaries with lipo
-          lipo -create \
-            "$STAGING_AARCH64/neomacs" \
-            "$STAGING_X8664/neomacs" \
-            -output "$APP/Contents/MacOS/neomacs"
-          chmod 0755 "$APP/Contents/MacOS/neomacs"
-
-          # Ship aarch64 pdump; x86_64 binary falls back to .elc bootstrap
-          # if fingerprint mismatches.
-          cp "$STAGING_AARCH64/neomacs.pdump" "$APP/Contents/MacOS/"
-
-          # Runtime files (identical across archs, just copy from aarch64)
-          cp -r "$STAGING_AARCH64/lisp"   "$APP/Contents/Resources/neomacs/"
-          cp -r "$STAGING_AARCH64/etc"    "$APP/Contents/Resources/neomacs/"
-          cp -r "$STAGING_AARCH64/LICENSE" "$APP/Contents/Resources/neomacs/"
-
-          # Create .dmg
-          DMG_NAME="neomacs-${VERSION}-universal"
-          DMG="$PWD/dist/${DMG_NAME}.dmg"
-          mkdir -p dist
-          hdiutil create -volname "NEO Emacs" \
-            -srcfolder "$APP" \
-            -ov -format UDZO \
-            "$DMG"
-
-          echo "Created $DMG"
-
-      - name: Upload macOS universal .dmg
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-universal
-          path: dist/neomacs-*-universal.dmg
-          if-no-files-found: error
-
   # ── Windows x86_64 ────────────────────────────────────────────────────
   build-windows-x86_64:
     name: build Windows x86_64
@@ -471,18 +328,18 @@ jobs:
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Package zip (x86_64-pc-windows-msvc)
-        shell: bash
+        shell: powershell
         run: |
-          TARGET=x86_64-pc-windows-msvc
-          STAGING="neomacs-${VERSION}-${TARGET}"
-          mkdir -p "$STAGING"
-          cp target/release/neomacs.exe "$STAGING/"
-          cp target/release/neomacs.pdump "$STAGING/"
-          cp -r lisp "$STAGING/"
-          cp -r etc "$STAGING/"
-          cp COPYING "$STAGING/"
-          mkdir -p dist
-          zip -r "dist/${STAGING}.zip" "$STAGING"
+          $TARGET="x86_64-pc-windows-msvc"
+          $STAGING="neomacs-${env:VERSION}-${TARGET}"
+          New-Item -ItemType Directory -Force -Path "$STAGING"
+          Copy-Item target/release/neomacs.exe "$STAGING/"
+          Copy-Item target/release/neomacs.pdump "$STAGING/"
+          Copy-Item -Recurse lisp "$STAGING/"
+          Copy-Item -Recurse etc "$STAGING/"
+          Copy-Item COPYING "$STAGING/"
+          New-Item -ItemType Directory -Force -Path dist
+          Compress-Archive -Path "$STAGING" -DestinationPath "dist/${STAGING}.zip"
 
       - name: Package .exe installer
         shell: bash
@@ -507,8 +364,6 @@ jobs:
       - build-linux-x86_64
       - build-linux-aarch64
       - build-macos-aarch64
-      - build-macos-x86_64
-      - build-macos-universal
       - build-windows-x86_64
     runs-on: ubuntu-latest
     steps:
