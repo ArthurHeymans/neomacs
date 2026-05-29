@@ -1000,3 +1000,78 @@ fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
                              (point-min) (point-max))))))))))))))))"##,
     );
 }
+
+#[test]
+fn org_navigate_sixteen_heading_tree_fold_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* S1\n")
+    (insert "** S1A\n")
+    (insert "*** S1A1\nBody.\n\n")
+    (insert "*** S1A2\nBody.\n\n")
+    (insert "** S1B\n")
+    (insert "*** S1B1\nBody.\n\n")
+    (insert "*** S1B2\nBody.\n\n")
+    (insert "* S2\n")
+    (insert "** S2A\n")
+    (insert "*** S2A1\nBody.\n\n")
+    (insert "** S2B\n")
+    (insert "*** S2B1\nBody.\n\n")
+    (insert "** S2C\n")
+    (insert("*** S2C1\nBody.\n\n")
+    (insert "** S2D\n")
+    (insert("*** S2D1\nBody.\n\n")
+    (let ((track (lambda ()
+                   (list (line-number-at-pos)
+                         (buffer-substring-no-properties
+                          (line-beginning-position) (line-end-position))
+                         (org-outline-level)
+                         (invisible-p (point))))))
+      ;; At S1A1
+      (goto-char (point-min))
+      (search-forward "S1A1")
+      (beginning-of-line)
+      (let ((at-s1a1 (funcall track)))
+        ;; Forward to S1A2
+        (org-forward-heading-same-level 1)
+        (let ((at-s1a2 (funcall track)))
+          ;; Up to S1A
+          (org-up-heading-safe)
+          (let ((at-s1a (funcall track)))
+            ;; Forward to S1B
+            (org-forward-heading-same-level 1)
+            (let ((at-s1b (funcall track)))
+              ;; Down to S1B1
+              (org-next-visible-heading 1)
+              (let ((at-s1b1 (funcall track)))
+                ;; Forward to S1B2
+                (org-forward-heading-same-level 1)
+                (let ((at-s1b2 (funcall track)))
+                  ;; Jump to S2D1
+                  (goto-char (point-min))
+                  (search-forward "S2D1")
+                  (beginning-of-line)
+                  (let ((at-s2d1 (funcall track)))
+                    ;; Edit: insert S1B3 under S1B
+                    (goto-char (point-min))
+                    (search-forward "S1B2")
+                    (end-of-line)
+                    (insert "\n*** S1B3\nBody.\n")
+                    ;; Fold S1 subtree
+                    (goto-char (point-min))
+                    (search-forward "S1")
+                    (beginning-of-line)
+                    (org-fold-subtree)
+                    (let ((after-fold (funcall track)))
+                      (list at-s1a1 at-s1a2 at-s1a at-s1b at-s1b1 at-s1b2 at-s2d1
+                            after-fold
+                            (buffer-substring-no-properties
+                             (point-min) (point-max))))))))))))))))"##,
+    );
+}
