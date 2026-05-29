@@ -864,3 +864,48 @@ fn org_export_todo_tag_property_planning_html_latex_deep() {
                    (point-min) (point-max))))))))))"##,
     );
 }
+
+#[test]
+fn org_export_separate_scheduled_deadline_html_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: SeparatePlanning\n\n")
+    (insert "* TODO Alpha\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "Body alpha.\n\n")
+    (insert "** DONE Beta\n")
+    (insert "Body beta.\n\n")
+    (insert "** TODO Gamma\n")
+    (insert "Body gamma.\n\n")
+    (let* ((snap (lambda ()
+                   (let* ((tree (org-element-parse-buffer))
+                          (info (org-combine-plists
+                                 (org-export--get-buffer-attributes)
+                                 (org-export-get-environment)))
+                          (headlines (org-element-map tree 'headline #'identity)))
+                     (mapcar (lambda (h)
+                               (list (org-element-property :raw-value h)
+                                     (org-element-property :level h)
+                                     (org-export-get-headline-number h info)
+                                     (org-export-get-tags h info)
+                                     (org-export-get-todo-keyword h info)))
+                             headlines)))))
+      (let ((before (funcall snap)))
+        ;; Edit: change Beta to TODO
+        (goto-char (point-min))
+        (search-forward "DONE Beta")
+        (replace-match "TODO Beta")
+        (let ((after (funcall snap)))
+          ;; Export HTML
+          (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
+            (list before after html
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
