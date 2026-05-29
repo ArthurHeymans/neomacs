@@ -204,6 +204,23 @@ impl GuiFrameRenderState {
         }
     }
 
+    pub(super) fn set_ime_preedit(&mut self, text: String) {
+        self.ime_preedit_active = !text.is_empty();
+        self.ime_preedit_text = text;
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn clear_ime_preedit(&mut self) {
+        self.ime_preedit_active = false;
+        self.ime_preedit_text.clear();
+        self.frame_dirty = true;
+    }
+
+    pub(super) fn set_fps_enabled(&mut self, enabled: bool) {
+        self.fps.enabled = enabled;
+        self.frame_dirty = true;
+    }
+
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),

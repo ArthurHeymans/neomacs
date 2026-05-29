@@ -583,8 +583,7 @@ impl RenderApp {
         if self.primary_window_state().is_none()
             && let Some(primary_frame) = self.primary_render_state_mut()
         {
-            primary_frame.fps.enabled = enabled;
-            primary_frame.frame_dirty = true;
+            primary_frame.set_fps_enabled(enabled);
         }
     }
 
@@ -923,17 +922,13 @@ impl RenderApp {
 
     pub(super) fn set_primary_ime_preedit(&mut self, text: String) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.ime_preedit_active = !text.is_empty();
-            primary_frame.ime_preedit_text = text;
-            primary_frame.frame_dirty = true;
+            primary_frame.set_ime_preedit(text);
         }
     }
 
     pub(super) fn clear_primary_ime_preedit(&mut self) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.ime_preedit_active = false;
-            primary_frame.ime_preedit_text.clear();
-            primary_frame.frame_dirty = true;
+            primary_frame.clear_ime_preedit();
         }
     }
 
