@@ -59,7 +59,7 @@ impl RenderApp {
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.set_title(title);
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_native_fallback.chrome.title = title;
+                    self.primary_chrome_mut().title = title;
                 } else {
                     tracing::warn!(
                         "SetFrameWindowTitle requested for unknown frame_id=0x{:x}",
