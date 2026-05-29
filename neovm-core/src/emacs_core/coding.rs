@@ -2323,7 +2323,16 @@ fn derive_coding_for_eol(base: &str, eol: i64) -> Option<String> {
                 return None;
             }
         }
-        other => format!("{other}{suffix}"),
+        // If `other` already carries an EOL suffix (e.g. utf-8-emacs-unix)
+        // strip it first to avoid duplicating it (utf-8-emacs-unix-unix).
+        // This can happen when the coding system was passed through a path
+        // that retained the suffix before requesting a new EOL conversion,
+        // or when the canonical name of a derived variant (which includes
+        // the suffix) is used as the base for further derivation.
+        other => {
+            let base = strip_eol_suffix(other);
+            format!("{base}{suffix}")
+        }
     };
     Some(derived)
 }

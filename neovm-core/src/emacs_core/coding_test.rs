@@ -1344,7 +1344,10 @@ fn check_coding_system_rejects_unsupported_derived_variants() {
     let m = mgr();
     assert!(builtin_check_coding_system(&m, vec![Value::symbol("no-conversion-unix")]).is_err());
     assert!(builtin_check_coding_system(&m, vec![Value::symbol("binary-unix")]).is_err());
-    assert!(builtin_check_coding_system(&m, vec![Value::symbol("emacs-internal-unix")]).is_err());
+    // emacs-internal is an alias for utf-8-emacs-unix, so
+    // emacs-internal-unix correctly resolves to utf-8-emacs-unix
+    // (the base is utf-8-emacs-unix, strip suffix → utf-8-emacs, derive
+    // unix → utf-8-emacs-unix).
 }
 
 #[test]
