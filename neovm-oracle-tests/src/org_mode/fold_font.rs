@@ -685,6 +685,63 @@ fn org_cycle_startup_visibility_archived_drawers_combo() {
 }
 
 #[test]
+fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v59() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Cloud :cloud:\n")
+      (insert ":PROPERTIES:\n:Owner: Mike\n:CATEGORY: infra\n:END:\n")
+      (insert "** DONE Compute :compute:core:\n")
+      (insert ":LOGBOOK:\nCLOCK: [2026-05-28 Wed 02:00]--[2026-05-28 Wed 06:00] =>  4:00\n:END:\n")
+      (insert ":PROPERTIES:\n:Effort: 5h\n:SLA: 99.99\n:END:\n")
+      (insert "Compute body.\n\n")
+      (insert "** TODO Storage :storage:edge:\n")
+      (insert ":PROPERTIES:\n:Effort: 3h\n:SLA: 99.9\n:END:\n")
+      (insert "Storage body.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda (tag)
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (line-number-at-pos)
+                                   (invisible-p (point))
+                                   (org-outline-level)
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (org-entry-get nil "Owner" 'inherit)
+                                   (org-entry-get nil "CATEGORY" 'inherit)
+                                   (org-entry-get nil "SLA"))
+                             (list needle 'not-found nil nil nil nil nil nil))))
+                     '("Cloud" "Compute" "Storage")))))
+        (let ((initial (funcall snap 'initial)))
+          (org-fold-hide-all)
+          (let ((after-hide (funcall snap 'hide)))
+            (goto-char (point-min))
+            (search-forward "Cloud")
+            (end-of-line)
+            (insert "\n** WAIT Network :network:security:\n:PROPERTIES:\n:Effort: 6h\n:SLA: 99.95\n:END:\nNetwork body.\n")
+            (let ((after-edit (funcall snap 'edit)))
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((after-show (funcall snap 'show)))
+                (org-global-cycle nil)
+                (let ((after-cycle (funcall snap 'cycle)))
+                  (list initial after-hide after-edit after-show after-cycle
+                        (buffer-substring-no-properties
+                         (point-min) (point-max))))))))))))))"##,
+    );
+}
+
+#[test]
 fn org_fold_hide_edit_show_cycle_clock_tag_prop_font_v58() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
