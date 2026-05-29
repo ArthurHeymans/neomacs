@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_grade_edit_reexecute_v16() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: scores
+      (insert "#+NAME: scores\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((s1 92) (s2 78) (s3 85) (s4 67) (s5 95))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: graded
+      (insert "#+NAME: graded\n")
+      (insert "#+begin_src emacs-lisp :var data=scores :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r)\n  (cond ((>= (cadr r) 90) \"A\")\n        ((>= (cadr r) 80) \"B\")\n        ((>= (cadr r) 70) \"C\")\n        (t \"D\")))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("scores" "graded"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: scores")
+      (forward-line 1)
+      (let ((scores1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: graded")
+        (forward-line 1)
+        (let ((graded1 (org-babel-read-result)))
+          ;; Edit: change s4 from 67 to 82
+          (goto-char (point-min))
+          (search-forward "(s4 67)")
+          (replace-match "(s4 82)")
+          ;; Re-execute
+          (dolist (name '("scores" "graded"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: scores")
+          (forward-line 1)
+          (let ((scores2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: graded")
+            (forward-line 1)
+            (let ((graded2 (org-babel-read-result)))
+              (list scores1 graded1 scores2 graded2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_tax_edit_reexecute_v15() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
