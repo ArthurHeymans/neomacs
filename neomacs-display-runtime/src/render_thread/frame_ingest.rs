@@ -87,7 +87,6 @@ impl RenderApp {
             compact_bar,
             cursor_config,
         );
-        window_state.render.frame_dirty = true;
         cursor_sync
     }
 
@@ -100,9 +99,9 @@ impl RenderApp {
         cursor_config: CursorConfigSnapshot,
     ) -> Option<CursorSyncOutcome> {
         render.cursor.reset_blink();
-        render.menu_bar = menu_bar;
-        render.tool_bar = tool_bar;
-        render.compact_bar = compact_bar;
+        render.set_menu_bar(menu_bar);
+        render.set_tool_bar(tool_bar);
+        render.set_compact_bar(compact_bar);
         render.current_frame = Some(frame);
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
         render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
