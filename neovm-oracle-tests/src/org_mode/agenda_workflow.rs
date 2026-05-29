@@ -1665,3 +1665,56 @@ fn org_agenda_week_view_clock_filter_edit_reagenda_deep() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_tag_filter_edit_todo_change_reagenda_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-tag-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgendaTag*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO Alpha :work:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE Beta :home:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO Gamma :work:urgent:\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT Delta :home:\nSCHEDULED: <2026-05-28 Wed>\n"))
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((full (replace-regexp-in-string
+                         (regexp-quote root) "<root>"
+                         (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+              ;; Filter by work
+              (org-agenda-filter-apply '("+work") 'tag)
+              (let ((work-only (replace-regexp-in-string
+                                (regexp-quote root) "<root>"
+                                (buffer-substring-no-properties
+                                 (point-min) (point-max)))))
+                (org-agenda-filter-remove-all)
+                ;; Edit: change Gamma TODO->DONE
+                (with-current-buffer (find-file-noselect file)
+                  (goto-char (point-min))
+                  (search-forward "TODO Gamma")
+                  (replace-match "DONE Gamma"))
+                ;; Re-agenda
+                (org-agenda-quit)
+                (org-agenda-list nil "2026-05-28" 1)
+                (with-current-buffer org-agenda-buffer-name
+                  (let ((after-edit (replace-regexp-in-string
+                                     (regexp-quote root) "<root>"
+                                     (buffer-substring-no-properties
+                                      (point-min) (point-max)))))
+                    (org-agenda-quit)
+                    (list full work-only after-edit))))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
