@@ -327,19 +327,22 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
+      - name: Install zip
+        run: choco install zip -y --no-progress
+
       - name: Package zip (x86_64-pc-windows-msvc)
-        shell: powershell
+        shell: bash
         run: |
-          $TARGET="x86_64-pc-windows-msvc"
-          $STAGING="neomacs-${env:VERSION}-${TARGET}"
-          New-Item -ItemType Directory -Force -Path "$STAGING"
-          Copy-Item target/release/neomacs.exe "$STAGING/"
-          Copy-Item target/release/neomacs.pdump "$STAGING/"
-          Copy-Item -Recurse lisp "$STAGING/"
-          Copy-Item -Recurse etc "$STAGING/"
-          Copy-Item COPYING "$STAGING/"
-          New-Item -ItemType Directory -Force -Path dist
-          Compress-Archive -Path "$STAGING" -DestinationPath "dist/${STAGING}.zip"
+          TARGET=x86_64-pc-windows-msvc
+          STAGING="neomacs-${VERSION}-${TARGET}"
+          mkdir -p "$STAGING"
+          cp target/release/neomacs.exe "$STAGING/"
+          cp target/release/neomacs.pdump "$STAGING/"
+          cp -r lisp "$STAGING/"
+          cp -r etc "$STAGING/"
+          cp COPYING "$STAGING/"
+          mkdir -p dist
+          zip -r "dist/${STAGING}.zip" "$STAGING"
 
       - name: Package .exe installer
         shell: bash
