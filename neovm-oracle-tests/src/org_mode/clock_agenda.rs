@@ -49,7 +49,75 @@ DEADLINE: <2026-05-28 Thu>
       (when (get-buffer org-agenda-buffer-name)
         (kill-buffer org-agenda-buffer-name))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
-      (when (file-exists-p file) (delete-file file)))))"##,
+      (delete-directory root t))))"##,
+    );
+}
+
+#[test]
+fn org_clock_three_project_report_edit_add_remove_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-clock)
+  (let* ((root (make-temp-file "org-clock-3proj-" t))
+         (file (expand-file-name "clocks.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* Proj-A\n")
+            (insert "** Task-A1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "** Task-A2\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\n")
+            (insert ":END:\n")
+            (insert "* Proj-B\n")
+            (insert "** Task-B1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 16:00] =>  2:00\n")
+            (insert ":END:\n")
+            (insert "* Proj-C\n")
+            (insert "** Task-C1\n")
+            (insert ":LOGBOOK:\n")
+            (insert "CLOCK: [2026-05-28 Wed 16:30]--[2026-05-28 Wed 17:30] =>  1:00\n")
+            (insert ":END:\n"))
+          (let* ((buf (find-file-noselect file))
+                 (snap (lambda ()
+                         (with-current-buffer buf
+                           (let* ((table (org-clock-get-table-data
+                                          nil '(:maxlevel 2 :scope buffer)))
+                                  (rows (mapcar (lambda (row)
+                                                  (list (nth 0 row)
+                                                        (substring-no-properties (nth 1 row))
+                                                        (nth 4 row)))
+                                                (nth 2 table))))
+                             (list (nth 1 table) rows))))))
+            (with-current-buffer buf (org-mode))
+            (let ((report1 (funcall snap)))
+              ;; Add clock to Task-C1
+              (with-current-buffer buf
+                (goto-char (point-min))
+                (search-forward "Task-C1")
+                (end-of-line)
+                (insert "\nCLOCK: [2026-05-28 Wed 18:00]--[2026-05-28 Wed 19:30] =>  1:30\n"))
+              (let ((report2 (funcall snap)))
+                ;; Remove clock from Task-A2
+                (with-current-buffer buf
+                  (goto-char (point-min))
+                  (search-forward "CLOCK: [2026-05-28 Wed 11:00")
+                  (beginning-of-line)
+                  (kill-line 1))
+                (let ((report3 (funcall snap)))
+                  (list report1 report2 report3
+                        (with-current-buffer buf
+                          (buffer-substring-no-properties
+                           (point-min) (point-max))))))))))
+      (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
+      (delete-directory root t))))"##,
     );
 }
 
