@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_map_edit_reexecute_v7() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: coords
+      (insert "#+NAME: coords\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((p 3 4) (q 1 7) (r 5 2) (s 8 6))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: computed
+      (insert "#+NAME: computed\n")
+      (insert "#+begin_src emacs-lisp :var data=coords :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (caddr r) (+ (cadr r) (caddr r)))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("coords" "computed"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: coords")
+      (forward-line 1)
+      (let ((coords1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: computed")
+        (forward-line 1)
+        (let ((computed1 (org-babel-read-result)))
+          ;; Edit: change r from (5 2) to (5 10)
+          (goto-char (point-min))
+          (search-forward "(r 5 2)")
+          (replace-match "(r 5 10)")
+          ;; Re-execute
+          (dolist (name '("coords" "computed"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: coords")
+          (forward-line 1)
+          (let ((coords2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: computed")
+            (forward-line 1)
+            (let ((computed2 (org-babel-read-result)))
+              (list coords1 computed1 coords2 computed2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_sort_index_edit_reexecute_v6() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
