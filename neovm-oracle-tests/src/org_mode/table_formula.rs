@@ -1510,3 +1510,64 @@ fn org_table_formula_sort_edit_resort_recalc_v3() {
                      (point-min) (point-max)))))))))))"##,
     );
 }
+
+#[test]
+fn org_table_formula_string_col_edit_sort_recalc_v4() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org-table)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| City | Jan | Feb | Mar | Total | Avg |\n")
+    (insert "|------+------+-----+-----+-------+-----|\n")
+    (insert "| Tokyo | 50 | 55 | 60 | | |\n")
+    (insert "| Oslo | 20 | 25 | 30 | | |\n")
+    (insert "| Miami | 70 | 75 | 80 | | |\n")
+    (insert "| Berlin | 30 | 35 | 40 | | |\n")
+    (insert "| Sydney | 60 | 65 | 70 | | |\n")
+    (insert "#+TBLFM: $5=vsum($2..$4)::$6=vmean($2..$4)\n")
+    (org-table-recalculate-buffer-tables)
+    (let ((initial (org-table-to-lisp)))
+      ;; Sort by City alpha
+      (goto-char (point-min))
+      (search-forward "City")
+      (beginning-of-line)
+      (org-table-sort-lines nil ?a)
+      (let ((sorted-alpha (org-table-to-lisp)))
+        ;; Sort by Total desc
+        (goto-char (point-min))
+        (search-forward "Total")
+        (beginning-of-line)
+        (org-table-sort-lines t ?n)
+        (let ((sorted-total (org-table-to-lisp)))
+          ;; Edit: change Tokyo Jan from 50 to 80
+          (goto-char (point-min))
+          (search-forward "Tokyo")
+          (org-table-goto-column 2)
+          (org-table-get-field nil "80")
+          (org-table-recalculate-buffer-tables)
+          (let ((after-edit (org-table-to-lisp))
+                (tokyo-total (progn
+                               (goto-char (point-min))
+                               (search-forward "Tokyo")
+                               (org-table-goto-column 5)
+                               (org-table-get-field)))
+                (tokyo-avg (progn
+                              (goto-char (point-min))
+                              (search-forward "Tokyo")
+                              (org-table-goto-column 6)
+                              (org-table-get-field))))
+            ;; Re-sort by Total desc
+            (goto-char (point-min))
+            (search-forward "Total")
+            (beginning-of-line)
+            (org-table-sort-lines t ?n)
+            (let ((resorted (org-table-to-lisp)))
+              (list initial sorted-alpha sorted-total
+                    after-edit tokyo-total tokyo-avg resorted
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
