@@ -175,8 +175,8 @@ impl RenderApp {
                     }
                 }
                 if is_primary && !sent_resize {
-                    self.primary_native_fallback.width = size.width;
-                    self.primary_native_fallback.height = size.height;
+                    self.primary_native_fallback
+                        .set_size(size.width, size.height);
                     if let Some(renderer) = &mut self.renderer {
                         renderer.resize(size.width, size.height);
                     }

@@ -91,8 +91,7 @@ impl RenderApp {
                 if let Some(primary_state) = self.primary_window_state() {
                     primary_state.request_inner_size(width, height);
                 } else {
-                    self.primary_native_fallback.width = width;
-                    self.primary_native_fallback.height = height;
+                    self.primary_native_fallback.set_size(width, height);
                 }
                 Ok(())
             }
@@ -112,9 +111,9 @@ impl RenderApp {
                     window_state.apply_geometry_hints(geometry_hints);
                     window_state.request_inner_size(width, height);
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_native_fallback.geometry_hints = Some(geometry_hints);
-                    self.primary_native_fallback.width = width;
-                    self.primary_native_fallback.height = height;
+                    self.primary_native_fallback
+                        .set_geometry_hints(geometry_hints);
+                    self.primary_native_fallback.set_size(width, height);
                 } else {
                     tracing::warn!(
                         "ResizeWindow requested for unknown frame_id=0x{:x}",
@@ -138,7 +137,8 @@ impl RenderApp {
                 if let Some(window_state) = self.frame_windows.get(emacs_frame_id) {
                     window_state.apply_geometry_hints(geometry_hints);
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_native_fallback.geometry_hints = Some(geometry_hints);
+                    self.primary_native_fallback
+                        .set_geometry_hints(geometry_hints);
                 } else {
                     tracing::warn!(
                         "SetFrameGeometryHints requested for unknown frame_id=0x{:x}",
