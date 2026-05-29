@@ -2935,3 +2935,320 @@ fn org_cycle_with_outline_previous_visible_heading() {
                      (point-min) (point-max)))))))))))"##,
     );
 }
+
+#[test]
+fn org_cycle_with_fold_hide_other_then_show_all() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\nBody A.\n\n")
+    (insert "** A1\nBody A1.\n\n")
+    (insert "* B\nBody B.\n\n")
+    (insert "** B1\nBody B1.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("A" "Body A" "A1" "B" "Body B" "B1")))))
+      ;; Cycle A: children
+      (goto-char (point-min))
+      (search-forward "A\n")
+      (beginning-of-line)
+      (org-cycle nil)
+      (org-cycle nil)
+      (let ((v1 (funcall vis)))
+        ;; Fold hide other (hide everything except current subtree)
+        (org-fold-hide-other)
+        (let ((v2 (funcall vis)))
+          ;; Show all
+          (org-fold-show-all)
+          (let ((v3 (funcall vis)))
+            ;; Cycle B: children
+            (goto-char (point-min))
+            (search-forward "B\n")
+            (beginning-of-line)
+            (org-cycle nil)
+            (org-cycle nil)
+            (let ((v4 (funcall vis)))
+              ;; Fold hide other
+              (org-fold-hide-other)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_cycle_with_fold_toggle_children_visibility() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* P\n")
+    (insert "** P1\nBody.\n\n")
+    (insert "** P2\nBody.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("P" "P1" "P2")))))
+      ;; Show all
+      (org-fold-show-all)
+      (let ((v1 (funcall vis)))
+        ;; Fold hide children
+        (goto-char (point-min))
+        (search-forward "P\n")
+        (beginning-of-line)
+        (org-fold-hide-children)
+        (let ((v2 (funcall vis)))
+          ;; Cycle P: overview
+          (goto-char (point-min))
+          (search-forward "P\n")
+          (beginning-of-line)
+          (org-cycle nil)
+          (let ((v3 (funcall vis)))
+            ;; Cycle P: children
+            (org-cycle nil)
+            (let ((v4 (funcall vis)))
+              ;; Cycle P: subtree
+              (org-cycle nil)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_cycle_with_fold_show_hidden_subtree_from_overview() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\n")
+    (insert "** A1\n")
+    (insert "*** A1a\nBody.\n\n")
+    (insert "** A2\nBody.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("A" "A1" "A1a" "A2")))))
+      ;; Cycle A: overview
+      (goto-char (point-min))
+      (search-forward "A\n")
+      (beginning-of-line)
+      (org-cycle nil)
+      (let ((v1 (funcall vis)))
+        ;; Show subtree of A1
+        (goto-char (point-min))
+        (search-forward "A1\n")
+        (beginning-of-line)
+        (org-fold-show-subtree)
+        (let ((v2 (funcall vis)))
+          ;; Cycle A: overview
+          (goto-char (point-min))
+          (search-forward "A\n")
+          (beginning-of-line)
+          (org-cycle nil)
+          (let ((v3 (funcall vis)))
+            ;; Cycle A: children
+            (org-cycle nil)
+            (let ((v4 (funcall vis)))
+              ;; Show subtree of A1
+              (goto-char (point-min))
+              (search-forward "A1\n")
+              (beginning-of-line)
+              (org-fold-show-subtree)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_cycle_with_fold_show_entry_from_hidden() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\nBody A.\n\n")
+    (insert "** A1\nBody A1.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("A" "Body A" "A1")))))
+      ;; Cycle A: overview
+      (goto-char (point-min))
+      (search-forward "A\n")
+      (beginning-of-line)
+      (org-cycle nil)
+      (let ((v1 (funcall vis)))
+        ;; Hide entry
+        (goto-char (point-min))
+        (search-forward "A")
+        (beginning-of-line)
+        (org-fold-hide-entry)
+        (let ((v2 (funcall vis)))
+          ;; Cycle A: overview
+          (org-cycle nil)
+          (let ((v3 (funcall vis)))
+            ;; Show entry
+            (goto-char (point-min))
+            (search-forward "A")
+            (beginning-of-line)
+            (org-fold-show-entry)
+            (let ((v4 (funcall vis)))
+              ;; Cycle A: children
+              (org-cycle nil)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_cycle_with_multiple_roots_and_global_local_interleave() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* R1\n")
+    (insert "** R1a\nBody.\n\n")
+    (insert "* R2\n")
+    (insert "** R2a\nBody.\n\n")
+    (insert "* R3\n")
+    (insert "** R3a\nBody.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("R1" "R1a" "R2" "R2a" "R3" "R3a")))))
+      ;; Global cycle: overview
+      (org-global-cycle nil)
+      (let ((v1 (funcall vis)))
+        ;; Local cycle R2: children
+        (goto-char (point-min))
+        (search-forward "R2\n")
+        (beginning-of-line)
+        (org-cycle nil)
+        (let ((v2 (funcall vis)))
+          ;; Global cycle: children
+          (org-global-cycle nil)
+          (let ((v3 (funcall vis)))
+            ;; Local cycle R3: subtree
+            (goto-char (point-min))
+            (search-forward "R3\n")
+            (beginning-of-line)
+            (org-cycle nil)
+            (org-cycle nil)
+            (let ((v4 (funcall vis)))
+              ;; Global cycle: all
+              (org-global-cycle nil)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
+
+#[test]
+fn org_cycle_with_fold_hide_all_then_local_cycle_different_heads() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* A\n")
+    (insert "** A1\nBody.\n\n")
+    (insert "* B\n")
+    (insert "** B1\nBody.\n\n")
+    (let ((vis (lambda ()
+                 (mapcar
+                  (lambda (needle)
+                    (save-excursion
+                      (goto-char (point-min))
+                      (if (search-forward needle nil t)
+                          (list needle (invisible-p (point)))
+                          (list needle 'not-found))))
+                  '("A" "A1" "B" "B1")))))
+      ;; Hide all
+      (org-fold-hide-all)
+      (let ((v1 (funcall vis)))
+        ;; Local cycle A: overview
+        (goto-char (point-min))
+        (search-forward "A\n")
+        (beginning-of-line)
+        (org-cycle nil)
+        (let ((v2 (funcall vis)))
+          ;; Local cycle B: overview
+          (goto-char (point-min))
+          (search-forward "B\n")
+          (beginning-of-line)
+          (org-cycle nil)
+          (let ((v3 (funcall vis)))
+            ;; Local cycle A: children
+            (goto-char (point-min))
+            (search-forward "A\n")
+            (beginning-of-line)
+            (org-cycle nil)
+            (let ((v4 (funcall vis)))
+              ;; Local cycle B: children
+              (goto-char (point-min))
+              (search-forward "B\n")
+              (beginning-of-line)
+              (org-cycle nil)
+              (let ((v5 (funcall vis)))
+                (list v1 v2 v3 v4 v5
+                      (buffer-substring-no-properties
+                       (point-min) (point-max))))))))))))"##,
+    );
+}
