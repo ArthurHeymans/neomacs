@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_ratio_edit_reexecute_v14() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: numbers
+      (insert "#+NAME: nums\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((a 60) (b 80) (c 45) (d 90) (e 70))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: ratios
+      (insert "#+NAME: ratios\n")
+      (insert "#+begin_src emacs-lisp :var data=nums :results value replace\n")
+      (insert "(let ((total (apply #'+ (mapcar #'cadr data))))\n  (mapcar (lambda (r) (list (car r) (cadr r) (/ (* 100.0 (cadr r)) total))) data))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("nums" "ratios"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: nums")
+      (forward-line 1)
+      (let ((nums1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: ratios")
+        (forward-line 1)
+        (let ((ratios1 (org-babel-read-result)))
+          ;; Edit: change c from 45 to 100
+          (goto-char (point-min))
+          (search-forward "(c 45)")
+          (replace-match "(c 100)")
+          ;; Re-execute
+          (dolist (name '("nums" "ratios"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: nums")
+          (forward-line 1)
+          (let ((nums2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: ratios")
+            (forward-line 1)
+            (let ((ratios2 (org-babel-read-result)))
+              (list nums1 ratios1 nums2 ratios2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_discount_edit_reexecute_v13() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
