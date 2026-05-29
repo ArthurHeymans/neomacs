@@ -133,7 +133,8 @@ impl RenderApp {
                     self.cursor_defaults.animating = false;
                 }
                 self.sync_top_level_cursor_config_from_defaults();
-                self.sync_top_level_transition_policy_from_default();
+                self.frame_windows
+                    .sync_top_level_transition_policy(self.transition_policy);
                 if !self.transition_policy.crossfade_enabled {
                     self.clear_top_level_crossfade_transitions();
                 }

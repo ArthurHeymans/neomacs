@@ -525,9 +525,6 @@ impl RenderApp {
 
     pub(super) fn hide_top_level_popup_menus(&mut self) {
         self.frame_windows.hide_top_level_popup_menus();
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.set_popup_menu(None);
-        }
     }
 
     pub(super) fn set_primary_tooltip(&mut self, tooltip: Option<TooltipState>) {
@@ -556,9 +553,6 @@ impl RenderApp {
 
     pub(super) fn hide_top_level_tooltips(&mut self) {
         self.frame_windows.hide_top_level_tooltips();
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.set_tooltip(None);
-        }
     }
 
     pub(super) fn set_primary_visual_bell_start(&mut self, start: Option<Instant>) {
@@ -646,31 +640,12 @@ impl RenderApp {
             .is_some_and(|frame| frame.renderer_effects.needs_redraw())
     }
 
-    pub(super) fn sync_primary_transition_policy_from_default(&mut self) {
-        let transition_policy = self.transition_policy;
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.transitions.policy = transition_policy;
-        }
-    }
-
-    pub(super) fn sync_top_level_transition_policy_from_default(&mut self) {
-        self.frame_windows
-            .sync_top_level_transition_policy(self.transition_policy);
-        self.sync_primary_transition_policy_from_default();
-    }
-
     pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
         self.frame_windows.clear_top_level_crossfade_transitions();
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.transitions.crossfades.clear();
-        }
     }
 
     pub(super) fn clear_top_level_scroll_transitions(&mut self) {
         self.frame_windows.clear_top_level_scroll_transitions();
-        if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.transitions.scroll_slides.clear();
-        }
     }
 
     pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
@@ -791,36 +766,13 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn sync_primary_cursor_config_from_defaults(&mut self) {
-        let defaults = &self.cursor_defaults;
-        let values = (
-            defaults.blink_enabled,
-            defaults.blink_interval,
-            defaults.anim_enabled,
-            defaults.anim_speed,
-            defaults.anim_style,
-            defaults.anim_duration,
-            defaults.trail_size,
-            defaults.size_transition_enabled,
-            defaults.size_transition_duration,
-        );
-        if let Some(cursor) = self.primary_cursor_mut() {
-            cursor.copy_config_from_values(
-                values.0, values.1, values.2, values.3, values.4, values.5, values.6, values.7,
-                values.8,
-            );
-        }
-    }
-
     pub(super) fn sync_top_level_cursor_config_from_defaults(&mut self) {
         self.frame_windows
             .sync_top_level_cursor_config(&self.cursor_defaults, true);
-        self.sync_primary_cursor_config_from_defaults();
     }
 
     pub(super) fn sync_top_level_cursor_config_from_defaults_without_dirty(&mut self) {
         self.frame_windows
             .sync_top_level_cursor_config(&self.cursor_defaults, false);
-        self.sync_primary_cursor_config_from_defaults();
     }
 }
