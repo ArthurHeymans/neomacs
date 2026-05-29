@@ -2009,3 +2009,56 @@ fn org_agenda_single_day_five_tasks_multi_edit_reagenda() {
       (delete-directory root t))))"##,
     );
 }
+
+#[test]
+fn org_agenda_single_day_six_tasks_multi_edit_reagenda() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-agenda)
+  (let* ((root (make-temp-file "org-agenda-6task-" t))
+         (org-agenda-files (list (expand-file-name "a.org" root)))
+         (org-agenda-buffer-name "*TestAgenda6Task*")
+         (file (expand-file-name "a.org" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file file
+            (insert "* TODO F1\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* DONE F2\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO F3\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* NEXT F4\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* TODO F5\nSCHEDULED: <2026-05-28 Wed>\n")
+            (insert "* WAIT F6\nSCHEDULED: <2026-05-28 Wed>\n"))
+          (org-agenda-list nil "2026-05-28" 1)
+          (with-current-buffer org-agenda-buffer-name
+            (let ((before (replace-regexp-in-string
+                           (regexp-quote root) "<root>"
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
+              (org-agenda-quit)
+              ;; Edit: F1->DONE, F3->DONE, F5->DONE
+              (with-current-buffer (find-file-noselect file)
+                (goto-char (point-min))
+                (search-forward "TODO F1")
+                (replace-match "DONE F1")
+                (goto-char (point-min))
+                (search-forward "TODO F3")
+                (replace-match "DONE F3")
+                (goto-char (point-min))
+                (search-forward "TODO F5")
+                (replace-match "DONE F5"))
+              (org-agenda-list nil "2026-05-28" 1)
+              (with-current-buffer org-agenda-buffer-name
+                (let ((after (replace-regexp-in-string
+                              (regexp-quote root) "<root>"
+                              (buffer-substring-no-properties
+                               (point-min) (point-max)))))
+                  (org-agenda-quit)
+                  (list before after))))))
+      (when (get-buffer org-agenda-buffer-name)
+        (kill-buffer org-agenda-buffer-name))
+      (delete-directory root t))))"##,
+    );
+}
