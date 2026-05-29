@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_cumulative_edit_reexecute_v11() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: amounts
+      (insert "#+NAME: amounts\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((a 100) (b 250) (c 75) (d 300) (e 150))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: cumulative
+      (insert "#+NAME: cumulative\n")
+      (insert "#+begin_src emacs-lisp :var data=amounts :results value replace\n")
+      (insert "(let ((sum 0))\n  (mapcar (lambda (r) (setq sum (+ sum (cadr r))) (list (car r) (cadr r) sum)) data))\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("amounts" "cumulative"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: amounts")
+      (forward-line 1)
+      (let ((amounts1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: cumulative")
+        (forward-line 1)
+        (let ((cumulative1 (org-babel-read-result)))
+          ;; Edit: change c from 75 to 200
+          (goto-char (point-min))
+          (search-forward "(c 75)")
+          (replace-match "(c 200)")
+          ;; Re-execute
+          (dolist (name '("amounts" "cumulative"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: amounts")
+          (forward-line 1)
+          (let ((amounts2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: cumulative")
+            (forward-line 1)
+            (let ((cumulative2 (org-babel-read-result)))
+              (list amounts1 cumulative1 amounts2 cumulative2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_mapcar_edit_reexecute_v10() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
