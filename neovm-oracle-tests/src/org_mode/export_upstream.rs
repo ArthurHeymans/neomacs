@@ -790,29 +790,76 @@ fn org_export_footnote_citation_edit_reexport_deep() {
     (let* ((snap (lambda ()
                    (let ((tree (org-element-parse-buffer)))
                      (list
-                      ;; Footnotes
                       (org-element-map tree 'footnote-reference
                         (lambda (fn)
                           (list (org-element-property :label fn)
                                 (org-element-property :footnote-begin fn))))
-                      ;; Headlines
                       (org-element-map tree 'headline
                         (lambda (hl)
                           (list (org-element-property :raw-value hl)
                                 (org-element-property :level hl)))))))))
       (let ((before (funcall snap)))
-        ;; Edit: add footnote 3
         (goto-char (point-max))
         (insert "[fn:3] Third footnote added later.\n")
-        ;; Add reference
         (goto-char (point-min))
         (search-forward "approach[fn:1]")
         (end-of-line)
         (insert " See also[fn:3].")
         (let ((after (funcall snap)))
-          ;; Export
           (let ((html (org-export-as 'html nil nil t '(:with-toc nil))))
             (list before after html
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))))))"##,
+    );
+}
+
+#[test]
+fn org_export_todo_tag_property_planning_html_latex_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ox)
+  (with-temp-buffer
+    (org-mode)
+    (insert "#+TITLE: DeepExportCombo\n")
+    (insert "#+TODO: TODO DONE WAIT CANCEL\n")
+    (insert "#+FILETAGS: :main:\n\n")
+    (insert "* TODO Launch :project:critical:\n")
+    (insert "SCHEDULED: <2026-05-28 Wed>\n")
+    (insert "DEADLINE: <2026-06-15 Mon>\n")
+    (insert ":PROPERTIES:\n:Effort: 40h\n:Budget: 10000\n:CUSTOM_ID: launch\n:END:\n")
+    (insert "Launch plan body.\n\n")
+    (insert "** DONE Design :design:\n")
+    (insert "CLOSED: [2026-05-20 Tue 14:00]\n")
+    (insert ":PROPERTIES:\n:Effort: 10h\n:END:\n")
+    (insert "Design body.\n\n")
+    (insert "** WAIT Approval :admin:\n")
+    (insert "DEADLINE: <2026-06-01 Mon>\n")
+    (insert ":PROPERTIES:\n:Effort: 1h\n:END:\n")
+    (insert "Approval body.\n\n")
+    (let* ((snap (lambda ()
+                   (let* ((tree (org-element-parse-buffer))
+                          (info (org-combine-plists
+                                 (org-export--get-buffer-attributes)
+                                 (org-export-get-environment)))
+                          (headlines (org-element-map tree 'headline #'identity)))
+                     (mapcar (lambda (h)
+                               (list (org-element-property :raw-value h)
+                                     (org-element-property :level h)
+                                     (org-export-get-headline-number h info)
+                                     (org-export-get-tags h info)
+                                     (org-export-get-todo-keyword h info)))
+                             headlines)))))
+      (let ((before (funcall snap)))
+        (goto-char (point-min))
+        (search-forward "WAIT Approval")
+        (replace-match "TODO Approval")
+        (let ((after (funcall snap)))
+          (let ((html (org-export-as 'html nil nil t '(:with-toc nil)))
+                (latex (org-export-as 'latex nil nil t '(:with-toc nil))))
+            (list before after html latex
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
     );
