@@ -199,35 +199,25 @@ impl RenderApp {
 
         // Tick cursor animation
         self.frame_windows.tick_top_level_cursor_animations();
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            primary_frame.tick_cursor_animation();
-        }
+        self.with_unmanaged_primary_render(|r| {
+            r.tick_cursor_animation();
+        });
 
         // Tick cursor size transition (runs after position animation, overrides w/h)
         self.frame_windows.tick_top_level_cursor_size_animations();
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            primary_frame.tick_cursor_size_animation();
-        }
+        self.with_unmanaged_primary_render(|r| {
+            r.tick_cursor_size_animation();
+        });
 
         if self.effects.idle_dim.enabled {
             let idle_dim_config = self.effects.idle_dim.clone();
             self.frame_windows.tick_top_level_idle_dim(&idle_dim_config);
-            if self.primary_window_state().is_none()
-                && let Some(primary_frame) = self.primary_render_state_mut()
-            {
-                primary_frame.tick_idle_dim(&idle_dim_config);
-            }
+            self.with_unmanaged_primary_render(|r| {
+                r.tick_idle_dim(&idle_dim_config);
+            });
         } else {
             self.frame_windows.clear_top_level_idle_dim();
-            if self.primary_window_state().is_none()
-                && let Some(primary_frame) = self.primary_render_state_mut()
-            {
-                primary_frame.clear_idle_dim();
-            }
+            self.with_unmanaged_primary_render(|r| r.clear_idle_dim());
         }
 
         // Keep dirty if cursor pulse is active (needs continuous redraw)
@@ -237,11 +227,9 @@ impl RenderApp {
 
         // Keep dirty if frame-owned renderer effects or transitions are active.
         self.frame_windows.mark_active_top_level_visuals_dirty();
-        if self.primary_window_state().is_none()
-            && let Some(primary_frame) = self.primary_render_state_mut()
-        {
-            primary_frame.mark_active_visuals_dirty();
-        }
+        self.with_unmanaged_primary_render(|r| {
+            r.mark_active_visuals_dirty();
+        });
 
         // Check for terminal PTY activity
         if self.has_terminal_activity() {

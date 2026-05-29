@@ -565,6 +565,17 @@ impl RenderApp {
         self.mark_unmanaged_primary_dirty();
     }
 
+    pub(super) fn with_unmanaged_primary_render<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut GuiFrameRenderState),
+    {
+        if self.primary_window_state().is_none()
+            && let Some(primary_frame) = self.primary_render_state_mut()
+        {
+            f(primary_frame);
+        }
+    }
+
     pub(super) fn set_top_level_titlebar_height(&mut self, height: f32) {
         self.primary_native_fallback.chrome.titlebar_height = height;
         self.frame_windows.set_top_level_titlebar_height(height);
