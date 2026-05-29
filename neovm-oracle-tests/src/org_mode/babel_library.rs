@@ -1080,6 +1080,66 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 }
 
 #[test]
+fn org_babel_two_stage_weighted_sum_edit_reexecute_v8() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'ob-core)
+  (require 'ob-emacs-lisp)
+  (with-temp-buffer
+    (org-mode)
+    (let ((org-confirm-babel-evaluate nil))
+      ;; Stage 1: values
+      (insert "#+NAME: vals\n")
+      (insert "#+begin_src emacs-lisp :results value replace\n")
+      (insert "'((x 10) (y 20) (z 30) (w 40))\n")
+      (insert "#+end_src\n\n")
+      ;; Stage 2: weighted
+      (insert "#+NAME: weighted\n")
+      (insert "#+begin_src emacs-lisp :var data=vals :results value replace\n")
+      (insert "(mapcar (lambda (r) (list (car r) (cadr r) (* 3 (cadr r)) (+ 100 (* 3 (cadr r))))) data)\n")
+      (insert "#+end_src\n\n")
+      ;; Execute
+      (dolist (name '("vals" "weighted"))
+        (goto-char (point-min))
+        (search-forward name)
+        (org-babel-execute-src-block))
+      ;; Read
+      (goto-char (point-min))
+      (search-forward "#+RESULTS: vals")
+      (forward-line 1)
+      (let ((vals1 (org-babel-read-result)))
+        (goto-char (point-min))
+        (search-forward "#+RESULTS: weighted")
+        (forward-line 1)
+        (let ((weighted1 (org-babel-read-result)))
+          ;; Edit: change z from 30 to 50
+          (goto-char (point-min))
+          (search-forward "(z 30)")
+          (replace-match "(z 50)")
+          ;; Re-execute
+          (dolist (name '("vals" "weighted"))
+            (goto-char (point-min))
+            (search-forward name)
+            (org-babel-execute-src-block))
+          ;; Re-read
+          (goto-char (point-min))
+          (search-forward "#+RESULTS: vals")
+          (forward-line 1)
+          (let ((vals2 (org-babel-read-result)))
+            (goto-char (point-min))
+            (search-forward "#+RESULTS: weighted")
+            (forward-line 1)
+            (let ((weighted2 (org-babel-read-result)))
+              (list vals1 weighted1 vals2 weighted2
+                    (buffer-substring-no-properties
+                     (point-min) (point-max)))))))))))"##,
+    );
+}
+
+#[test]
 fn org_babel_two_stage_map_edit_reexecute_v7() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
