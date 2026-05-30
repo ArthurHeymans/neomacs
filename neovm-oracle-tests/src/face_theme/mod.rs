@@ -15967,3 +15967,181 @@ fn ft_fermion_face_overlay_make_multiple_delete_all_check() {
      'delete-all (progn (mapc #'delete-overlay (overlays-in 1 70)) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 10 20 40 50 60 70)))))))"##,
     );
 }
+
+#[test]
+fn ft_gluon_face_display_table_and_face_combined_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Display table with face test buffer content text data here now")
+    (put-text-property 1 54 'face '(:foreground "blue"))
+    (condition-case nil
+        (let ((dt (make-display-table)))
+          (set-display-table-slot dt 0 (make-glyph-code ?a 'bold))
+          (list
+           'display-table-created 'ok
+           'face-still-present (get-text-property 1 'face)
+           'slot-0 (display-table-slot dt 0)
+           'glyph-code-p (glyphp (car (display-table-slot dt 0)))))
+      (error (list 'dt-error (get-text-property 1 'face) (fboundp 'make-display-table) (fboundp 'set-display-table-slot)))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_text_property_interval_merge_after_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 10 11 15 16 20 21 25 26 30)))))
+      (let ((v0 (funcall snap)))
+        ;; Delete the italic region entirely
+        (delete-region 6 11)
+        (let ((v1 (funcall snap)))
+          ;; Delete the red region partially
+          (delete-region 10 18)
+          (let ((v2 (funcall snap)))
+            ;; Delete remaining
+            (delete-region 1 (point-max))
+            (let ((v3 (funcall snap)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_font_lock_fontify_unfontify_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Region unfontify\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        (font-lock-unfontify-region 1 25)
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+          (font-lock-fontify-region 1 25)
+          (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+            (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_overlay_window_specific_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay window specific face property test content text data buffer here done")
+    (let ((ov-all (make-overlay 1 25))) (overlay-put ov-all 'face '(:background "yellow")))
+    (let ((ov-win (make-overlay 25 50))) (overlay-put ov-win 'face '(:background "cyan")) (overlay-put ov-win 'window (selected-window)))
+    (let ((ov-nil-win (make-overlay 50 70))) (overlay-put ov-nil-win 'face '(:background "magenta")) (overlay-put ov-nil-win 'window nil))
+    (list
+     'face-all (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 15 25 30 40 50 55 60 69))
+     'ov-all-window (overlay-get ov-all 'window)
+     'ov-win-window (overlay-get ov-win 'window)
+     'ov-nil-window (overlay-get ov-nil-win 'window)
+     (progn (mapc #'delete-overlay (overlays-in 1 70)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_set_face_attribute_with_eieio_interaction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'eieio)
+  (list
+   'facep-bold (facep 'bold)
+   'face-attribute-bold-weight (face-attribute 'bold :weight nil 'default-on)
+   (condition-case nil
+       (progn
+         (defclass ft-face-test () ((face-weight :initarg :weight :initform 'bold) (face-used :initform nil)))
+         (let ((obj (ft-face-test)))
+           (list
+            'obj-weight (eieio-oref obj :weight)
+            'eieio-oref-fbound (fboundp 'eieio-oref)
+            'face-still-bold (facep 'bold)
+            'face-attr-after-eieio (face-attribute 'bold :weight nil 'default-on))))
+     (error (list 'eieio-error (fboundp 'eieio-oref) (facep 'bold)))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_overlay_with_item_property_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with item property face test content text data buffer content")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string "> ")
+      (overlay-put ov 'display '(margin left-margin) "NOTE"))
+    (list
+     'face (overlay-get ov 'face)
+     'before-string (overlay-get ov 'before-string)
+     'display (overlay-get ov 'display)
+     'face-at-ov (get-char-property 25 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_font_lock_fontify_with_mode_specific_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (text-mode)
+    (font-lock-mode 1)
+    (insert "Text mode font lock keyword face test buffer content data here end")
+    (font-lock-fontify-buffer)
+    (list
+     'font-lock-mode font-lock-mode
+     'fontified (get-text-property 1 'fontified)
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-20 (get-text-property 20 'face)
+     'face-at-40 (get-text-property 40 'face)
+     'mode-name major-mode))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon_face_text_property_cursor_sensor_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Cursor sensor and face text property test buffer content data text")
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 20 40 'face 'italic)
+    (put-text-property 20 40 'cursor-sensor-functions (list 'ignore))
+    (put-text-property 40 58 'face 'underline)
+    (list
+     'face-and-sensor (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'cursor-sensor-functions))) '(1 10 20 30 40 50 57))
+     'sensor-at-20 (get-text-property 20 'cursor-sensor-functions)
+     'sensor-at-1 (get-text-property 1 'cursor-sensor-functions)
+     'sensor-functions-fbound (fboundp 'cursor-sensor-functions))))"##,
+    );
+}
