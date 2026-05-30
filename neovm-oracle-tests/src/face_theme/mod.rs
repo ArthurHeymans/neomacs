@@ -3348,16 +3348,18 @@ fn ft_delve_face_interval_tree_property_walk_deep() {
     (put-text-property 15 17 'face '(:background "yellow"))
     (list
      'next-face-changes
-     (let ((pos 1) (result nil))
-       (while pos
-         (setq pos (next-single-property-change pos 'face nil (point-max)))
-         (when pos (push (list pos (get-text-property pos 'face)) result)))
+     (let ((pos 1) (result nil) (limit (point-max)))
+       (while (and pos (< pos limit))
+         (setq pos (next-single-property-change pos 'face nil limit))
+         (when (and pos (< pos limit))
+           (push (list pos (get-text-property pos 'face)) result)))
        (nreverse result))
      'previous-face-changes
-     (let ((pos 17) (result nil))
-       (while pos
-         (setq pos (previous-single-property-change pos 'face nil (point-min)))
-         (when pos (push (list pos (get-text-property pos 'face)) result)))
+     (let ((pos 17) (result nil) (limit (point-min)))
+       (while (and pos (> pos limit))
+         (setq pos (previous-single-property-change pos 'face nil limit))
+         (when (and pos (> pos limit))
+           (push (list pos (get-text-property pos 'face)) result)))
        (nreverse result))
      'text-property-any
      (text-property-any 1 10 'face 'bold)
@@ -8399,7 +8401,7 @@ fn ft_cosmic_face_text_property_search_any_with_nil_value_deep() {
      'find-nil-face (text-property-any 1 50 'face nil)
      'find-non-nil (text-property-any 1 50 'face 'underline)
      'find-with-nil-prop (let ((pos 1) (result nil))
-                           (while pos
+                           (while (and pos (< pos 50))
                              (let ((face (get-text-property pos 'face)))
                                (when (null face) (push pos result)))
                              (setq pos (next-single-property-change pos 'face nil 50)))
