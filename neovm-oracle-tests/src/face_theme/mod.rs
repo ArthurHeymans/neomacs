@@ -18843,3 +18843,150 @@ fn ft_baryon_face_color_complement_check_deep() {
    'color-rgb-to-hsl (condition-case nil (color-rgb-to-hsl 1 0 0) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_hadron_face_overlay_face_set_unset_set_again() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (let ((v0 (overlay-get ov 'face)))
+        (overlay-put ov 'face nil)
+        (let ((v1 (overlay-get ov 'face)))
+          (overlay-put ov 'face '(:foreground "red" :weight bold))
+          (list v0 v1 (overlay-get ov 'face) (get-char-property 5 'face)
+                (progn (delete-overlay ov) 'cleaned))))))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_font_lock_fontify_with_syntactic_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; syntax comment\n\"syntax string\"\n(defun syntax-test () 42)\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (font-lock-fontify-keywords-region (point-min) (point-max) nil)
+    (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face)))) '("comment" "string" "defun" "syntax-test" "42"))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_face_text_property_read_after_different_setters() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Read after different setters face property test buffer content data")
+    (list
+     'put-text (progn (put-text-property 1 10 'face 'bold) (get-text-property 1 'face))
+     'add-face (progn (add-face-text-property 10 20 '(:foreground "red")) (get-text-property 15 'face))
+     'add-text-props (progn (add-text-properties 20 30 (list 'face 'italic 'key 'val)) (get-text-property 25 'face))
+     'set-text-props (progn (set-text-properties 30 40 (list 'face 'underline 'key2 'val2)) (get-text-property 35 'face))
+     'all-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 12 17 22 28 32 38 50)))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_face_overlay_window_specific_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov1 (make-overlay 1 16))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 30) (overlay-put ov1 'window (selected-window)))
+    (let ((ov2 (make-overlay 1 16))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 10) (overlay-put ov2 'window nil))
+    (let ((ov3 (make-overlay 1 16))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 20))
+    (list
+     'effective-face (get-char-property 5 'face)
+     'sorted-overlays (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face) (overlay-get ov 'window))) (sort (overlays-at 5) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_font_lock_fontify_region_with_start_end_params() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun region-params-test (x) (+ x 1))\n")
+    (list
+     'fontify-1-10 (progn (font-lock-fontify-region 1 10) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15)))
+     'fontify-10-20 (progn (font-lock-fontify-region 10 20) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15 20)))
+     'fontify-rest (progn (font-lock-fontify-region 20 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 20 25 30 35)))
+     'faces-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 30 35))))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_face_set_face_font_attribute_xlfd_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-xlfd-font-face) (error nil))
+  (list
+   'default-font (condition-case nil (face-font 'default nil) (error 'no))
+   'default-font-xlfd (condition-case nil (let ((f (face-font 'default nil))) (if (fontp f) (font-xlfd-name f) 'not-a-font)) (error 'no))
+   'set-font-by-spec (condition-case nil (progn (set-face-font 'my-xlfd-font-face (font-spec :family "Monospace" :size 12 :weight 'bold) nil) 'ok) (error 'no))
+   'get-font-after (condition-case nil (face-font 'my-xlfd-font-face nil) (error 'no))
+   'get-font-xlfd (condition-case nil (let ((f (face-font 'my-xlfd-font-face nil))) (if (fontp f) (font-xlfd-name f) 'not-font)) (error 'no))
+   'reset-font (condition-case nil (progn (set-face-font 'my-xlfd-font-face 'unspecified nil) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_face_property_change_increment_counter_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((count 0))
+      (put-text-property 1 6 'face 'bold) (setq count (1+ count))
+      (put-text-property 6 11 'face 'italic) (setq count (1+ count))
+      (put-text-property 11 16 'face 'underline) (setq count (1+ count))
+      (put-text-property 16 21 'face '(:foreground "red")) (setq count (1+ count))
+      (list
+       'prop-changes-count count
+       'faces-after (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 10 11 15 16 20))
+       'interval-count (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hadron_face_overlay_face_with_evaporate_and_before_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov (make-overlay 10 25)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'before-string (propertize ">>" 'face '(:foreground "red")))
+      (list
+       'ov-face (overlay-get ov 'face)
+       'ov-evap (overlay-get ov 'evaporate)
+       'before-str (overlay-get ov 'before-string)
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'at-before-del (get-char-property 15 'face)
+       (progn (delete-region 10 25) (list 'ov-gone (not (and (overlay-buffer ov))) 'face-at-10 (get-char-property 10 'face))))))))"##,
+    );
+}
