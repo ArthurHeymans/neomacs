@@ -393,11 +393,11 @@ pub(crate) fn validate_string_point(
 pub(crate) fn validate_string_point_raw(
     s: &crate::heap_types::LispString,
     pos: i64,
-    pos0: Value,
+    _pos0: Value,
 ) -> Result<usize, Flow> {
     let len = s.schars() as i64;
     if !(0 <= pos && pos <= len) {
-        return Err(args_out_of_range_range(pos0, pos0));
+        return Err(args_out_of_range_point(pos));
     }
     Ok(pos as usize)
 }
@@ -430,12 +430,12 @@ pub(crate) fn validate_buffer_point(
 pub(crate) fn validate_buffer_point_raw(
     buf: &crate::buffer::buffer::Buffer,
     pos: i64,
-    pos0: Value,
+    _pos0: Value,
 ) -> Result<usize, Flow> {
     let point_min = buf.point_min_char() as i64 + 1;
     let point_max = buf.point_max_char() as i64 + 1;
     if !(point_min <= pos && pos <= point_max) {
-        return Err(args_out_of_range_range(pos0, pos0));
+        return Err(args_out_of_range_point(pos));
     }
     Ok(elisp_pos_to_byte(buf, pos))
 }
