@@ -8279,3 +8279,216 @@ fn ft_zenith_face_with_last_nonzero_length_property_deep() {
         'after-extend-interval-count (length (object-intervals (current-buffer))))))))"##,
     );
 }
+
+#[test]
+fn ft_cosmic_overlay_variable_width_insert_delete_boundary_test() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJ")
+    (put-text-property 1 51 'face '(:foreground "gray"))
+    (let ((ov1 (make-overlay 6 15))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 16 25))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 26 35))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 30))
+    (let ((ov4 (make-overlay 36 45))) (overlay-put ov4 'face '(:foreground "orange")) (overlay-put ov4 'priority 15))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 16 20 25 26 30 35 36 40 45 50)))))
+      (let ((v0 (funcall snap)))
+        ;; Insert 3 chars at each overlay boundary
+        (goto-char 15) (insert "XXX")
+        (goto-char 25) (insert "YYY")
+        (goto-char 35) (insert "ZZZ")
+        (let ((v1 (funcall snap)))
+          ;; Delete 3 chars through overlay boundaries
+          (delete-region 10 20)
+          (let ((v2 (funcall snap)))
+            (delete-region 30 40)
+            (let ((v3 (funcall snap)))
+              (mapc #'delete-overlay (overlays-in 1 (point-max)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_text_property_sticky_at_insertion_point_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Sticky insertion point face test buffer content")
+    (put-text-property 1 8 'face '(:foreground "red") ,rear-nonsticky nil)
+    (put-text-property 8 16 'face '(:foreground "green") ,front-sticky t)
+    (put-text-property 16 24 'face '(:foreground "blue") ,front-sticky t ,rear-nonsticky nil)
+    (put-text-property 24 32 'face 'bold ,rear-nonsticky '(face))
+    (put-text-property 32 43 'face 'italic ,front-sticky '(face))
+    (list
+     'initial-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'front-sticky) (get-text-property pos 'rear-nonsticky))) '(1 5 8 12 16 20 24 28 32 38 42))
+     'insert-at-nonsticky (progn (goto-char 8) (insert "AAA") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 8 11 14 16)))
+     'insert-at-frontsticky (progn (goto-char 32) (insert "BBB") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(26 30 35 38 42 45))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_font_lock_mode_on_off_multiple_cycles() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t) (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO Cycle face test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda () (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))))))
+        (let ((v0 (funcall snap)))
+          (font-lock-mode -1) (let ((v1 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v2 (funcall snap)))
+          (font-lock-mode -1) (let ((v3 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v4 (funcall snap)))
+          (font-lock-mode -1) (let ((v5 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v6 (funcall snap)))
+          (list v0 v1 v2 v3 v4 v5 v6))))))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_overlay_insert_behind_front_hooks_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay insert behind front hooks priority test text data here")
+    (defvar my-callback-ran nil)
+    (let ((ov1 (make-overlay 5 15)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'insert-in-front-hooks (list (lambda (ov after beg end &optional len) (setq my-callback-ran (cons 'front my-callback-ran))))))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'face '(:background "cyan"))
+      (overlay-put ov2 'insert-behind-hooks (list (lambda (ov after beg end &optional len) (setq my-callback-ran (cons 'behind my-callback-ran))))))
+    (list
+     'before-insert my-callback-ran
+     'faces-before (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35 40 50))
+     ;; Insert at front-hook overlay boundary
+     (progn (goto-char 15) (insert "F") my-callback-ran)
+     ;; Insert at behind-hook overlay boundary
+     (progn (goto-char 35) (insert "B") my-callback-ran)
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_text_property_search_any_with_nil_value_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property search with nil values test content buffer text")
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 10 20 'face nil)
+    (put-text-property 20 30 'face '(:foreground "red"))
+    (put-text-property 30 40 'face nil)
+    (put-text-property 40 50 'face 'underline)
+    (list
+     'find-bold (text-property-any 1 50 'face 'bold)
+     'find-nil-face (text-property-any 1 50 'face nil)
+     'find-non-nil (text-property-any 1 50 'face 'underline)
+     'find-with-nil-prop (let ((pos 1) (result nil))
+                           (while pos
+                             (let ((face (get-text-property pos 'face)))
+                               (when (null face) (push pos result)))
+                             (setq pos (next-single-property-change pos 'face nil 50)))
+                           (nreverse result))
+     'prop-not-all (text-property-not-all 1 50 'face nil)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_display_table_glyph_face_interaction_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Display table glyph face interaction test buffer")
+    (put-text-property 1 48 'face '(:foreground "blue"))
+    (let ((dt (make-display-table)))
+      (condition-case nil
+          (progn
+            (set-display-table-slot dt 'selective-display
+                                    (vector (make-glyph-code ?- 'highlight)))
+            (list
+             'display-table-created 'ok
+             'face-still-present (get-text-property 1 'face)
+             'display-table-slots (mapcar (lambda (slot) (display-table-slot dt slot)) '(0 1))
+             'describe-display-fbound (fboundp 'describe-display-table)))
+        (error (list 'display-table-error
+                     (fboundp 'make-display-table)
+                     (fboundp 'set-display-table-slot)
+                     (fboundp 'display-table-slot)
+                     (facep 'highlight)
+                     (get-text-property 1 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_font_lock_global_fontify_mode_toggle_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (insert "Global fontify mode toggle buffer test text here now end")
+    (list
+     'font-lock-mode-before font-lock-mode
+     'turn-on (condition-case nil (progn (font-lock-mode 1) 'ok) (error 'no))
+     'font-lock-mode-after-on font-lock-mode
+     'fontify-buffer (condition-case nil (progn (font-lock-fontify-buffer) 'ok) (error 'no))
+     'face-after-fontify (get-text-property 1 'face)
+     'fontified-after (get-text-property 1 'fontified)
+     'turn-off (condition-case nil (progn (font-lock-mode -1) 'ok) (error 'no))
+     'font-lock-mode-after-off font-lock-mode
+     'face-after-off (get-text-property 1 'face)
+     'fontified-after-off (get-text-property 1 'fontified)
+     'turn-on-again (condition-case nil (progn (font-lock-mode 1) (font-lock-fontify-buffer) 'ok) (error 'no))
+     'face-after-again (get-text-property 1 'face))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_face_overlay_make_and_move_and_delete_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJ")
+    (put-text-property 1 51 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 10 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 15 20 25 30 40 50)))))
+        (let ((v0 (funcall snap)))
+          ;; Move overlay forward
+          (move-overlay ov 20 30)
+          (let ((v1 (funcall snap)))
+            ;; Move overlay backward
+            (move-overlay ov 1 12)
+            (let ((v2 (funcall snap)))
+              ;; Move to empty
+              (move-overlay ov 50 50)
+              (let ((v3 (funcall snap)))
+                ;; Move back
+                (move-overlay ov 30 42)
+                (let ((v4 (funcall snap)))
+                  (delete-overlay ov)
+                  (list v0 v1 v2 v3 v4))))))))))"##,
+    );
+}
