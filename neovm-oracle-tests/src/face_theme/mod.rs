@@ -26033,3 +26033,131 @@ fn ft_blast_font_lock_fontify_save_excursion_deep() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_force_face_overlay_face_attr_merge_same_prop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'text-prop (get-text-property 3 'face)
+       'char-prop (get-char-property 3 'face)
+       'overlay-face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_force_font_lock_fontify_with_prog1_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(prog1 (car list)\n  (setq list (cdr list)))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'prog1-face (save-excursion (goto-char (point-min)) (search-forward "prog1") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_force_face_overlay_face_get_at_all_positions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEF")
+    (let ((ov (make-overlay 2 5)))
+      (overlay-put ov 'face '(:foreground "red"))
+      (list
+       'before-ov (get-char-property 1 'face)
+       'ov-start (get-char-property 2 'face)
+       'ov-mid (get-char-property 3 'face)
+       'ov-end (get-char-property 4 'face)
+       'after-ov (get-char-property 5 'face)
+       'after-ov-pos6 (get-char-property 6 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_force_face_text_property_rerun_same_put_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'face (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_force_font_lock_fontify_condition_case_unless_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(condition-case-unless-debug err\n    (/ 1 0)\n  (error nil))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'condition-face (save-excursion (goto-char (point-min)) (search-forward "condition-case-unless-debug") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_force_face_overlay_face_unmodified_after_noop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (let ((v0 (overlay-get ov 'face)))
+        (overlay-put ov 'face v0)
+        (list
+         'face (overlay-get ov 'face)
+         'char-prop (get-char-property 3 'face)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_force_face_face_defined_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'color-defined-p-fbound (fboundp 'color-defined-p)
+   'color-values-fbound (fboundp 'color-values)
+   'color-dark-p-fbound (fboundp 'color-dark-p)
+   'defined-black (condition-case nil (color-defined-p "black") (error 'no))
+   'defined-white (condition-case nil (color-defined-p "white") (error 'no))
+   'defined-custom (condition-case nil (color-defined-p "moccasin") (error 'no))
+   'values-red (condition-case nil (color-values "red") (error 'no))
+   'values-blue (condition-case nil (color-values "blue") (error 'no))
+   'dark-p-black (condition-case nil (color-dark-p "black") (error 'no)))))"##,
+    );
+}
