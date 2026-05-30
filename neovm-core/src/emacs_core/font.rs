@@ -3027,8 +3027,31 @@ pub(crate) fn builtin_internal_copy_lisp_face(
     let from_name = resolve_copy_source_face_symbol(&args[0])?;
     mark_created_lisp_face(&to_name);
     ensure_lisp_face_id_property(eval, &to_name)?;
-    copy_defaults_overrides(&from_name, &to_name);
-    copy_selected_overrides(&from_name, &to_name);
+
+    // Build the full merged face vector from the source, then store
+    // every non-unspecified attribute as an override for the target.
+    // This matches GNU's `vcopy(copy, 0, xvector_contents(lface),
+    // LFACE_VECTOR_SIZE)` in Finternal_copy_lisp_face.  We must
+    // explicitly populate overrides (not just copy FACE_ATTR_STATE
+    // maps) because FACE_ATTR_STATE is a Rust thread-local that is
+    // empty after a pdump reload — the source face's attributes may
+    // only exist as base values.
+    let src_vector = make_lisp_face_vector_merged(&from_name);
+    if let Some(vec_elems) = src_vector.as_vector_data() {
+        let elems = vec_elems.clone();
+        // elem[0] is the 'face symbol; elem[1..] are the attrs
+        for (i, attr) in LFACE_ATTRS.iter().enumerate() {
+            let val = *elems.get(i + 1).unwrap_or(&Value::NIL);
+            if val.is_symbol_named("unspecified") {
+                continue;
+            }
+            // Store in both override maps so facep / face-equal can
+            // find the attributes regardless of frame domain.
+            set_face_override(&to_name, *attr, val, false);
+            set_face_override(&to_name, *attr, val, true);
+        }
+    }
+
     let result = args[1];
 
     // Copy the Rust FaceTable entry.
