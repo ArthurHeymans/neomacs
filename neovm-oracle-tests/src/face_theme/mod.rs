@@ -26259,3 +26259,93 @@ fn ft_warp_face_text_property_face_then_composition_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_dive_face_overlay_face_on_single_char() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "A")
+    (let ((ov (make-overlay 1 2)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'face (overlay-get ov 'face)
+       'char (get-char-property 1 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_dive_font_lock_fontify_prog2_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(prog2 (init) (eval) (cleanup))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'prog2-face (save-excursion (goto-char (point-min)) (search-forward "prog2") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_dive_face_overlay_face_to_another_without_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'first-face (overlay-get ov 'face)
+       'changed-face (progn (overlay-put ov 'face 'italic) (overlay-get ov 'face))
+       'changed-again (progn (overlay-put ov 'face 'underline) (overlay-get ov 'face))
+       'char-prop-after (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_dive_face_text_property_face_with_property_range_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 11 16 'face 'italic)
+    (list
+     'prop-range-fbound (fboundp 'text-property-any)
+     'any-bold (text-property-any 1 16 'face 'bold)
+     'any-italic (text-property-any 1 16 'face 'italic)
+     'any-underline (text-property-any 1 16 'face 'underline)
+     'not-nil (condition-case nil (text-property-not-all 1 16 'face 'bold nil) (error 'no))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_dive_font_lock_fontify_with_rest_args() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun fn (a &optional b &rest c)\n  (list a b c))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'and-rest-face (save-excursion (goto-char (point-min)) (search-forward "&rest") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
