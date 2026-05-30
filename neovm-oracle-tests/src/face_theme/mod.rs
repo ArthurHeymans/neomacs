@@ -13747,3 +13747,155 @@ fn ft_phi_face_set_attribute_default_return_value_check() {
    'face-font-type (condition-case nil (type-of (face-font 'default nil)) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_chi_face_with_three_overlay_layers_on_same_region() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (put-text-property 1 26 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 5 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 5 20))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 5 20))) (overlay-put ov3 'face '(:slant italic)) (overlay-put ov3 'priority 30))
+    (list
+     'all-overlays-count (length (overlays-at 10))
+     'face-at-10 (get-char-property 10 'face)
+     'face-at-1 (get-char-property 1 'face)
+     'face-at-25 (get-char-property 25 'face)
+     'all-overlay-faces (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 10) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 26)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_font_lock_fontify_region_outside_visible_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun out-of-range-test () t)\n")
+    ;; Fontify region that extends beyond buffer
+    (condition-case nil
+        (font-lock-fontify-region 1 (+ (point-max) 10))
+      (error 'no))
+    (list
+     'fontified-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 28))
+     'faces-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 10 15 20 25))))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_face_property_value_deep_comparison() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face '(:foreground "red"))
+    (put-text-property 1 6 'key1 '(:complex value))
+    (list
+     'face-equal-plist (equal (get-text-property 1 'face) '(:foreground "red"))
+     'key-equal-list (equal (get-text-property 1 'key1) '(:complex value))
+     'facep-check (facep (get-text-property 1 'face))
+     'key-type (type-of (get-text-property 1 'key1))
+     'all-props (text-properties-at 1)
+     'props-count (length (text-properties-at 1)))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_face_overlay_after_delete_face_persistence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Delete overlay face persistence test content text data here now end")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'before-delete (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 15 25 35 45))
+       'after-delete-ov (progn (delete-overlay ov) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 15 25 35 45)))
+       'overlay-dead (not (overlay-buffer ov)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_font_lock_fontify_region_before_after_fontified_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun fontified-check (x) (* x x))\n")
+    (list
+     'unfontified-before (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30))
+     'after-fontify (progn (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30)))
+     'after-unfontify (progn (font-lock-unfontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30)))
+     'after-refontify (progn (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_face_text_property_at_very_narrow_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (list
+     'single-char-no-face (get-text-property 1 'face)
+     'single-char-no-fontified (get-text-property 1 'fontified)
+     'set-face (progn (put-text-property 1 2 'face 'bold) (get-text-property 1 'face))
+     'text-props-at-1 (text-properties-at 1)
+     'interval-count (length (object-intervals (current-buffer)))
+     ;; Extend buffer
+     'after-extend (progn (goto-char 2) (insert "Y") (list (get-text-property 1 'face) (get-text-property 2 'face) (length (object-intervals (current-buffer))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_face_set_face_attribute_with_face_spec_match_condition() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'face-spec-choose (condition-case nil (face-spec-choose '(((class color)) (:foreground "red") (t (:foreground "blue")))) (error 'no))
+   (condition-case nil (face-spec-match-p 'default '(((class color)) (:foreground "red")) (selected-frame)) (error 'no))
+   (condition-case nil (face-attribute 'default :foreground nil 'default-on) (error 'no))
+   (condition-case nil (face-attribute 'default :weight nil 'default-on) (error 'no))
+   (condition-case nil (face-attribute 'default :background nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_chi_face_overlay_get_set_face_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay get set face roundtrip test content data text here now done")
+    (let ((ov (make-overlay 1 57)))
+      (overlay-put ov 'face '(:foreground "blue"))
+      (let ((v0 (overlay-get ov 'face)))
+        (overlay-put ov 'face '(:background "yellow" :weight bold))
+        (let ((v1 (overlay-get ov 'face)))
+          (overlay-put ov 'face '(:foreground "red" :slant italic :underline t))
+          (let ((v2 (overlay-get ov 'face)))
+            (list v0 v1 v2 (get-char-property 30 'face) (progn (delete-overlay ov) 'cleaned)))))))))"##,
+    );
+}
