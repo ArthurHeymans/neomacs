@@ -26584,3 +26584,70 @@ fn ft_scorch_face_text_property_fontified_and_face_mix() {
      'pos6 (list (get-text-property 6 'face) (get-text-property 6 'fontified))))))"##,
     );
 }
+
+#[test]
+fn ft_melt_face_overlay_create_delete_create_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face 'bold) (delete-overlay ov1))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face 'italic) (delete-overlay ov2))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face 'underline))
+    (list
+     'final-face (overlay-get ov3 'face)
+     'char-prop (get-char-property 3 'face)
+     (progn (delete-overlay ov3) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_melt_font_lock_fontify_block_comment_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "#| block comment |# 42\n")
+    (font-lock-fontify-buffer)
+    (list
+     'comment-face (get-text-property 1 'face)
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_melt_face_overlay_face_plist_extreme_depths() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "orange" :background "navy" :weight extra-bold :slant oblique :underline (:color "gold" :style double-line) :overline (:color "cyan" :style dashed) :strike-through (:color "brown") :box (:line-width 3 :color "teal" :style released-button) :inherit (bold italic) :extend t :height 1.8))
+      (list
+       'len (length (overlay-get ov 'face))
+       'keys-count (/ (length (overlay-get ov 'face)) 2)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_melt_face_text_property_read_multiple_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face '(bold italic underline))
+    (list
+     'face-list (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
