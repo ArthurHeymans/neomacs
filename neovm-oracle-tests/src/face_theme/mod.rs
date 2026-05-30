@@ -5401,3 +5401,212 @@ fn ft_hard_face_with_nested_invisible_and_display() {
      'char-prop-visible (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 20 30)))))"##,
     );
 }
+
+#[test]
+fn ft_brute_face_wrap_line_prefix_with_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Line with wrap prefix and line prefix face")
+    (put-text-property 1 45 'wrap-prefix ">>> ")
+    (put-text-property 1 45 'line-prefix "| ")
+    (put-text-property 1 45 'face '(:foreground "blue"))
+    (list
+     'wrap-prefix (get-text-property 1 'wrap-prefix)
+     'line-prefix (get-text-property 1 'line-prefix)
+     'face (get-text-property 1 'face)
+     'all-text-props (text-properties-at 1)
+     'wrap-prefix-char-width (length (get-text-property 1 'wrap-prefix))
+     'line-prefix-char-width (length (get-text-property 1 'line-prefix)))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_overlay_with_category_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay category face test buffer content")
+    (put-text-property 1 41 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 15)))
+      (overlay-put ov1 'category 'my-cat)
+      (overlay-put ov1 'face '(:background "yellow")))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'category 'my-cat2)
+      (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+    (list
+     'faces-with-category (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 15 20 25 35 40))
+     'overlay-category (list (overlay-get ov1 'category) (overlay-get ov2 'category))
+     'overlay-properties (list (overlay-properties ov1) (overlay-properties ov2))
+     (progn (delete-overlay ov1) (delete-overlay ov2) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_with_modification_hooks_prop_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-mod-hook-counter 0)
+  (defun my-mod-hook (ov after beg end &optional len)
+    (setq my-mod-hook-counter (1+ my-mod-hook-counter)))
+  (with-temp-buffer
+    (insert "Modification hooks face test")
+    (put-text-property 1 28 'face 'bold)
+    (put-text-property 1 28 'modification-hooks '(my-mod-hook))
+    (list
+     'initial-face (get-text-property 1 'face)
+     'initial-mod-hooks (get-text-property 1 'modification-hooks)
+     'hook-counter-before my-mod-hook-counter
+     ;; Modify text
+     (progn
+       (goto-char 10)
+       (insert "INSERTED")
+       'after-insert)
+     'hook-counter-after my-mod-hook-counter
+     'face-after-mod (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 8 12 15 28))))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_set_face_attribute_extend_raise_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-extend-face) (error nil))
+  (list
+   'set-extend (condition-case nil (progn (set-face-attribute 'my-extend-face nil :extend t) 'ok) (error 'no))
+   'get-extend (condition-case nil (face-attribute 'my-extend-face :extend nil 'default-on) (error 'no))
+   'set-extend-off (condition-case nil (progn (set-face-attribute 'my-extend-face nil :extend nil) 'ok) (error 'no))
+   'get-extend-off (condition-case nil (face-attribute 'my-extend-face :extend nil 'default-on) (error 'no))
+   'get-extend-default (condition-case nil (face-attribute 'default :extend nil 'default-on) (error 'no))
+   'set-raise (condition-case nil (progn (set-face-attribute 'my-extend-face nil :raise 0.2) 'ok) (error 'no-raise))
+   'get-raise (condition-case nil (face-attribute 'my-extend-face :raise nil 'default-on) (error 'no))
+   'set-raise-negative (condition-case nil (progn (set-face-attribute 'my-extend-face nil :raise -0.1) 'ok) (error 'no))
+   'get-raise-neg (condition-case nil (face-attribute 'my-extend-face :raise nil 'default-on) (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_font_lock_multi_line_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "START\nmulti-line content here\nEND")
+    (font-lock-add-keywords nil
+                            '(("\\`START\\'" (0 font-lock-warning-face t)
+                               ("\\`END\\'" nil nil (0 font-lock-function-name-face t)))))
+    (font-lock-fontify-buffer)
+    (list
+     'start-face (save-excursion (goto-char (point-min)) (search-forward "START") (get-text-property (match-beginning 0) 'face))
+     'multi-line-face (save-excursion (goto-char (point-min)) (search-forward "multi-line") (get-text-property (match-beginning 0) 'face))
+     'end-face (save-excursion (goto-char (point-min)) (search-forward "END") (get-text-property (match-beginning 0) 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_font_lock_maximum_decoration_variants_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'max-decoration-bound (boundp 'font-lock-maximum-decoration)
+   'max-dec-value (if (boundp 'font-lock-maximum-decoration)
+                       font-lock-maximum-decoration
+                     'no-bound)
+   'font-lock-support-mode (if (boundp 'font-lock-support-mode)
+                                font-lock-support-mode
+                              'no-support-mode)
+   (if (boundp 'font-lock-maximum-decoration)
+       (condition-case nil
+           (progn
+             (setq font-lock-maximum-decoration t)
+             (with-temp-buffer
+               (c-mode)
+               (insert "int x = 42;\n")
+               (font-lock-ensure (point-min) (point-max))
+               (list 'max-t
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward "int")
+                       (get-text-property (match-beginning 0) 'face))
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward "42")
+                       (get-text-property (match-beginning 0) 'face))
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward "x")
+                       (get-text-property (match-beginning 0) 'face))))
+         (error 'max-t-failed))
+     'no-max-bound)
+   (if (boundp 'font-lock-maximum-decoration)
+       (condition-case nil
+           (progn
+             (setq font-lock-maximum-decoration nil)
+             (with-temp-buffer
+               (c-mode)
+               (insert "int x = 42;\n")
+               (font-lock-ensure (point-min) (point-max))
+               (list 'max-nil
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward "int")
+                       (get-text-property (match-beginning 0) 'face))
+                     (save-excursion
+                       (goto-char (point-min))
+                       (search-forward "42")
+                       (get-text-property (match-beginning 0) 'face))))
+         (error 'max-nil-failed))
+     'no-max-bound2))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_overlay_before_after_string_with_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before after string face test")
+    (put-text-property 1 30 'face 'bold)
+    (let ((ov1 (make-overlay 5 15)))
+      (overlay-put ov1 'before-string #("[[BEFORE]]" 0 10 (face (:foreground "red" :weight bold))))
+      (overlay-put ov1 'face 'italic))
+    (list
+     'faces-around-overlay (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20))
+     'overlay-before-props (text-properties-at 0 (overlay-get ov1 'before-string))
+     (progn (delete-overlay ov1) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_brute_face_with_line_spacing_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-spacing-face) (error nil))
+  (list
+   'set-line-spacing (condition-case nil (progn (set-face-attribute 'my-spacing-face nil :line-spacing 10) 'ok) (error 'no))
+   'get-line-spacing (condition-case nil (face-attribute 'my-spacing-face :line-spacing nil 'default-on) (error 'no))
+   'set-line-spacing-float (condition-case nil (progn (set-face-attribute 'my-spacing-face nil :line-spacing 1.5) 'ok) (error 'no))
+   'get-line-spacing-float (condition-case nil (face-attribute 'my-spacing-face :line-spacing nil 'default-on) (error 'no))
+   'set-line-spacing-nil (condition-case nil (progn (set-face-attribute 'my-spacing-face nil :line-spacing nil) 'ok) (error 'no))
+   'get-line-spacing-default (condition-case nil (face-attribute 'default :line-spacing nil 'default-on) (error 'no)))))"##,
+    );
+}
