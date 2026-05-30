@@ -20553,3 +20553,167 @@ fn ft_last_hope_face_overlay_face_after_deleting_overlay_region() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_neverend_face_overlay_all_properties_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "help")
+      (overlay-put ov 'category 'my-cat)
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-count (length props)
+         'keys (let ((ks nil) (i 0)) (while (< i (length props)) (push (nth i props) ks) (setq i (+ i 2))) (nreverse ks))
+         'face (plist-get props 'face)
+         'priority (plist-get props 'priority)
+         'help (plist-get props 'help-echo)
+         'category (plist-get props 'category)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_font_lock_unfontify_region_multi_boundary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun multi-boundary-test (a b c d) (+ a b c d))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'all-fontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40 45))
+     'unfontify-chunk1 (progn (font-lock-unfontify-region 1 15) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 15 20 30)))
+     'unfontify-chunk2 (progn (font-lock-unfontify-region 15 30) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 15 20 30)))
+     'unfontify-chunk3 (progn (font-lock-unfontify-region 30 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 30 40)))
+     'refontify-all (progn (font-lock-fontify-buffer) (get-text-property 1 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_face_overlay_face_propagate_to_string() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow" :foreground "black" :weight bold))
+      (overlay-put ov 'before-string (propertize "B4" 'face '(:foreground "red")))
+      (overlay-put ov 'after-string (propertize "AF" 'face '(:foreground "blue")))
+      (list
+       'ov-face (overlay-get ov 'face)
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'after-face (get-text-property 0 (overlay-get ov 'after-string))
+       'char-prop-inside (get-char-property 10 'face)
+       'char-prop-outside (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_face_text_property_get_all_chars_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 6 'face 'italic)
+    (put-text-property 6 9 'face 'underline)
+    (put-text-property 9 11 'face '(:foreground "red"))
+    (list
+     'all-chars (mapcar (lambda (pos) (goto-char pos) (list pos (char-after pos) (get-text-property pos 'face))) '(1 2 3 4 5 6 7 8 9 10))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_font_lock_add_keywords_remove_all_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "REMOVE-ALL-KW-1 REMOVE-ALL-KW-2 font lock face buffer test end")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(REMOVE-ALL-KW-1\\)\\>" 1 '(:foreground "red") t)
+                              ("\\<\\(REMOVE-ALL-KW-2\\)\\>" 1 '(:foreground "green") t)))
+    (font-lock-fontify-buffer)
+    (let ((f (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face)))))
+      (let ((v0 (list (funcall f "REMOVE-ALL-KW-1") (funcall f "REMOVE-ALL-KW-2"))))
+        (font-lock-remove-keywords nil
+                                    '(("\\<\\(REMOVE-ALL-KW-1\\)\\>" 1 '(:foreground "red") t)
+                                      ("\\<\\(REMOVE-ALL-KW-2\\)\\>" 1 '(:foreground "green") t)))
+        (font-lock-fontify-buffer)
+        (list v0 (list (funcall f "REMOVE-ALL-KW-1") (funcall f "REMOVE-ALL-KW-2"))))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_face_set_attribute_inverse_vid_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inverse-vid-face) (error nil))
+  (list
+   'default-inverse (condition-case nil (face-attribute 'default :inverse-video nil 'default-on) (error 'no))
+   'set-inverse-t (condition-case nil (progn (set-face-attribute 'my-inverse-vid-face nil :inverse-video t) (face-attribute 'my-inverse-vid-face :inverse-video nil 'default-on)) (error 'no))
+   'set-inverse-nil (condition-case nil (progn (set-face-attribute 'my-inverse-vid-face nil :inverse-video nil) (face-attribute 'my-inverse-vid-face :inverse-video nil 'default-on)) (error 'no))
+   'set-inverse-unspec (condition-case nil (progn (set-face-attribute 'my-inverse-vid-face nil :inverse-video 'unspecified) (face-attribute 'my-inverse-vid-face :inverse-video nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_face_overlay_make_nil_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face nil)
+      (list
+       'nil-face (overlay-get ov 'face)
+       'char-prop-with-nil-overlay (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverend_face_text_property_interval_object_stats() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWWVVVVV")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (let ((intervals (object-intervals (current-buffer))))
+      (list
+       'count (length intervals)
+       'starts (mapcar #'overlay-start intervals)
+       'ends (mapcar #'overlay-end intervals)
+       'faces (mapcar (lambda (ov) (get-text-property (overlay-start ov) 'face)) intervals))))))"##,
+    );
+}
