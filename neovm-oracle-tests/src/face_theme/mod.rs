@@ -12084,3 +12084,191 @@ fn ft_lambda_face_property_interval_edge_boundary_stress() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_mu_face_property_text_any_with_specific_value_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjj")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:background "yellow"))
+    (put-text-property 21 25 'face '(:foreground "blue"))
+    (put-text-property 25 29 'face '(:background "cyan"))
+    (put-text-property 29 33 'face '(:weight bold))
+    (put-text-property 33 37 'face '(:slant italic))
+    (put-text-property 37 41 'face '(:underline t))
+    (list
+     'find-bold (text-property-any 1 41 'face 'bold)
+     'find-italic (text-property-any 1 41 'face 'italic)
+     'find-complex (text-property-any 1 41 'face '(:foreground "red"))
+     'find-weight (text-property-any 1 41 'face '(:weight bold))
+     'find-none (text-property-any 1 41 'face 'nonexistent-face)
+     'not-all (text-property-not-all 1 41 'face 'bold)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_font_lock_unfontify_entire_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Unfontify entire\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 20))))
+        (font-lock-unfontify-buffer)
+        (let ((v1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 20))))
+          (font-lock-fontify-buffer)
+          (let ((v2 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 20))))
+            (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_overlay_get_all_properties_as_alist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay properties as alist face test content data text here now")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "hello")
+      (overlay-put ov 'evaporate t)
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-len (length props)
+         'keys (let ((keys nil) (i 0))
+                 (while (< i (length props))
+                   (push (nth i props) keys)
+                   (setq i (+ i 2)))
+                 (nreverse keys))
+         'face-get (overlay-get ov 'face)
+         'priority-get (overlay-get ov 'priority)
+         'help-echo-get (overlay-get ov 'help-echo)
+         'evaporate-get (overlay-get ov 'evaporate)
+         (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_set_attribute_family_foundry_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-family-face) (error nil))
+  (list
+   'set-family-monospace (condition-case nil (progn (set-face-attribute 'my-family-face nil :family "Monospace") (face-attribute 'my-family-face :family nil 'default-on)) (error 'no))
+   'set-family-unspec (condition-case nil (progn (set-face-attribute 'my-family-face nil :family 'unspecified) (face-attribute 'my-family-face :family nil 'default-on)) (error 'no))
+   'default-family (face-attribute 'default :family nil 'default-on)
+   'default-foundry (face-attribute 'default :foundry nil 'default-on)
+   'bold-family (face-attribute 'bold :family nil 'default-on)
+   'font-family-list-bound (boundp 'font-family-list))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_font_lock_fontify_region_with_narrow_bounds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun narrow-fontify-test (a b c) (+ a b c))\n")
+    (insert "(defun second-narrow () 42)\n")
+    ;; Only fontify first function region
+    (font-lock-fontify-region 1 32)
+    (list
+     'fontified-first (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 15 25 31 32))
+     'not-fontified-second (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(33 35 40 45))
+     'faces-first (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 15 25 31))
+     'faces-second (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(33 35 40 45))
+     ;; Now fontify all
+     'all-fontified (progn (font-lock-fontify-region 33 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 31 33 40 45)))))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_text_property_set_on_fresh_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (list
+     'empty-buffer (list 'face (get-text-property 1 'face) 'interval-count (length (object-intervals (current-buffer))))
+     'after-insert (progn
+                     (insert "New content")
+                     (put-text-property 1 12 'face 'bold)
+                     (list 'face (get-text-property 1 'face) 'interval-count (length (object-intervals (current-buffer)))))
+     'after-erase (progn
+                    (erase-buffer)
+                    (list 'face (get-text-property 1 'face) 'interval-count (length (object-intervals (current-buffer)))))
+     'after-reinsert (progn
+                       (insert "Re-inserted")
+                       (put-text-property 1 12 'face 'italic)
+                       (list 'face (get-text-property 1 'face) 'interval-count (length (object-intervals (current-buffer)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_color_rgb_manipulate_and_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'rgb-red (color-name-to-rgb "red")
+   'rgb-green (color-name-to-rgb "green")
+   'rgb-blue (color-name-to-rgb "blue")
+   'rgb-black (color-name-to-rgb "black")
+   'rgb-white (color-name-to-rgb "white")
+   'hex-to-rgb-FF0000 (color-name-to-rgb "#FF0000")
+   'hex-to-rgb-00FF00 (color-name-to-rgb "#00FF00")
+   'hex-to-rgb-0000FF (color-name-to-rgb "#0000FF")
+   'hex-to-rgb-FF00FF (color-name-to-rgb "#FF00FF")
+   'hex-to-rgb-FFFF00 (color-name-to-rgb "#FFFF00")
+   'hex-to-rgb-00FFFF (color-name-to-rgb "#00FFFF")
+   'hex-to-rgb-808080 (color-name-to-rgb "#808080")
+   'valid-color-p (mapcar (lambda (c) (list c (condition-case nil (color-defined-p c) (error 'no)))) '("red" "green" "blue" "#FF0000" "#invalid")))))"##,
+    );
+}
+
+#[test]
+fn ft_mu_face_overlay_at_point_gets_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay at point get properties face test content data text here now end")
+    (let ((ov1 (make-overlay 10 25))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 15 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 20 40))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 15))
+    (list
+     'at-12 (list (get-char-property 12 'face) (mapcar (lambda (ov) (overlay-get ov 'priority)) (overlays-at 12)))
+     'at-22 (list (get-char-property 22 'face) (mapcar (lambda (ov) (overlay-get ov 'priority)) (overlays-at 22)))
+     'at-28 (list (get-char-property 28 'face) (mapcar (lambda (ov) (overlay-get ov 'priority)) (overlays-at 28)))
+     'overlay-start-list (mapcar #'overlay-start (list ov1 ov2 ov3))
+     'overlay-end-list (mapcar #'overlay-end (list ov1 ov2 ov3))
+     (progn (mapc #'delete-overlay (overlays-in 1 50)) 'cleaned))))"##,
+    );
+}
