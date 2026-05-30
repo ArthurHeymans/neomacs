@@ -12272,3 +12272,166 @@ fn ft_mu_face_overlay_at_point_gets_properties_deep() {
      (progn (mapc #'delete-overlay (overlays-in 1 50)) 'cleaned))))"##,
     );
 }
+
+#[test]
+fn ft_nu_face_text_property_change_during_insert_delete_loop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 5 6 8 10)))))
+      (let ((v0 (funcall snap)))
+        (goto-char 5) (insert "XX") (delete-region 3 6)
+        (let ((v1 (funcall snap)))
+          (goto-char 2) (insert "YYY") (delete-region 1 4)
+          (let ((v2 (funcall snap)))
+            (list v0 v1 v2 (length (object-intervals (current-buffer))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_font_lock_fontify_immediately_after_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Insert fontify\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        ;; Insert new content immediately after existing
+        (goto-char (point-max))
+        (insert "** DONE New insert\nBody new.\n\n")
+        ;; Fontify just the new part
+        (font-lock-fontify-region 20 (point-max))
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face)))
+              (v2 (save-excursion (goto-char (point-min)) (search-forward "DONE") (get-text-property (match-beginning 0) 'face))))
+          (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_overlay_empty_move_then_fill_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 6 6)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'empty-overlay-start (overlay-start ov)
+       'empty-overlay-end (overlay-end ov)
+       'empty-face-get (overlay-get ov 'face)
+       ;; Insert at empty overlay
+       'after-insert (progn (goto-char 6) (insert "FILLED") (list 'face-at-6 (get-char-property 6 'face) 'face-at-8 (get-char-property 8 'face) 'face-at-12 (get-char-property 12 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_set_face_font_weight_from_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-weight-table-face) (error nil))
+  (list
+   'set-bold (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'bold) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'set-light (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'light) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'set-heavy (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'heavy) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'set-medium (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'medium) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'set-ultra-light (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'ultra-light) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'set-ultra-bold (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'ultra-bold) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no))
+   'reset (condition-case nil (progn (set-face-attribute 'my-weight-table-face nil :weight 'unspecified) (face-attribute 'my-weight-table-face :weight nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_font_lock_unfontify_partial_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun a () 1)\n(defun b () 2)\n(defun c () 3)\n")
+    (font-lock-ensure (point-min) (point-max))
+    (let ((all-fontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 30 45))))
+      ;; Unfontify only middle region
+      (font-lock-unfontify-region 15 30)
+      (let ((partial-unfontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 20 25 30 45))))
+        ;; Unfontify left and right too
+        (font-lock-unfontify-region 1 15)
+        (font-lock-unfontify-region 30 45)
+        (let ((all-unfontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 30 45))))
+          (list all-fontified partial-unfontified all-unfontified)))))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_property_interval_overlap_resolve_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAABBBBBBBCCCCCCCDDDDDDDEEEEEEE")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 5 15 'face 'italic)
+    (put-text-property 12 22 'face 'underline)
+    (put-text-property 20 29 'face '(:foreground "red"))
+    (put-text-property 27 36 'face '(:background "yellow"))
+    (list
+     'overlap-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 8 12 15 20 22 27 29 35))
+     'last-write-wins (list (get-text-property 1 'face) (get-text-property 8 'face) (get-text-property 15 'face) (get-text-property 22 'face) (get-text-property 29 'face))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_set_attribute_inverse_video_toggle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inverse-face) (error nil))
+  (list
+   'set-inverse-on (condition-case nil (progn (set-face-attribute 'my-inverse-face nil :inverse-video t) (face-attribute 'my-inverse-face :inverse-video nil 'default-on)) (error 'no))
+   'set-inverse-off (condition-case nil (progn (set-face-attribute 'my-inverse-face nil :inverse-video nil) (face-attribute 'my-inverse-face :inverse-video nil 'default-on)) (error 'no))
+   'set-inverse-unspec (condition-case nil (progn (set-face-attribute 'my-inverse-face nil :inverse-video 'unspecified) (face-attribute 'my-inverse-face :inverse-video nil 'default-on)) (error 'no))
+   'default-inverse (condition-case nil (face-attribute 'default :inverse-video nil 'default-on) (error 'no))
+   'bold-inverse (condition-case nil (face-attribute 'bold :inverse-video nil 'default-on) (error 'no))
+   'face-inverse-video-p-fbound (fboundp 'face-inverse-video-p))))"##,
+    );
+}
+
+#[test]
+fn ft_nu_face_text_property_read_after_write_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Read after write property face test buffer content text")
+    (let ((result nil))
+      ;; Write many face properties
+      (put-text-property 1 11 'face 'bold) (push (list 1 (get-text-property 1 'face) (get-text-property 1 'face)) result)
+      (put-text-property 11 21 'face 'italic) (push (list 11 (get-text-property 11 'face) (get-text-property 11 'face)) result)
+      (put-text-property 21 31 'face 'underline) (push (list 21 (get-text-property 21 'face) (get-text-property 21 'face)) result)
+      (put-text-property 31 41 'face '(:foreground "red")) (push (list 31 (get-text-property 31 'face) (get-text-property 31 'face)) result)
+      (put-text-property 41 52 'face '(:background "yellow")) (push (list 41 (get-text-property 41 'face) (get-text-property 41 'face)) result)
+      (list (nreverse result) (length (object-intervals (current-buffer))))))))"##,
+    );
+}
