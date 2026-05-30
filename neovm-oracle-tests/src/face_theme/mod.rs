@@ -20401,3 +20401,155 @@ fn ft_final_quark_face_overlay_face_with_zero_width_regions() {
      (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned)))))"##,
     );
 }
+
+#[test]
+fn ft_last_hope_face_overlay_face_with_nil_category() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'category nil)
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'nil-category (overlay-get ov 'category)
+       'face (overlay-get ov 'face)
+       'char-prop (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_font_lock_keywords_with_override_flag_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "OVERRIDE-FLAG keyword test font lock face buffer content text end")
+    (font-lock-add-keywords nil '(("\\<\\(OVERRIDE-FLAG\\)\\>" 1 '(:foreground "blue") t)))
+    (font-lock-add-keywords nil '(("\\<\\(OVERRIDE-FLAG\\)\\>" 1 '(:foreground "red" :weight bold) overwrite)))
+    (font-lock-fontify-buffer)
+    (list
+     'override-face (save-excursion (goto-char (point-min)) (search-forward "OVERRIDE-FLAG") (get-text-property (match-beginning 0) 'face))
+     'non-override (save-excursion (goto-char (point-min)) (search-forward "keyword") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_face_set_face_underline_multiple_styles_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-cycle-face) (error nil))
+  (list
+   'set-wave-red (condition-case nil (progn (set-face-underline 'my-ul-cycle-face '(:color "red" :style wave) nil) (face-attribute 'my-ul-cycle-face :underline nil 'default-on)) (error 'no))
+   'set-line-blue (condition-case nil (progn (set-face-underline 'my-ul-cycle-face '(:color "blue" :style line) nil) (face-attribute 'my-ul-cycle-face :underline nil 'default-on)) (error 'no))
+   'set-double-green (condition-case nil (progn (set-face-underline 'my-ul-cycle-face '(:color "green" :style double-line) nil) (face-attribute 'my-ul-cycle-face :underline nil 'default-on)) (error 'no))
+   'set-tsimple (condition-case nil (progn (set-face-underline 'my-ul-cycle-face t nil) (face-attribute 'my-ul-cycle-face :underline nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-underline 'my-ul-cycle-face nil nil) (face-attribute 'my-ul-cycle-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_face_overlay_priority_zero_and_negative_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov-pos (make-overlay 1 21))) (overlay-put ov-pos 'face '(:background "red")) (overlay-put ov-pos 'priority 5))
+    (let ((ov-zero (make-overlay 1 21))) (overlay-put ov-zero 'face '(:background "green")) (overlay-put ov-zero 'priority 0))
+    (let ((ov-neg (make-overlay 1 21))) (overlay-put ov-neg 'face '(:background "blue")) (overlay-put ov-neg 'priority -5))
+    (list
+     'effective (get-char-property 5 'face)
+     'all-prios (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 5) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_face_text_property_insert_boundary_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 6 8 10))
+     'insert-at-1 (progn (goto-char 1) (insert "Z") (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 4 6 7 9 11)))
+     'insert-at-6 (progn (goto-char 6) (insert "Y") (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 4 6 7 8 10 12)))
+     'insert-at-11 (progn (goto-char 11) (insert "X") (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 4 6 7 8 10 12 13 14))))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_font_lock_unfontify_buffer_and_fontify_again() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun unfontify-again-test (x) (* x x))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 22 30 36))))
+      (font-lock-unfontify-buffer)
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 22 30 36))))
+        (list (equal v0 v1) v0 v1))))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_face_property_interval_object_basic_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXYYYZZZWWW")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 10 'face 'underline)
+    (put-text-property 10 13 'face '(:foreground "red"))
+    (let ((intervals (object-intervals (current-buffer))))
+      (list
+       'count (length intervals)
+       'first-start (overlay-start (car intervals))
+       'first-end (overlay-end (car intervals))
+       'face-at-first (get-text-property (overlay-start (car intervals)) 'face)
+       'last-start (overlay-start (car (last intervals)))
+       'last-end (overlay-end (car (last intervals)))
+       'face-at-last (get-text-property (overlay-start (car (last intervals))) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_last_hope_face_overlay_face_after_deleting_overlay_region() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov (make-overlay 10 25)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 15 20 25 30))
+       'delete-partial (progn (delete-region 15 20) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25 28)))
+       'delete-all (progn (delete-region 10 25) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
