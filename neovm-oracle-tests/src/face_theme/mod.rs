@@ -9876,3 +9876,208 @@ fn ft_xero_face_set_face_attribute_int_vs_float_height_deep() {
    'default-height (face-attribute 'default :height nil 'default-on))))"##,
     );
 }
+
+#[test]
+fn ft_zeta_face_property_map_on_face_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOP")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (list
+     'property-map (let ((pos 1) (props nil))
+                     (while (< pos 17)
+                       (push (cons pos (get-text-property pos 'face)) props)
+                       (setq pos (1+ pos)))
+                     (nreverse props))
+     'face-change-positions (let ((pos 1) (changes nil))
+                              (while pos
+                                (setq pos (next-single-property-change pos 'face nil 17))
+                                (when pos (push pos changes)))
+                              (nreverse changes))
+     'interval-objects (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov)))
+                               (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_overlay_evaporate_with_text_insert_and_delete_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Evaporate overlay insert delete chain test content text here now")
+    (let ((ovs (list (let ((ov (make-overlay 5 10)))
+                       (overlay-put ov 'face '(:background "red"))
+                       (overlay-put ov 'evaporate t) ov)
+                     (let ((ov (make-overlay 15 25)))
+                       (overlay-put ov 'face '(:background "green"))
+                       (overlay-put ov 'evaporate t) ov)
+                     (let ((ov (make-overlay 30 45)))
+                       (overlay-put ov 'face '(:background "blue"))
+                       (overlay-put ov 'evaporate t) ov))))
+    (list
+     'before-ops (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 5 8 15 20 30 35 45 55))
+     'after-insert (progn (goto-char 7) (insert "NEW") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 7 10 15)))
+     'after-delete (progn (delete-region 25 40) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(15 20 25 30)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_make_face_with_every_attribute_set_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (make-face 'my-every-attr-face) (error nil))
+  (condition-case nil
+      (set-face-attribute 'my-every-attr-face nil
+                          :family "Monospace"
+                          :foundry "misc"
+                          :width 'condensed
+                          :height 120
+                          :weight 'bold
+                          :slant 'italic
+                          :underline '(:color "red" :style wave)
+                          :overline t
+                          :strike-through t
+                          :box '(:line-width 3 :color "blue" :style pressed-button)
+                          :inverse-video t
+                          :foreground "DarkGreen"
+                          :background "LightYellow"
+                          :stipple nil
+                          :inherit 'default
+                          :extend t
+                          :raise 0.1
+                          :distant-foreground "gray")
+    (error nil))
+  (list
+   'family (face-attribute 'my-every-attr-face :family nil 'default-on)
+   'width (face-attribute 'my-every-attr-face :width nil 'default-on)
+   'height (face-attribute 'my-every-attr-face :height nil 'default-on)
+   'weight (face-attribute 'my-every-attr-face :weight nil 'default-on)
+   'slant (face-attribute 'my-every-attr-face :slant nil 'default-on)
+   'underline (face-attribute 'my-every-attr-face :underline nil 'default-on)
+   'overline (face-attribute 'my-every-attr-face :overline nil 'default-on)
+   'strike (face-attribute 'my-every-attr-face :strike-through nil 'default-on)
+   'box (face-attribute 'my-every-attr-face :box nil 'default-on)
+   'inverse (face-attribute 'my-every-attr-face :inverse-video nil 'default-on)
+   'fg (condition-case nil (face-foreground 'my-every-attr-face nil 'default-on) (error 'no))
+   'bg (condition-case nil (face-background 'my-every-attr-face nil 'default-on) (error 'no))
+   'extend (face-attribute 'my-every-attr-face :extend nil 'default-on)
+   'raise (face-attribute 'my-every-attr-face :raise nil 'default-on)
+   'all-attrs-count (length (face-all-attributes 'my-every-attr-face (selected-frame))))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_font_lock_unfontify_region_with_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun a () 1)\n(defun b () 2)\n(defun c () 3)\n")
+    (font-lock-ensure (point-min) (point-max))
+    (let ((all-fontified-before (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30))))
+      ;; Unfontify middle region only
+      (font-lock-unfontify-region 12 24)
+      (let ((after-unfontify (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 15 20 25 30))))
+        ;; Refontify everything
+        (font-lock-fontify-buffer)
+        (let ((after-refontify (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 15 20 25 30))))
+          (list all-fontified-before after-unfontify after-refontify)))))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_text_properties_in_nested_buffer_inserts_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Outer content with face")
+    (put-text-property 1 23 'face 'bold)
+    ;; Nested insert via buffer
+    (insert-buffer-substring (current-buffer) 1 10)
+    (put-text-property 23 32 'face 'italic)
+    (list
+     'faces-across (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 23 28 31))
+     'interval-count (length (object-intervals (current-buffer)))
+     'buffer-length (point-max))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_overlay_priority_multiple_same_value_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Same priority multiple overlays face test buffer content text")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 50))
+    (let ((ov2 (make-overlay 5 25))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 50))
+    (let ((ov3 (make-overlay 10 30))) (overlay-put ov3 'face '(:underline t)) (overlay-put ov3 'priority 50))
+    (let ((ov4 (make-overlay 15 35))) (overlay-put ov4 'face '(:slant italic)) (overlay-put ov4 'priority 50))
+    (list
+     'faces-at-positions (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35 40 50))
+     'overlay-count (mapcar (lambda (pos) (goto-char pos) (length (overlays-at pos))) '(5 10 15 20 25 30))
+     'all-priorities (mapcar (lambda (ov) (overlay-get ov 'priority)) (list ov1 ov2 ov3 ov4))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_face_all_attributes_length_and_keys_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-all-atts-length (condition-case nil (length (face-all-attributes 'default (selected-frame))) (error 'no))
+   'bold-all-atts-length (condition-case nil (length (face-all-attributes 'bold (selected-frame))) (error 'no))
+   'default-atts-keys (condition-case nil
+                          (let ((atts (face-all-attributes 'default (selected-frame)))
+                                (keys nil) (i 0))
+                            (while (< i (length atts))
+                              (when (= 0 (mod i 2)) (push (nth i atts) keys))
+                              (setq i (1+ i)))
+                            (nreverse keys))
+                        (error 'no))
+   'default-has-weight (condition-case nil (plist-get (face-all-attributes 'default (selected-frame)) :weight) (error 'no))
+   'default-has-family (condition-case nil (plist-get (face-all-attributes 'default (selected-frame)) :family) (error 'no))
+   'default-has-fg (condition-case nil (plist-get (face-all-attributes 'default (selected-frame)) :foreground) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_font_lock_fontify_entire_buffer_twice_consistency() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Twice fontify\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((first-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 20))))
+        ;; Fontify again
+        (font-lock-ensure (point-min) (point-max))
+        (let ((second-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 20))))
+          (list first-faces second-faces)))))))"##,
+    );
+}
