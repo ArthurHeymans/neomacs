@@ -13899,3 +13899,166 @@ fn ft_chi_face_overlay_get_set_face_roundtrip_deep() {
             (list v0 v1 v2 (get-char-property 30 'face) (progn (delete-overlay ov) 'cleaned)))))))))"##,
     );
 }
+
+#[test]
+fn ft_remap_add_relative_multiple_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'default-weight-before (face-attribute 'default :weight nil 'default-on)
+   'remap-1 (condition-case nil (progn (face-remap-add-relative 'default '(:weight bold)) 'ok) (error 'no))
+   'default-weight-after-1 (face-attribute 'default :weight nil 'default-on)
+   'remap-2 (condition-case nil (progn (face-remap-add-relative 'default '(:foreground "red")) 'ok) (error 'no))
+   'remap-alist (face-remapping-alist)
+   'remap-alist-length (length (face-remapping-alist))
+   (condition-case nil (progn (face-remap-reset-base 'default) 'reset) (error 'no))
+   'default-weight-after-reset (face-attribute 'default :weight nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_set_base_then_add_relative_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'set-base (condition-case nil (progn (face-remap-set-base 'bold '(:slant italic :foreground "blue")) 'ok) (error 'no))
+   'bold-slant-after-base (condition-case nil (face-attribute 'bold :slant nil 'default-on) (error 'no))
+   'bold-fg-after-base (condition-case nil (face-attribute 'bold :foreground nil 'default-on) (error 'no))
+   'add-relative-to-base (condition-case nil (progn (face-remap-add-relative 'bold '(:weight extra-bold)) 'ok) (error 'no))
+   'bold-weight-after-relative (condition-case nil (face-attribute 'bold :weight nil 'default-on) (error 'no))
+   'remap-alist (face-remapping-alist)
+   (condition-case nil (progn (face-remap-reset-base 'bold) 'reset) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_text_scale_cycle_up_down_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'default-height-before (face-attribute 'default :height nil 'default-on)
+   'scale-up-1 (condition-case nil (progn (text-scale-increase 1) 'ok) (error 'no))
+   'height-after-up-1 (face-attribute 'default :height nil 'default-on)
+   'scale-up-2 (condition-case nil (progn (text-scale-increase 1) 'ok) (error 'no))
+   'height-after-up-2 (face-attribute 'default :height nil 'default-on)
+   'scale-down-1 (condition-case nil (progn (text-scale-decrease 1) 'ok) (error 'no))
+   'height-after-down-1 (face-attribute 'default :height nil 'default-on)
+   'scale-reset (condition-case nil (progn (text-scale-set 0) 'ok) (error 'no))
+   'height-after-reset (face-attribute 'default :height nil 'default-on)
+   'remap-alist (face-remapping-alist))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_buffer_face_mode_toggle_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Buffer face mode toggle face test content text data here")
+    (put-text-property 1 50 'face 'bold)
+    (list
+     'before-mode (list (get-text-property 1 'face) (face-remapping-alist))
+     'turn-on (condition-case nil (progn (buffer-face-mode 1) 'ok) (error 'no))
+     'face-after-on (get-text-property 1 'face)
+     'remap-after-on (face-remapping-alist)
+     'turn-off (condition-case nil (progn (buffer-face-mode -1) 'ok) (error 'no))
+     'face-after-off (get-text-property 1 'face)
+     'remap-after-off (face-remapping-alist)))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_variable_pitch_mode_toggle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Variable pitch mode toggle face test content text buffer data here")
+    (put-text-property 1 55 'face 'bold)
+    (list
+     'before-faces (list (get-text-property 1 'face) (face-attribute 'default :family nil 'default-on))
+     'turn-on (condition-case nil (progn (variable-pitch-mode 1) 'ok) (error 'no))
+     'faces-after-on (list (get-text-property 1 'face) (face-attribute 'default :family nil 'default-on))
+     'remap-after-on (face-remapping-alist)
+     'turn-off (condition-case nil (progn (variable-pitch-mode -1) 'ok) (error 'no))
+     'faces-after-off (list (get-text-property 1 'face) (face-attribute 'default :family nil 'default-on))
+     'remap-after-off (face-remapping-alist)))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_add_remove_relative_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'default-weight-before (face-attribute 'default :weight nil 'default-on)
+   'add-1 (condition-case nil (progn (face-remap-add-relative 'default '(:weight bold)) 'ok) (error 'no))
+   'add-2 (condition-case nil (progn (face-remap-add-relative 'default '(:foreground "red")) 'ok) (error 'no))
+   'add-3 (condition-case nil (progn (face-remap-add-relative 'default '(:slant italic)) 'ok) (error 'no))
+   'remap-alist-after-adds (face-remapping-alist)
+   'remove-1 (condition-case nil (progn (face-remap-remove-relative 'default) 'ok) (error 'no))
+   'remap-alist-after-remove-1 (face-remapping-alist)
+   'remove-2 (condition-case nil (progn (face-remap-remove-relative 'default) 'ok) (error 'no))
+   'remap-alist-after-remove-2 (face-remapping-alist)
+   'remove-3 (condition-case nil (progn (face-remap-remove-relative 'default) 'ok) (error 'no))
+   'remap-alist-after-all-removed (face-remapping-alist)
+   'default-weight-after-all (face-attribute 'default :weight nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_set_base_with_complex_spec_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'set-base-complex (condition-case nil (progn (face-remap-set-base 'default '(:weight bold :slant italic :underline t :height 1.2)) 'ok) (error 'no))
+   'weight-after (face-attribute 'default :weight nil 'default-on)
+   'slant-after (face-attribute 'default :slant nil 'default-on)
+   'underline-after (condition-case nil (face-attribute 'default :underline nil 'default-on) (error 'no))
+   'height-after (face-attribute 'default :height nil 'default-on)
+   'remap-alist (face-remapping-alist)
+   (condition-case nil (progn (face-remap-reset-base 'default) 'reset) (error 'no))
+   'weight-after-reset (face-attribute 'default :weight nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_remap_remapping_alist_consistency_after_reset() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'alist-before (face-remapping-alist)
+   'add-relative (condition-case nil (progn (face-remap-add-relative 'default '(:weight bold)) 'ok) (error 'no))
+   'alist-after-add (face-remapping-alist)
+   'set-base (condition-case nil (progn (face-remap-set-base 'italic '(:slant oblique)) 'ok) (error 'no))
+   'alist-after-base (face-remapping-alist)
+   'reset-default (condition-case nil (progn (face-remap-reset-base 'default) 'ok) (error 'no))
+   'alist-after-reset-default (face-remapping-alist)
+   'reset-italic (condition-case nil (progn (face-remap-reset-base 'italic) 'ok) (error 'no))
+   'alist-after-all-reset (face-remapping-alist)
+   (equal (face-remapping-alist) nil))))"##,
+    );
+}
