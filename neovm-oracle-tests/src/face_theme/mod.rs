@@ -17506,3 +17506,184 @@ fn ft_photon_face_default_properties_of_font_lock_faces() {
    'font-lock-preprocessor-face-weight (condition-case nil (face-attribute 'font-lock-preprocessor-face :weight nil 'default-on) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_gluon2_face_overlay_with_negative_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov1 (make-overlay 1 15))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority -5))
+    (let ((ov2 (make-overlay 10 25))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority -10))
+    (let ((ov3 (make-overlay 20 30))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority -1))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30))
+     'negative-priority-order (mapcar (lambda (ov) (list (overlay-start ov) (overlay-get ov 'priority))) (sort (list ov1 ov2 ov3) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 30)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_font_lock_fontify_after_add_and_remove_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "ADD-REMOVE keyword cycle test font lock face buffer content data text")
+    (let ((results nil))
+      (font-lock-add-keywords nil '(("\\<\\(ADD-REMOVE\\)\\>" 1 '(:foreground "red" :weight bold) t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-add (save-excursion (goto-char (point-min)) (search-forward "ADD-REMOVE") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-remove-keywords nil '(("\\<\\(ADD-REMOVE\\)\\>" 1 '(:foreground "red" :weight bold) t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-remove (save-excursion (goto-char (point-min)) (search-forward "ADD-REMOVE") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-add-keywords nil '(("\\<\\(ADD-REMOVE\\)\\>" 1 '(:foreground "green")) t))
+      (font-lock-fontify-buffer)
+      (push (list 'after-re-add (save-excursion (goto-char (point-min)) (search-forward "ADD-REMOVE") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-remove-keywords nil '(("\\<\\(ADD-REMOVE\\)\\>" 1 '(:foreground "green")) t))
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_face_text_property_value_plist_decompose_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Plist decompose face property test buffer content text data here")
+    (put-text-property 1 56 'face '(:foreground "blue" :weight bold :slant italic :underline t :overline t :strike-through nil :box (:line-width 2) :inherit bold :extend t))
+    (let ((plist (get-text-property 1 'face)))
+      (list
+       'plist-length (length plist)
+       'all-keys (let ((keys nil) (i 0))
+                   (while (< i (length plist)) (push (nth i plist) keys) (setq i (+ i 2)))
+                   (nreverse keys))
+       'all-values (let ((vals nil) (i 0))
+                     (while (< i (length plist)) (push (nth (1+ i) plist) vals) (setq i (+ i 2)))
+                     (nreverse vals))
+       'fg-get (plist-get plist :foreground)
+       'weight-get (plist-get plist :weight)
+       'slant-get (plist-get plist :slant)
+       'underline-get (plist-get plist :underline)
+       'box-get (plist-get plist :box)
+       'inherit-get (plist-get plist :inherit)
+       'extend-get (plist-get plist :extend)))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_face_overlay_properties_list_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAA")
+    (let ((ov (make-overlay 1 11)))
+      (list
+       'empty-props (overlay-properties ov)
+       'add-face (progn (overlay-put ov 'face '(:background "yellow")) (overlay-properties ov))
+       'add-prio (progn (overlay-put ov 'priority 50) (overlay-properties ov))
+       'add-help (progn (overlay-put ov 'help-echo "help") (overlay-properties ov))
+       'add-evap (progn (overlay-put ov 'evaporate t) (overlay-properties ov))
+       'add-cat (progn (overlay-put ov 'category 'my-cat) (overlay-properties ov))
+       'remove-face (progn (overlay-put ov 'face nil) (overlay-properties ov))
+       'face-gone (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_font_lock_fontify_after_mode_disable_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* TODO Mode disable fontify test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        (font-lock-mode -1)
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+          (font-lock-mode 1)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+            (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_face_property_next_change_with_object_limit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:background "yellow"))
+    (put-text-property 21 41 'face '(:foreground "blue"))
+    (list
+     'next-with-limit (next-single-property-change 1 'face nil 20)
+     'next-no-limit (next-single-property-change 1 'face)
+     'next-from-10-limit (next-single-property-change 10 'face nil 15)
+     'next-from-10-no-limit (next-single-property-change 10 'face)
+     'prev-with-limit (previous-single-property-change 41 'face nil 1)
+     'text-prop-any-limited (text-property-any 1 15 'face 'bold)
+     'text-prop-not-all (text-property-not-all 1 41 'face '(:foreground "blue")))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_face_overlay_priority_change_affects_rendering() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 100))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 50))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35)))))
+      (let ((v0 (funcall snap)))
+        (overlay-put ov2 'priority 200)
+        (let ((v1 (funcall snap)))
+          (overlay-put ov1 'face '(:foreground "blue" :weight bold))
+          (overlay-put ov2 'face '(:foreground "orange" :slant italic))
+          (let ((v2 (funcall snap)))
+            (mapc #'delete-overlay (overlays-in 1 35))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_gluon2_face_set_face_attribute_with_default_family() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-default-family-face) (error nil))
+  (list
+   'set-family-to-default (condition-case nil (progn (set-face-attribute 'my-default-family-face nil :family (face-attribute 'default :family nil 'default-on)) 'ok) (error 'no))
+   'get-family (face-attribute 'my-default-family-face :family nil 'default-on)
+   'set-family-unspec (condition-case nil (progn (set-face-attribute 'my-default-family-face nil :family 'unspecified) (face-attribute 'my-default-family-face :family nil 'default-on)) (error 'no)))
+   'default-family-is (face-attribute 'default :family nil 'default-on)
+   'default-foundry-is (face-attribute 'default :foundry nil 'default-on)
+   'default-registry-is (face-attribute 'default :registry nil 'default-on))))"##,
+    );
+}
