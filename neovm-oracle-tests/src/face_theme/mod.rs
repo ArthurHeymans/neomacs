@@ -16679,3 +16679,169 @@ fn ft_wave_face_overlay_copy_and_paste_face_deep() {
                      (list 'new-face (overlay-get ov2 'face) 'new-priority (overlay-get ov2 'priority) 'char-prop-at-45 (get-char-property 45 'face) (progn (delete-overlay ov2) 'new-cleaned)))))))))"##,
     );
 }
+
+#[test]
+fn ft_ray_face_overlay_priority_zero_vs_negative_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 0))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority -1))
+    (let ((ov3 (make-overlay 15 35))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 1))
+    (let ((ov4 (make-overlay 5 25))) (overlay-put ov4 'face '(:foreground "cyan")) (overlay-put ov4 'priority -10))
+    (list
+     'face-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 5 10 15 20 25 30 35))
+     'negative-priorities (mapcar (lambda (ov) (list (overlay-start ov) (overlay-get ov 'priority))) (list ov1 ov2 ov3 ov4))
+     (progn (mapc #'delete-overlay (overlays-in 1 35)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_font_lock_fontify_only_syntactic_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; comment text\n\"string literal\"\n(defun syn-only () 42)\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (mapcar
+     (lambda (needle)
+       (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))))
+     '("comment" "string" "defun" "syn-only" "42"))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_face_overlay_get_face_after_evaporate_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Evaporate overlay face after deletion test content text data buffer")
+    (let ((ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (list
+       'face-before (overlay-get ov 'face)
+       'evaporate-before (overlay-get ov 'evaporate)
+       'overlay-alive (and ov (overlay-buffer ov) t)
+       (progn (delete-region 15 30) (list 'overlay-dead (not (and ov (overlay-buffer ov))) 'face-at-14 (get-char-property 14 'face) 'face-at-16 (get-char-property 16 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_face_text_property_interval_boundary_cross_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    (put-text-property 2 4 'face 'bold)
+    (put-text-property 4 6 'face 'italic)
+    (put-text-property 6 8 'face 'underline)
+    (put-text-property 8 10 'face '(:foreground "red"))
+    (put-text-property 10 12 'face '(:backward "yellow"))
+    (list
+     'every-char-face (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 4 5 6 7 8 9 10 11 12 13))
+     'prop-boundaries (mapcar (lambda (pos) (next-single-property-change pos 'face nil 13)) '(1 2 4 6 8 10 12))
+     'no-face-chars (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 13))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_font_lock_fontify_region_vs_ensure_equivalence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun equiv-test (a) (+ a 1))\n")
+    (list
+     'fontify-region (progn (font-lock-fontify-region 1 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 29)))
+     'unfontify (progn (font-lock-unfontify-buffer) 'unfontified)
+     'fontify-ensure (progn (font-lock-ensure (point-min) (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 29)))
+     'equivalent (progn (font-lock-unfontify-buffer) (let ((v1 (progn (font-lock-fontify-region 1 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 29))))) (font-lock-unfontify-buffer) (let ((v2 (progn (font-lock-ensure (point-min) (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 29))))) (equal v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_face_overlay_string_property_persistence_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string property persistence face test content text buffer data here done")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "BEFORE" 'face '(:foreground "red") 'custom-prop 'custom-value))
+      (overlay-put ov 'after-string (propertize "AFTER" 'face '(:foreground "blue") 'other-prop 'other-value))
+      (list
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'before-custom (get-text-property 0 'custom-prop (overlay-get ov 'before-string))
+       'after-face (get-text-property 0 (overlay-get ov 'after-string))
+       'after-custom (get-text-property 0 'other-prop (overlay-get ov 'after-string))
+       'before-props (text-properties-at 0 (overlay-get ov 'before-string))
+       'after-props (text-properties-at 0 (overlay-get ov 'after-string))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_face_set_attribute_with_relative_float_height() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-rel-height-face) (error nil))
+  (list
+   'set-1.5 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 1.5) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-2.0 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 2.0) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-0.5 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 0.5) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-int-180 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 180) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-unspecified (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 'unspecified) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-nil (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height nil) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_ray_face_property_list_access_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property list access cycle face test buffer content text data here end now final done all")
+    (add-text-properties 1 76 (list 'face 'bold 'p1 'v1 'p2 'v2 'p3 'v3 'p4 'v4 'p5 'v5))
+    (add-text-properties 25 50 (list 'face 'italic 'p6 'v6 'p7 'v7))
+    (let ((props (text-properties-at 1)))
+      (list
+       'props-length (length props)
+       'all-keys (let ((keys nil) (i 0))
+                   (while (< i (length props))
+                     (push (nth i props) keys)
+                     (setq i (+ i 2)))
+                   (nreverse keys))
+       'all-values (let ((vals nil) (i 0))
+                     (while (< i (length props))
+                       (push (nth (1+ i) props) vals)
+                       (setq i (+ i 2)))
+                     (nreverse vals))
+       'check-face (get-text-property 1 'face)
+       'check-p3 (get-text-property 1 'p3)
+       'check-p6 (get-text-property 1 'p6)
+       'check-face-at-30 (get-text-property 30 'face)
+       'check-p6-at-30 (get-text-property 30 'p6))))))"##,
+    );
+}
