@@ -2247,11 +2247,38 @@ fn copy_defaults_overrides(src: &str, dst: &str) {
     let dst_face = face_symbol_id(dst);
     FACE_ATTR_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let copied = state.defaults_overrides.get(&src_face).cloned();
+        // Copy defaults first; fall back to selected overrides so that
+        // faces whose attributes were only set on the selected frame
+        // (e.g. via defface → face-spec-recalc) still transfer to the
+        // target.  This mirrors GNU's `vcopy(lface, …)` which copies the
+        // full face vector regardless of frame domain.
+        let copied = state
+            .defaults_overrides
+            .get(&src_face)
+            .or_else(|| state.selected_overrides.get(&src_face))
+            .cloned();
         if let Some(attrs) = copied {
             state.defaults_overrides.insert(dst_face, attrs);
         } else {
             state.defaults_overrides.remove(&dst_face);
+        }
+    });
+}
+
+fn copy_selected_overrides(src: &str, dst: &str) {
+    let src_face = face_symbol_id(src);
+    let dst_face = face_symbol_id(dst);
+    FACE_ATTR_STATE.with(|slot| {
+        let mut state = slot.borrow_mut();
+        let copied = state
+            .selected_overrides
+            .get(&src_face)
+            .or_else(|| state.defaults_overrides.get(&src_face))
+            .cloned();
+        if let Some(attrs) = copied {
+            state.selected_overrides.insert(dst_face, attrs);
+        } else {
+            state.selected_overrides.remove(&dst_face);
         }
     });
 }
@@ -2382,6 +2409,26 @@ fn make_lisp_face_vector_for_domain(face_name: &str, defaults_frame: bool) -> Va
             .iter()
             .map(|attr| lisp_face_attribute_value(face_name, *attr, defaults_frame)),
     );
+    Value::vector(values)
+}
+
+/// Build a face vector that merges both selected and defaults-domain
+/// overrides.  This matches GNU Emacs' behaviour where the face vector in
+/// `Vface_new_frame_defaults` reflects the full face definition regardless
+/// of which frame domains the attributes were set on.
+fn make_lisp_face_vector_merged(face_name: &str) -> Value {
+    let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
+    values.push(Value::symbol("face"));
+    values.extend(LFACE_ATTRS.iter().map(|attr| {
+        // Prefer selected override, then defaults override, then base
+        if let Some(v) = get_face_override(face_name, *attr, false) {
+            return v;
+        }
+        if let Some(v) = get_face_override(face_name, *attr, true) {
+            return v;
+        }
+        lisp_face_attribute_base_value(face_name, *attr, false)
+    }));
     Value::vector(values)
 }
 
@@ -2548,6 +2595,16 @@ fn lisp_face_attribute_value(face: &str, attr: LFaceAttr, defaults_frame: bool) 
         return value;
     }
     lisp_face_attribute_base_value(face, attr, defaults_frame)
+}
+
+fn lisp_face_attribute_value_merged(face: &str, attr: LFaceAttr) -> Value {
+    if let Some(v) = get_face_override(face, attr, false) {
+        return v;
+    }
+    if let Some(v) = get_face_override(face, attr, true) {
+        return v;
+    }
+    lisp_face_attribute_base_value(face, attr, false)
 }
 
 fn resolve_known_face_name_for_compare(face: &Value, defaults_frame: bool) -> Result<String, Flow> {
@@ -2909,9 +2966,9 @@ pub(crate) fn builtin_internal_lisp_face_p(args: Vec<Value>) -> EvalResult {
     };
     if let Some(face_name) = known_face_name(&args[0]) {
         if frame_designator {
-            Ok(make_lisp_face_vector_for_domain(&face_name, false))
+            Ok(make_lisp_face_vector_merged(&face_name))
         } else {
-            Ok(make_lisp_face_vector_for_domain(&face_name, true))
+            Ok(make_lisp_face_vector_merged(&face_name))
         }
     } else {
         Ok(Value::NIL)
@@ -2971,6 +3028,7 @@ pub(crate) fn builtin_internal_copy_lisp_face(
     mark_created_lisp_face(&to_name);
     ensure_lisp_face_id_property(eval, &to_name)?;
     copy_defaults_overrides(&from_name, &to_name);
+    copy_selected_overrides(&from_name, &to_name);
     let result = args[1];
 
     // Copy the Rust FaceTable entry.
@@ -3608,8 +3666,8 @@ pub(crate) fn builtin_internal_lisp_face_equal_p(args: Vec<Value>) -> EvalResult
     let face1 = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
     let face2 = resolve_known_face_name_for_compare(&args[1], defaults_frame)?;
     for attr in LFACE_ATTRS {
-        let v1 = lisp_face_attribute_value(&face1, attr, defaults_frame);
-        let v2 = lisp_face_attribute_value(&face2, attr, defaults_frame);
+        let v1 = lisp_face_attribute_value_merged(&face1, attr);
+        let v2 = lisp_face_attribute_value_merged(&face2, attr);
         if v1 != v2 {
             return Ok(Value::NIL);
         }
@@ -3625,7 +3683,7 @@ pub(crate) fn builtin_internal_lisp_face_empty_p(args: Vec<Value>) -> EvalResult
     let defaults_frame = frame_defaults_flag(args.get(1))?;
     let face = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
     for attr in LFACE_ATTRS {
-        let v = lisp_face_attribute_value(&face, attr, defaults_frame);
+        let v = lisp_face_attribute_value_merged(&face, attr);
         if !v.is_symbol_named("unspecified") {
             return Ok(Value::NIL);
         }
