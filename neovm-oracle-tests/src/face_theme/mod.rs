@@ -7016,3 +7016,234 @@ fn ft_extreme_edge_face_after_text_property_remove_specific_deep() {
      'fontified-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40 48)))))"##,
     );
 }
+
+#[test]
+fn ft_extreme_face_overlay_interval_split_merge_face_transition() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (put-text-property 31 36 'face '(:background "cyan"))
+    (let ((ov1 (make-overlay 3 14))) (overlay-put ov1 'face '(:weight bold)) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 13 24))) (overlay-put ov2 'face '(:slant italic)) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 23 34))) (overlay-put ov3 'face '(:underline t)) (overlay-put ov3 'priority 15))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-char-property pos 'face))) '(1 4 8 12 16 20 24 28 32 35)))))
+      (let ((v0 (funcall snap)))
+        ;; Split interval by inserting at boundary
+        (goto-char 11) (insert "ZZZZZ")
+        (let ((v1 (funcall snap)))
+          ;; Merge intervals by deleting boundary region
+          (delete-region 18 28)
+          (let ((v2 (funcall snap)))
+            ;; Split again differently
+            (goto-char 8) (insert "YYYY")
+            (let ((v3 (funcall snap)))
+              ;; Delete all overlays, check text-only face
+              (mapc #'delete-overlay (overlays-in 1 (point-max)))
+              (let ((v4 (funcall snap)))
+                (list v0 v1 v2 v3 v4)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_overlay_variable_width_zero_length_boundary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Zero width overlay boundary test content")
+    (put-text-property 1 39 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 1)))
+      (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 38 39)))
+      (overlay-put ov2 'face '(:background "yellow")))
+    (let ((ov3 (make-overlay 20 20)))
+      (overlay-put ov3 'face '(:foreground "green" :weight bold)))
+    (list
+     'before-insert (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 2 20 21 38 39))
+     ;; Insert at beginning where zero-width overlay sits
+     'after-insert-beginning (progn
+                               (goto-char 1) (insert "START ")
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 38)))
+     ;; Insert at middle zero-width
+     'after-insert-middle (progn
+                            (goto-char 25) (insert "MIDDLE")
+                            (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(25 28 31 35 40)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_text_property_at_point_min_and_max() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property at buffer boundaries test text")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 35 39 'face 'italic)
+    (list
+     'at-point-min (text-properties-at 1)
+     'at-eob (text-properties-at (point-max))
+     'before-point-min (text-properties-at 0)
+     'after-eob (text-properties-at (+ (point-max) 1))
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-min (get-text-property (point-min) 'face)
+     'face-at-max (get-text-property (point-max) 'face)
+     'face-at-0 (get-text-property 0 'face)
+     'face-beyond-max (get-text-property (+ (point-max) 1) 'face)
+     'next-prop-from-min (next-single-property-change (point-min) 'face)
+     'prev-prop-from-max (previous-single-property-change (point-max) 'face nil (point-min))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_add_text_properties_then_partial_remove_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Partial property removal from textured content buffer")
+    (add-text-properties 1 55 (list 'face '(:foreground "blue" :weight bold)
+                                     'layer1 'val1 'layer2 'val2 'layer3 'val3))
+    ;; Remove layer1 from first third
+    (remove-text-properties 1 18 '(layer1 nil))
+    ;; Remove face from middle third
+    (remove-text-properties 18 36 '(face nil))
+    ;; Remove layer2 from last third
+    (remove-text-properties 36 55 '(layer2 nil))
+    ;; Add face back to middle but with different value
+    (put-text-property 18 36 'face '(:background "yellow" :slant italic))
+    (list
+     'face-across (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 18 25 36 45 54))
+     'layer1-across (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'layer1)) '(1 10 18 25 36 45 54))
+     'layer2-across (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'layer2)) '(1 10 18 25 36 45 54))
+     'layer3-across (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'layer3)) '(1 10 18 25 36 45 54))
+     'text-props-at-boundaries (mapcar (lambda (pos) (goto-char pos) (length (text-properties-at pos))) '(1 18 36 54)))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_overlay_evaporate_in_chain_with_textprop_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Evaporating overlays in text property chain test buffer text")
+    (put-text-property 1 55 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 10)))
+      (overlay-put ov1 'face '(:background "red"))
+      (overlay-put ov1 'evaporate t))
+    (let ((ov2 (make-overlay 10 20)))
+      (overlay-put ov2 'face '(:background "green"))
+      (overlay-put ov2 'evaporate t))
+    (let ((ov3 (make-overlay 20 30)))
+      (overlay-put ov3 'face '(:background "yellow"))
+      (overlay-put ov3 'evaporate nil))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 5 10 15 20 25 30 35 40 50)))))
+      (let ((v0 (funcall snap)))
+        ;; Delete region that should evaporate ov1 and ov2
+        (delete-region 5 25)
+        (let ((v1 (funcall snap)))
+          ;; Insert new text - ov3 should persist
+          (goto-char 10) (insert "PERSISTENT-TEXT")
+          (let ((v2 (funcall snap)))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_with_keyword_matching_multiple_groups() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "function myFunc(param1, param2) { return param1 + param2; }")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(function\\)\\>" 1 font-lock-keyword-face t)
+                              ("\\<\\(return\\)\\>" 1 font-lock-keyword-face t)
+                              ("\\<\\(myFunc\\)\\>" 1 font-lock-function-name-face t)
+                              ("\\<\\(param[12]\\)\\>" 1 font-lock-variable-name-face t)))
+    (font-lock-fontify-buffer)
+    (list
+     'keyword-face (save-excursion (goto-char (point-min)) (search-forward "function") (get-text-property (match-beginning 0) 'face))
+     'func-name-face (save-excursion (goto-char (point-min)) (search-forward "myFunc") (get-text-property (match-beginning 0) 'face))
+     'var1-face (save-excursion (goto-char (point-min)) (search-forward "param1") (get-text-property (match-beginning 0) 'face))
+     'var2-face (save-excursion (goto-char (point-min)) (search-forward "param2") (get-text-property (match-beginning 0) 'face))
+     'return-face (save-excursion (goto-char (point-min)) (search-forward "return") (get-text-property (match-beginning 0) 'face))
+     'syntax-chars-face (save-excursion (goto-char (point-min)) (search-forward "{") (get-text-property (match-beginning 0) 'face))
+     'non-keyword-face (save-excursion (goto-char (point-min)) (search-forward "+") (get-text-property (match-beginning 0) 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_with_face_spec_set_then_reset_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (condition-case nil (copy-face 'default 'my-spec-reset-face) (error nil))
+  (list
+   'before-spec (face-attribute 'my-spec-reset-face :weight nil 'default-on)
+   'set-spec (condition-case nil
+                 (face-spec-set 'my-spec-reset-face '((t :weight bold :foreground "red")) 'face-defface-spec)
+               (error 'no-set))
+   'after-spec (face-attribute 'my-spec-reset-face :weight nil 'default-on)
+   'reset-spec (condition-case nil
+                   (face-spec-set 'my-spec-reset-face '((t :weight normal :foreground "black")) 'face-defface-spec)
+                 (error 'no-reset))
+   'after-reset (face-attribute 'my-spec-reset-face :weight nil 'default-on)
+   'reset-to-defaults (condition-case nil
+                          (face-spec-set 'my-spec-reset-face '((t)) 'face-defface-spec)
+                        (error 'no-reset2))
+   'after-reset-default (face-attribute 'my-spec-reset-face :weight nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_font_lock_with_overlay_priority_interleaving() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Overlay priority interleaving with font-lock faces test")
+    (font-lock-add-keywords nil '(("\\<\\(Overlay\\)\\>" 1 font-lock-warning-face t)
+                                  ("\\<\\(priority\\)\\>" 1 '(:foreground "red") t)
+                                  ("\\<\\(font-lock\\)\\>" 1 font-lock-keyword-face t)))
+    (font-lock-fontify-buffer)
+    (let ((ov1 (make-overlay 1 9)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'priority 100))
+    (let ((ov2 (make-overlay 20 30)))
+      (overlay-put ov2 'face '(:weight bold))
+      (overlay-put ov2 'priority -1))
+    (let ((ov3 (make-overlay 35 45)))
+      (overlay-put ov3 'face '(:foreground "green"))
+      (overlay-put ov3 'priority 50))
+    (list
+     'faces-all (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-char-property pos 'face))) '(1 5 8 15 20 25 30 35 40 45 55))
+     'overlay-counts (mapcar (lambda (pos) (goto-char pos) (length (overlays-at pos))) '(1 8 25 40))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
