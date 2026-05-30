@@ -11577,3 +11577,176 @@ fn ft_theta_face_set_face_font_via_spec_vs_string_deep() {
    'reset-font (condition-case nil (progn (set-face-font 'my-font-spec-face 'unspecified nil) 'reset) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_iota_face_invisible_property_affects_face_visibility() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Visible HIDDEN Visible HIDDEN Visible")
+    (put-text-property 1 9 'face 'bold)
+    (put-text-property 9 15 'face 'italic)
+    (put-text-property 9 15 'invisible t)
+    (put-text-property 15 23 'face 'underline)
+    (put-text-property 23 29 'face '(:foreground "red") :invisible t)
+    (put-text-property 29 36 'face '(:background "yellow"))
+    (list
+     'faces-with-invisible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (invisible-p pos))) '(1 5 9 12 15 20 23 26 29 33))
+     'next-visible-change (next-single-property-change 1 'invisible)
+     'remove-invisible (progn (remove-text-properties 9 15 '(invisible nil)) (remove-text-properties 23 29 '(invisible nil)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 9 12 15 23 26 29)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_font_lock_fontify_with_char_syntax_table_change() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun st-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'st-test-face (save-excursion (goto-char (point-min)) (search-forward "st-test") (get-text-property (match-beginning 0) 'face))
+     'paren-face-left (save-excursion (goto-char (point-min)) (search-forward "(") (get-text-property (match-beginning 0) 'face))
+     'paren-face-right (save-excursion (goto-char (point-min)) (search-forward ")") (get-text-property (match-beginning 0) 'face))
+     'syntax-table-before (syntax-table)
+     'fontified-after (get-text-property 1 'fontified))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_face_overlay_with_zero_length_text_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Zero overlay text test")
+    (let ((ov (make-overlay 5 5)))
+      (overlay-put ov 'face '(:background "red")))
+    (let ((ov2 (make-overlay 21 21)))
+      (overlay-put ov2 'face '(:background "blue")))
+    (list
+     'before-insert (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 4 5 6 10 19 20 21 22))
+     'after-insert-at-zero (progn (goto-char 5) (insert "INSERTED") (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 4 5 8 12 16 20 22 25 30)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_face_set_attribute_slant_italic_oblique_normal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-slant-cycle-face) (error nil))
+  (list
+   'set-slant-normal (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant 'normal) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no))
+   'set-slant-italic (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant 'italic) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no))
+   'set-slant-oblique (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant 'oblique) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no))
+   'set-slant-normal-again (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant 'normal) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no))
+   'set-slant-unspecified (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant 'unspecified) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no))
+   'set-slant-nil (condition-case nil (progn (set-face-attribute 'my-slant-cycle-face nil :slant nil) (face-attribute 'my-slant-cycle-face :slant nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_face_text_property_next_change_fast_path_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "11111222223333344444555556666677777888889999900000")
+    (dotimes (i 10)
+      (put-text-property (1+ (* i 5)) (1+ (* (1+ i) 5)) 'face
+                         (nth (mod i 4) '(bold italic underline (:foreground "red")))))
+    (list
+     'all-next-changes (let ((pos 1) (result nil))
+                         (while pos
+                           (setq pos (next-single-property-change pos 'face nil 51))
+                           (when pos (push pos result)))
+                         (nreverse result))
+     'all-prev-changes (let ((pos 51) (result nil))
+                         (while pos
+                           (setq pos (previous-single-property-change pos 'face nil 1))
+                           (when pos (push pos result)))
+                         (nreverse result))
+     'interval-count (length (object-intervals (current-buffer)))
+     'spot-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 6 11 16 21 26 31 36 41 46 50)))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_font_lock_set_defaults_multiple_times_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Set defaults multiple times font lock test buffer data")
+    (list
+     'mode-before font-lock-mode
+     'set-defaults-1 (condition-case nil (progn (font-lock-set-defaults) 'ok) (error 'no))
+     'set-defaults-2 (condition-case nil (progn (font-lock-set-defaults) 'ok) (error 'no))
+     'set-defaults-3 (condition-case nil (progn (font-lock-set-defaults) 'ok) (error 'no))
+     'fontify-after (progn (font-lock-fontify-buffer) (get-text-property 1 'fontified))
+     'mode-after font-lock-mode))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_face_overlay_with_category_face_inherit_combination() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay category face inherit combination test content text data here end")
+    (let ((ov1 (make-overlay 1 20)))
+      (overlay-put ov1 'category 'cat-type-a)
+      (overlay-put ov1 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov1 'priority 100))
+    (let ((ov2 (make-overlay 15 40)))
+      (overlay-put ov2 'category 'cat-type-b)
+      (overlay-put ov2 'face '(:foreground "red" :inherit italic :weight bold))
+      (overlay-put ov2 'priority 50))
+    (list
+     'cat-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 15 20 25 30 35 40 50 60))
+     'ov1-face (overlay-get ov1 'face)
+     'ov2-face (overlay-get ov2 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_iota_face_with_face_list_dedup_and_sort() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'total-faces (length (face-list))
+   'deduped-count (length (delete-dups (copy-sequence (face-list))))
+   'all-facep (apply #'and (mapcar #'facep (seq-take (face-list) 30)))
+   'sample-faces (seq-take (sort (copy-sequence (face-list)) #'string<) 15)
+   'has-default (member 'default (face-list))
+   'has-bold (member 'bold (face-list))
+   'has-italic (member 'italic (face-list))
+   'has-bold-italic (member 'bold-italic (face-list))
+   'has-underline (member 'underline (face-list))
+   'has-fringe (member 'fringe (face-list))
+   'has-scroll-bar (member 'scroll-bar (face-list))
+   'has-tool-bar (if (member 'tool-bar (face-list)) 'present 'absent))))"##,
+    );
+}
