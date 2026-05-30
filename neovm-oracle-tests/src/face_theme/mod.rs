@@ -13244,3 +13244,171 @@ fn ft_sigma_face_set_attribute_with_relative_height_values() {
    'face-attrib-relative-p (if (fboundp 'face-attribute-relative-p) (face-attribute-relative-p :height) 'no-func)))))"##,
     );
 }
+
+#[test]
+fn ft_tau_face_text_property_value_comparison_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (list
+     'compare-bold-bold (equal (get-text-property 1 'face) (get-text-property 1 'face))
+     'compare-bold-italic (equal (get-text-property 1 'face) (get-text-property 6 'face))
+     'compare-italic-underline (equal (get-text-property 6 'face) (get-text-property 11 'face))
+     'compare-bold-red (equal (get-text-property 1 'face) (get-text-property 16 'face))
+     'compare-complex-equal (equal (get-text-property 16 'face) (get-text-property 16 'face))
+     'text-property-any-bold (text-property-any 1 21 'face 'bold)
+     'text-property-any-underline (text-property-any 1 21 'face 'underline)
+     'text-property-any-red (text-property-any 1 21 'face '(:foreground "red"))))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_font_lock_mode_off_insert_on_recheck_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Mode off test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        (font-lock-mode -1)
+        ;; Insert while font-lock is off
+        (goto-char (point-max))
+        (insert "* DONE Inserted while off\nBody inserted.\n\n")
+        (font-lock-mode 1)
+        (font-lock-ensure (point-min) (point-max))
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face)))
+              (v2 (save-excursion (goto-char (point-min)) (search-forward "DONE") (get-text-property (match-beginning 0) 'face))))
+          (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_overlay_creation_in_empty_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'empty-overlay-start (overlay-start ov)
+       'empty-overlay-end (overlay-end ov)
+       'face-get (overlay-get ov 'face)
+       'overlay-buffer (overlay-buffer ov)
+       ;; Insert text after overlay
+       'after-insert (progn (insert "Text after overlay") (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 18)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_text_property_all_properties_list_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "All text properties list face test buffer content data here now end final")
+    (add-text-properties 1 64 (list 'face 'bold 'key1 'val1 'key2 'val2 'key3 'val3 'key4 'val4 'key5 'val5 'fontified t))
+    (list
+     'props-count (length (text-properties-at 1))
+     'all-keys (let ((props (text-properties-at 1)) (keys nil) (i 0))
+                 (while (< i (length props))
+                   (push (nth i props) keys)
+                   (setq i (+ i 2)))
+                 (nreverse keys))
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-30 (get-text-property 30 'face)
+     'face-at-63 (get-text-property 63 'face)
+     'all-key-values (mapcar (lambda (k) (list k (get-text-property 1 k))) '(face key1 key2 key3 key4 key5 fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_font_lock_fontify_syntactically_full_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; Comment line\n(\"string\" symbol 42)\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (list
+     'comment-face (save-excursion (goto-char (point-min)) (search-forward "Comment") (get-text-property (match-beginning 0) 'face))
+     'string-face (save-excursion (goto-char (point-min)) (search-forward "string") (get-text-property (match-beginning 0) 'face))
+     'symbol-face (save-excursion (goto-char (point-min)) (search-forward "symbol") (get-text-property (match-beginning 0) 'face))
+     'number-face (save-excursion (goto-char (point-min)) (search-forward "42") (get-text-property (match-beginning 0) 'face))
+     'fontified-all (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 15 25 30 35)))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_overlay_after_string_with_complex_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "After string complex face overlay test content data text here now")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'after-string
+                   (propertize "{{AFTER-COMPLEX}}" 'face '(:foreground "blue" :weight bold :slant italic :underline t :background "white"))))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'after-face (get-text-property 0 (overlay-get ov 'after-string))
+     'after-face-length (length (text-properties-at 0 (overlay-get ov 'after-string)))
+     'after-str-len (length (overlay-get ov 'after-string))
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_text_property_insert_at_interval_ends() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (list
+     'before-insert (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 6 8 10))
+     'insert-at-start (progn (goto-char 1) (insert "X") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 2 3 6 7 10 12)))
+     'insert-at-boundary (progn (goto-char 6) (insert "YY") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 5 6 8 9 12 14)))
+     'insert-at-end (progn (goto-char 11) (insert "Z") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 5 6 8 11 12 13))))))"##,
+    );
+}
+
+#[test]
+fn ft_tau_face_set_fill_column_indicator_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'fill-column-indicator-facep (facep 'fill-column-indicator)
+   (condition-case nil (face-attribute 'fill-column-indicator :foreground nil 'default-on) (error 'no-fg))
+   (condition-case nil (face-attribute 'fill-column-indicator :background nil 'default-on) (error 'no-bg))
+   (condition-case nil (face-attribute 'fill-column-indicator :underline nil 'default-on) (error 'no-ul))
+   'line-number-facep (facep 'line-number)
+   'display-fill-column-indicator-bound (boundp 'display-fill-column-indicator))))"##,
+    );
+}
