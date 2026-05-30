@@ -21310,3 +21310,157 @@ fn ft_spacetime_face_text_property_interval_ends_precise() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_infinite_face_overlay_properties_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'help-echo "help text")
+      (overlay-put ov 'priority 42)
+      (let ((p (overlay-properties ov)))
+        (list
+         'face-get (plist-get p 'face)
+         'help-get (plist-get p 'help-echo)
+         'priority-get (plist-get p 'priority)
+         'none-get (plist-get p 'nonexistent)
+         'props-len (length p)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_font_lock_fontify_unfontify_empty_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (list
+     'empty-before (list 'face (get-text-property 1 'face) 'fontified (get-text-property 1 'fontified))
+     'fontify-empty (progn (font-lock-fontify-buffer) (list 'face (get-text-property 1 'face) 'fontified (get-text-property 1 'fontified)))
+     'unfontify-empty (progn (font-lock-unfontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+     'insert-then-fontify (progn (insert "(defun ef (x) x)") (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 11 14 15 17)))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_overlay_same_region_diff_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 1 21))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 1 21))) (overlay-put ov2 'face '(:foreground "green")))
+    (let ((ov3 (make-overlay 1 21))) (overlay-put ov3 'face '(:underline t)))
+    (list
+     'how-many (length (overlays-at 5))
+     'effective-face (get-char-property 5 'face)
+     'all-faces (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 5))
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_text_property_interval_after_delete_merge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZ")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (list
+     'init-intervals (length (object-intervals (current-buffer)))
+     'delete-middle (progn (delete-region 6 11) (list 'intervals (length (object-intervals (current-buffer))) 'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 7 10 11)))))
+     'delete-all (progn (delete-region 1 (point-max)) (list 'intervals (length (object-intervals (current-buffer))))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_font_lock_fontify_region_only_first_line() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun first-line () 1)\n(defun second-line () 2)\n")
+    (font-lock-fontify-region 1 25)
+    (list
+     'fontified-first (get-text-property 1 'fontified)
+     'fontified-second (get-text-property 27 'fontified)
+     'face-first-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'face-second-defun (save-excursion (goto-char (point-min)) (search-forward "second-line") (get-text-property (match-beginning 0) 'face))
+     'fontify-rest (progn (font-lock-fontify-region 25 (point-max)) (get-text-property 27 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_set_face_attribute_width_table_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'font-width-table-bound (boundp 'font-width-table)
+   'font-width-table-value (if (boundp 'font-width-table) (length font-width-table) 'no-bound)
+   'ultra-condensed-available (if (boundp 'font-width-table) (member 'ultra-condensed font-width-table) 'no-table)
+   'condensed-available (if (boundp 'font-width-table) (member 'condensed font-width-table) 'no-table)
+   'normal-available (if (boundp 'font-width-table) (member 'normal font-width-table) 'no-table)
+   'expanded-available (if (boundp 'font-width-table) (member 'expanded font-width-table) 'no-table)
+   'default-width (face-attribute 'default :width nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_overlay_face_after_property_overwrite_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "red"))
+      (list
+       'first-face (overlay-get ov 'face)
+       'overwrite-face (progn (overlay-put ov 'face '(:background "green")) (overlay-get ov 'face))
+       'overwrite-again (progn (overlay-put ov 'face '(:background "blue" :foreground "white")) (overlay-get ov 'face))
+       'char-prop-after-all (get-char-property 10 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_text_property_null_values_handling() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face nil)
+    (put-text-property 11 16 'face nil)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (list
+     'faces-with-nil (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 8 11 13 16 18 20))
+     'find-bold (text-property-any 1 21 'face 'bold)
+     'find-nil (text-property-any 1 21 'face nil)
+     'find-red (text-property-any 1 21 'face '(:foreground "red")))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
