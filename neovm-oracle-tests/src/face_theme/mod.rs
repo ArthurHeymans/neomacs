@@ -7857,3 +7857,209 @@ fn ft_omega_face_with_font_lock_fontify_after_change_deep() {
         (list v0 v1)))))"##,
     );
 }
+
+#[test]
+fn ft_maxedge_face_interval_tree_rebuild_after_many_inserts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((results nil))
+      (dotimes (i 20)
+        (let ((start (1+ (* i 5)))
+              (end (min (1+ (* (1+ i) 5)) (* 20 5 3))))
+          (insert (make-string 5 (+ ?A i)))
+          (put-text-property start end 'face
+                             (nth (mod i 5)
+                                   '(bold italic underline
+                                     (:foreground "red")
+                                     (:background "yellow"))))))
+      (list
+       'spot-checks (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 6 11 20 35 50 70 90))
+       'interval-count (length (object-intervals (current-buffer)))
+       'prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 6 11 20 35))
+       'prev-changes (mapcar (lambda (pos) (previous-single-property-change pos 'face nil (point-min))) '(10 25 40 60 90))))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_overlay_property_at_start_end_of_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay at buffer start and end test text here now")
+    (let ((ov-start (make-overlay 1 5)))
+      (overlay-put ov-start 'face '(:background "red"))
+      (overlay-put ov-start 'before-string "<<<"))
+    (let ((ov-end (make-overlay 48 52)))
+      (overlay-put ov-end 'face '(:background "yellow"))
+      (overlay-put ov-end 'after-string ">>>"))
+    (let ((ov-full (make-overlay 1 52)))
+      (overlay-put ov-full 'face '(:foreground "blue"))
+      (overlay-put ov-full 'priority -1))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 3 5 10 25 40 48 51))
+     'overlay-starts (mapcar #'overlay-start (overlays-in 1 52))
+     'overlay-ends (mapcar #'overlay-end (overlays-in 1 52))
+     'overlays-at-buffer-start (overlays-at 1)
+     'overlays-at-buffer-end (overlays-at 51)
+     (progn (mapc #'delete-overlay (overlays-in 1 52)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_face_with_raise_attribute_combined_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-raise-face) (error nil))
+  (list
+   'set-raise-positive (condition-case nil (progn (set-face-attribute 'my-raise-face nil :raise 0.3) 'ok) (error 'no))
+   'get-raise-positive (condition-case nil (face-attribute 'my-raise-face :raise nil 'default-on) (error 'no))
+   'set-raise-negative (condition-case nil (progn (set-face-attribute 'my-raise-face nil :raise -0.2) 'ok) (error 'no))
+   'get-raise-negative (condition-case nil (face-attribute 'my-raise-face :raise nil 'default-on) (error 'no))
+   'set-raise-zero (condition-case nil (progn (set-face-attribute 'my-raise-face nil :raise 0) 'ok) (error 'no))
+   'get-raise-zero (condition-case nil (face-attribute 'my-raise-face :raise nil 'default-on) (error 'no))
+   'set-raise-with-other-attrs (condition-case nil (progn (set-face-attribute 'my-raise-face nil :raise 0.1 :weight 'bold :slant 'italic :underline t) 'ok) (error 'no))
+   'get-all-after-set (list (face-attribute 'my-raise-face :raise nil 'default-on)
+                            (face-attribute 'my-raise-face :weight nil 'default-on)
+                            (face-attribute 'my-raise-face :slant nil 'default-on)
+                            (condition-case nil (face-attribute 'my-raise-face :underline nil 'default-on) (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_font_lock_fontify_block_with_nested_functions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun outer (a)\n")
+    (insert "  (let ((inner (lambda (b) (* b b))))\n")
+    (insert "    (funcall inner a)))\n")
+    (font-lock-fontify-buffer)
+    (mapcar
+     (lambda (needle)
+       (save-excursion
+         (goto-char (point-min))
+         (if (search-forward needle nil t)
+             (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))
+             (list needle 'not-found nil))))
+     '("defun" "outer" "let" "lambda" "funcall" "inner"))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_face_text_property_add_to_empty_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (list
+     'empty-before-face (get-text-property 1 'face)
+     'empty-before-fontified (get-text-property 1 'fontified)
+     'empty-interval-count (length (object-intervals (current-buffer)))
+     ;; Add content and face
+     (progn
+       (insert "New content with face")
+       (put-text-property 1 20 'face 'bold)
+       (list
+        'after-face (get-text-property 1 'face)
+        'after-fontified (get-text-property 1 'fontified)
+        'after-interval-count (length (object-intervals (current-buffer)))))
+     ;; Erase and re-check
+     (progn
+       (erase-buffer)
+       (list
+        'after-erase-face (get-text-property 1 'face)
+        'after-erase-interval-count (length (object-intervals (current-buffer)))))
+     ;; Re-insert and check
+     (progn
+       (insert "Re-inserted with different face properties now")
+       (put-text-property 1 13 'face 'italic)
+       (put-text-property 13 30 'face 'underline)
+       (put-text-property 30 49 'face '(:foreground "red"))
+       (list
+        'reinsert-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 13 20 30 40 48))
+        'reinsert-interval-count (length (object-intervals (current-buffer)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_face_overlay_with_multiple_faces_appended_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with multiple appended face properties test content")
+    (let ((ov (make-overlay 1 57)))
+      (overlay-put ov 'face '(:foreground "blue"))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic :background "yellow"))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic :background "yellow" :underline t))
+      (list
+       'face-at-point (get-char-property 1 'face)
+       'face-at-10 (get-char-property 10 'face)
+       'face-at-30 (get-char-property 30 'face)
+       'face-at-50 (get-char-property 50 'face)
+       'facep-face (facep (get-char-property 1 'face))
+       'overlay-props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_face_buffer_local_face_remap_complex() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Buffer local face remap complex test content text")
+    (put-text-property 1 50 'face 'bold)
+    (list
+     'initial-face (get-text-property 1 'face)
+     'initial-remap-alist (face-remapping-alist)
+     'add-relative (condition-case nil (progn (face-remap-add-relative 'bold '(:foreground "red")) 'ok) (error 'no))
+     'face-after-remap (get-text-property 1 'face)
+     'remap-alist-after (face-remapping-alist)
+     'add-another (condition-case nil (progn (face-remap-add-relative 'bold '(:slant italic)) 'ok) (error 'no))
+     'face-after-another (get-text-property 1 'face)
+     'remap-alist-after-another (face-remapping-alist)
+     'reset-all (condition-case nil (progn (face-remap-reset-base 'bold) 'ok) (error 'no))
+     'face-after-reset (get-text-property 1 'face)
+     'remap-alist-after-reset (face-remapping-alist)))))"##,
+    );
+}
+
+#[test]
+fn ft_maxedge_face_compare_via_attribute_extraction_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'bold-vs-italic (list 'weight (face-attribute 'bold :weight nil 'default-on) (face-attribute 'italic :weight nil 'default-on)
+                         'slant (face-attribute 'bold :slant nil 'default-on) (face-attribute 'italic :slant nil 'default-on))
+   'default-vs-bold (list 'weight-d (face-attribute 'default :weight nil 'default-on) 'weight-b (face-attribute 'bold :weight nil 'default-on)
+                          'face-equal (condition-case nil (face-equal 'default 'bold) (error 'no)))
+   'italic-vs-underline (list 'slant-i (face-attribute 'italic :slant nil 'default-on)
+                               'underline-u (condition-case nil (face-attribute 'underline :underline nil 'default-on) (error 'no)))
+   'all-3-compare (list (face-equal 'default 'default)
+                        (condition-case nil (face-equal 'bold 'bold) (error 'no))
+                        (face-differs-from-default-p 'bold)
+                        (face-differs-from-default-p 'italic)
+                        (condition-case nil (face-differs-from-default-p 'underline) (error 'no)))))"##,
+    );
+}
