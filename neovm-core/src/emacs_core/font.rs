@@ -2096,7 +2096,7 @@ fn mark_created_lisp_face(name: &str) {
     }
 }
 
-fn ensure_lisp_face_id_property(
+pub(crate) fn ensure_lisp_face_id_property(
     eval: &mut super::eval::Context,
     face_name: &str,
 ) -> Result<(), Flow> {
@@ -3014,6 +3014,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
             } else if !face_exists_for_domain(&face_name, false) {
                 mark_selected_created_lisp_face(&face_name);
                 mark_created_lisp_face(&face_name);
+                // GNU Emacs `Finternal_set_lisp_face_attribute` calls
+                // `lface_from_face_name` which calls `Finternal_make_lisp_face`,
+                // which stores the internal face ID as the symbol's `face`
+                // property.  Without this `check-face` / `face-id` fail.
+                ensure_lisp_face_id_property(eval, &face_name)?;
             }
 
             let (canonical_attr, canonical_value) =

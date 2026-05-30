@@ -7345,6 +7345,10 @@ impl Context {
         attr: crate::face::LFaceAttr,
         value: crate::face::FaceAttrValue,
     ) -> bool {
+        // GNU Emacs stores the internal face ID as the symbol's `face`
+        // property during `internal-make-lisp-face`.  Ensure this is set
+        // so that `check-face`, `face-id`, `face-equal`, etc. work.
+        let _ = super::font::ensure_lisp_face_id_property(self, face_name);
         let changed = self.face_table.set_attribute(face_name, attr, value);
         if changed {
             self.face_change_count += 1;
