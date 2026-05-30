@@ -2701,7 +2701,7 @@ fn normalize_face_attr_for_set_with_eval(
         SetFaceAttr::Bold => ":bold",
         SetFaceAttr::Italic => ":italic",
     };
-    let normalized = match attr_name {
+    let mut normalized = match attr_name {
         ":foreground" | ":background" | ":distant-foreground" if value.is_nil() => {
             Value::symbol("unspecified")
         }
@@ -2810,19 +2810,20 @@ fn normalize_face_attr_for_set_with_eval(
                 }
             }
         }
-        ":foreground" => {
+        ":foreground" | ":background" | ":distant-foreground" => {
             if !is_reset_like {
-                check_non_empty_string(&normalized, "Empty foreground color value")?;
-            }
-        }
-        ":background" => {
-            if !is_reset_like {
-                check_non_empty_string(&normalized, "Empty background color value")?;
-            }
-        }
-        ":distant-foreground" => {
-            if !is_reset_like {
-                check_non_empty_string(&normalized, "Empty distant-foreground color value")?;
+                // Doom themes and some Emacs themes store colours as cons cells
+                // (dark . light).  Resolve to a plain string so downstream
+                // consumers (lisp_value_to_face_attr) receive a valid colour.
+                if let ValueKind::Cons = normalized.kind() {
+                    normalized = normalized.cons_car();
+                }
+                let check_msg = match attr_name {
+                    ":foreground" => "Empty foreground color value",
+                    ":background" => "Empty background color value",
+                    _ => "Empty distant-foreground color value",
+                };
+                check_non_empty_string(&normalized, check_msg)?;
             }
         }
         ":inverse-video" => {
