@@ -6542,3 +6542,261 @@ fn ft_tera_face_font_lock_prepend_vs_append_keywords_deep() {
      'test-override (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face)))))"##,
     );
 }
+
+#[test]
+fn ft_edge_indirect_buffer_face_edit_clone_edit_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (require 'face-remap)
+    (insert "Indirect buffer multi-edit face test content here now")
+    (put-text-property 1 13 'face 'bold)
+    (put-text-property 13 25 'face 'italic)
+    (put-text-property 25 38 'face 'underline)
+    (put-text-property 38 51 'face '(:foreground "red" :weight bold))
+    (let* ((clone-name (generate-new-buffer-name "*ft-edge-clone*"))
+           (clone (make-indirect-buffer (current-buffer) clone-name t))
+           (snap (lambda (buf)
+                   (with-current-buffer buf
+                     (list
+                      (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 7 13 19 25 30 40 48))
+                      (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 13 25 38))
+                      (length (object-intervals buf)))))))
+      (unwind-protect
+          (let ((v0 (funcall snap (current-buffer)))
+                (v0c (funcall snap clone)))
+            ;; Edit in base: change some faces
+            (goto-char 13)
+            (put-text-property 13 25 'face '(:background "yellow" :weight bold))
+            (let ((v1 (funcall snap (current-buffer)))
+                  (v1c (funcall snap clone)))
+              ;; Edit in clone: add overlay
+              (with-current-buffer clone
+                (let ((ov (make-overlay 20 35)))
+                  (overlay-put ov 'face '(:foreground "green"))
+                  (overlay-put ov 'priority 50)))
+              (let ((v2 (funcall snap (current-buffer)))
+                    (v2c (funcall snap clone)))
+                ;; Edit in base: delete region
+                (delete-region 10 30)
+                (let ((v3 (funcall snap (current-buffer)))
+                      (v3c (funcall snap clone)))
+                  (list v0 v0c v1 v1c v2 v2c v3 v3c))))))
+      (when (get-buffer clone-name) (kill-buffer clone-name))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_overlay_priority_insert_delete_advance_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 41 'face '(:foreground "gray"))
+    (let ((ovs nil)
+          (snap (lambda ()
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 4 8 12 16 20 24 28 32 36 40)))))
+      ;; Create 5 overlapping overlays with different priorities
+      (push (let ((ov (make-overlay 1 10))) (overlay-put ov 'face '(:background "red")) (overlay-put ov 'priority 10) ov) ovs)
+      (push (let ((ov (make-overlay 6 16))) (overlay-put ov 'face '(:foreground "green")) (overlay-put ov 'priority 20) ov) ovs)
+      (push (let ((ov (make-overlay 12 22))) (overlay-put ov 'face '(:background "blue")) (overlay-put ov 'priority 30) ov) ovs)
+      (push (let ((ov (make-overlay 18 28))) (overlay-put ov 'face '(:foreground "orange")) (overlay-put ov 'priority 15) ov) ovs)
+      (push (let ((ov (make-overlay 24 34))) (overlay-put ov 'face '(:background "yellow")) (overlay-put ov 'priority 25) ov) ovs)
+      (let ((v0 (funcall snap)))
+        ;; Insert text at overlap point
+        (goto-char 10)
+        (insert "INSERT")
+        (let ((v1 (funcall snap)))
+          ;; Delete text at another overlap
+          (delete-region 20 26)
+          (let ((v2 (funcall snap)))
+            ;; Change priority of first overlay
+            (overlay-put (car (last ovs)) 'priority 100)
+            (let ((v3 (funcall snap)))
+              ;; Advance all overlays
+              (mapc (lambda (ov) (condition-case nil (overlay-put ov 'advance-both t) (error nil))) ovs)
+              (goto-char 15)
+              (insert "ADV")
+              (let ((v4 (funcall snap)))
+                (mapc #'delete-overlay (overlays-in 1 (point-max)))
+                (list v0 v1 v2 v3 v4)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_text_property_single_char_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOP")
+    ;; Single char faces
+    (put-text-property 1 2 'face 'bold)
+    (put-text-property 2 3 'face 'italic)
+    (put-text-property 3 4 'face 'underline)
+    (put-text-property 5 6 'face '(:foreground "red"))
+    (put-text-property 6 7 'face '(:background "yellow"))
+    (put-text-property 7 8 'face '(:foreground "blue" :weight bold))
+    (put-text-property 9 10 'face 'bold)
+    (put-text-property 10 11 'face 'italic)
+    (put-text-property 12 13 'face 'underline)
+    (put-text-property 13 14 'face '(:foreground "green"))
+    (put-text-property 15 16 'face '(:background "cyan"))
+    (list
+     'single-char-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 5 6 7 9 10 12 13 15 16))
+     'no-face-chars (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(4 8 11 14))
+     'prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 2 3 5 10 15))
+     'interval-count (length (object-intervals (current-buffer)))
+     ;; Insert between single chars
+     'after-insert (progn
+                     (goto-char 4)
+                     (insert "X")
+                     (goto-char 11)
+                     (insert "Y")
+                     (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 4 5 6 9 11 12 13 15 16))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_face_after_kill_yank_multiple_cycles_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "KILL CYCLE ONE   KILL CYCLE TWO   KILL CYCLE THREE")
+    (put-text-property 1 17 'face 'bold)
+    (put-text-property 17 22 'face 'italic)
+    (put-text-property 22 39 'face 'underline)
+    (put-text-property 39 47 'face '(:foreground "red" :weight bold))
+    (let ((snap (lambda ()
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 20 22 30 39 45)))))
+      (let ((v0 (funcall snap)))
+        ;; Kill region 1
+        (goto-char 10)
+        (kill-region (point) (+ (point) 7))
+        (let ((v1 (funcall snap)))
+          ;; Yank
+          (goto-char (point-max))
+          (yank)
+          (let ((v2 (funcall snap)))
+            ;; Kill region 2
+            (goto-char 30)
+            (kill-region (point) (+ (point) 9))
+            (let ((v3 (funcall snap)))
+              ;; Yank at position 5
+              (goto-char 5)
+              (yank)
+              (let ((v4 (funcall snap)))
+                (list v0 v1 v2 v3 v4)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_face_font_lock_fontify_buffer_partial_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Fontify partial buffer test text here")
+    ;; Fontify only first half
+    (font-lock-fontify-region 1 18)
+    (list
+     'fontified-first-half (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15 17))
+     'not-fontified-last (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(20 25 30 35))
+     ;; Fontify remainder
+     'after-full-fontify (progn
+                           (font-lock-fontify-region 18 36)
+                           (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 5 10 15 17 20 25 30 35)))
+     ;; Unfontify and re-fontify
+     'after-unfontify-refontify (progn
+                                  (font-lock-unfontify-region 1 18)
+                                  (font-lock-fontify-region 1 36)
+                                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30 35))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_face_with_overlay_start_end_markers_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay start end marker face test buffer content here")
+    (put-text-property 1 52 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 10 nil t nil)))
+      (overlay-put ov1 'face '(:background "yellow")))
+    (let ((ov2 (make-overlay 20 35 nil nil t)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+    (let ((ov3 (make-overlay 40 52 t t nil)))
+      (overlay-put ov3 'face '(:slant italic)))
+    (list
+     'front-advance-only (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 5 10 15 20))
+     'rear-advance-only (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(15 20 25 30 35 40))
+     'both-advance (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(40 45 50 52))
+     ;; Insert at front-advance boundary
+     'after-insert (progn
+                     (goto-char 10)
+                     (insert "NEW")
+                     (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 13 15 20 30 40)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_face_with_very_long_property_name_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Long property name face test")
+    (let ((prop-name (intern (concat "my-very-" (make-string 20 ?x) "-property")))
+          (face-name (intern (concat "face-" (make-string 20 ?y)))))
+      (put-text-property 1 7 'face 'bold)
+      (put-text-property 1 7 prop-name "value")
+      (list
+       'long-prop-name prop-name
+       'face-at-pos (get-text-property 1 'face)
+       'long-prop-value (get-text-property 1 prop-name)
+       'text-props-count (length (text-properties-at 1))
+       'long-prop-name-length (length (symbol-name prop-name))))))"##,
+    );
+}
+
+#[test]
+fn ft_edge_face_remove_all_properties_from_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Remove all properties from this region test buffer")
+    (put-text-property 1 30 'face 'bold)
+    (put-text-property 1 30 'key1 'val1)
+    (put-text-property 1 30 'key2 'val2)
+    (put-text-property 30 50 'face 'italic)
+    (put-text-property 30 50 'key3 'val3)
+    (list
+     'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (length (text-properties-at pos)))) '(1 15 30 40 49))
+     ;; Remove ALL properties from first half
+     'after-remove-all (progn
+                         (set-text-properties 1 30 nil)
+                         (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (length (text-properties-at pos)))) '(1 15 30 40 49)))
+     ;; Add new properties
+     'after-add-new (progn
+                      (put-text-property 1 30 'face 'underline)
+                      (put-text-property 1 30 'new-prop 'new-val)
+                      (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'new-prop) (length (text-properties-at pos)))) '(1 15 30 40 49))))))"##,
+    );
+}
