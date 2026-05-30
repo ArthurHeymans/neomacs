@@ -23992,3 +23992,237 @@ fn ft_1000_face_face_custom_reset_standard_deep() {
    'reset-font (condition-case nil (progn (set-face-font 'my-custom-reset-face nil nil) (face-font 'my-custom-reset-face t)) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_divergence_face_custom_theme_set_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+    (progn
+      (deftheme my-test-theme "Test theme for oracle")
+      (custom-theme-set-faces 'my-test-theme
+        '(default ((t (:background "white" :foreground "black"))))
+        '(font-lock-comment-face ((t (:foreground "red" :slant italic))))
+        '(font-lock-function-name-face ((t (:weight bold :foreground "blue"))))
+        '(font-lock-keyword-face ((t (:foreground "purple" :weight bold))))
+        '(font-lock-string-face ((t (:foreground "darkgreen"))))
+        '(font-lock-type-face ((t (:foreground "darkblue"))))
+        '(font-lock-variable-name-face ((t (:foreground "darkorange")))))
+      (custom-theme-set-variables 'my-test-theme '(custom-enabled-themes '(my-test-theme))))
+    (error 'no-theme))
+  (list
+   'theme-fbound-custom-theme-set-faces (fboundp 'custom-theme-set-faces)
+   'theme-fbound-deftheme (fboundp 'deftheme)
+   'theme-fbound-load-theme (fboundp 'load-theme)
+   'theme-fbound-enable-theme (fboundp 'enable-theme)
+   'theme-fbound-disable-theme (fboundp 'disable-theme)
+   'custom-theme-p (condition-case nil (custom-theme-p 'my-test-theme) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_overlay_face_after_replace_buffer_contents() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'before (list (overlay-start ov) (overlay-end ov) (get-char-property 3 'face))
+       'after (progn (erase-buffer) (insert "BBBBB") (list (overlay-start ov) (overlay-end ov) (get-char-property 3 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_lock_fontify_delete_insert_fenceposts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setq x 1)\n(setq y 2)\n(setq z 3)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'x-face (save-excursion (goto-char (point-min)) (search-forward "x ") (get-text-property (match-beginning 0) 'face))
+     'z-face (save-excursion (goto-char (point-min)) (search-forward "z ") (get-text-property (match-beginning 0) 'face))
+     'delete-mid (progn
+                   (goto-char (point-min))
+                   (search-forward "(setq y")
+                   (delete-region (match-beginning 0) (point-max))
+                   (insert "(setq w 4)\n")
+                   (font-lock-fontify-buffer)
+                   'fontified)
+     'w-face (save-excursion (goto-char (point-min)) (search-forward "w ") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_overlay_keymap_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'keymap (let ((map (make-sparse-keymap))) (define-key map "k" 'ignore) map))
+      (overlay-put ov 'face 'underline)
+      (list
+       'keymap-p (condition-case nil (keymapp (overlay-get ov 'keymap)) (error 'no))
+       'face (overlay-get ov 'face)
+       'char-prop (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_face_at_point_on_string_intervals() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert (propertize "AAAAA" 'face 'bold))
+    (insert "BBBBB")
+    (list
+     'face-pos1 (get-text-property 1 'face)
+     'face-pos4 (get-text-property 4 'face)
+     'face-pos5 (get-text-property 5 'face)
+     'face-pos6 (get-text-property 6 'face)
+     'face-pos10 (get-text-property 10 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_lock_fontify_unfontified_property_after_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun foo () (+ 1 2))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'fontified-everywhere (mapcar (lambda (pos) (get-text-property pos 'fontified)) '(1 7 10 15 20 22))
+     'face-everywhere (mapcar (lambda (pos) (get-text-property pos 'face)) '(1 7 10 15 20 22))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_overlay_face_property_readd_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'round1 (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'round2 (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       'round3 (progn (overlay-put ov 'face '(:foreground "red")) (overlay-get ov 'face))
+       'round4 (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       'round5 (progn (overlay-put ov 'face '(:weight bold :slant italic)) (overlay-get ov 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_set_face_documentation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-doc-face) (error nil))
+  (list
+   'default-doc (condition-case nil (face-documentation 'default) (error 'no))
+   'set-doc (condition-case nil (progn (set-face-documentation 'my-doc-face "A test face for documentation") (face-documentation 'my-doc-face)) (error 'no))
+   'bold-doc (condition-case nil (face-documentation 'bold) (error 'no))
+   'italic-doc (condition-case nil (face-documentation 'italic) (error 'no))
+   'doc-fn-fbound (fboundp 'face-documentation)))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_overlay_insert_behind_in_front_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'before-string (propertize "<<" 'face 'underline))
+      (overlay-put ov 'after-string (propertize ">>" 'face 'italic))
+      (list
+       'before-str (overlay-get ov 'before-string)
+       'after-str (overlay-get ov 'after-string)
+       'face (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_lock_fontify_variable_pitch_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";;;###autoload\n(defun autoload-test (x) x)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'section-face (save-excursion (goto-char (point-min)) (search-forward ";;;") (get-text-property (match-beginning 0) 'face))
+     'autoload-face (save-excursion (goto-char (point-min)) (search-forward "autoload") (get-text-property (match-beginning 0) 'face))
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_overlay_category_with_face_default() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'category 'my-test-cat)
+      (list
+       'face (overlay-get ov 'face)
+       'category (overlay-get ov 'category)
+       'char-prop (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_font_xlfd_parse_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'xlfd-fbound (fboundp 'font-xlfd-name)
+   'font-info-fbound (fboundp 'font-info)
+   'x-list-fonts-fbound (fboundp 'x-list-fonts)
+   'font-get-fbound (fboundp 'font-get)
+   'font-put-fbound (fboundp 'font-put))))"##,
+    );
+}
