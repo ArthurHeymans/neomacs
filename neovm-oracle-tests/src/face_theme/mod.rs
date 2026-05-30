@@ -20091,3 +20091,155 @@ fn ft_final_boson_face_text_property_charset_differences() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_final_fermion_face_overlay_no_priority_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'no-priority (overlay-get ov 'priority)
+       'face-get (overlay-get ov 'face)
+       'char-prop (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_font_lock_fontify_buffer_unfontify_refontify_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun cycle-test () 42)\n")
+    (let ((results nil))
+      (font-lock-fontify-buffer) (push 'f1 results)
+      (font-lock-unfontify-buffer) (push 'u1 results)
+      (font-lock-fontify-buffer) (push 'f2 results)
+      (font-lock-unfontify-buffer) (push 'u2 results)
+      (font-lock-fontify-buffer) (push 'f3 results)
+      (list (nreverse results) (get-text-property 1 'fontified) (get-text-property 7 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_face_set_attribute_with_relative_values_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-rel-values-face) (error nil))
+  (list
+   'height-1.0 (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 1.0) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no))
+   'height-2.0 (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 2.0) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no))
+   'height-100 (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 100) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no))
+   'height-200 (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 200) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no))
+   'height-0.5 (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 0.5) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no))
+   'height-unspec (condition-case nil (progn (set-face-attribute 'my-rel-values-face nil :height 'unspecified) (face-attribute 'my-rel-values-face :height nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_face_overlay_face_after_move_and_resize_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (let ((snap (lambda () (get-char-property 10 'face))))
+        (let ((v0 (funcall snap)))
+          (move-overlay ov 20 30) (let ((v1 (funcall snap)))
+          (move-overlay ov 1 10) (let ((v2 (funcall snap)))
+          (delete-overlay ov)
+          (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_face_text_property_interval_list_expand() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWW")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (let ((intervals (object-intervals (current-buffer)))
+          (result nil))
+      (dolist (ov intervals)
+        (push (list (overlay-start ov) (overlay-end ov) (get-text-property (overlay-start ov) 'face)) result))
+      (nreverse result))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_font_lock_add_keywords_prepend_append_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "ORDER keyword ORDER test font lock face buffer content ORDER end")
+    (font-lock-add-keywords nil '(("\\<\\(ORDER\\)\\>" 1 '(:foreground "blue") prepend)))
+    (font-lock-add-keywords nil '(("\\<\\(ORDER\\)\\>" 1 '(:foreground "red") append)))
+    (font-lock-add-keywords nil '(("\\<\\(ORDER\\)\\>" 1 '(:foreground "green" :weight bold) overwrite)))
+    (font-lock-fontify-buffer)
+    (list
+     'order-face (save-excursion (goto-char (point-min)) (search-forward "ORDER") (get-text-property (match-beginning 0) 'face))
+     'other-face (save-excursion (goto-char (point-min)) (search-forward "keyword") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_face_overlay_evaporate_auto_remove_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (list
+       'before-delete (list 'ov-alive (and (overlay-buffer ov) t) 'face (overlay-get ov 'face))
+       'delete-region (progn (delete-region 6 15) (list 'ov-dead (not (and (overlay-buffer ov))) 'face-at-5 (get-char-property 5 'face) 'face-at-10 (get-char-property 10 'face))))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_fermion_face_color_hex_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'name-to-rgb-red (color-name-to-rgb "red")
+   'name-to-rgb-green (color-name-to-rgb "green")
+   'name-to-rgb-blue (color-name-to-rgb "blue")
+   'hex-ff0000 (color-name-to-rgb "#FF0000")
+   'hex-00ff00 (color-name-to-rgb "#00FF00")
+   'hex-0000ff (color-name-to-rgb "#0000FF")
+   'hex-ff00ff (color-name-to-rgb "#FF00FF")
+   'rgb-to-hex (apply 'color-rgb-to-hex (append (color-name-to-rgb "red") '(2)))
+   'hex-roundtrip (equal (color-name-to-rgb "red") (color-name-to-rgb "#FF0000")))))"##,
+    );
+}
