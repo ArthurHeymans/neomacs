@@ -3140,7 +3140,16 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
 
     match attr {
         LFaceAttr::Foreground | LFaceAttr::Background | LFaceAttr::DistantForeground => {
-            let s = value.as_utf8_str()?;
+            // Doom themes store colours as cons cells (dark . light).
+            // Extract the car (dark variant) — the common TUI default.
+            let s = match value.kind() {
+                ValueKind::Cons => {
+                    let items = crate::emacs_core::value::list_to_vec(&value).unwrap_or_default();
+                    items.first().and_then(|v| v.as_utf8_str())
+                }
+                _ => value.as_utf8_str(),
+            };
+            let s = s?;
             let c = Color::from_name(s).or_else(|| Color::from_hex(s))?;
             Some(FaceAttrValue::Color(c))
         }
