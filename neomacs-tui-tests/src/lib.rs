@@ -124,14 +124,34 @@ impl TuiSession {
     }
 
     /// Spawn GNU Emacs in TUI mode WITHOUT `-Q`, loading the user's init
-    /// file (e.g. Doom config).  For face/theme comparison tests.
+    /// file (e.g. Doom config).  Uses the real HOME so Doom is found.
+    /// For face/theme comparison tests.
     pub fn gnu_emacs_with_init() -> Self {
-        let cmd = "emacs -nw".to_string();
-        Self::spawn(&cmd, "GNU")
+        let (pty, pts) = pty_process::blocking::open().expect("open pty");
+        pty.resize(pty_process::Size::new(ROWS, COLS))
+            .expect("resize pty");
+        let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
+        let mut command = pty_process::blocking::Command::new("emacs");
+        command = command.arg("-nw");
+        command = command.env("TERM", "screen-256color");
+        command = command.env("COLUMNS", COLS.to_string());
+        command = command.env("LINES", ROWS.to_string());
+        command = command.env("HOME", &real_home);
+        let child = command.spawn(pts).expect("spawn");
+        let parser = vt100::Parser::new(ROWS, COLS, 0);
+        TuiSession {
+            pty,
+            _child: child,
+            parser,
+            recent_output: Vec::new(),
+            home: real_home,
+            name: "GNU".into(),
+        }
     }
 
     /// Spawn Neomacs in TUI mode WITHOUT `-Q` so the user's init file
-    /// (e.g. Doom Emacs config) is loaded. For face/theme tests.
+    /// (e.g. Doom Emacs config) is loaded.  Uses the real HOME.
+    /// For face/theme tests.
     pub fn neomacs_with_init(extra_args: &str) -> Self {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest.parent().expect("workspace root");
@@ -141,8 +161,31 @@ impl TuiSession {
             "neomacs binary not found at {}",
             bin.display()
         );
-        let cmd = format!("{} -nw {extra_args}", bin.display());
-        Self::spawn(&cmd, "NEO")
+        let (pty, pts) = pty_process::blocking::open().expect("open pty");
+        pty.resize(pty_process::Size::new(ROWS, COLS))
+            .expect("resize pty");
+        let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
+        let mut command = pty_process::blocking::Command::new(&bin);
+        command = command.arg("-nw");
+        if !extra_args.is_empty() {
+            for arg in extra_args.split_whitespace() {
+                command = command.arg(arg);
+            }
+        }
+        command = command.env("TERM", "screen-256color");
+        command = command.env("COLUMNS", COLS.to_string());
+        command = command.env("LINES", ROWS.to_string());
+        command = command.env("HOME", &real_home);
+        let child = command.spawn(pts).expect("spawn");
+        let parser = vt100::Parser::new(ROWS, COLS, 0);
+        TuiSession {
+            pty,
+            _child: child,
+            parser,
+            recent_output: Vec::new(),
+            home: real_home,
+            name: "NEO".into(),
+        }
     }
 
     /// Spawn Neomacs in TUI mode.
