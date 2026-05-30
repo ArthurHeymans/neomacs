@@ -25430,3 +25430,146 @@ fn ft_mine_face_overlay_face_string_property_empty() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_pry_face_overlay_face_priority_max_min_int() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority most-positive-fixnum))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority most-negative-fixnum))
+    (list
+     'max-win (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_font_lock_fontify_eval_and_compile_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(eval-and-compile (setq x 42))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'eval-and-compile-face (save-excursion (goto-char (point-min)) (search-forward "eval-and-compile") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_face_overlay_face_after_property_cur() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'get-at-start (get-char-property 1 'face)
+       'get-at-mid (get-char-property 3 'face)
+       'get-at-end (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_face_font_lock_global_fontify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-global-fbound (fboundp 'font-lock-global-modes)
+   'font-lock-maximum-decoration-fbound (fboundp 'font-lock-maximum-decoration)
+   'font-lock-verbose-fbound (fboundp 'font-lock-verbose)
+   'font-lock-global-default (condition-case nil font-lock-global-modes (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_face_text_property_get_with_nil_object() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'text-property-any-fbound (fboundp 'text-property-any)
+   'text-property-not-all-fbound (fboundp 'text-property-not-all)
+   'with-nil-object (condition-case nil (text-property-any 1 5 'face nil nil) (error 'no))
+   'with-string (condition-case nil (text-property-any 0 5 'face 'bold "hello") (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_face_overlay_face_iterator_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face 'bold))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face 'italic))
+    (list
+     'overlays-at (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 3))
+     'overlays-in (length (overlays-in 1 6))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_pry_face_set_face_all_attributes_batch_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-batch-face) (error nil))
+  (condition-case nil
+    (progn
+      (set-face-attribute 'my-batch-face nil
+                          :family "Courier"
+                          :foundry "misc"
+                          :width 'semi-condensed
+                          :height 150
+                          :weight 'semibold
+                          :slant 'italic
+                          :underline '(:color "red" :style wave)
+                          :overline '(:color "green")
+                          :strike-through '(:color "blue" :style line)
+                          :box '(:line-width 2 :color "purple" :style pressed-button)
+                          :inverse-video nil
+                          :foreground "snow"
+                          :background "DarkOrchid"
+                          :stipple nil
+                          :inherit 'bold
+                          :extend t)
+      'ok)
+    (error 'no))
+  (list
+   'family (condition-case nil (face-attribute 'my-batch-face :family nil 'default-on) (error 'no))
+   'width (condition-case nil (face-attribute 'my-batch-face :width nil) (error 'no))
+   'height (condition-case nil (face-attribute 'my-batch-face :height nil) (error 'no))
+   'weight (condition-case nil (face-attribute 'my-batch-face :weight nil 'default-on) (error 'no))
+   'slant (condition-case nil (face-attribute 'my-batch-face :slant nil) (error 'no))
+   'underline (condition-case nil (face-attribute 'my-batch-face :underline nil 'default-on) (error 'no))
+   'overline (condition-case nil (face-attribute 'my-batch-face :overline nil 'default-on) (error 'no))
+   'strike (condition-case nil (face-attribute 'my-batch-face :strike-through nil 'default-on) (error 'no))
+   'box (condition-case nil (face-attribute 'my-batch-face :box nil 'default-on) (error 'no))
+   'fg (condition-case nil (face-attribute 'my-batch-face :foreground nil 'default-on) (error 'no))
+   'bg (condition-case nil (face-attribute 'my-batch-face :background nil 'default-on) (error 'no))
+   'inherit (condition-case nil (face-attribute 'my-batch-face :inherit nil) (error 'no))
+   'extend (condition-case nil (face-attribute 'my-batch-face :extend nil) (error 'no))
+   )))"##,
+    );
+}
