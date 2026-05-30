@@ -18173,3 +18173,183 @@ fn ft_quanta_face_overlay_face_get_after_properties_clear() {
           (list v0 v1 (progn (delete-overlay ov) 'cleaned))))))))"##,
     );
 }
+
+#[test]
+fn ft_atom_face_overlay_all_properties_to_alist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "overlay help")
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'category 'my-category)
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-len (length props)
+         'face (plist-get props 'face)
+         'priority (plist-get props 'priority)
+         'help-echo (plist-get props 'help-echo)
+         'evaporate (plist-get props 'evaporate)
+         'category (plist-get props 'category)
+         'nonexistent (plist-get props 'nonexistent-property)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_font_lock_fontify_different_font_lock_modes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'emacs-lisp (with-temp-buffer (emacs-lisp-mode) (font-lock-mode 1) (insert "(defun test () 1)") (font-lock-fontify-buffer) (list 'mode major-mode 'fontified (get-text-property 1 'fontified) 'face-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))))
+   'text (with-temp-buffer (text-mode) (font-lock-mode 1) (insert "text mode test") (font-lock-fontify-buffer) (list 'mode major-mode 'fontified (get-text-property 1 'fontified) 'face (get-text-property 1 'face)))
+   'fundamental (with-temp-buffer (fundamental-mode) (font-lock-mode 1) (insert "fundamental test") (font-lock-fontify-buffer) (list 'mode major-mode 'fontified (get-text-property 1 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_face_property_interval_extract_all_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:background "yellow"))
+    (put-text-property 21 25 'face '(:foreground "blue"))
+    (put-text-property 25 29 'face '(:background "cyan"))
+    (put-text-property 29 33 'face '(:slant italic))
+    (put-text-property 33 37 'face '(:weight bold))
+    (put-text-property 37 41 'face '(:underline t))
+    (let ((intervals (object-intervals (current-buffer))))
+      (list
+       'count (length intervals)
+       'all-starts (mapcar #'overlay-start intervals)
+       'all-ends (mapcar #'overlay-end intervals)
+       'all-faces (mapcar (lambda (ov) (get-text-property (overlay-start ov) 'face)) intervals))))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_face_overlay_evaporate_with_face_after_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 10 25)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (list
+       'face-before (overlay-get ov 'face)
+       'ov-alive (and (overlay-buffer ov) t)
+       'delete-region (progn (delete-region 10 25) 'deleted)
+       'ov-dead (not (and (overlay-buffer ov)))
+       'face-at-9 (get-char-property 9 'face)
+       'face-at-10 (get-char-property 10 'face)
+       'face-at-25 (get-char-property 25 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_font_lock_keywords_with_group_highlight_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "group1=value1 group2=value2 group3=value3 font lock keyword group test end")
+    (font-lock-add-keywords nil
+                            '(("\\(group[0-9]\\)\\(=\\)\\([a-z0-9]+\\)"
+                               (1 font-lock-function-name-face)
+                               (2 font-lock-keyword-face)
+                               (3 font-lock-warning-face))))
+    (font-lock-fontify-buffer)
+    (list
+     'g1-face (save-excursion (goto-char (point-min)) (search-forward "group1") (get-text-property (match-beginning 0) 'face))
+     'eq-face (save-excursion (goto-char (point-min)) (search-forward "=") (get-text-property (match-beginning 0) 'face))
+     'val1-face (save-excursion (goto-char (point-min)) (search-forward "value1") (get-text-property (match-beginning 0) 'face))
+     'g2-face (save-excursion (goto-char (point-min)) (search-forward "group2") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_face_overlay_priority_zero_vs_positive_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov0 (make-overlay 1 21))) (overlay-put ov0 'face '(:background "red")) (overlay-put ov0 'priority 0))
+    (let ((ov-1 (make-overlay 1 21))) (overlay-put ov-1 'face '(:background "green")) (overlay-put ov-1 'priority 1))
+    (let ((ov-2 (make-overlay 1 21))) (overlay-put ov-2 'face '(:background "blue")) (overlay-put ov-2 'priority 2))
+    (list
+     'effective (get-char-property 5 'face)
+     'overlays-sorted (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 5) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_face_set_face_strike_color_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-strike-color-face) (error nil))
+  (list
+   'default-strike (condition-case nil (face-attribute 'default :strike-through nil 'default-on) (error 'no))
+   'set-strike-t (condition-case nil (progn (set-face-attribute 'my-strike-color-face nil :strike-through t) (face-attribute 'my-strike-color-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-red (condition-case nil (progn (set-face-attribute 'my-strike-color-face nil :strike-through '(:color "red")) (face-attribute 'my-strike-color-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-green (condition-case nil (progn (set-face-attribute 'my-strike-color-face nil :strike-through '(:color "green")) (face-attribute 'my-strike-color-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-off (condition-case nil (progn (set-face-attribute 'my-strike-color-face nil :strike-through nil) (face-attribute 'my-strike-color-face :strike-through nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_atom_face_text_property_search_any_in_full_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:background "yellow"))
+    (put-text-property 21 25 'face '(:foreground "blue"))
+    (put-text-property 25 29 'face '(:background "cyan"))
+    (put-text-property 29 33 'face '(:slant italic))
+    (put-text-property 33 37 'face '(:weight bold))
+    (put-text-property 37 41 'face '(:underline t))
+    (list
+     'find-bold (text-property-any 1 41 'face 'bold)
+     'find-red (text-property-any 1 41 'face '(:foreground "red"))
+     'find-yellow (text-property-any 1 41 'face '(:background "yellow"))
+     'find-weight-bold (text-property-any 1 41 'face '(:weight bold))
+     'find-underline-t (text-property-any 1 41 'face '(:underline t))
+     'find-none (text-property-any 1 41 'face 'nonexistent)
+     'not-all-bold (text-property-not-all 1 41 'face 'bold)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
