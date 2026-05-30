@@ -21025,3 +21025,147 @@ fn ft_relentless_face_point_min_max_face_properties() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_void2_face_overlay_empty_with_no_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (list
+       'no-props (overlay-properties ov)
+       'no-face (overlay-get ov 'face)
+       'no-priority (overlay-get ov 'priority)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_font_lock_fontify_then_unfontify_then_fontify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun fu-test (x) (* x x))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (list 'f1 pos (get-text-property pos 'face))) '(1 7 15 22 28))))
+      (font-lock-unfontify-buffer)
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (list 'u pos (get-text-property pos 'fontified))) '(1 7 15 22 28))))
+        (font-lock-fontify-buffer)
+        (list v0 v1 (mapcar (lambda (pos) (goto-char pos) (list 'f2 pos (get-text-property pos 'face))) '(1 7 15 22 28))))))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_face_overlay_before_string_nil_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string ">")
+      (list
+       'ov-face (overlay-get ov 'face)
+       'before-str (overlay-get ov 'before-string)
+       'char-prop (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_face_set_face_attribute_unspec_vs_nil_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-unspec-nil-face) (error nil))
+  (list
+   'set-weight-bold (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight 'bold) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-nil (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight nil) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-unspec (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight 'unspecified) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'set-fg-red (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face "red" nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no))
+   'set-fg-nil (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face nil nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no))
+   'set-fg-unspec (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face 'unspecified nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_font_lock_fontify_empty_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (font-lock-fontify-buffer)
+    (let ((v0 (list 'empty-face (get-text-property 1 'face) 'empty-fontified (get-text-property 1 'fontified))))
+      (insert "(defun empty-test () 42)\n")
+      (font-lock-fontify-buffer)
+      (list v0 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 7 15 22 27)))))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_face_text_property_interval_count_after_split() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXXX")
+    (put-text-property 1 13 'face 'bold)
+    (let ((counts nil))
+      (push (list 'one-interval (length (object-intervals (current-buffer)))) counts)
+      (goto-char 5) (insert "Y") (push (list 'after-split (length (object-intervals (current-buffer)))) counts)
+      (goto-char 8) (insert "Z") (push (list 'after-second-split (length (object-intervals (current-buffer)))) counts)
+      (nreverse counts))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_face_overlay_priority_one_field_only() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'priority 42)
+      (list
+       'priority-only (overlay-get ov 'priority)
+       'no-face (overlay-get ov 'face)
+       'char-prop (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_void2_face_color_rgb_hex_name_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'red-named (color-name-to-rgb "red")
+   'red-hex (color-name-to-rgb "#FF0000")
+   'equal-red (equal (color-name-to-rgb "red") (color-name-to-rgb "#FF0000"))
+   'green-named (color-name-to-rgb "green")
+   'green-hex (color-name-to-rgb "#00FF00")
+   'equal-green (equal (color-name-to-rgb "green") (color-name-to-rgb "#00FF00"))
+   'blue-named (color-name-to-rgb "blue")
+   'blue-hex (color-name-to-rgb "#0000FF")
+   'equal-blue (equal (color-name-to-rgb "blue") (color-name-to-rgb "#0000FF")))))"##,
+    );
+}
