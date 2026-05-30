@@ -18684,3 +18684,162 @@ fn ft_lepton_face_overlay_face_remap_and_priority_deep() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_baryon_face_overlay_string_with_multiple_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 10 25)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "<<<" 'face '(:foreground "red" :weight bold) 'key1 'val1))
+      (overlay-put ov 'after-string (propertize ">>>" 'face '(:foreground "blue" :slant italic) 'key2 'val2))
+      (overlay-put ov 'display "")
+      (list
+       'ov-face (overlay-get ov 'face)
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'after-face (get-text-property 0 (overlay-get ov 'after-string))
+       'before-props-count (length (text-properties-at 0 (overlay-get ov 'before-string)))
+       'after-props-count (length (text-properties-at 0 (overlay-get ov 'after-string)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_font_lock_add_keywords_prepend_overwrite_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "PREPEND overwrite test PREPEND keyword font lock face buffer")
+    (font-lock-add-keywords nil '(("\\<\\(PREPEND\\)\\>" 1 '(:foreground "blue") prepend)))
+    (font-lock-add-keywords nil '(("\\<\\(PREPEND\\)\\>" 1 '(:foreground "red" :weight bold) overwrite)))
+    (font-lock-fontify-buffer)
+    (list
+     'prepend-face (save-excursion (goto-char (point-min)) (search-forward "PREPEND") (get-text-property (match-beginning 0) 'face))
+     'prepend-face-next (save-excursion (search-forward "PREPEND") (get-text-property (match-beginning 0) 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_face_set_face_attribute_with_face_defface() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (condition-case nil
+      (progn
+        (defface my-defface-test-face
+          '((t :weight bold :foreground "dark blue" :underline t))
+          "Test defface")
+        (list
+         'facep (facep 'my-defface-test-face)
+         'weight (face-attribute 'my-defface-test-face :weight nil 'default-on)
+         'fg (condition-case nil (face-foreground 'my-defface-test-face nil 'default-on) (error 'no))
+         'underline (condition-case nil (face-attribute 'my-defface-test-face :underline nil 'default-on) (error 'no))
+         (condition-case nil (progn (set-face-attribute 'my-defface-test-face nil :weight 'unspecified :foreground 'unspecified :underline 'unspecified) 'reset) (error 'no))))
+    (error (list 'defface-error (fboundp 'defface))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_face_overlay_empty_buffer_make_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face '(:background "red"))
+      (list
+       'empty-ov-start (overlay-start ov)
+       'empty-ov-end (overlay-end ov)
+       'empty-ov-face (overlay-get ov 'face)
+       'fill (progn (insert "FILLED-CONTENT") (list 'ov-start (overlay-start ov) 'ov-end (overlay-end ov) 'face-at-1 (get-char-property 1 'face) 'face-at-7 (get-char-property 7 'face) 'face-at-14 (get-char-property 14 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_font_lock_fontify_all_at_once_vs_incremental() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (let ((content "(defun incr-test (a b) (+ a b))\n"))
+    (list
+     'all-at-once (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 25 31)))
+     'incremental (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-region 1 15) (font-lock-fontify-region 15 (point-max)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 25 31)))
+     'consistent (equal (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 31))) (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-region 1 15) (font-lock-fontify-region 15 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 31))))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_face_text_property_next_property_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (dotimes (i 16)
+      (put-text-property (1+ (* i 2)) (+ (* i 2) 3) 'face (if (evenp i) 'bold 'italic)))
+    (list
+     'interval-count (length (object-intervals (current-buffer)))
+     'next-from-1 (next-property-change 1)
+     'next-single-from-1 (next-single-property-change 1 'face)
+     'next-property-at-3 (next-property-change 3)
+     'next-single-at-3 (next-single-property-change 3 'face)
+     'next-single-at-30 (next-single-property-change 30 'face)
+     'next-single-with-limit (next-single-property-change 1 'face nil 10)
+     'next-nonexistent (next-single-property-change 1 'nonexistent-prop))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_face_overlay_priority_change_repeated_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 1 21))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 1 21))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((snap (lambda () (get-char-property 5 'face))))
+      (let ((v0 (funcall snap)))
+        (overlay-put ov1 'priority 30) (let ((v1 (funcall snap)))
+        (overlay-put ov2 'priority 40) (let ((v2 (funcall snap)))
+        (overlay-put ov1 'priority 5) (let ((v3 (funcall snap)))
+        (list v0 v1 v2 v3 (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_baryon_face_color_complement_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'complement-red (condition-case nil (color-complement "#FF0000") (error 'no))
+   'complement-green (condition-case nil (color-complement "#00FF00") (error 'no))
+   'complement-blue (condition-case nil (color-complement "#0000FF") (error 'no))
+   'complement-white (condition-case nil (color-complement "#FFFFFF") (error 'no))
+   'complement-black (condition-case nil (color-complement "#000000") (error 'no))
+   'complement-named (condition-case nil (color-complement "red") (error 'no))
+   'color-gradient (condition-case nil (color-gradient '(0 0 0) '(1 1 1) 5) (error 'no))
+   'color-hsl-to-rgb (condition-case nil (color-hsl-to-rgb 0 1 0.5) (error 'no))
+   'color-rgb-to-hsl (condition-case nil (color-rgb-to-hsl 1 0 0) (error 'no)))))"##,
+    );
+}
