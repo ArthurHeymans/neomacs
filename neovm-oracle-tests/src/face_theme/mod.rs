@@ -24684,3 +24684,126 @@ fn ft_seek_face_overlay_face_nested_three_deep_faces() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_probe_face_overlay_face_priority_collision_stable() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 5))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 5))
+    (list
+     'winning (get-char-property 3 'face)
+     'change-first (progn (overlay-put ov1 'priority 6) (get-char-property 3 'face))
+     'restore (progn (overlay-put ov1 'priority 5) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_font_lock_fontify_defmacro_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defmacro my-macro (name &rest body)\n  `(defun ,name () ,@body))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defmacro-face (save-excursion (goto-char (point-min)) (search-forward "defmacro") (get-text-property (match-beginning 0) 'face))
+     'macro-name-face (save-excursion (goto-char (point-min)) (search-forward "my-macro") (get-text-property (match-beginning 0) 'face))
+     'backquote-face (save-excursion (goto-char (point-min)) (search-forward "`") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_overlay_face_remap_buffer_local() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-remapped-in-buf) (error nil))
+  (list
+   'face-remap-cookie (condition-case nil
+                         (with-temp-buffer
+                           (face-remap-add-relative 'default 'my-remapped-in-buf))
+                         (error 'no))
+   'remap-reset (condition-case nil (face-remap-reset-base 'default) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_text_property_face_plist_complex_color() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face '(:foreground "DarkGoldenrod1" :background "MidnightBlue" :weight semi-bold :slant oblique :underline (:color "firebrick" :style wave) :height 0.9))
+    (let ((pl (get-text-property 1 'face)))
+      (list
+       'fg (plist-get pl :foreground)
+       'bg (plist-get pl :background)
+       'weight (plist-get pl :weight)
+       'slant (plist-get pl :slant)
+       'underline (plist-get pl :underline)
+       'height (plist-get pl :height)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_font_lock_fontify_face_property_after_toggle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setq foo 1)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'before-toggle (get-text-property 2 'face)
+     'font-lock-off (progn (font-lock-mode -1) (get-text-property 2 'face))
+     'font-lock-on (progn (font-lock-mode 1) (font-lock-fontify-buffer) (get-text-property 2 'face))
+     'fontified-after (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_overlay_face_property_after_move_to_beginning() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 5 15)))
+      (overlay-put ov 'face 'italic)
+      (list
+       'before (list (overlay-start ov) (overlay-end ov) (get-char-property 3 'face) (get-char-property 10 'face))
+       'moved-beg (progn (move-overlay ov 1 10) (list (overlay-start ov) (overlay-end ov) (get-char-property 3 'face) (get-char-property 10 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_set_face_with_non_face_frame() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-frame-face) (error nil))
+  (list
+   'frame-of-default (condition-case nil (face-attribute 'default :foreground nil 'default-on) (error 'no))
+   'frame-nil (condition-case nil (face-attribute 'default :foreground nil nil) (error 'no))
+   'frame-t (condition-case nil (face-attribute 'default :foreground nil t) (error 'no)))))"##,
+    );
+}
