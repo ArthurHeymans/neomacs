@@ -4613,3 +4613,366 @@ fn ft_pure_font_lock_fontify_buffer_region_syntactically_deep() {
              '("comment" "int" "x"))))))"##,
     );
 }
+
+#[test]
+fn ft_pure_font_lock_syntactic_keyword_table_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-syntactic-keywords-fbound (fboundp 'font-lock-syntactic-keywords)
+   'font-lock-syntax-table-fbound (fboundp 'font-lock-syntax-table)
+   'font-lock-keywords-alist-fbound (fboundp 'font-lock-keywords-alist)
+   'font-lock-remove-keywords-fbound (fboundp 'font-lock-remove-keywords)
+   'font-lock-add-keywords-multiple
+   (condition-case nil
+       (progn
+         (font-lock-add-keywords nil
+                                 '(("\\<\\(A1\\)\\>" 1 font-lock-warning-face t)
+                                   ("\\<\\(A2\\)\\>" 1 '(:foreground "red") t)
+                                   ("\\<\\(A3\\)\\>" 1 '(:weight bold) t)))
+         'add-multiple-ok)
+     (error 'add-multiple-failed))
+   'font-lock-remove-keywords-one
+   (condition-case nil
+       (progn
+         (font-lock-remove-keywords nil
+                                    '(("\\<\\(A1\\)\\>" 1 font-lock-warning-face t)))
+         'remove-one-ok)
+     (error 'remove-one-failed))
+   'font-lock-remove-keywords-rest
+   (condition-case nil
+       (progn
+         (font-lock-remove-keywords nil
+                                    '(("\\<\\(A2\\)\\>" 1 '(:foreground "red") t)
+                                      ("\\<\\(A3\\)\\>" 1 '(:weight bold) t)))
+         'remove-rest-ok)
+     (error 'remove-rest-failed))
+   (if (boundp 'font-lock-keywords-only)
+       font-lock-keywords-only
+     'no-keywords-only)
+   (if (boundp 'font-lock-beginning-of-syntax-function)
+       font-lock-beginning-of-syntax-function
+     'no-bos-func))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_set_face_attribute_interactive_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'set-face-attribute-fbound (fboundp 'set-face-attribute)
+   'modify-face-fbound (fboundp 'modify-face)
+   'customize-face-fbound (fboundp 'customize-face)
+   (condition-case nil
+       (copy-face 'default 'my-interactive-face)
+     (error nil))
+   'modify-face
+   (condition-case nil
+       (progn
+         (modify-face 'my-interactive-face "blue" "yellow" nil nil "Monospace" nil nil)
+         'modify-ok)
+     (error 'modify-failed))
+   'face-foreground-after-modify (condition-case nil (face-foreground 'my-interactive-face nil 'default-on) (error 'no))
+   'face-background-after-modify (condition-case nil (face-background 'my-interactive-face nil 'default-on) (error 'no))
+   'set-face-attribute-multiple
+   (condition-case nil
+       (progn
+         (set-face-attribute 'my-interactive-face nil
+                             :foreground "green"
+                             :background "black"
+                             :weight 'bold
+                             :slant 'italic)
+         'set-multi-ok)
+     (error 'set-multi-failed))
+   'face-fg-after-multi (condition-case nil (face-foreground 'my-interactive-face nil 'default-on) (error 'no))
+   'face-bg-after-multi (condition-case nil (face-background 'my-interactive-face nil 'default-on) (error 'no))
+   'reset-to-default
+   (condition-case nil
+       (progn
+         (set-face-attribute 'my-interactive-face nil
+                             :foreground 'unspecified :background 'unspecified
+                             :weight 'unspecified :slant 'unspecified)
+         'reset-ok)
+     (error 'reset-failed)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_aliases_and_obsolete_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-alias-fbound (fboundp 'face-alias)
+   'define-obsolete-face-alias-fbound (fboundp 'define-obsolete-face-alias)
+   (condition-case nil
+       (face-alias 'default)
+     (error 'no-face-alias))
+   (condition-case nil
+       (face-alias 'modeline)
+     (error 'no-modeline-alias))
+   (condition-case nil
+       (face-alias 'mode-line)
+     (error 'no-mode-line-alias))
+   'check-region-face
+   (if (fboundp 'region)
+       (condition-case nil
+           (facep 'region)
+         (error 'no-region-facep))
+     'no-region-func)
+   'check-secondary-selection
+   (if (fboundp 'secondary-selection)
+       (condition-case nil
+           (facep 'secondary-selection)
+         (error 'no-sec-sel-facep))
+     'no-sec-sel)
+   'check-highlight
+   (condition-case nil
+       (facep 'highlight)
+     (error 'no-highlight))
+   'check-trailing-whitespace
+   (condition-case nil
+       (facep 'trailing-whitespace)
+     (error 'no-trailing-ws))
+   'check-fringe
+   (condition-case nil
+       (facep 'fringe)
+     (error 'no-fringe))
+   'check-cursor
+   (condition-case nil
+       (facep 'cursor)
+     (error 'no-cursor))
+   'check-scroll-bar
+   (condition-case nil
+       (facep 'scroll-bar)
+     (error 'no-scroll-bar))
+   'check-tool-bar
+   (condition-case nil
+       (facep 'tool-bar)
+     (error 'no-tool-bar))
+   'check-menu
+   (condition-case nil
+       (facep 'menu)
+     (error 'no-menu))
+   'check-border
+   (condition-case nil
+       (facep 'border)
+     (error 'no-border))
+   'check-mouse
+   (condition-case nil
+       (facep 'mouse)
+     (error 'no-mouse))
+   'check-fixed-pitch
+   (condition-case nil
+       (facep 'fixed-pitch)
+     (error 'no-fixed-pitch))
+   'check-variable-pitch
+   (condition-case nil
+       (facep 'variable-pitch)
+     (error 'no-var-pitch))
+   'check-shadow
+   (condition-case nil
+       (facep 'shadow)
+     (error 'no-shadow))
+   'check-link
+   (condition-case nil
+       (facep 'link)
+     (error 'no-link))
+   'check-link-visited
+   (condition-case nil
+       (facep 'link-visited)
+     (error 'no-link-visited))
+   'check-error
+   (condition-case nil
+       (facep 'error)
+     (error 'no-error))
+   'check-warning
+   (condition-case nil
+       (facep 'warning)
+     (error 'no-warning))
+   'check-success
+   (condition-case nil
+       (facep 'success)
+     (error 'no-success))
+   'check-match
+   (condition-case nil
+       (facep 'match)
+     (error 'no-match))
+   'check-isearch
+   (condition-case nil
+       (facep 'isearch)
+     (error 'no-isearch))
+   'check-lazy-highlight
+   (condition-case nil
+       (facep 'lazy-highlight)
+     (error 'no-lazy))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_font_lock_keywords_many_overlapping_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "KEYWORD1 and KEYWORD2 and KEYWORD3 plus KEYWORD1 again")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(KEYWORD1\\)\\>" 1 font-lock-warning-face t)
+                              ("\\<\\(KEYWORD2\\)\\>" 1 '(:foreground "red" :weight bold) t)
+                              ("\\<\\(KEYWORD3\\)\\>" 1 '(:foreground "blue" :underline t) t)))
+    (font-lock-fontify-buffer)
+    (list
+     'all-keywords (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle (get-text-property (match-beginning 0) 'face))
+                                    (list needle 'not-found))))
+                            '("KEYWORD1" "KEYWORD2" "KEYWORD3"))
+     'duplicate-keyword (save-excursion
+                          (goto-char (point-min))
+                          (let ((result nil))
+                            (while (search-forward "KEYWORD1" nil t)
+                              (push (list (point) (get-text-property (match-beginning 0) 'face)) result))
+                            (nreverse result)))
+     'non-keyword (save-excursion
+                    (goto-char (point-min))
+                    (search-forward "and")
+                    (list 'and-face (get-text-property (match-beginning 0) 'face)
+                          'plus-face (progn (search-forward "plus") (get-text-property (match-beginning 0) 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_after_buffer_substring_with_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "BUFFER-SUBSTRING FACE TEST CONTENT")
+    (put-text-property 1 16 'face 'bold)
+    (put-text-property 16 22 'face 'italic)
+    (put-text-property 22 36 'face '(:foreground "red" :weight bold))
+    (list
+     'substring-with-props (let ((sub (buffer-substring 1 16)))
+                              (with-temp-buffer
+                                (insert sub)
+                                (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15))))
+     'substring-no-props (buffer-substring-no-properties 1 16)
+     'buffer-string-length (length (buffer-string))
+     'insert-buffer-substring (with-temp-buffer
+                                (insert-buffer-substring (current-buffer) 1 36)
+                                (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 16 22 30)))
+     'copy-to-buffer (let ((buf (generate-new-buffer "*ft-copy*")))
+                       (unwind-protect
+                           (progn
+                             (copy-to-buffer buf 1 36)
+                             (with-current-buffer buf
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 16 22 30))))
+                         (kill-buffer buf))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_set_face_attribute_underline_style_variants_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-face) (error nil))
+  (list
+   'underline-line (condition-case nil (progn (set-face-underline 'my-ul-face '(:style line) nil) 'ok) (error 'no))
+   'underline-line-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-wave (condition-case nil (progn (set-face-underline 'my-ul-face '(:style wave) nil) 'ok) (error 'no))
+   'underline-wave-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-double (condition-case nil (progn (set-face-underline 'my-ul-face '(:style double-line) nil) 'ok) (error 'no))
+   'underline-double-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-dot (condition-case nil (progn (set-face-underline 'my-ul-face '(:style dots) nil) 'ok) (error 'no))
+   'underline-dot-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-dash (condition-case nil (progn (set-face-underline 'my-ul-face '(:style dash) nil) 'ok) (error 'no))
+   'underline-dash-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-color (condition-case nil (progn (set-face-underline 'my-ul-face '(:color "red" :style wave) nil) 'ok) (error 'no))
+   'underline-color-get (condition-case nil (face-attribute 'my-ul-face :underline nil 'default-on) (error 'no))
+   'underline-off (condition-case nil (progn (set-face-underline 'my-ul-face nil nil) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_merged_via_add_face_text_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Add face text property merge test")
+    ;; Add face incrementally
+    (add-face-text-property 1 34 '(:underline t))
+    (add-face-text-property 1 34 '(:slant italic))
+    (add-face-text-property 1 15 '(:weight bold))
+    (add-face-text-property 15 34 '(:foreground "red"))
+    (list
+     'merged-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 30))
+     'facep-merged (mapcar (lambda (pos) (goto-char pos) (list pos (facep (get-text-property pos 'face)))) '(1 15))
+     ;; Remove underlines
+     'after-remove-underline (progn
+                               (remove-text-properties 1 34 '(face nil))
+                               (add-face-text-property 1 34 '(:weight bold :slant italic :foreground "blue"))
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 15)))
+     ;; Add more with append
+     'with-append (progn
+                    (add-face-text-property 1 34 '(:underline t) t)
+                    (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 15 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_make_face_and_set_all_attrs_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (make-face 'my-full-face) (error nil))
+  (list
+   'face-exists-after-make (facep 'my-full-face)
+   'set-family (condition-case nil (progn (set-face-attribute 'my-full-face nil :family "Monospace") 'ok) (error 'no))
+   'set-foundry (condition-case nil (progn (set-face-attribute 'my-full-face nil :foundry "misc") 'ok) (error 'no))
+   'set-width (condition-case nil (progn (set-face-attribute 'my-full-face nil :width 'normal) 'ok) (error 'no))
+   'set-height (condition-case nil (progn (set-face-attribute 'my-full-face nil :height 100) 'ok) (error 'no))
+   'set-weight (condition-case nil (progn (set-face-attribute 'my-full-face nil :weight 'bold) 'ok) (error 'no))
+   'set-slant (condition-case nil (progn (set-face-attribute 'my-full-face nil :slant 'italic) 'ok) (error 'no))
+   'set-underline (condition-case nil (progn (set-face-attribute 'my-full-face nil :underline t) 'ok) (error 'no))
+   'set-overline (condition-case nil (progn (set-face-attribute 'my-full-face nil :overline t) 'ok) (error 'no))
+   'set-strike (condition-case nil (progn (set-face-attribute 'my-full-face nil :strike-through t) 'ok) (error 'no))
+   'set-box (condition-case nil (progn (set-face-attribute 'my-full-face nil :box t) 'ok) (error 'no))
+   'set-inverse (condition-case nil (progn (set-face-attribute 'my-full-face nil :inverse-video t) 'ok) (error 'no))
+   'set-fg (condition-case nil (progn (set-face-attribute 'my-full-face nil :foreground "red") 'ok) (error 'no))
+   'set-bg (condition-case nil (progn (set-face-attribute 'my-full-face nil :background "yellow") 'ok) (error 'no))
+   'get-family (face-attribute 'my-full-face :family nil 'default-on)
+   'get-weight (face-attribute 'my-full-face :weight nil 'default-on)
+   'get-slant (face-attribute 'my-full-face :slant nil 'default-on)
+   'get-underline (face-attribute 'my-full-face :underline nil 'default-on)
+   'get-box (face-attribute 'my-full-face :box nil 'default-on)
+   'get-fg (face-attribute 'my-full-face :foreground nil 'default-on)
+   'get-bg (face-attribute 'my-full-face :background nil 'default-on)
+   'unset-all (condition-case nil (progn (set-face-attribute 'my-full-face nil
+                                                              :family 'unspecified :foundry 'unspecified
+                                                              :width 'unspecified :height 'unspecified
+                                                              :weight 'unspecified :slant 'unspecified
+                                                              :underline 'unspecified :overline 'unspecified
+                                                              :strike-through 'unspecified :box 'unspecified
+                                                              :inverse-video 'unspecified :foreground 'unspecified
+                                                              :background 'unspecified) 'ok) (error 'no)))))"##,
+    );
+}
