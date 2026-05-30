@@ -26895,3 +26895,86 @@ fn ft_quake_face_text_property_fill_gap_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_surge_face_overlay_many_small_overlays_priority_sort() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 2))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 2 3))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 2))
+    (let ((ov3 (make-overlay 3 4))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 3))
+    (let ((ov4 (make-overlay 4 5))) (overlay-put ov4 'face '(:background "yellow")) (overlay-put ov4 'priority 4))
+    (let ((ov5 (make-overlay 5 6))) (overlay-put ov5 'face '(:background "cyan")) (overlay-put ov5 'priority 5))
+    (list
+     'pos1 (get-char-property 1 'face)
+     'pos2 (get-char-property 2 'face)
+     'pos3 (get-char-property 3 'face)
+     'pos4 (get-char-property 4 'face)
+     'pos5 (get-char-property 5 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_surge_font_lock_fontify_progv_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(progv '(x y) '(1 2)\n  (+ x y))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'progv-face (save-excursion (goto-char (point-min)) (search-forward "progv") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_surge_face_overlay_face_after_typed_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 3 5)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 4)
+      (insert "BBB")
+      (list
+       'face-at-3 (get-char-property 3 'face)
+       'face-at-4 (get-char-property 4 'face)
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_surge_face_text_property_face_interval_scan_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "12345678901234567890")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 10 'face 'italic)
+    (put-text-property 10 15 'face 'underline)
+    (put-text-property 15 21 'face '(:foreground "red"))
+    (list
+     'scan-all (let ((pos 1) (res nil))
+                 (while (<= pos 20)
+                   (push (get-text-property pos 'face) res)
+                   (setq pos (1+ pos)))
+                 (nreverse res))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
