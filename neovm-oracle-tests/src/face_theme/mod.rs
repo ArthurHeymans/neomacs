@@ -17006,3 +17006,178 @@ fn ft_beam_face_propertize_multiple_props_and_read() {
      (progn (set-text-properties 0 (length s) (list 'face 'italic 'key3 'newval) s) (list 'modified-face (get-text-property 0 'face s) 'old-key1 (get-text-property 0 'key1 s) 'new-key3 (get-text-property 0 'key3 s)))))))"##,
     );
 }
+
+#[test]
+fn ft_pulse_face_set_face_underline_complex_patterns() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-patterns-face) (error nil))
+  (list
+   'wave-red (condition-case nil (progn (set-face-underline 'my-ul-patterns-face '(:color "red" :style wave) nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'line-blue (condition-case nil (progn (set-face-underline 'my-ul-patterns-face '(:color "blue" :style line) nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'double-green (condition-case nil (progn (set-face-underline 'my-ul-patterns-face '(:color "green" :style double-line) nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'dots-orange (condition-case nil (progn (set-face-underline 'my-ul-patterns-face '(:color "orange" :style dots) nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'dash-purple (condition-case nil (progn (set-face-underline 'my-ul-patterns-face '(:color "purple" :style dash) nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'clear (condition-case nil (progn (set-face-underline 'my-ul-patterns-face nil nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   't-simple (condition-case nil (progn (set-face-underline 'my-ul-patterns-face t nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no))
+   'unspec (condition-case nil (progn (set-face-underline 'my-ul-patterns-face 'unspacified nil) (face-attribute 'my-ul-patterns-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_font_lock_fontify_buffer_unfontify_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun unfontify-cycle (x) (* x x))\n")
+    (let ((results nil))
+      (font-lock-fontify-buffer)
+      (push (list 'fontify-1 (get-text-property 1 'fontified) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 25))) results)
+      (font-lock-unfontify-buffer)
+      (push (list 'unfontify (get-text-property 1 'fontified)) results)
+      (font-lock-fontify-buffer)
+      (push (list 'fontify-2 (get-text-property 1 'fontified) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 25))) results)
+      (font-lock-unfontify-buffer)
+      (push (list 'unfontify-2 (get-text-property 1 'fontified)) results)
+      (font-lock-fontify-buffer)
+      (push (list 'fontify-3 (get-text-property 1 'fontified)) results)
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_face_text_property_get_all_props_and_rebuild() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Get all props and rebuild face test content text data buffer content")
+    (add-text-properties 1 58 (list 'face 'bold 'a 1 'b 2 'c 3 'fontified t))
+    (let ((props (text-properties-at 1)) (keys nil))
+      (dotimes (i (/ (length props) 2))
+        (push (nth (* i 2) props) keys)
+        (push (nth (1+ (* i 2)) props) keys))
+      (setq keys (nreverse keys))
+      (list
+       'extracted-keys (let ((k nil) (i 0))
+                         (while (< i (length props))
+                           (push (nth i props) k) (setq i (+ i 2)))
+                         (nreverse k))
+       'face-value (get-text-property 1 'face)
+       'props-count (length props)
+       ;; Clear and rebuild with extracted props
+       (progn (set-text-properties 1 58 nil) (add-text-properties 1 58 keys) (list 'rebuilt-face (get-text-property 1 'face) 'rebuilt-fontified (get-text-property 1 'fontified))))))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_face_overlay_both_empty_end_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((ov-start (make-overlay 1 1))) (overlay-put ov-start 'face '(:background "red")) (overlay-put ov-start 'before-string "[B]"))
+    (let ((ov-end (make-overlay 1 1))) (overlay-put ov-end 'face '(:background "blue")) (overlay-put ov-end 'after-string "[A]"))
+    (let ((ov-mid (make-overlay 1 1))) (overlay-put ov-mid 'face '(:weigh bold :slant italic)) (overlay-put ov-mid 'display ""))
+    (list
+     'all-empty-faces (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov) (overlay-get ov 'face))) (list ov-start ov-end ov-mid))
+     'char-prop (get-char-property 1 'face)
+     (progn (insert "FILLED") (list 'after-fill (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 3 6))))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_font_lock_keywords_fontify_case_sensitive_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "CASE case Case CAse font lock face case sensitivity test")
+    (let ((results nil))
+      (let ((font-lock-keywords-case-fold-search t))
+        (font-lock-add-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t)))
+        (font-lock-fontify-buffer)
+        (push (list 'case-fold-t (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("CASE" "case" "Case")))
+              results)
+        (font-lock-remove-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t))))
+      (let ((font-lock-keywords-case-fold-search nil))
+        (font-lock-add-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t)))
+        (font-lock-fontify-buffer)
+        (push (list 'case-fold-nil (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("CASE" "case" "Case")))
+              results)
+        (font-lock-remove-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t))))
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_face_overlay_face_get_after_overlay_buffer_deletion() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Face after overlay buffer deletion test content text data here now done")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'before (list 'face (overlay-get ov 'face) 'buffer (and (overlay-buffer ov) t))
+       (progn (delete-overlay ov) (list 'after-delete (and (overlay-buffer ov) t) 'face-at-15 (get-char-property 15 'face) 'face-at-25 (get-char-property 25 'face))))))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_face_with_text_property_category_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Text property category face test buffer content text data here now end")
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 1 20 'category 'my-text-cat-bold)
+    (put-text-property 20 40 'face 'italic)
+    (put-text-property 20 40 'category 'my-text-cat-italic)
+    (put-text-property 40 60 'face 'underline)
+    (list
+     'face-cat (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'category))) '(1 10 20 30 40 50 59))
+     'get-char-property (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'category)) '(1 20 40 59))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_pulse_face_overlay_properties_count_after_multiple_adds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAA")
+    (let ((ov (make-overlay 1 11)))
+      (list
+       'empty-props (length (overlay-properties ov))
+       'add-face (progn (overlay-put ov 'face '(:background "yellow")) (length (overlay-properties ov)))
+       'add-priority (progn (overlay-put ov 'priority 50) (length (overlay-properties ov)))
+       'add-help (progn (overlay-put ov 'help-echo "test") (length (overlay-properties ov)))
+       'add-evap (progn (overlay-put ov 'evaporate t) (length (overlay-properties ov)))
+       'add-category (progn (overlay-put ov 'category 'my-cat) (length (overlay-properties ov)))
+       'all-keys (let ((props (overlay-properties ov)) (keys nil) (i 0))
+                   (while (< i (length props)) (push (nth i props) keys) (setq i (+ i 2)))
+                   (nreverse keys))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
