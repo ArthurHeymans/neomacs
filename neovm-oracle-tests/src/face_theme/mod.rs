@@ -8885,3 +8885,207 @@ fn ft_void_face_with_zero_length_string_faces_deep() {
      'empty-string-no-props (text-properties-at 0 s1)))))"##,
     );
 }
+
+#[test]
+fn ft_abyss_face_overlay_evaporate_with_insert_before_after_text_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Evaporating overlay with before after text test here now")
+    (let ((ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'before-string "{{")
+      (overlay-put ov 'after-string "}}")
+      (list
+       'before-delete (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 15 20 25 30 35 45))
+       ;; Delete region containing evaporating overlay
+       'after-delete (progn
+                       (delete-region 15 30)
+                       (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 15 20 25 30 35)))
+       'overlay-deleted (not (overlay-buffer ov)))))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_attribute_all_atts_extraction_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-all-atts (condition-case nil
+                         (face-all-attributes 'default (selected-frame))
+                       (error 'no-all-atts))
+   'bold-all-atts (condition-case nil
+                      (face-all-attributes 'bold (selected-frame))
+                    (error 'no-bold-atts))
+   'all-atts-length-default (condition-case nil
+                                (length (face-all-attributes 'default (selected-frame)))
+                              (error 'no-length))
+   'default-foreground (condition-case nil (face-foreground 'default (selected-frame) 'default-on) (error 'no))
+   'default-background (condition-case nil (face-background 'default (selected-frame) 'default-on) (error 'no))
+   'default-font (condition-case nil (face-font 'default (selected-frame)) (error 'no))
+   'default-size (condition-case nil (face-attribute 'default :height (selected-frame) 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_overlays_in_order_by_priority_and_position_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlays sorted by priority and position in buffer text content here")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'priority 50) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 5 25))) (overlay-put ov2 'priority 50) (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 10 30))) (overlay-put ov3 'priority 75) (overlay-put ov3 'face '(:background "blue")))
+    (let ((ov4 (make-overlay 20 40))) (overlay-put ov4 'priority 25) (overlay-put ov4 'face '(:background "yellow")))
+    (let ((ov5 (make-overlay 30 50))) (overlay-put ov5 'priority 100) (overlay-put ov5 'face '(:background "orange")))
+    (list
+     'overlays-sorted (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov) (overlay-get ov 'priority) (overlay-get ov 'face)))
+                             (sort (overlays-in 1 55)
+                                   (lambda (a b)
+                                     (let ((pa (or (overlay-get a 'priority) 0))
+                                           (pb (or (overlay-get b 'priority) 0)))
+                                       (or (> pa pb)
+                                           (and (= pa pb) (< (overlay-start a) (overlay-start b))))))))
+     'faces-at-10 (get-char-property 10 'face)
+     'faces-at-25 (get-char-property 25 'face)
+     'faces-at-35 (get-char-property 35 'face)
+     'max-priority-at-10 (apply #'max (mapcar (lambda (ov) (or (overlay-get ov 'priority) 0)) (overlays-at 10)))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_font_lock_unfontify_region_then_refontify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Region unfontify\nBody region.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))))
+        ;; Unfontify specific region
+        (font-lock-unfontify-region 1 20)
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))))
+          ;; Unfontify whole buffer
+          (font-lock-unfontify-buffer)
+          (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))))
+            ;; Re-fontify
+            (font-lock-fontify-buffer)
+            (let ((v3 (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))))
+              (list v0 v1 v2 v3)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_buffer_string_property_survival_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Buffer string property survival test text content area")
+    (put-text-property 1 49 'face '(:foreground "blue"))
+    (put-text-property 1 20 'extra-mark 'first-half)
+    (put-text-property 20 49 'extra-mark 'second-half)
+    (list
+     'local-face (get-text-property 1 'face)
+     'local-extra (get-text-property 1 'extra-mark)
+     'via-buffer-string
+     (let ((s (buffer-string)))
+       (with-temp-buffer
+         (insert s)
+         (list
+          'copy-face (get-text-property 1 'face)
+          'copy-extra (get-text-property 1 'extra-mark)
+          'copy-face-25 (get-text-property 25 'face)
+          'copy-extra-25 (get-text-property 25 'extra-mark))))
+     'via-buffer-substring
+     (let ((s (buffer-substring 1 49)))
+       (with-temp-buffer
+         (insert s)
+         (list
+          'sub-face (get-text-property 1 'face)
+          'sub-extra (get-text-property 1 'extra-mark)))))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_font_lock_fontify_region_with_boundary_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Boundary fontify\nBody.\n\n")
+      ;; Fontify only portion
+      (font-lock-fontify-region 1 15)
+      (list
+       'fontified-first-half (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 15))
+       'not-fontified-second (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(18 20 25))
+       ;; Now fontify the rest
+       'after-full-fontify (progn
+                             (font-lock-fontify-region 15 (point-max))
+                             (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 5 10 15 18 20 25))))))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_property_change_after_text_insert_at_each_pos_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAA")
+    (put-text-property 1 11 'face 'bold)
+    (let ((results nil))
+      (dotimes (i 5)
+        (goto-char (+ i 2))
+        (insert "X")
+        (push (list 'pos (+ i 2) 'face (get-text-property (+ i 2) 'face)) results))
+      (nreverse results))))"##,
+    );
+}
+
+#[test]
+fn ft_abyss_face_font_lock_mode_without_mode_hooks_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-default-function (if (boundp 'font-lock-fontify-buffer-function)
+                                     'bound
+                                   'not-bound)
+   'font-lock-support-mode (if (boundp 'font-lock-support-mode)
+                                font-lock-support-mode
+                              'not-bound)
+   'fast-lock-mode (if (fboundp 'fast-lock-mode) 'fbound 'not-fbound)
+   'lazy-lock-mode (if (fboundp 'lazy-lock-mode) 'fbound 'not-fbound)
+   'jit-lock-stealth-fontify
+   (condition-case nil
+       (progn (jit-lock-stealth-fontify) 'stealth-fontify-ok)
+     (error 'no-stealth-fontify))
+   'font-lock-after-fontify-buffer
+   (condition-case nil
+       (progn (font-lock-after-fontify-buffer) 'ok)
+     (error 'no-after-fontify))))"##,
+    );
+}
