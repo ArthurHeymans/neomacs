@@ -8492,3 +8492,201 @@ fn ft_cosmic_face_overlay_make_and_move_and_delete_deep() {
                   (list v0 v1 v2 v3 v4))))))))))"##,
     );
 }
+
+#[test]
+fn ft_nova_face_multi_overlay_same_buffer_region_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multi overlay same region face priority stacking test text")
+    (put-text-property 1 55 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 10 30))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:foreground "green" :weight bold)))
+    (let ((ov3 (make-overlay 10 30))) (overlay-put ov3 'face '(:underline t)))
+    (let ((ov4 (make-overlay 10 30))) (overlay-put ov4 'face '(:slant italic)))
+    (list
+     'same-region-overlay-count (length (overlays-at 20))
+     'face-at-20 (get-char-property 20 'face)
+     'all-overlay-faces (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 20))
+     'text-prop-face (get-text-property 20 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_add_text_properties_multiple_regions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "First region with bold face and properties here")
+    (insert "\nSecond region with italic face here region end\n")
+    (insert "Third region with underline face goes here end\n")
+    (put-text-property 1 31 'face 'bold)
+    (put-text-property 1 31 'region 'first)
+    (put-text-property 32 60 'face 'italic)
+    (put-text-property 32 60 'region 'second)
+    (put-text-property 61 93 'face 'underline)
+    (put-text-property 61 93 'region 'third)
+    (list
+     'faces-by-region (mapcar (lambda (pos) (goto-char pos) (list pos (line-number-at-pos) (get-text-property pos 'face) (get-text-property pos 'region))) '(1 15 30 32 45 59 61 75 92))
+     'prop-changes-across-newlines (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 32 61))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_font_lock_ensure_versus_fontify_buffer_diff() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun compare (a b) (+ a b))\n")
+    (insert "(setq x 42)\n")
+    ;; Don't fontify first, check state
+    (list
+     'before-any-fontify (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))
+     ;; Fontify with font-lock-ensure
+     'after-ensure (progn
+                     (font-lock-ensure (point-min) (point-max))
+                     (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30)))
+     ;; Unfontify and use font-lock-fontify-buffer
+     'after-fontify-buffer (progn
+                             (font-lock-unfontify-buffer)
+                             (font-lock-fontify-buffer)
+                             (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30)))
+     'font-lock-fontify-region-function (if (boundp 'font-lock-fontify-region-function) 'bound 'not-bound)))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_with_overlay_property_at_overlay_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Boundary overlay properties face test region content text here end")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'help-echo "This is overlay text")
+      (overlay-put ov 'keymap (make-sparse-keymap))
+      (overlay-put ov 'local-map (make-sparse-keymap))
+      (list
+       'at-start (list (get-char-property 9 'face) (get-char-property 10 'face))
+       'at-end (list (get-char-property 39 'face) (get-char-property 40 'face))
+       'inside (get-char-property 25 'face)
+       'help-echo (overlay-get ov 'help-echo)
+       'has-keymap (keymapp (overlay-get ov 'keymap))
+       'has-local-map (keymapp (overlay-get ov 'local-map))
+       'overlay-props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_text_properties_at_various_buffer_positions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Position-based text property check for face accuracy")
+    (put-text-property 1 53 'face '(:foreground "blue"))
+    (put-text-property 1 10 'extra-property 'first-ten)
+    (put-text-property 40 53 'extra-property 'last-thirteen)
+    (list
+     'pos-1 (text-properties-at 1)
+     'pos-5 (text-properties-at 5)
+     'pos-10 (text-properties-at 10)
+     'pos-11 (text-properties-at 11)
+     'pos-25 (text-properties-at 25)
+     'pos-40 (text-properties-at 40)
+     'pos-52 (text-properties-at 52)
+     'prop-any-first-ten (text-property-any 1 53 'extra-property 'first-ten)
+     'prop-any-last (text-property-any 1 53 'extra-property 'last-thirteen)
+     'prop-any-none (text-property-any 1 53 'extra-property 'none))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_org_font_lock_defface_present_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-faces)
+  (list
+   'org-level-faces (mapcar (lambda (n) (let ((face (intern (format "org-level-%d" n)))) (list n face (facep face)))) '(1 2 3 4 5 6 7 8))
+   'org-todo-face (facep 'org-todo)
+   'org-done-face (facep 'org-done)
+   'org-priority-face (facep 'org-priority)
+   'org-tag-face (facep 'org-tag)
+   'org-date-face (facep 'org-date)
+   'org-link-face (facep 'org-link)
+   'org-block-face (facep 'org-block)
+   'org-table-face (facep 'org-table)
+   'org-drawer-face (facep 'org-drawer)
+   'org-special-keyword-face (facep 'org-special-keyword)
+   'org-document-title-face (facep 'org-document-title)
+   'org-meta-line-face (facep 'org-meta-line)
+   'org-checkbox-face (facep 'org-checkbox)
+   'org-verbatim-face (facep 'org-verbatim)
+   'org-code-face (facep 'org-code)
+   'org-formula-face (facep 'org-formula))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_with_property_interval_deletion_at_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXXXYYYYYZZZZZZZZZZWWWWWWWWW")
+    (put-text-property 1 13 'face 'bold)
+    (put-text-property 13 18 'face 'italic)
+    (put-text-property 18 28 'face 'underline)
+    (put-text-property 28 37 'face '(:foreground "red"))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 13 15 18 22 28 32 36)))))
+      (let ((v0 (funcall snap)))
+        ;; Delete exactly at boundary (13-18 removes italic exactly)
+        (delete-region 13 18)
+        (let ((v1 (funcall snap)))
+          ;; Delete across boundary (part of bold, part of underline)
+          (delete-region 7 22)
+          (let ((v2 (funcall snap)))
+            ;; Delete entire remaining region
+            (delete-region 1 (point-max))
+            (let ((v3 (funcall snap)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_nova_face_text_property_character_width_multi_column_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AいろはXYZ한글テストEND")
+    (put-text-property 1 2 'face 'bold)
+    (put-text-property 2 4 'face 'italic)
+    (put-text-property 4 6 'face 'underline)
+    (put-text-property 6 15 'face '(:foreground "red"))
+    (list
+     'faces-and-widths (mapcar (lambda (pos) (goto-char pos) (list pos (char-after pos) (get-text-property pos 'face) (char-width (char-after pos)) (string-width (string (char-after pos))))) '(1 2 3 4 5 7 9 12 15))
+     'string-width-of-region (string-width (buffer-substring 1 10))
+     'byte-length (length (encode-coding-string (buffer-string) 'utf-8))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
