@@ -4976,3 +4976,92 @@ fn ft_pure_face_make_face_and_set_all_attrs_deep() {
                                                               :background 'unspecified) 'ok) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_deep_face_with_overlay_window_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay window-specific face test data here")
+    (put-text-property 1 42 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 15)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'window (selected-window)))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold))
+      (overlay-put ov2 'window nil))
+    (list
+     'faces-with-window-overlays (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 15 20 25 35 40))
+     'overlay-get-window (list (overlay-get ov1 'window) (overlay-get ov2 'window))
+     'overlay-buffer (list (overlay-buffer ov1) (overlay-buffer ov2))
+     (progn (delete-overlay ov1) (delete-overlay ov2) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_with_c_mode_syntax_colors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (c-mode)
+    (insert "int main() {\n  int x = 42;\n  printf(\"hello %d\\n\", x);\n  return 0;\n}\n")
+    (font-lock-ensure (point-min) (point-max))
+    (mapcar
+     (lambda (needle)
+       (save-excursion
+         (goto-char (point-min))
+         (if (search-forward needle nil t)
+             (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified) (get-text-property (match-beginning 0) 'font-lock-face))
+             (list needle 'not-found nil nil))))
+     '("int" "main" "x" "42" "printf" "return"))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_with_emacs_lisp_mode_colors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun my-func (x)\n  \"Docstring.\"\n  (let ((y (+ x 1)))\n    y))\n")
+    (font-lock-ensure (point-min) (point-max))
+    (mapcar
+     (lambda (needle)
+       (save-excursion
+         (goto-char (point-min))
+         (if (search-forward needle nil t)
+             (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))
+             (list needle 'not-found nil))))
+     '("defun" "my-func" "Docstring" "let" "+"))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_with_python_mode_colors() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (let ((python-indent-guess-indent-offset nil))
+          (python-mode)
+          (insert "def my_func(x):\n    \"\"\"Docstring.\"\"\"\n    y = x + 1\n    return y\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))
+                   (list needle 'not-found nil))))
+           '("def" "my_func" "Docstring" "return")))
+      (error (list 'python-error (fboundp 'python-mode))))))"##,
+    );
+}
