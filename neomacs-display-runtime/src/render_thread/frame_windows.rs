@@ -104,6 +104,59 @@ pub(crate) struct FrameCompositor {
     pub transitions: TransitionState,
 }
 
+impl OverlayState {
+    pub fn popup_is_open(&self) -> bool {
+        self.popup_menu.is_some()
+    }
+
+    pub fn hide_popup(&mut self) -> bool {
+        if self.popup_menu.is_some() {
+            self.popup_menu = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn hide_tooltip(&mut self) -> bool {
+        if self.tooltip.is_some() {
+            self.tooltip = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn has_active_overlay(&self) -> bool {
+        self.popup_menu.is_some() || self.tooltip.is_some()
+    }
+}
+
+impl ChromeState {
+    pub fn is_interacting(&self) -> bool {
+        self.interaction.menu_bar_active.is_some()
+            || self.interaction.compact_bar_menu_active.is_some()
+            || self.interaction.compact_bar_tool_pressed.is_some()
+            || self.interaction.toolbar_pressed.is_some()
+            || self.interaction.tab_bar_pressed.is_some()
+    }
+
+    pub fn clear_interaction(&mut self) {
+        self.interaction.menu_bar_active = None;
+        self.interaction.compact_bar_menu_active = None;
+        self.interaction.compact_bar_tool_pressed = None;
+        self.interaction.toolbar_pressed = None;
+        self.interaction.toolbar_press_captured = false;
+        self.interaction.tab_bar_pressed = None;
+        self.interaction.tab_bar_press_captured = false;
+    }
+
+    pub fn dismiss_menus(&mut self) {
+        self.interaction.menu_bar_active = None;
+        self.interaction.compact_bar_menu_active = None;
+    }
+}
+
 /// Per-window state for a top-level GUI frame.
 ///
 /// `native` is `None` until the winit window is created (at `resumed`),
