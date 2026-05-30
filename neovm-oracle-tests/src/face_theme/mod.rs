@@ -3536,3 +3536,293 @@ fn ft_delve_org_face_double_global_cycle_with_edits() {
                   (list v0 v1 v2 v3 v4)))))))))))"##,
     );
 }
+
+#[test]
+fn ft_pure_face_copy_face_and_compare_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'bold 'my-test-face)
+    (error nil))
+  (condition-case nil
+      (copy-face 'italic 'my-test-face-2)
+    (error nil))
+  (list
+   'my-test-face-exists (facep 'my-test-face)
+   'my-test-face-2-exists (facep 'my-test-face-2)
+   'face-equal-test (condition-case nil
+                         (face-equal 'my-test-face 'bold)
+                       (error 'no-face-equal))
+   'face-bold-p (condition-case nil (face-bold-p 'my-test-face nil t) (error 'no-bold-p))
+   'face-italic-p (condition-case nil (face-italic-p 'my-test-face-2 nil t) (error 'no-italic-p))
+   'face-id-default (if (fboundp 'face-id) (face-id 'default) 'no-face-id)
+   'face-id-bold (if (fboundp 'face-id) (face-id 'bold) 'no-face-id)
+   'face-differs-default (face-differs-from-default-p 'bold)
+   'face-differs-italic (face-differs-from-default-p 'italic)
+   (condition-case nil
+       (progn (set-face-attribute 'my-test-face nil :underline t :weight 'bold) 'set-ok)
+     (error 'set-error))
+   'face-underline-after-set (condition-case nil (face-underline-p 'my-test-face nil t) (error 'no-ulp))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_all_atts_get_set_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-face-all-atts)
+    (error nil))
+  (list
+   'family (face-attribute 'default :family nil 'default-on)
+   'foundry (face-attribute 'default :foundry nil 'default-on)
+   'width (face-attribute 'default :width nil 'default-on)
+   'height (face-attribute 'default :height nil 'default-on)
+   'weight (face-attribute 'default :weight nil 'default-on)
+   'slant (face-attribute 'default :slant nil 'default-on)
+   'underline (face-attribute 'default :underline nil 'default-on)
+   'overline (face-attribute 'default :overline nil 'default-on)
+   'strike (face-attribute 'default :strike-through nil 'default-on)
+   'box (face-attribute 'default :box nil 'default-on)
+   'inverse (face-attribute 'default :inverse-video nil 'default-on)
+   'fg (face-attribute 'default :foreground nil 'default-on)
+   'bg (face-attribute 'default :background nil 'default-on)
+   'stipple (face-attribute 'default :stipple nil 'default-on)
+   'inherit (face-attribute 'default :inherit nil 'default-on)
+   'font (condition-case nil (face-attribute 'default :font nil 'default-on) (error 'no-font))
+   'distant-fg (condition-case nil (face-attribute 'default :distant-foreground nil 'default-on) (error 'no-distant))
+   (if (facep 'my-face-all-atts)
+       (list (face-attribute 'my-face-all-atts :weight nil 'default-on)
+             (face-attribute 'my-face-all-atts :slant nil 'default-on))
+     'no-copy)))"##,
+    );
+}
+
+#[test]
+fn ft_pure_font_family_list_and_info_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'font-family-list-fbound (fboundp 'font-family-list)
+   'first-10-families (condition-case nil
+                          (let ((families (font-family-list)))
+                            (list 'count (length families) 'sample (seq-take families 5)))
+                        (error 'no-font-family-list))
+   'find-font (condition-case nil
+                  (let ((f (find-font (font-spec :family "Monospace"))))
+                    (if f 'found 'not-found))
+                (error 'no-find-font))
+   'font-info (condition-case nil
+                  (font-info (face-attribute 'default :font nil 'default-on))
+                (error 'no-font-info))
+   'fontp-default-font (condition-case nil
+                           (fontp (face-attribute 'default :font nil 'default-on))
+                         (error 'no-fontp))
+   'font-slant-table (condition-case nil (font-slant-table) (error 'no-slant-table))
+   'font-width-table (condition-case nil (font-width-table) (error 'no-width-table))
+   'font-weight-table (condition-case nil (font-weight-table) (error 'no-weight-table)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_custom_theme_set_get_enable_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'custom)
+  (list
+   'custom-theme-set-faces-fbound (fboundp 'custom-theme-set-faces)
+   'custom-theme-face-value-fbound (fboundp 'custom-theme-face-value)
+   'enable-theme-fbound (fboundp 'enable-theme)
+   'disable-theme-fbound (fboundp 'disable-theme)
+   'load-theme-fbound (fboundp 'load-theme)
+   'theme-list (if (fboundp 'custom-available-themes)
+                   (custom-available-themes)
+                 'no-theme-list)
+   'custom-known-themes (if (boundp 'custom-known-themes) custom-known-themes 'no-known-themes)
+   'face-attr-default-weight (face-attribute 'default :weight nil 'default-on)
+   (condition-case nil
+       (custom-theme-face-value 'default 'default)
+     (error 'no-face-value))
+   (condition-case nil
+       (custom-theme-set-faces 'user '(default ((t (:weight bold)))))
+     (error 'no-set-faces)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_font_lock_defaults_and_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-defaults-fbound (fboundp 'font-lock-defaults)
+   'font-lock-set-defaults-fbound (fboundp 'font-lock-set-defaults)
+   'font-lock-add-keywords-fbound (fboundp 'font-lock-add-keywords)
+   'font-lock-remove-keywords-fbound (fboundp 'font-lock-remove-keywords)
+   'font-lock-update-fbound (fboundp 'font-lock-update)
+   'font-lock-flush-fbound (fboundp 'font-lock-flush)
+   'font-lock-ensure-fbound (fboundp 'font-lock-ensure)
+   (condition-case nil
+       (progn
+         (font-lock-add-keywords nil '(("\\<\\(TODO\\)\\>" 1 font-lock-warning-face t)))
+         (font-lock-remove-keywords nil '(("\\<\\(TODO\\)\\>" 1 font-lock-warning-face t)))
+         'add-remove-ok)
+     (error 'add-remove-failed))
+   'font-lock-keywords-case-fold (font-lock-keywords-case-fold)
+   'font-lock-syntactic-face-function (if (fboundp 'font-lock-syntactic-face-function)
+                                          (font-lock-syntactic-face-function)
+                                        'no-func))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_jit_lock_functions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'jit-lock)
+  (list
+   'jit-lock-mode-fbound (fboundp 'jit-lock-mode)
+   'jit-lock-register-fbound (fboundp 'jit-lock-register)
+   'jit-lock-unregister-fbound (fboundp 'jit-lock-unregister)
+   'jit-lock-function-fbound (fboundp 'jit-lock-function)
+   (if (boundp 'jit-lock-mode) jit-lock-mode 'no-jit-mode)
+   (if (boundp 'jit-lock-chunk-size) jit-lock-chunk-size 'no-chunk-size)
+   (if (boundp 'jit-lock-stealth-time) jit-lock-stealth-time 'no-stealth)
+   (if (boundp 'jit-lock-stealth-nice) jit-lock-stealth-nice 'no-nice)
+   'jit-lock-functions (if (boundp 'jit-lock-functions)
+                           (length jit-lock-functions)
+                         'no-functions))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_remap_advanced_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'face-remap-add-relative (fboundp 'face-remap-add-relative)
+   'face-remap-remove-relative (fboundp 'face-remap-remove-relative)
+   'face-remap-set-base (fboundp 'face-remap-set-base)
+   'face-remap-reset-base (fboundp 'face-remap-reset-base)
+   'text-scale-set (fboundp 'text-scale-set)
+   'text-scale-increase (fboundp 'text-scale-increase)
+   'text-scale-decrease (fboundp 'text-scale-decrease)
+   'buffer-face-mode (fboundp 'buffer-face-mode)
+   'variable-pitch-mode (fboundp 'variable-pitch-mode)
+   (condition-case nil
+       (progn
+         (face-remap-add-relative 'default '(:weight bold))
+         (face-remap-reset-base 'default)
+         'remap-ok)
+     (error 'remap-failed))
+   'face-remapping-alist (face-remapping-alist)
+   'default-text-scale (if (boundp 'text-scale-mode-amount) text-scale-mode-amount 'no-amount))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_color_api_functions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'color-name-to-rgb (fboundp 'color-name-to-rgb)
+   'color-rgb-to-hex (fboundp 'color-rgb-to-hex)
+   'color-values (fboundp 'color-values)
+   'color-defined-p (fboundp 'color-defined-p)
+   'color-dark-p (fboundp 'color-dark-p)
+   'color-light-name-p (fboundp 'color-light-name-p)
+   'color-complement (fboundp 'color-complement)
+   'color-gradient (fboundp 'color-gradient)
+   'color-hsl-to-rgb (fboundp 'color-hsl-to-rgb)
+   'color-rgb-to-hsl (fboundp 'color-rgb-to-hsl)
+   (condition-case nil (color-name-to-rgb "red") (error 'no-rgb))
+   (condition-case nil (color-values "black") (error 'no-values))
+   (condition-case nil (color-values "black" t) (error 'no-values-frame))
+   (condition-case nil (color-dark-p "#000000") (error 'no-darkp))
+   (condition-case nil (color-complement "red") (error 'no-complement))
+   (condition-case nil (color-gradient '(0 0 0) '(1 1 1) 3) (error 'no-gradient)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_list_and_basic_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-list-fbound (fboundp 'face-list)
+   'first-10-faces (condition-case nil
+                       (seq-take (face-list) 10)
+                     (error 'no-face-list))
+   'facep-default (facep 'default)
+   'facep-bold (facep 'bold)
+   'facep-italic (facep 'italic)
+   'facep-bold-italic (facep 'bold-italic)
+   'facep-underline (facep 'underline)
+   'facep-non-existent (facep 'this-face-does-not-exist-really)
+   'make-face (condition-case nil
+                  (progn (make-face 'my-dynamic-face) (facep 'my-dynamic-face))
+                (error 'no-make-face))
+   'internal-lisp-face-p (if (fboundp 'internal-lisp-face-p)
+                             (list (internal-lisp-face-p 'default)
+                                   (internal-lisp-face-p 'bold)
+                                   (internal-lisp-face-p 'my-dynamic-face))
+                           'no-internal-lisp-face-p)
+   'face-nontrivial-faces (condition-case nil
+                              (length (face-list))
+                            (error 'no-face-list))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_frame_face_parameters_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'frame-parameter-face (if (fboundp 'frame-parameter)
+                             (frame-parameter nil 'font)
+                           'no-frame-parameter)
+   'face-attribute-frame (condition-case nil
+                             (face-attribute 'default :family nil t)
+                           (error 'no-frame-face))
+   'face-attribute-frame-fg (condition-case nil
+                                (face-attribute 'default :foreground nil t)
+                              (error 'no-frame-fg))
+   'face-attribute-frame-bg (condition-case nil
+                                (face-attribute 'default :background nil t)
+                              (error 'no-frame-bg))
+   'font-attribute-from-frame (condition-case nil
+                                  (face-attribute 'default :font nil t)
+                                (error 'no-frame-font))
+   'display-graphic-p (display-graphic-p)
+   'display-color-p (display-color-p)
+   'display-grayscale-p (if (fboundp 'display-grayscale-p) (display-grayscale-p) 'no)
+   'display-planes (if (fboundp 'display-planes) (display-planes) 'no)
+   'display-color-cells (if (fboundp 'display-color-cells) (display-color-cells) 'no)
+   'display-mm-height (if (fboundp 'display-mm-height) (display-mm-height) 'no)
+   'display-mm-width (if (fboundp 'display-mm-width) (display-mm-width) 'no)
+   'display-pixel-height (display-pixel-height)
+   'display-pixel-width (display-pixel-width))))"##,
+    );
+}
