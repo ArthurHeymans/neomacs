@@ -6246,3 +6246,152 @@ fn ft_ultra_face_set_face_attribute_with_face_spec_plist_deep() {
    'reset (condition-case nil (progn (set-face-attribute 'my-spec-face nil :foreground 'unspecified :weight 'unspecified :inherit 'unspecified :height 'unspecified :slant 'unspecified :underline 'unspecified) 'ok) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_giga_face_frame_parameter_font_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'frame-parameter-font (condition-case nil (frame-parameter nil 'font) (error 'no))
+   'frame-parameter-font-backend (condition-case nil (frame-parameter nil 'font-backend) (error 'no))
+   'frame-parameter-foreground-color (condition-case nil (frame-parameter nil 'foreground-color) (error 'no))
+   'frame-parameter-background-color (condition-case nil (frame-parameter nil 'background-color) (error 'no))
+   'frame-parameter-cursor-color (condition-case nil (frame-parameter nil 'cursor-color) (error 'no))
+   'frame-parameter-border-color (condition-case nil (frame-parameter nil 'border-color) (error 'no))
+   'frame-parameter-mouse-color (condition-case nil (frame-parameter nil 'mouse-color) (error 'no))
+   'face-attr-font (condition-case nil (face-font 'default nil) (error 'no))
+   'face-attr-font-fg (condition-case nil (face-foreground 'default nil 'default-on) (error 'no))
+   'face-attr-font-bg (condition-case nil (face-background 'default nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_giga_face_with_face_resources_and_defaults_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-new-frame-defaults-fbound (fboundp 'face-new-frame-defaults)
+   (condition-case nil
+       (face-set-after-frame-default (selected-frame) nil)
+     (error 'no-set-after))
+   (if (fboundp 'face-new-frame-defaults)
+       (condition-case nil
+           (face-new-frame-defaults)
+         (error 'no-defaults))
+     'no-func)
+   'custom-face-attributes (if (boundp 'custom-face-attributes)
+                                (length custom-face-attributes)
+                              'no-bound)
+   'custom-face-format (if (boundp 'custom-face-format)
+                             custom-face-format
+                           'no-bound)
+   (if (fboundp 'x-resolve-font-name)
+       (condition-case nil
+           (x-resolve-font-name "Monospace")
+         (error 'no-x-resolve))
+     'no-x-resolve-func)
+   (if (fboundp 'face-spec-recalc)
+       (condition-case nil
+           (face-spec-recalc 'default (selected-frame))
+         (error 'no-recalc))
+     'no-recalc-func))))"##,
+    );
+}
+
+#[test]
+fn ft_giga_face_text_property_at_point_and_char_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Point and char property comparison test")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 8 14 'face 'italic)
+    (put-text-property 8 14 'font-lock-face 'underline)
+    (put-text-property 14 22 'face '(:foreground "red"))
+    (put-text-property 22 31 'face '(:background "yellow"))
+    (put-text-property 22 31 'font-lock-face nil)
+    (let ((ov (make-overlay 10 20)))
+      (overlay-put ov 'face '(:weight bold :slant italic))
+      (overlay-put ov 'priority 100))
+    (list
+     'get-text-property (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'font-lock-face))) '(1 5 9 12 15 20 25 30))
+     'get-char-property (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'font-lock-face))) '(1 5 9 12 15 20 25 30))
+     'get-char-property-and-overlay (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property-and-overlay pos 'face))) '(1 5 9 12 15 20 25 30))
+     'char-after (mapcar (lambda (pos) (goto-char pos) (char-after pos)) '(1 9 15 22))
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_giga_face_with_overlay_insert_in_front_behind_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay insert in front behind test")
+    (put-text-property 1 38 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 10)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'insert-in-front-hooks '(ignore))
+      (overlay-put ov1 'insert-behind-hooks '(ignore)))
+    (list
+     'overlay-with-hooks (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'face))) '(1 5 10 15 20 30 37))
+     'overlay-hooks (list (overlay-get ov1 'insert-in-front-hooks) (overlay-get ov1 'insert-behind-hooks))
+     (progn (delete-overlay ov1) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_giga_face_multi_byte_string_with_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "αβγ 日本語 التصميم 🌍🌎🌏 конец")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 19 'face 'underline)
+    (put-text-property 19 29 'face '(:foreground "red"))
+    (put-text-property 29 33 'face '(:background "yellow"))
+    (list
+     'faces-multibyte (mapcar (lambda (pos)
+                                (goto-char pos)
+                                (list pos (char-after pos) (get-text-property pos 'face) (char-width (char-after pos))))
+                              '(1 2 3 5 7 12 22 30 33))
+     'prop-changes-multibyte (next-single-property-change 1 'face)
+     'previous-prop-change (previous-single-property-change 33 'face)
+     'buf-string-length (length (buffer-string))))))"##,
+    );
+}
+
+#[test]
+fn ft_giga_face_with_property_list_remove_list_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Remove list of properties face test zone area")
+    (add-text-properties 1 45 (list 'face 'bold 'key1 'val1 'key2 'val2 'key3 'val3))
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1) (get-text-property pos 'key2) (get-text-property pos 'key3))) '(1 10 20 30 40))
+     'remove-face-key (progn
+                        (remove-list-of-text-properties 1 45 '(face key1))
+                        (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1) (get-text-property pos 'key2) (get-text-property pos 'key3))) '(1 10 20 30 40)))
+     'remove-rest (progn
+                    (remove-list-of-text-properties 1 45 '(key2 key3))
+                    (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'key2) (get-text-property pos 'key3))) '(1 10 20 30 40)))
+     're-add (progn
+               (put-text-property 1 20 'face 'italic)
+               (put-text-property 20 45 'face 'underline)
+               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 20 30 40))))))"##,
+    );
+}
