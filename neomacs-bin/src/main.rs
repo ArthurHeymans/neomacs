@@ -2929,6 +2929,7 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
 fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup: &StartupOptions) {
     let tty_name = tty_init::detect_tty_name(startup);
     let tty_type = tty_init::detect_tty_type();
+    let bg_mode = tty_init::detect_tty_background_mode();
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         frame.set_parameter(Value::symbol("tty"), Value::string(tty_name));
         if let Some(tty_type) = tty_type {
@@ -2936,6 +2937,10 @@ fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup
         } else {
             frame.remove_parameter(Value::symbol("tty-type"));
         }
+        // Required by face-spec-set-match-display (faces.el) for
+        // defface conditions (class color) and (background dark).
+        frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
+        frame.set_parameter(Value::symbol("background-mode"), Value::symbol(bg_mode));
     }
 }
 
@@ -2989,8 +2994,15 @@ fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: Frame
     if let Some(frame) = eval.frame_manager_mut().get_mut(terminal_frame_id) {
         frame.visible = false;
         frame.set_window_system(None);
-        frame.remove_parameter(Value::symbol("display-type"));
-        frame.remove_parameter(Value::symbol("background-mode"));
+        // Keep display-type and background-mode so defface spec
+        // conditions like (class color) (background dark) match
+        // during early face resolution — critical for font-lock
+        // and org-mode face colours.
+        frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
+        frame.set_parameter(
+            Value::symbol("background-mode"),
+            Value::symbol(tty_init::detect_tty_background_mode()),
+        );
         if let Some(environment) = environment {
             frame.set_parameter(Value::symbol("environment"), environment);
         }
