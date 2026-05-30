@@ -11386,3 +11386,194 @@ fn ft_eta_face_color_dark_light_deep() {
    (condition-case nil (color-complement "#0000FF") (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_theta_face_overlay_with_multiple_properties_and_priorities() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multiple overlay properties and priorities face test data content")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 100)
+      (overlay-put ov 'help-echo "Test overlay")
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'category 'my-cat)
+      (list
+       'face (overlay-get ov 'face)
+       'priority (overlay-get ov 'priority)
+       'help-echo (overlay-get ov 'help-echo)
+       'evaporate (overlay-get ov 'evaporate)
+       'category (overlay-get ov 'category)
+       'props-count (length (overlay-properties ov))
+       'all-keys (let ((props (overlay-properties ov)) (keys nil) (i 0))
+                   (while (< i (length props))
+                     (push (nth i props) keys)
+                     (setq i (+ i 2)))
+                   (nreverse keys))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_set_attribute_distant_foreground_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-dist-fg-face) (error nil))
+  (list
+   'set-dist-fg-red (condition-case nil (progn (set-face-attribute 'my-dist-fg-face nil :distant-foreground "red") 'ok) (error 'no))
+   'get-dist-fg (condition-case nil (face-attribute 'my-dist-fg-face :distant-foreground nil 'default-on) (error 'no))
+   'set-dist-fg-blue (condition-case nil (progn (set-face-attribute 'my-dist-fg-face nil :distant-foreground "blue") 'ok) (error 'no))
+   'get-dist-fg2 (condition-case nil (face-attribute 'my-dist-fg-face :distant-foreground nil 'default-on) (error 'no))
+   'set-dist-fg-unspec (condition-case nil (progn (set-face-attribute 'my-dist-fg-face nil :distant-foreground 'unspecified) 'ok) (error 'no))
+   'get-dist-fg-after-unspec (condition-case nil (face-attribute 'my-dist-fg-face :distant-foreground nil 'default-on) (error 'no))
+   'default-dist-fg (condition-case nil (face-attribute 'default :distant-foreground nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_font_lock_mode_check_after_buffer_erase() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Erase test\nBody erase.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (list 'mode font-lock-mode 'face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face)))))
+        ;; Erase buffer
+        (erase-buffer)
+        (let ((v1 (list 'mode-after-erase font-lock-mode 'empty-face (get-text-property 1 'face))))
+          ;; Re-insert and fontify
+          (insert "* DONE After erase\nBody after.\n\n")
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v2 (list 'mode-after-refill font-lock-mode 'face-after (save-excursion (goto-char (point-min)) (search-forward "DONE") (get-text-property (match-beginning 0) 'face)))))
+            (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_property_search_with_nil_value_large_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert (make-string 100 ?X))
+    (put-text-property 1 50 'face 'bold)
+    (put-text-property 50 101 'face nil)
+    (list
+     'find-bold (text-property-any 1 101 'face 'bold)
+     'find-nil (text-property-any 1 101 'face nil)
+     'not-all-bold (text-property-not-all 1 101 'face 'bold)
+     'next-nil (next-single-property-change 1 'face nil 101)
+     'prev-bold (previous-single-property-change 101 'face nil 1)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_add_face_text_property_incrementally_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Incremental add face text property test buffer content text data")
+    ;; Start with base face
+    (add-face-text-property 1 55 '(:foreground "blue"))
+    (add-face-text-property 1 55 '(:weight bold))
+    (add-face-text-property 1 30 '(:slant italic))
+    (add-face-text-property 25 55 '(:underline t))
+    (add-face-text-property 40 55 '(:background "yellow"))
+    (list
+     'step1 (get-text-property 1 'face)
+     'step2 (get-text-property 15 'face)
+     'step3 (get-text-property 28 'face)
+     'step4 (get-text-property 45 'face)
+     'step5 (get-text-property 54 'face)
+     'facep-all (mapcar (lambda (pos) (goto-char pos) (facep (get-text-property pos 'face))) '(1 15 28 45 54))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_font_lock_fontify_syntactically_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; comment line\n(defun test () 42)\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (list
+     'comment-face (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'face))
+     'comment-fontified (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'fontified))
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'test-face (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face))
+     '42-face (save-excursion (goto-char (point-min)) (search-forward "42") (get-text-property (match-beginning 0) 'face))
+     'fontified-after-syn (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 15 20 25 30)))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_overlay_properties_plist_length_stress_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay plist length stress test face buffer content text area")
+    (let ((ov (make-overlay 1 10)))
+      (overlay-put ov 'prop1 'val1)
+      (overlay-put ov 'prop2 'val2)
+      (overlay-put ov 'prop3 'val3)
+      (overlay-put ov 'prop4 'val4)
+      (overlay-put ov 'prop5 'val5)
+      (overlay-put ov 'prop6 'val6)
+      (overlay-put ov 'prop7 'val7)
+      (overlay-put ov 'prop8 'val8)
+      (overlay-put ov 'prop9 'val9)
+      (overlay-put ov 'prop10 'val10)
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'props-count (length (overlay-properties ov))
+       'face-get (overlay-get ov 'face)
+       'prop1-get (overlay-get ov 'prop1)
+       'prop5-get (overlay-get ov 'prop5)
+       'prop10-get (overlay-get ov 'prop10)
+       'all-keys (let ((props (overlay-properties ov)) (keys nil) (i 0))
+                   (while (< i (length props))
+                     (push (nth i props) keys)
+                     (setq i (+ i 2)))
+                   (sort (nreverse keys) #'string<))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_theta_face_set_face_font_via_spec_vs_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-font-spec-face) (error nil))
+  (list
+   'set-font-by-spec (condition-case nil (progn (set-face-font 'my-font-spec-face (font-spec :family "Monospace" :size 12) nil) 'set) (error 'no))
+   'get-font-after-spec (condition-case nil (face-font 'my-font-spec-face nil) (error 'no))
+   'set-font-by-string (condition-case nil (progn (set-face-font 'my-font-spec-face "Monospace-12" nil) 'set) (error 'no))
+   'get-font-after-string (condition-case nil (face-font 'my-font-spec-face nil) (error 'no))
+   'set-font-by-xlfd (condition-case nil (let* ((font (face-font 'default nil)) (xlfd (if (fontp font) (font-xlfd-name font) "none"))) (list 'xlfd xlfd)) (error 'no-xlfd))
+   'reset-font (condition-case nil (progn (set-face-font 'my-font-spec-face 'unspecified nil) 'reset) (error 'no)))))"##,
+    );
+}
