@@ -9282,3 +9282,219 @@ fn ft_infinity_face_font_lock_verbose_and_debug_flags_deep() {
      (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_eternal_face_overlay_make_delete_recreate_same_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay recreate same region face test buffer content text here")
+    (put-text-property 1 56 'face '(:foreground "blue"))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 20 30 40 50 55)))))
+      (let ((v0 (funcall snap)))
+        ;; Create overlay
+        (let ((ov (make-overlay 10 30))) (overlay-put ov 'face '(:background "yellow")))
+        (let ((v1 (funcall snap)))
+          ;; Delete it
+          (mapc #'delete-overlay (overlays-at 20))
+          (let ((v2 (funcall snap)))
+            ;; Recreate different overlay same region
+            (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+            (let ((v3 (funcall snap)))
+              ;; Delete and recreate third time
+              (mapc #'delete-overlay (overlays-at 20))
+              (let ((ov3 (make-overlay 10 30))) (overlay-put ov3 'face '(:underline t :slant italic)))
+              (let ((v4 (funcall snap)))
+                (mapc #'delete-overlay (overlays-in 1 (point-max)))
+                (list v0 v1 v2 v3 v4))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_text_property_at_buffer_start_and_end_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Buffer start end properties")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 8 16 'face 'italic)
+    (put-text-property 16 25 'face 'underline)
+    (put-text-property 25 30 'face '(:foreground "red"))
+    (list
+     'start-pos-0 (text-properties-at 0)
+     'start-pos-1 (get-text-property 1 'face)
+     'start-pos-2 (text-properties-at 1)
+     'end-pos (text-properties-at (point-max))
+     'end-pos-minus-1 (get-text-property (1- (point-max)) 'face)
+     'end-pos-plus-1 (text-properties-at (1+ (point-max)))
+     'next-from-0 (next-single-property-change 0 'face)
+     'prev-from-end (previous-single-property-change (point-max) 'face nil 1)
+     'buf-size (point-max))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_font_lock_mode_disable_enable_sequence_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Mode sequence test\nBody.\n\n")
+      (let ((snap (lambda () (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))))))
+        (font-lock-ensure (point-min) (point-max))
+        (let ((v0 (funcall snap)))
+          (font-lock-mode -1) (let ((v1 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v2 (funcall snap)))
+          (font-lock-mode -1) (let ((v3 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v4 (funcall snap)))
+          (font-lock-mode -1) (let ((v5 (funcall snap)))
+          (font-lock-mode 1) (font-lock-ensure (point-min) (point-max)) (let ((v6 (funcall snap)))
+          (list v0 v1 v2 v3 v4 v5 v6)))))))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_overlay_before_after_propertize_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before after propertize roundtrip face test buffer content")
+    (let* ((before-str (propertize "[[B]]" 'face '(:foreground "red" :weight bold)))
+           (after-str (propertize "{{A}}" 'face '(:foreground "blue" :slant italic)))
+           (ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string before-str)
+      (overlay-put ov 'after-string after-str)
+      (list
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'after-face (get-text-property 0 (overlay-get ov 'after-string))
+       'overlay-face (overlay-get ov 'face)
+       'before-str (overlay-get ov 'before-string)
+       'after-str (overlay-get ov 'after-string)
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_face_spec_set_with_multiple_displays_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'face-spec-set-fbound (fboundp 'face-spec-set)
+   'spec-with-multiple-displays
+   (condition-case nil
+       (face-spec-choose '(((type x w32 ns) (:weight bold))
+                           ((type x) (:slant italic))
+                           ((type w32) (:underline t))
+                           (t (:weight normal))))
+     (error 'no))
+   'spec-with-class
+   (condition-case nil
+       (face-spec-choose '(((class color) (min-colors 88)) (:foreground "blue")
+                           ((class color) (min-colors 8)) (:foreground "green")
+                           ((class mono)) (:foreground "black")))
+     (error 'no))
+   'spec-with-background
+   (condition-case nil
+       (face-spec-choose '(((class color) (background light)) (:foreground "black" :background "white")
+                           ((class color) (background dark)) (:foreground "white" :background "black")))
+     (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_text_property_interval_object_intervals_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (list
+     'one-char-no-props (length (object-intervals (current-buffer)))
+     (progn
+       (put-text-property 1 2 'face 'bold)
+       (list 'one-char-bold (length (object-intervals (current-buffer)))
+             (get-text-property 1 'face)))
+     (progn
+       (goto-char 2) (insert "YYYY")
+       (list 'more-chars (length (object-intervals (current-buffer)))
+             (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 2 3))))
+     (progn
+       (set-text-properties 1 (point-max) nil)
+       (list 'all-cleared (length (object-intervals (current-buffer)))))
+     (progn
+       (put-text-property 1 3 'face 'italic)
+       (put-text-property 3 (point-max) 'face 'underline)
+       (list 'two-intervals (length (object-intervals (current-buffer)))
+             (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 2 3 4)))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_font_lock_fontify_with_narrowed_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Narrowed fontify\nBody narrow.\n\n")
+      (insert "* DONE Outside narrow\nBody outside.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((full-face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        ;; Narrow to first heading
+        (goto-char (point-min))
+        (search-forward "TODO Narrowed fontify")
+        (beginning-of-line)
+        (org-narrow-to-subtree)
+        (let ((narrowed-face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+          ;; Unfontify and refontify within narrow
+          (font-lock-unfontify-buffer)
+          (font-lock-fontify-buffer)
+          (let ((refontified-narrow-face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+            (widen)
+            (list full-face narrowed-face refontified-narrow-face))))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternal_face_property_list_manipulation_via_plist_put_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((plist (list :weight 'bold :slant 'italic :foreground "red")))
+    (list
+     'initial-plist plist
+     'initial-plist-len (length plist)
+     'get-weight (plist-get plist :weight)
+     'get-slant (plist-get plist :slant)
+     'get-fg (plist-get plist :foreground)
+     'put-underline (let ((new (plist-put plist :underline t))) (list new (plist-get new :underline)))
+     'put-override-weight (let ((new (plist-put plist :weight 'extra-bold))) (list new (plist-get new :weight)))
+     'remove-fg (let ((new (plist-put plist :foreground nil))) (list new (plist-get new :foreground)))
+     'add-multiple (let ((new (copy-sequence plist)))
+                     (setq new (plist-put new :underline t))
+                     (setq new (plist-put new :overline t))
+                     (setq new (plist-put new :box t))
+                     (list new (length new)))))))"##,
+    );
+}
