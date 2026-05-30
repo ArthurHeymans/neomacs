@@ -15258,3 +15258,178 @@ fn ft_quark_face_face_everything_all_fbounds_check() {
    'face-remap-reset-base-fbound (fboundp 'face-remap-reset-base))))"##,
     );
 }
+
+#[test]
+fn ft_neutrino_face_overlay_face_get_after_resize_and_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'initial (get-char-property 10 'face)
+       'resize-shrink (progn (move-overlay ov 10 15) (get-char-property 12 'face))
+       'resize-expand (progn (move-overlay ov 5 25) (get-char-property 15 'face))
+       'change-face (progn (overlay-put ov 'face '(:foreground "red" :weight bold)) (get-char-property 15 'face))
+       'change-priority (progn (overlay-put ov 'priority 100) (get-char-property 15 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_font_lock_fontify_region_with_keywords_only() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (insert "Keywords only mode test for font lock face buffer content")
+    (setq-local font-lock-keywords-only t)
+    (font-lock-add-keywords nil '(("\\<\\(Keywords\\)\\>" 1 '(:foreground "red" :weight bold) t)))
+    (font-lock-mode 1)
+    (font-lock-fontify-buffer)
+    (list
+     'keywords-only (if (boundp 'font-lock-keywords-only) font-lock-keywords-only 'no-bound)
+     'face-keyword (save-excursion (goto-char (point-min)) (search-forward "Keywords") (get-text-property (match-beginning 0) 'face))
+     'face-only (save-excursion (goto-char (point-min)) (search-forward "only") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)
+     (progn (kill-local-variable 'font-lock-keywords-only) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_face_and_display_graphic_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'display-graphic-p (display-graphic-p)
+   'display-color-p (display-color-p)
+   'display-planes (if (fboundp 'display-planes) (display-planes) 'no)
+   'display-color-cells (if (fboundp 'display-color-cells) (display-color-cells) 'no)
+   'display-mm-height (if (fboundp 'display-mm-height) (display-mm-height) 'no)
+   'display-mm-width (if (fboundp 'display-mm-width) (display-mm-width) 'no)
+   'display-pixel-height (display-pixel-height)
+   'display-pixel-width (display-pixel-width)
+   'face-attrs-conditional (condition-case nil (face-attribute 'default :family nil t) (error 'no))
+   'face-fg-conditional (condition-case nil (face-foreground 'default (selected-frame) 'default-on) (error 'no))
+   'face-bg-conditional (condition-case nil (face-background 'default (selected-frame) 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_face_overlay_with_multiple_property_deletes_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (put-text-property 1 6 'face 'bold :prop1 'v1 :prop2 'v2)
+    (put-text-property 6 11 'face 'italic :prop1 'v3 :prop3 'v4)
+    (put-text-property 11 16 'face 'underline :prop2 'v5 :prop4 'v6)
+    (put-text-property 16 21 'face '(:foreground "red") :prop1 'v7 :prop3 'v8 :prop5 'v9)
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue") :prop6 'v10 :prop7 'v11)
+    (list
+     'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (length (text-properties-at pos)))) '(1 3 6 8 11 13 16 18 21 23 26 28 30))
+     'remove-prop1 (progn (remove-text-properties 1 26 '(prop1 nil prop3 nil)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'prop1) (get-text-property pos 'prop3))) '(1 6 11 16 21 26)))
+     'remove-prop2 (progn (remove-text-properties 1 26 '(prop2 nil prop4 nil)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'prop2))) '(1 6 11 16 21 26)))
+     'faces-after-removals (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 6 11 16 21 26 30)))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_font_lock_fontify_keywords_with_backref_groups() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "<TAG>content</TAG> <DIV>more</DIV> <SPAN>text</SPAN>")
+    (font-lock-add-keywords nil
+                            '(("<\\([A-Z]+\\)>\\([^<]*\\)</\\([A-Z]+\\)>"
+                               (1 '(:foreground "red" :weight bold))
+                               (2 '(:foreground "blue"))
+                               (3 '(:foreground "red" :weight bold)))))
+    (font-lock-fontify-buffer)
+    (list
+     'tag1-face (save-excursion (goto-char (point-min)) (search-forward "TAG>") (get-text-property (match-beginning 0) 'face))
+     'content-face (save-excursion (goto-char (point-min)) (search-forward "content") (get-text-property (match-beginning 0) 'face))
+     'closing-face (save-excursion (goto-char (point-min)) (search-forward "/TAG>") (get-text-property (match-beginning 0) 'face))
+     'fontified-all (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_face_set_face_font_by_spec_then_by_name() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-spec-name-font-face) (error nil))
+  (list
+   'set-by-spec (condition-case nil (progn (set-face-font 'my-spec-name-font-face (font-spec :family "Monospace" :size 12 :weight 'bold) nil) 'ok) (error 'no))
+   'get-after-spec (condition-case nil (face-font 'my-spec-name-font-face nil) (error 'no))
+   'set-by-name (condition-case nil (progn (set-face-font 'my-spec-name-font-face "Monospace-Bold-12" nil) 'ok) (error 'no))
+   'get-after-name (condition-case nil (face-font 'my-spec-name-font-face nil) (error 'no))
+   'set-by-xlfd-name (condition-case nil (let ((font (face-font 'default nil))) (if (fontp font) (progn (set-face-font 'my-spec-name-font-face (font-xlfd-name font) nil) 'ok) 'no-default-font)) (error 'no-xlfd))
+   'get-after-xlfd (condition-case nil (face-font 'my-spec-name-font-face nil) (error 'no))
+   'reset-font (condition-case nil (progn (set-face-font 'my-spec-name-font-face 'unspecified nil) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_face_overlay_insert_behind_hook_face_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-behind-hook-ran nil)
+  (defun my-behind-hook-fn (ov after beg end &optional len)
+    (setq my-behind-hook-ran (cons (list 'called after beg end len) my-behind-hook-ran)))
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 6 11)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'insert-behind-hooks (list 'my-behind-hook-fn))
+      (list
+       'before-hook my-behind-hook-ran
+       'face-before (get-char-property 8 'face)
+       (progn (goto-char 11) (insert "AFTER-OV") (list 'after-insert my-behind-hook-ran 'face-at-8 (get-char-property 8 'face) 'face-at-12 (get-char-property 12 'face)))
+       (progn (goto-char 6) (insert "BEFORE-OV") (list 'after-another my-behind-hook-ran 'face-at-5 (get-char-property 5 'face)))
+       (progn (delete-overlay ov) (setq my-behind-hook-ran nil) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neutrino_face_with_filtered_face_attribute_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'filtered-face-fbound (fboundp 'filteredp)
+   'face-filtered-available (condition-case nil (and (boundp 'face-filters) face-filters) (error 'no-filters))
+   (condition-case nil
+       (with-temp-buffer
+         (insert "Filtered face test")
+         (put-text-property 1 18 'face '(:filtered (:window t) (:foreground "blue")))
+         (list
+          'face-value (get-text-property 1 'face)
+          'facep (facep (get-text-property 1 'face))
+          'contains-filtered (memq ':filtered (get-text-property 1 'face))))
+     (error 'test-failed))
+   (condition-case nil (face-filters) (error 'no-face-filters))))"##,
+    );
+}
