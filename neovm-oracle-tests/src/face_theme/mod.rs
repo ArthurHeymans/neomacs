@@ -22236,3 +22236,304 @@ fn ft_milestone_face_text_property_get_every_pos_loop() {
       (nreverse result))))"##,
     );
 }
+
+#[test]
+fn ft_limit_face_overlay_same_start_different_end_face_sort() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 1 21))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 1 15))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 1))
+    (let ((ov3 (make-overlay 1 10))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 1))
+    (list
+     'inner (get-char-property 5 'face)
+     'mid (get-char-property 12 'face)
+     'outer-only (get-char-property 17 'face)
+     (progn (mapc #'delete-overlay '(ov1 ov2 ov3)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_font_lock_fontify_non_lisp_comments_strings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun foo-comment (x) ; this is a comment\n  \"doc string\"\n  (list x))")
+    (font-lock-fontify-buffer)
+    (list
+     'comment-face (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'face))
+     'string-face (save-excursion (goto-char (point-min)) (search-forward "doc") (get-text-property (match-beginning 0) 'face))
+     'keyword-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'function-face (save-excursion (goto-char (point-min)) (search-forward "foo") (get-text-property (match-beginning 0) 'face))
+     'comment-prop (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_overlay_face_nil_then_non_nil_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XX")
+    (let ((ov (make-overlay 1 3)))
+      (list
+       'nil-face (progn (overlay-put ov 'face nil) (list 'face (overlay-get ov 'face) 'char (get-char-property 1 'face)))
+       'bold (progn (overlay-put ov 'face 'bold) (list 'face (overlay-get ov 'face) 'char (get-char-property 1 'face)))
+       'nil-again (progn (overlay-put ov 'face nil) (list 'face (overlay-get ov 'face) 'char (get-char-property 1 'face)))
+       'italic (progn (overlay-put ov 'face 'italic) (list 'face (overlay-get ov 'face) 'char (get-char-property 1 'face)))
+       'nil-final (progn (overlay-put ov 'face nil) (list 'face (overlay-get ov 'face) 'char (get-char-property 1 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_display_table_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "A\tB")
+    (list
+     'default-char-display (condition-case nil (let ((dt (make-display-table))) (list 'type (type-of dt) 'slot0 (aref dt 9))) (error 'no-display-table))
+     'set-display (condition-case nil (let ((dt (make-display-table))) (aset dt 9 [?>]) (set-window-display-table (get-buffer-window (current-buffer)) dt) 'set) (error 'no-set))
+     'tab-exists (get-text-property 1 'display)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_font_lock_fontify_region_partial_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun a (x) x)\n(defun b (y) y)\n(defun c (z) z)\n")
+    (font-lock-fontify-region 1 22)
+    (list
+     'first-fn (save-excursion (goto-char (point-min)) (search-forward "a ") (get-text-property (1- (match-beginning 0)) 'face))
+     'second-fn (save-excursion (goto-char (point-min)) (search-forward "b ") (get-text-property (1- (match-beginning 0)) 'face))
+     'third-notfontified (save-excursion (goto-char (point-min)) (search-forward "c ") (get-text-property (1- (match-beginning 0)) 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_overlay_property_deduplicate_face_attrs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow" :background "red" :foreground "blue" :foreground "green"))
+      (list
+       'face (overlay-get ov 'face)
+       'bg (face-attribute (list :background "yellow" :background "red" :foreground "blue" :foreground "green") :background nil 'default-on)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_text_property_put_get_with_sticky_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGH")
+    (list
+     'before (save-excursion (goto-char 1) (mapcar (lambda (pos) (get-text-property pos 'face)) '(1 2 4 8)))
+     (progn (put-text-property 1 5 'face 'underline) 'put)
+     'after (save-excursion (goto-char 1) (mapcar (lambda (pos) (get-text-property pos 'face)) '(1 2 4 5 8)))
+     (progn (remove-text-properties 1 5 '(face nil)) 'removed)
+     'after-rem (save-excursion (goto-char 1) (mapcar (lambda (pos) (get-text-property pos 'face)) '(1 2 4 5 8))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_face_alloc_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'make-face (condition-case nil (let ((f (make-face 'my-alloc-face))) (list 'facep (facep f) 'symbol (symbol-name f))) (error 'no))
+   'xface-fbound (condition-case nil (fboundp 'x-create-frame-with-faces) (error 'no))
+   'internal-faces (condition-case nil (length (face-list)) (error 'no))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_font_lock_fontify_buffer_without_mode_set() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (insert "text without font lock mode enabled")
+    (font-lock-fontify-buffer)
+    (list
+     'fontified-p (get-text-property 1 'fontified)
+     'face-p (get-text-property 5 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_overlay_evaporate_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'evap-default (overlay-get ov 'evaporate)
+       'evap-t (progn (overlay-put ov 'evaporate t) (overlay-get ov 'evaporate))
+       'evap-nil (progn (overlay-put ov 'evaporate nil) (overlay-get ov 'evaporate))
+       'evap-x (progn (overlay-put ov 'evaporate 'x) (overlay-get ov 'evaporate))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_font_lock_fontify_narrowed_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun narrowed-fn (x) x)\n(defun outside-fn (y) y)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'before-narrow (save-excursion (goto-char (point-min)) (search-forward "defun" nil nil 2) (get-text-property (match-beginning 0) 'face))
+     'narrowed-fontify (progn (narrow-to-region 1 23) (font-lock-fontify-buffer) (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face)))
+     'widen (progn (widen) 'widened)
+     'after-widen (save-excursion (goto-char (point-min)) (search-forward "defun" nil nil 2) (get-text-property (match-beginning 0) 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_set_face_underline_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-underline-face) (error nil))
+  (list
+   'default (condition-case nil (face-attribute 'default :underline nil 'default-on) (error 'no))
+   'set-t (condition-case nil (progn (set-face-attribute 'my-underline-face nil :underline t) (face-attribute 'my-underline-face :underline nil 'default-on)) (error 'no))
+   'set-color-flat (condition-case nil (progn (set-face-attribute 'my-underline-face nil :underline '(:color "blue" :style wave)) (face-attribute 'my-underline-face :underline nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-attribute 'my-underline-face nil :underline nil) (face-attribute 'my-underline-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_overlay_insert_in_front_behind_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (let ((ov (make-overlay 6 11)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'before-string "BEFORE")
+      (overlay-put ov 'after-string "AFTER")
+      (list
+       'before-str (overlay-get ov 'before-string)
+       'after-str (overlay-get ov 'after-string)
+       'face (get-char-property 7 'face)
+       'cp-start (get-char-property 6 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_text_property_interval_count_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (let ((n0 (length (object-intervals (current-buffer)))))
+      (put-text-property 1 6 'face 'bold)
+      (put-text-property 3 11 'face 'italic)
+      (list
+       'n0 n0
+       'n2 (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_overlay_overlapping_region_extract_face_attrs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
+    (let ((ov1 (make-overlay 1 15))) (overlay-put ov1 'face '(:background "yellow")))
+    (let ((ov2 (make-overlay 5 25))) (overlay-put ov2 'face '(:foreground "red")))
+    (let ((ov3 (make-overlay 18 31))) (overlay-put ov3 'face '(:weight bold)))
+    (list
+     'ov1-only (get-char-property 3 'face)
+     'ov1+ov2 (get-char-property 10 'face)
+     'ov2-only (get-char-property 17 'face)
+     'ov2+ov3 (get-char-property 22 'face)
+     'ov3-only (get-char-property 28 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 31)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_font_lock_fontify_after_region_modify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setq var1 42)\n(setq var2 99)\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "var1") (get-text-property (match-beginning 0) 'face))))
+      (goto-char (point-min))
+      (search-forward "var1")
+      (delete-region (match-beginning 0) (match-end 0))
+      (insert "VARX")
+      (font-lock-fontify-buffer)
+      (list v0 (save-excursion (goto-char (point-min)) (search-forward "VARX") (get-text-property (match-beginning 0) 'face)) 'fontified-all (get-text-property 1 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_limit_face_face_set_stipple_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-stipple-face) (error nil))
+  (list
+   'default-stipple (condition-case nil (face-attribute 'default :stipple nil 'default-on) (error 'no))
+   'set-stipple (condition-case nil (progn (set-face-attribute 'my-stipple-face nil :stipple nil) (face-attribute 'my-stipple-face :stipple nil 'default-on)) (error 'no))
+   'stipple-all-attributes (condition-case nil (face-all-attributes 'my-stipple-face nil) (error 'no)))))"##,
+    );
+}
