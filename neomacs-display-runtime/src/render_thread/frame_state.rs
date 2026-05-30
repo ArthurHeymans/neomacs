@@ -35,12 +35,12 @@ impl RenderApp {
         let mut faces = std::collections::HashMap::new();
         self.frame_windows
             .for_each_top_level_window(|window_state| {
-                if let Some(frame) = window_state.render.current_frame.as_ref() {
+                if let Some(frame) = window_state.render.compositor.current_frame.as_ref() {
                     for (face_id, face) in &frame.faces {
                         faces.entry(*face_id).or_insert_with(|| face.clone());
                     }
                 }
-                for entry in window_state.render.child_frames.frames.values() {
+                for entry in window_state.render.compositor.child_frames.frames.values() {
                     for (face_id, face) in &entry.frame.faces {
                         faces.entry(*face_id).or_insert_with(|| face.clone());
                     }
@@ -68,7 +68,7 @@ impl RenderApp {
                     old_face_ids.len(),
                     face_count
                 );
-                if let Some(atlas) = primary_frame.glyph_atlas.as_mut() {
+                if let Some(atlas) = primary_frame.compositor.glyph_atlas.as_mut() {
                     atlas.clear();
                 }
             }

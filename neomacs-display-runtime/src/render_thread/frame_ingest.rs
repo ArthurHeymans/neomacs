@@ -67,16 +67,16 @@ impl RenderApp {
         cursor_config: CursorConfigSnapshot,
     ) -> Option<CursorSyncOutcome> {
         if menu_bar.is_none() {
-            window_state.render.chrome_interaction.clear_menu_bar();
+            window_state.render.chrome.interaction.clear_menu_bar();
         }
         if tool_bar.is_none() {
-            window_state.render.chrome_interaction.clear_toolbar();
+            window_state.render.chrome.interaction.clear_toolbar();
         }
         if compact_bar.is_none() {
-            window_state.render.chrome_interaction.clear_compact_bar();
+            window_state.render.chrome.interaction.clear_compact_bar();
         }
         if frame.tab_bar.is_none() {
-            window_state.render.chrome_interaction.clear_tab_bar();
+            window_state.render.chrome.interaction.clear_tab_bar();
         }
 
         let cursor_sync = Self::ingest_top_level_render_frame(
@@ -113,7 +113,7 @@ impl RenderApp {
         render: &mut GuiFrameRenderState,
         cursor_config: CursorConfigSnapshot,
     ) -> Option<CursorSyncOutcome> {
-        let mut active_cursor = render.current_frame.as_ref().and_then(|frame| {
+        let mut active_cursor = render.compositor.current_frame.as_ref().and_then(|frame| {
             crate::render_thread::frame_windows::GuiFrameWindowManager::cursor_target_for_frame(
                 render.emacs_frame_id,
                 frame,
@@ -121,7 +121,7 @@ impl RenderApp {
         });
 
         if active_cursor.is_none() {
-            for (_, entry) in &render.child_frames.frames {
+            for (_, entry) in &render.compositor.child_frames.frames {
                 if let Some(cursor) = entry.frame.phys_cursor.as_ref() {
                     active_cursor = Some(CursorTarget {
                         window_id: cursor.window_id,
@@ -191,7 +191,7 @@ impl RenderApp {
         {
             let cx = new_target.x + new_target.width / 2.0;
             let cy = new_target.y + new_target.height / 2.0;
-            renderer.spawn_transient_ripple(&mut render.renderer_effects, cx, cy);
+            renderer.spawn_transient_ripple(&mut render.compositor.renderer_effects, cx, cy);
         }
 
         if target_moved
@@ -200,7 +200,7 @@ impl RenderApp {
             && let Some(renderer) = renderer
         {
             renderer.record_transient_cursor_trail(
-                &mut render.renderer_effects,
+                &mut render.compositor.renderer_effects,
                 old_cursor_rect.0,
                 old_cursor_rect.1,
                 old_cursor_rect.2,
@@ -443,7 +443,7 @@ impl RenderApp {
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-                    window_state.render.child_frames.update_frame(frame);
+                    window_state.render.compositor.child_frames.update_frame(frame);
                     let cursor_sync = Self::sync_frame_window_cursor(window_state, cursor_config);
                     window_state.render.mark_dirty();
                     if let Some(cursor_sync) = cursor_sync {

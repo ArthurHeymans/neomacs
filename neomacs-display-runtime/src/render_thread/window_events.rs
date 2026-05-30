@@ -21,21 +21,21 @@ impl RenderApp {
                 Some(InputEvent::MenuSelection { index: -1 })
             }
             Key::Named(NamedKey::ArrowDown) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 if menu.move_hover(1) {
                     render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::ArrowUp) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 if menu.move_hover(-1) {
                     render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::Enter) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 let panel = menu.active_panel();
                 let hi = panel.hover_index;
                 if hi >= 0 && (hi as usize) < panel.item_indices.len() {
@@ -57,21 +57,21 @@ impl RenderApp {
                 }
             }
             Key::Named(NamedKey::ArrowRight) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 if menu.open_submenu() {
                     render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::ArrowLeft) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 if menu.close_submenu() {
                     render.mark_dirty();
                 }
                 None
             }
             Key::Named(NamedKey::Home) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 menu.active_panel_mut().hover_index = -1;
                 if menu.move_hover(1) {
                     render.mark_dirty();
@@ -79,7 +79,7 @@ impl RenderApp {
                 None
             }
             Key::Named(NamedKey::End) => {
-                let menu = render.popup_menu.as_mut()?;
+                let menu = render.overlays.popup_menu.as_mut()?;
                 let len = menu.active_panel().item_indices.len() as i32;
                 menu.active_panel_mut().hover_index = len;
                 if menu.move_hover(-1) {
@@ -154,7 +154,7 @@ impl RenderApp {
                                 && let Some(renderer) = self.renderer.as_ref()
                             {
                                 renderer.trigger_transient_resize_padding(
-                                    &mut ws.render.renderer_effects,
+                                    &mut ws.render.compositor.renderer_effects,
                                     std::time::Instant::now(),
                                 );
                             }
@@ -208,13 +208,13 @@ impl RenderApp {
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
                 let ime_preedit_active = self.frame_windows.get_by_winit(window_id).map_or_else(
                     || is_primary && self.primary_ime_preedit_active(),
-                    |ws| ws.render.ime_preedit_active,
+                    |ws| ws.render.overlays.ime_preedit_active,
                 );
                 let handled_managed_popup = state == ElementState::Pressed
                     && self
                         .frame_windows
                         .get_by_winit(window_id)
-                        .is_some_and(|ws| ws.render.popup_menu.is_some());
+                        .is_some_and(|ws| ws.render.overlays.popup_menu.is_some());
                 if handled_managed_popup {
                     let event = self
                         .frame_windows

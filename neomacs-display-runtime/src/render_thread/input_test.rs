@@ -88,13 +88,13 @@ fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.menu_bar = Some(GuiMenuBarState {
+    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
-    primary_frame.tool_bar = Some(GuiToolBarState {
+    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -110,7 +110,7 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.menu_bar = Some(GuiMenuBarState {
+    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -122,8 +122,8 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
         y: 33.0,
         height: 33.0,
     });
-    primary_frame.current_frame = Some(frame);
-    primary_frame.tool_bar = Some(GuiToolBarState {
+    primary_frame.compositor.current_frame = Some(frame);
+    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -139,13 +139,13 @@ fn toolbar_hit_test_uses_toolbar_local_y() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.menu_bar = Some(GuiMenuBarState {
+    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
         bg: (0.0, 0.0, 0.0),
     });
-    primary_frame.tool_bar = Some(GuiToolBarState {
+    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: vec![toolbar_item(7)],
         height: 33.0,
         fg: (0.0, 0.0, 0.0),
@@ -165,7 +165,7 @@ fn menu_bar_hit_test_uses_shared_item_geometry() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.menu_bar = Some(GuiMenuBarState {
+    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: vec![MenuBarItem {
             index: 11,
             label: "File".to_string(),
@@ -186,7 +186,7 @@ fn compact_bar_tool_hit_test_offsets_after_menu_items() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.compact_bar = Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
+    primary_frame.chrome.compact_bar = Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
         menu_items: vec![MenuBarItem {
             index: 1,
             label: "File".to_string(),

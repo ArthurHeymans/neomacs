@@ -456,12 +456,12 @@ impl RenderApp {
 
     pub(super) fn primary_current_frame(&self) -> Option<&FrameGlyphBuffer> {
         self.primary_render_state()
-            .and_then(|frame| frame.current_frame.as_ref())
+            .and_then(|frame| frame.compositor.current_frame.as_ref())
     }
 
     pub(super) fn primary_current_frame_mut(&mut self) -> Option<&mut FrameGlyphBuffer> {
         self.primary_render_state_mut()
-            .and_then(|frame| frame.current_frame.as_mut())
+            .and_then(|frame| frame.compositor.current_frame.as_mut())
     }
 
     pub(super) fn set_primary_current_frame(&mut self, frame: Option<FrameGlyphBuffer>) {
@@ -472,7 +472,7 @@ impl RenderApp {
 
     pub(super) fn primary_dirty(&self) -> bool {
         self.primary_render_state()
-            .is_some_and(|frame| frame.frame_dirty)
+            .is_some_and(|frame| frame.compositor.dirty)
     }
 
     pub(super) fn mark_primary_dirty(&mut self) {
@@ -481,24 +481,24 @@ impl RenderApp {
 
     pub(super) fn set_primary_dirty(&mut self, dirty: bool) {
         if let Some(primary_frame) = self.primary_render_state_mut() {
-            primary_frame.frame_dirty = dirty;
+            primary_frame.compositor.dirty = dirty;
         }
     }
 
     pub(super) fn primary_char_width(&self) -> f32 {
         self.primary_render_state()
-            .and_then(|frame| frame.glyph_atlas.as_ref())
+            .and_then(|frame| frame.compositor.glyph_atlas.as_ref())
             .map_or(8.0, |atlas| atlas.default_char_width())
     }
 
     pub(super) fn primary_popup_menu(&self) -> Option<&PopupMenuState> {
         self.primary_render_state()
-            .and_then(|frame| frame.popup_menu.as_ref())
+            .and_then(|frame| frame.overlays.popup_menu.as_ref())
     }
 
     pub(super) fn primary_popup_menu_mut(&mut self) -> Option<&mut PopupMenuState> {
         self.primary_render_state_mut()
-            .and_then(|frame| frame.popup_menu.as_mut())
+            .and_then(|frame| frame.overlays.popup_menu.as_mut())
     }
 
     pub(super) fn set_primary_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
@@ -560,14 +560,14 @@ impl RenderApp {
 
     pub(super) fn primary_child_frames(&self) -> &ChildFrameManager {
         if let Some(frame) = self.primary_render_state() {
-            return &frame.child_frames;
+            return &frame.compositor.child_frames;
         }
         panic!("primary child frames")
     }
 
     pub(super) fn primary_child_frames_mut(&mut self) -> &mut ChildFrameManager {
         if self.frame_windows.primary_window_mut().is_some() {
-            return &mut self.frame_windows.primary_window_mut().unwrap().render.child_frames;
+            return &mut self.frame_windows.primary_window_mut().unwrap().render.compositor.child_frames;
         }
         panic!("primary child frames mut")
     }
@@ -596,27 +596,27 @@ impl RenderApp {
 
     pub(super) fn primary_transitions_active(&self) -> bool {
         self.primary_render_state()
-            .is_some_and(|frame| frame.transitions.has_active())
+            .is_some_and(|frame| frame.compositor.transitions.has_active())
     }
 
     pub(super) fn primary_renderer_effects_need_redraw(&self) -> bool {
         self.primary_render_state()
-            .is_some_and(|frame| frame.renderer_effects.needs_redraw())
+            .is_some_and(|frame| frame.compositor.renderer_effects.needs_redraw())
     }
 
     pub(super) fn primary_menu_bar(&self) -> Option<&GuiMenuBarState> {
         self.primary_render_state()
-            .and_then(|frame| frame.menu_bar.as_ref())
+            .and_then(|frame| frame.chrome.menu_bar.as_ref())
     }
 
     pub(super) fn primary_tool_bar(&self) -> Option<&GuiToolBarState> {
         self.primary_render_state()
-            .and_then(|frame| frame.tool_bar.as_ref())
+            .and_then(|frame| frame.chrome.tool_bar.as_ref())
     }
 
     pub(super) fn primary_compact_bar(&self) -> Option<&GuiCompactBarState> {
         self.primary_render_state()
-            .and_then(|frame| frame.compact_bar.as_ref())
+            .and_then(|frame| frame.chrome.compact_bar.as_ref())
     }
 
     pub(super) fn primary_tab_bar(&self) -> Option<&FrameTabBarState> {
@@ -669,7 +669,7 @@ impl RenderApp {
 
     pub(super) fn update_primary_popup_hover(&mut self, lx: f32, ly: f32) -> bool {
         self.primary_render_state_mut().is_some_and(|render| {
-            let had_popup = render.popup_menu.is_some();
+            let had_popup = render.overlays.popup_menu.is_some();
             render.update_popup_hover(lx, ly);
             had_popup
         })
@@ -690,7 +690,7 @@ impl RenderApp {
     pub(super) fn primary_chrome_interaction(&self) -> GuiChromeInteractionState {
         self.primary_render_state()
             .map_or(GuiChromeInteractionState::default(), |frame| {
-                frame.chrome_interaction
+                frame.chrome.interaction
             })
     }
 
@@ -707,7 +707,7 @@ impl RenderApp {
 
     pub(super) fn primary_ime_preedit_active(&self) -> bool {
         self.primary_render_state()
-            .is_some_and(|frame| frame.ime_preedit_active)
+            .is_some_and(|frame| frame.overlays.ime_preedit_active)
     }
 
     pub(super) fn set_primary_ime_preedit(&mut self, text: String) {

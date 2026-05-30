@@ -104,7 +104,7 @@ fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
         return;
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
-    render.visual_cursors.insert(7, {
+    render.compositor.visual_cursors.insert(7, {
         let mut cursor = crate::render_thread::cursor::CursorState::default();
         cursor.set_target(CursorTarget {
             window_id: 7,
@@ -125,12 +125,12 @@ fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
 
     render.sync_cursor_config(&defaults, true);
 
-    let visual = render.visual_cursors.get(&7).expect("visual cursor");
+    let visual = render.compositor.visual_cursors.get(&7).expect("visual cursor");
     assert!(!render.cursor.anim_enabled);
     assert!(!visual.anim_enabled);
     assert_eq!(visual.trail_size, 17.0);
     assert!(!visual.size_transition_enabled);
-    assert!(render.frame_dirty);
+    assert!(render.compositor.dirty);
 }
 
 #[test]
@@ -150,7 +150,7 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
         style: CursorStyle::Hollow,
         color: Color::WHITE,
     });
-    render.current_frame = Some(frame);
+    render.compositor.current_frame = Some(frame);
     let mut visual = crate::render_thread::cursor::CursorState::default();
     visual.set_target(CursorTarget {
         window_id: -7,
@@ -162,11 +162,11 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
         color: Color::WHITE,
         frame_id: 0x42,
     });
-    render.visual_cursors.insert(-7, visual);
+    render.compositor.visual_cursors.insert(-7, visual);
 
     render.apply_visual_cursor_animations();
 
-    let cursor = &render.current_frame.as_ref().unwrap().window_cursors[0];
+    let cursor = &render.compositor.current_frame.as_ref().unwrap().window_cursors[0];
     assert_eq!(cursor.x, 11.0);
     assert_eq!(cursor.y, 12.0);
     assert_eq!(cursor.width, 13.0);
@@ -208,12 +208,12 @@ fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
     let mut child = make_frame(0x99, 0x42);
     child.parent_x = 10.0;
     child.parent_y = 20.0;
-    render.child_frames.update_frame(child);
+    render.compositor.child_frames.update_frame(child);
 
     assert!(render.remove_child_frame(0x99));
 
-    assert!(render.child_frames.frames.is_empty());
-    assert!(render.frame_dirty);
+    assert!(render.compositor.child_frames.frames.is_empty());
+    assert!(render.compositor.dirty);
 }
 
 #[test]
@@ -232,15 +232,15 @@ fn frame_render_state_remove_child_cursor_clears_preedit() {
         color: Color::WHITE,
         frame_id: 0x99,
     });
-    render.ime_preedit_active = true;
-    render.ime_preedit_text = "preedit".to_string();
+    render.overlays.ime_preedit_active = true;
+    render.overlays.ime_preedit_text = "preedit".to_string();
 
     assert!(render.remove_child_frame(0x99));
 
     assert!(render.cursor.target_cloned().is_none());
-    assert!(!render.ime_preedit_active);
-    assert!(render.ime_preedit_text.is_empty());
-    assert!(render.frame_dirty);
+    assert!(!render.overlays.ime_preedit_active);
+    assert!(render.overlays.ime_preedit_text.is_empty());
+    assert!(render.compositor.dirty);
 }
 
 // =======================================================================
@@ -617,11 +617,10 @@ fn destroy_queue_refill_after_process() {
 // by testing that the manager maps are properly typed.
 
 #[test]
-fn windows_map_key_is_u64() {
+fn windows_map_key_is_frame_key() {
     let mgr = GuiFrameWindowManager::new();
-    // Verify the map accepts u64 keys
-    assert!(mgr.windows.get(&0u64).is_none());
-    assert!(mgr.windows.get(&u64::MAX).is_none());
+    assert!(mgr.windows.get(&FrameKey::Pending).is_none());
+    assert!(mgr.windows.get(&FrameKey::Adopted(0x1000)).is_none());
 }
 
 // =======================================================================

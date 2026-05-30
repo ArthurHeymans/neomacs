@@ -10,7 +10,7 @@ impl RenderApp {
         let (ime_off_x, ime_off_y) = if target.frame_id != window_state.render.emacs_frame_id {
             window_state
                 .render
-                .child_frames
+                .compositor.child_frames
                 .frames
                 .get(&target.frame_id)
                 .map(|e| (e.abs_x as f64, e.abs_y as f64))
@@ -72,7 +72,7 @@ impl RenderApp {
         window_state: &mut GuiFrameWindowState,
         target: &CursorTarget,
     ) {
-        if !window_state.ime_enabled() && !window_state.render.ime_preedit_active {
+        if !window_state.ime_enabled() && !window_state.render.overlays.ime_preedit_active {
             return;
         }
 

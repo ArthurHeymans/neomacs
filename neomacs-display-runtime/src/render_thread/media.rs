@@ -77,7 +77,7 @@ impl RenderApp {
         render: &mut GuiFrameRenderState,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
     ) {
-        let Some(frame) = render.current_frame.as_ref() else {
+        let Some(frame) = render.compositor.current_frame.as_ref() else {
             return;
         };
         let extra_glyphs = Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);

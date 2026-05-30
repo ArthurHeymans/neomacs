@@ -382,7 +382,7 @@ fn primary_tooltip_command_marks_render_state_dirty() {
 
     assert!(
         app.primary_render_state()
-            .and_then(|frame| frame.tooltip.as_ref())
+            .and_then(|frame| frame.overlays.tooltip.as_ref())
             .is_some()
     );
     assert!(app.primary_dirty());
@@ -474,7 +474,7 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
 
     assert!(
         app.primary_render_state()
-            .and_then(|frame| frame.tooltip.as_ref())
+            .and_then(|frame| frame.overlays.tooltip.as_ref())
             .is_none()
     );
     assert!(!app.primary_dirty());
@@ -501,7 +501,7 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
 
     assert!(
         app.primary_render_state()
-            .and_then(|frame| frame.visual_bell_start)
+            .and_then(|frame| frame.overlays.visual_bell_start)
             .is_some()
     );
     assert!(app.primary_dirty());
@@ -534,13 +534,13 @@ fn managed_primary_visual_bell_uses_frame_renderer_effects() {
         String::new(),
         false,
     );
-    render.current_frame = Some(frame);
+    render.compositor.current_frame = Some(frame);
 
     render.trigger_visual_bell(true, true, 120, std::time::Instant::now());
 
-    assert!(render.visual_bell_start.is_some());
-    assert!(render.renderer_effects.has_transient_effects());
-    assert!(render.frame_dirty);
+    assert!(render.overlays.visual_bell_start.is_some());
+    assert!(render.compositor.renderer_effects.has_transient_effects());
+    assert!(render.compositor.dirty);
 }
 
 #[test]

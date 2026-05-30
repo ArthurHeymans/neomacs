@@ -385,7 +385,7 @@ impl RenderApp {
             Some(n) => n,
             None => return None,
         };
-        Self::update_fps_counter(&mut render.fps);
+        Self::update_fps_counter(&mut render.overlays.fps);
         let Some(frame_for_decision) = render.current_frame_clone() else {
             return None;
         };
@@ -411,7 +411,7 @@ impl RenderApp {
             cursor.height = render.cursor.current_h;
         }
 
-        let need_offscreen = render.transitions.policy.needs_offscreen()
+        let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
             || frame_for_decision.effect_hints.iter().any(|hint| {
                 matches!(
                     hint,
@@ -469,23 +469,23 @@ impl RenderApp {
         let cursor_visible = render.cursor.blink_on;
 
         if need_offscreen {
-            render.transitions.current_is_a = !render.transitions.current_is_a;
+            render.compositor.transitions.current_is_a = !render.compositor.transitions.current_is_a;
             ensure_frame_offscreen_textures(
                 renderer,
-                &mut render.transitions,
+                &mut render.compositor.transitions,
                 native.width,
                 native.height,
             );
 
-            let current_view = if render.transitions.current_is_a {
+            let current_view = if render.compositor.transitions.current_is_a {
                 render
-                    .transitions
+                    .compositor.transitions
                     .offscreen_a
                     .as_ref()
                     .map(|(_, view, _)| view as *const wgpu::TextureView)
             } else {
                 render
-                    .transitions
+                    .compositor.transitions
                     .offscreen_b
                     .as_ref()
                     .map(|(_, view, _)| view as *const wgpu::TextureView)
@@ -510,32 +510,32 @@ impl RenderApp {
                 );
             }
 
-            let current_bg = if render.transitions.current_is_a {
+            let current_bg = if render.compositor.transitions.current_is_a {
                 render
-                    .transitions
+                    .compositor.transitions
                     .offscreen_a
                     .as_ref()
                     .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
             } else {
                 render
-                    .transitions
+                    .compositor.transitions
                     .offscreen_b
                     .as_ref()
                     .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
             };
 
-            renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
                 detect_frame_transitions(
                     renderer,
-                    &mut render.transitions,
+                    &mut render.compositor.transitions,
                     &renderer.effects.clone(),
                     &mut frame,
-                    &mut render.frame_dirty,
+                    &mut render.compositor.dirty,
                     native.width,
                     native.height,
                 );
             });
-            if render.renderer_effects.needs_redraw() {
+            if render.compositor.renderer_effects.needs_redraw() {
                 render.mark_dirty();
             }
 
@@ -549,12 +549,12 @@ impl RenderApp {
             }
             render_frame_transitions(
                 renderer,
-                &mut render.transitions,
+                &mut render.compositor.transitions,
                 &surface_view,
                 native.width,
                 native.height,
             );
-            if render.transitions.has_active() {
+            if render.compositor.transitions.has_active() {
                 render.mark_dirty();
             }
             Self::render_frame_window_overlays_with_toolbar_resources(
@@ -587,13 +587,13 @@ impl RenderApp {
                 scroll_indicators_enabled,
                 toolbar,
             );
-            renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+            renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
                 detect_frame_transitions(
                     renderer,
-                    &mut render.transitions,
+                    &mut render.compositor.transitions,
                     &renderer.effects.clone(),
                     &mut frame,
-                    &mut render.frame_dirty,
+                    &mut render.compositor.dirty,
                     native.width,
                     native.height,
                 );
@@ -662,17 +662,17 @@ impl RenderApp {
         );
 
         let menu_bar_height = render
-            .menu_bar
+            .chrome.menu_bar
             .as_ref()
             .map_or(0.0, |menu_bar| menu_bar.height);
         let compact_bar_height = render
-            .compact_bar
+            .chrome.compact_bar
             .as_ref()
             .map_or(0.0, |compact_bar| compact_bar.height);
         Self::render_frame_chrome_overlays(
             renderer,
             surface_view,
-            &mut render.glyph_atlas.as_mut().unwrap(),
+            &mut render.compositor.glyph_atlas.as_mut().unwrap(),
             GuiFrameChromeOverlays {
                 native_chrome: &native.chrome,
                 titlebar_background: Some((
@@ -680,9 +680,9 @@ impl RenderApp {
                     frame.background.g,
                     frame.background.b,
                 )),
-                chrome_interaction: render.chrome_interaction,
+                chrome_interaction: render.chrome.interaction,
                 menu_bar: render
-                    .menu_bar
+                    .chrome.menu_bar
                     .as_ref()
                     .map(|menu_bar| GuiFrameMenuBarOverlay {
                         items: &menu_bar.items,
@@ -691,7 +691,7 @@ impl RenderApp {
                         bg: menu_bar.bg,
                     }),
                 tool_bar: render
-                    .tool_bar
+                    .chrome.tool_bar
                     .as_ref()
                     .map(|tool_bar| GuiFrameToolBarOverlay {
                         items: &tool_bar.items,
@@ -705,7 +705,7 @@ impl RenderApp {
                         bg: tool_bar.bg,
                         toolbar,
                     }),
-                compact_bar: render.compact_bar.as_ref().map(|compact_bar| {
+                compact_bar: render.chrome.compact_bar.as_ref().map(|compact_bar| {
                     GuiFrameCompactBarOverlay {
                         menu_items: &compact_bar.menu_items,
                         tool_items: &compact_bar.tool_items,
@@ -717,14 +717,14 @@ impl RenderApp {
                         toolbar,
                     }
                 }),
-                popup_menu: render.popup_menu.as_ref(),
-                tooltip: render.tooltip.as_ref(),
+                popup_menu: render.overlays.popup_menu.as_ref(),
+                tooltip: render.overlays.tooltip.as_ref(),
                 ime_preedit: Self::frame_ime_preedit_overlay(
-                    render.ime_preedit_active,
-                    &render.ime_preedit_text,
+                    render.overlays.ime_preedit_active,
+                    &render.overlays.ime_preedit_text,
                     render.cursor.target_cloned(),
                     render.emacs_frame_id,
-                    &render.child_frames,
+                    &render.compositor.child_frames,
                 ),
             },
             native.width,
@@ -734,8 +734,8 @@ impl RenderApp {
         Self::render_frame_visual_bell_overlay(
             renderer,
             surface_view,
-            &mut render.visual_bell_start,
-            &mut render.frame_dirty,
+            &mut render.overlays.visual_bell_start,
+            &mut render.compositor.dirty,
             native.width,
             native.height,
         );
@@ -751,11 +751,11 @@ impl RenderApp {
         if Self::render_frame_fps_overlay(
             renderer,
             surface_view,
-            &mut render.glyph_atlas.as_mut().unwrap(),
-            &mut render.fps,
+            &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+            &mut render.overlays.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
-            render.transitions.crossfades.len() + render.transitions.scroll_slides.len(),
+            render.compositor.transitions.crossfades.len() + render.compositor.transitions.scroll_slides.len(),
             native.width,
             native.height,
         ) {
@@ -767,9 +767,9 @@ impl RenderApp {
                 renderer,
                 surface_view,
                 frame,
-                &mut render.glyph_atlas.as_mut().unwrap(),
-                &mut render.typing_speed,
-                &mut render.frame_dirty,
+                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+                &mut render.overlays.typing_speed,
+                &mut render.compositor.dirty,
             );
         }
     }
@@ -786,12 +786,12 @@ impl RenderApp {
         root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            renderer.set_idle_dim_alpha(render.idle_dim.current_alpha);
+        renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
+            renderer.set_idle_dim_alpha(render.overlays.idle_dim.current_alpha);
             renderer.render_frame_glyphs(
                 surface_view,
                 frame,
-                &mut render.glyph_atlas.as_mut().unwrap(),
+                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
                 faces,
                 native.width,
                 native.height,
@@ -816,15 +816,15 @@ impl RenderApp {
         child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
     ) {
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
-            for &child_id in render.child_frames.sorted_for_rendering() {
-                if let Some(child_entry) = render.child_frames.frames.get(&child_id) {
+        renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
+            for &child_id in render.compositor.child_frames.sorted_for_rendering() {
+                if let Some(child_entry) = render.compositor.child_frames.frames.get(&child_id) {
                     renderer.render_child_frame(
                         surface_view,
                         &child_entry.frame,
                         child_entry.abs_x,
                         child_entry.abs_y,
-                        &mut render.glyph_atlas.as_mut().unwrap(),
+                        &mut render.compositor.glyph_atlas.as_mut().unwrap(),
                         faces,
                         native.width,
                         native.height,
@@ -839,7 +839,7 @@ impl RenderApp {
                 }
             }
         });
-        if render.renderer_effects.needs_redraw() {
+        if render.compositor.renderer_effects.needs_redraw() {
             render.mark_dirty();
         }
 
@@ -848,18 +848,18 @@ impl RenderApp {
             renderer.render_floating_webkits(surface_view, &render.floating_webkits);
         }
 
-        renderer.with_frame_effects(&mut render.renderer_effects, |renderer| {
+        renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             Self::render_frame_common_overlays(
                 renderer,
                 surface_view,
                 frame,
-                &mut render.glyph_atlas.as_mut().unwrap(),
+                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
                 native.width,
                 native.height,
                 scroll_indicators_enabled,
             );
         });
-        if render.renderer_effects.needs_redraw() {
+        if render.compositor.renderer_effects.needs_redraw() {
             render.mark_dirty();
         }
     }
@@ -892,7 +892,7 @@ impl RenderApp {
             root_animated_cursor,
             bg_gradient,
         );
-        let renderer_effects_still_active = render.renderer_effects.needs_redraw();
+        let renderer_effects_still_active = render.compositor.renderer_effects.needs_redraw();
 
         if !include_overlays {
             render.set_dirty(renderer_effects_still_active);
@@ -936,7 +936,7 @@ impl RenderApp {
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
             return;
         };
-        window_state.render.transitions.policy = self.transition_policy;
+        window_state.render.compositor.transitions.policy = self.transition_policy;
 
         if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
             renderer,

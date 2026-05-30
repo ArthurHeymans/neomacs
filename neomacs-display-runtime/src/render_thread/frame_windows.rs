@@ -57,51 +57,51 @@ pub(crate) struct GuiFrameNativeWindowState {
 pub(crate) struct GuiFrameRenderState {
     /// The Emacs frame_id that owns this window (used for routing).
     pub emacs_frame_id: u64,
-    /// Current root frame glyph buffer for this window.
-    pub current_frame: Option<FrameGlyphBuffer>,
-    /// Child frames rendered as overlays in this window.
-    pub child_frames: ChildFrameManager,
-    /// Glyph atlas rasterized at this window's current scale factor.
-    pub glyph_atlas: Option<WgpuGlyphAtlas>,
-    /// Whether this window needs a redraw.
-    pub frame_dirty: bool,
-    /// Last known pointer position in this frame's logical coordinates.
-    pub mouse_pos: (f32, f32),
+    /// Chromeless glyph composition and rendering state.
+    pub compositor: FrameCompositor,
+    /// GUI chrome (menu bar, tool bar, compact bar) for this frame window.
+    pub chrome: ChromeState,
+    /// Transient overlays (popup, tooltip, bell, fps, typing, idle, ime).
+    pub overlays: OverlayState,
     /// Text cursor animation and blink state for this frame window.
     pub(super) cursor: CursorState,
-    /// Render-only visual cursors keyed by their stable visual cursor id.
-    pub(super) visual_cursors: HashMap<i64, CursorState>,
-    /// GUI menu bar snapshot for this frame, if visible.
-    pub menu_bar: Option<GuiMenuBarState>,
-    /// GUI tool bar snapshot for this frame, if visible.
-    pub tool_bar: Option<GuiToolBarState>,
-    /// Compact GUI chrome snapshot for this frame, if visible.
-    pub compact_bar: Option<GuiCompactBarState>,
-    /// Hover/active/pressed state for GUI chrome in this frame window.
-    pub chrome_interaction: GuiChromeInteractionState,
-    /// Active popup menu shown in this frame window.
-    pub popup_menu: Option<PopupMenuState>,
-    /// Active tooltip shown in this frame window.
-    pub tooltip: Option<TooltipState>,
-    /// Visual bell flash start time for this frame window.
-    pub visual_bell_start: Option<Instant>,
-    /// FPS overlay timing owned by this frame window.
-    pub(super) fps: FpsCounter,
-    /// Typing-speed overlay state owned by this frame window.
-    pub(super) typing_speed: TypingSpeedState,
-    /// Idle dim overlay state owned by this frame window.
-    pub(super) idle_dim: IdleDimState,
-    /// Whether an IME preedit overlay is active in this frame window.
-    pub ime_preedit_active: bool,
-    /// Current IME preedit text for this frame window.
-    pub ime_preedit_text: String,
-    /// Window transition state owned by this frame window.
-    pub transitions: TransitionState,
-    /// Renderer runtime effects owned by this frame window.
-    pub renderer_effects: RendererFrameEffects,
+    /// Last known pointer position in this frame's logical coordinates.
+    pub mouse_pos: (f32, f32),
     /// Floating WebKit overlays rendered on this frame window.
     #[cfg(feature = "wpe-webkit")]
     pub floating_webkits: Vec<FloatingWebKit>,
+}
+
+/// GUI chrome state for a frame window.
+#[derive(Default)]
+pub(crate) struct ChromeState {
+    pub menu_bar: Option<GuiMenuBarState>,
+    pub tool_bar: Option<GuiToolBarState>,
+    pub compact_bar: Option<GuiCompactBarState>,
+    pub interaction: GuiChromeInteractionState,
+}
+
+/// Transient overlay state for a frame window.
+pub(crate) struct OverlayState {
+    pub popup_menu: Option<PopupMenuState>,
+    pub tooltip: Option<TooltipState>,
+    pub visual_bell_start: Option<Instant>,
+    pub(super) fps: FpsCounter,
+    pub(super) typing_speed: TypingSpeedState,
+    pub(super) idle_dim: IdleDimState,
+    pub ime_preedit_active: bool,
+    pub ime_preedit_text: String,
+}
+
+/// Glyph composition and rendering state for a frame window.
+pub(crate) struct FrameCompositor {
+    pub current_frame: Option<FrameGlyphBuffer>,
+    pub child_frames: ChildFrameManager,
+    pub glyph_atlas: Option<WgpuGlyphAtlas>,
+    pub dirty: bool,
+    pub(super) visual_cursors: HashMap<i64, CursorState>,
+    pub renderer_effects: RendererFrameEffects,
+    pub transitions: TransitionState,
 }
 
 /// Per-window state for a top-level GUI frame.
@@ -130,30 +130,31 @@ impl GuiFrameRenderState {
     ) -> Self {
         Self {
             emacs_frame_id,
-            current_frame: None,
-            child_frames: ChildFrameManager::new(),
-            glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
-            frame_dirty: false,
-            mouse_pos: (0.0, 0.0),
-            cursor: CursorState::default(),
-            visual_cursors: HashMap::new(),
-            menu_bar: None,
-            tool_bar: None,
-            compact_bar: None,
-            chrome_interaction: GuiChromeInteractionState::default(),
-            popup_menu: None,
-            tooltip: None,
-            visual_bell_start: None,
-            fps: FpsCounter {
-                enabled: fps_enabled,
-                ..FpsCounter::default()
+            compositor: FrameCompositor {
+                current_frame: None,
+                child_frames: ChildFrameManager::new(),
+                glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
+                dirty: false,
+                visual_cursors: HashMap::new(),
+                renderer_effects: RendererFrameEffects::default(),
+                transitions: TransitionState::default(),
             },
-            typing_speed: TypingSpeedState::default(),
-            idle_dim: IdleDimState::default(),
-            ime_preedit_active: false,
-            ime_preedit_text: String::new(),
-            transitions: TransitionState::default(),
-            renderer_effects: RendererFrameEffects::default(),
+            chrome: ChromeState::default(),
+            overlays: OverlayState {
+                popup_menu: None,
+                tooltip: None,
+                visual_bell_start: None,
+                fps: FpsCounter {
+                    enabled: fps_enabled,
+                    ..FpsCounter::default()
+                },
+                typing_speed: TypingSpeedState::default(),
+                idle_dim: IdleDimState::default(),
+                ime_preedit_active: false,
+                ime_preedit_text: String::new(),
+            },
+            cursor: CursorState::default(),
+            mouse_pos: (0.0, 0.0),
             #[cfg(feature = "wpe-webkit")]
             floating_webkits: Vec::new(),
         }
@@ -162,116 +163,117 @@ impl GuiFrameRenderState {
     pub(super) fn new_without_device(emacs_frame_id: u64, fps_enabled: bool) -> Self {
         Self {
             emacs_frame_id,
-            current_frame: None,
-            child_frames: ChildFrameManager::new(),
-            glyph_atlas: None,
-            frame_dirty: false,
-            mouse_pos: (0.0, 0.0),
-            cursor: CursorState::default(),
-            visual_cursors: HashMap::new(),
-            menu_bar: None,
-            tool_bar: None,
-            compact_bar: None,
-            chrome_interaction: GuiChromeInteractionState::default(),
-            popup_menu: None,
-            tooltip: None,
-            visual_bell_start: None,
-            fps: FpsCounter {
-                enabled: fps_enabled,
-                ..FpsCounter::default()
+            compositor: FrameCompositor {
+                current_frame: None,
+                child_frames: ChildFrameManager::new(),
+                glyph_atlas: None,
+                dirty: false,
+                visual_cursors: HashMap::new(),
+                renderer_effects: RendererFrameEffects::default(),
+                transitions: TransitionState::default(),
             },
-            typing_speed: TypingSpeedState::default(),
-            idle_dim: IdleDimState::default(),
-            ime_preedit_active: false,
-            ime_preedit_text: String::new(),
-            transitions: TransitionState::default(),
-            renderer_effects: RendererFrameEffects::default(),
+            chrome: ChromeState::default(),
+            overlays: OverlayState {
+                popup_menu: None,
+                tooltip: None,
+                visual_bell_start: None,
+                fps: FpsCounter {
+                    enabled: fps_enabled,
+                    ..FpsCounter::default()
+                },
+                typing_speed: TypingSpeedState::default(),
+                idle_dim: IdleDimState::default(),
+                ime_preedit_active: false,
+                ime_preedit_text: String::new(),
+            },
+            cursor: CursorState::default(),
+            mouse_pos: (0.0, 0.0),
             #[cfg(feature = "wpe-webkit")]
             floating_webkits: Vec::new(),
         }
     }
 
     pub(super) fn populate_glyph_atlas(&mut self, device: &wgpu::Device, scale_factor: f64) {
-        if self.glyph_atlas.is_none() {
-            self.glyph_atlas = Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
+        if self.compositor.glyph_atlas.is_none() {
+            self.compositor.glyph_atlas = Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
         }
     }
 
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
-        self.current_frame.clone()
+        self.compositor.current_frame.clone()
     }
 
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
-        self.glyph_atlas.as_ref().map_or((13.0, 17.0, 13.0 * 0.6), |atlas| {
+        self.compositor.glyph_atlas.as_ref().map_or((13.0, 17.0, 13.0 * 0.6), |atlas| {
             (atlas.default_font_size(), atlas.default_line_height(), atlas.default_char_width())
         })
     }
 
     pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
-        self.popup_menu = popup_menu;
-        self.frame_dirty = true;
+        self.overlays.popup_menu = popup_menu;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_tooltip(&mut self, tooltip: Option<TooltipState>) {
-        self.tooltip = tooltip;
-        self.frame_dirty = true;
+        self.overlays.tooltip = tooltip;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_menu_bar(&mut self, menu_bar: Option<GuiMenuBarState>) {
-        self.menu_bar = menu_bar;
-        self.frame_dirty = true;
+        self.chrome.menu_bar = menu_bar;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_tool_bar(&mut self, tool_bar: Option<GuiToolBarState>) {
-        self.tool_bar = tool_bar;
-        self.frame_dirty = true;
+        self.chrome.tool_bar = tool_bar;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
-        self.compact_bar = compact_bar;
-        self.frame_dirty = true;
+        self.chrome.compact_bar = compact_bar;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn extend_current_frame_glyphs(&mut self, glyphs: Vec<FrameGlyph>) -> bool {
         if glyphs.is_empty() {
             return false;
         }
-        let Some(frame) = self.current_frame.as_mut() else {
+        let Some(frame) = self.compositor.current_frame.as_mut() else {
             return false;
         };
         frame.glyphs.extend(glyphs);
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
         true
     }
 
     pub(super) fn set_visual_bell_start(&mut self, start: Option<Instant>) {
-        self.visual_bell_start = start;
+        self.overlays.visual_bell_start = start;
         if start.is_some() {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
     }
 
     pub(super) fn set_ime_preedit(&mut self, text: String) {
-        self.ime_preedit_active = !text.is_empty();
-        self.ime_preedit_text = text;
-        self.frame_dirty = true;
+        self.overlays.ime_preedit_active = !text.is_empty();
+        self.overlays.ime_preedit_text = text;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn clear_ime_preedit(&mut self) {
-        self.ime_preedit_active = false;
-        self.ime_preedit_text.clear();
-        self.frame_dirty = true;
+        self.overlays.ime_preedit_active = false;
+        self.overlays.ime_preedit_text.clear();
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_fps_enabled(&mut self, enabled: bool) {
-        self.fps.enabled = enabled;
-        self.frame_dirty = true;
+        self.overlays.fps.enabled = enabled;
+        self.compositor.dirty = true;
     }
 
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn push_floating_webkit(&mut self, overlay: FloatingWebKit) {
         self.floating_webkits.push(overlay);
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
     }
 
     #[cfg(feature = "wpe-webkit")]
@@ -280,42 +282,42 @@ impl GuiFrameRenderState {
         self.floating_webkits.retain(|w| w.webkit_id != id);
         let removed = self.floating_webkits.len() != old_len;
         if removed {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         removed
     }
 
     pub(super) fn record_typing_keypress(&mut self, now: Instant) {
-        self.typing_speed.key_press_times.push(now);
-        self.frame_dirty = true;
+        self.overlays.typing_speed.key_press_times.push(now);
+        self.compositor.dirty = true;
     }
 
     pub(super) fn record_idle_activity(&mut self, now: Instant) {
-        self.idle_dim.last_activity_time = now;
-        self.frame_dirty = true;
+        self.overlays.idle_dim.last_activity_time = now;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn dismiss_all_chrome_menus(&mut self) {
-        self.popup_menu = None;
-        self.chrome_interaction.menu_bar_active = None;
-        self.chrome_interaction.compact_bar_menu_active = None;
+        self.overlays.popup_menu = None;
+        self.chrome.interaction.menu_bar_active = None;
+        self.chrome.interaction.compact_bar_menu_active = None;
         self.mark_dirty();
     }
 
     pub(super) fn mark_dirty(&mut self) {
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn set_dirty(&mut self, dirty: bool) {
-        self.frame_dirty = dirty;
+        self.compositor.dirty = dirty;
     }
 
     pub(super) fn clear_all_chrome_pressed(&mut self) {
-        self.chrome_interaction.tab_bar_pressed = None;
-        self.chrome_interaction.tab_bar_press_captured = false;
-        self.chrome_interaction.compact_bar_tool_pressed = None;
-        self.chrome_interaction.toolbar_pressed = None;
-        self.chrome_interaction.toolbar_press_captured = false;
+        self.chrome.interaction.tab_bar_pressed = None;
+        self.chrome.interaction.tab_bar_press_captured = false;
+        self.chrome.interaction.compact_bar_tool_pressed = None;
+        self.chrome.interaction.toolbar_pressed = None;
+        self.chrome.interaction.toolbar_press_captured = false;
         self.mark_dirty();
     }
 
@@ -331,24 +333,24 @@ impl GuiFrameRenderState {
         &mut self,
         frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
     ) {
-        self.current_frame = frame;
+        self.compositor.current_frame = frame;
     }
 
     pub(super) fn with_chrome_interaction_mut(
         &mut self,
         f: impl FnOnce(&mut GuiChromeInteractionState),
     ) -> bool {
-        let previous = self.chrome_interaction;
-        f(&mut self.chrome_interaction);
-        let changed = self.chrome_interaction != previous;
+        let previous = self.chrome.interaction;
+        f(&mut self.chrome.interaction);
+        let changed = self.chrome.interaction != previous;
         if changed {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         changed
     }
 
     pub(super) fn update_popup_hover(&mut self, x: f32, y: f32) -> bool {
-        let Some(menu) = self.popup_menu.as_mut() else {
+        let Some(menu) = self.overlays.popup_menu.as_mut() else {
             return false;
         };
         let (hit_depth, hit_local) = menu.hit_test_all(x, y);
@@ -376,7 +378,7 @@ impl GuiFrameRenderState {
             }
         }
         if dirty {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         dirty
     }
@@ -388,12 +390,12 @@ impl GuiFrameRenderState {
         edge_snap_duration_ms: u32,
         now: Instant,
     ) {
-        self.visual_bell_start = Some(now);
+        self.overlays.visual_bell_start = Some(now);
         if cursor_error_pulse_enabled {
-            self.renderer_effects.trigger_cursor_error_pulse(now);
+            self.compositor.renderer_effects.trigger_cursor_error_pulse(now);
         }
         if edge_snap_enabled {
-            let selected_info = self.current_frame.as_ref().and_then(|frame| {
+            let selected_info = self.compositor.current_frame.as_ref().and_then(|frame| {
                 frame
                     .window_infos
                     .iter()
@@ -404,7 +406,7 @@ impl GuiFrameRenderState {
                 let at_top = info.window_start <= 1;
                 let at_bottom = info.window_end >= info.buffer_size;
                 if at_top || at_bottom {
-                    self.renderer_effects.trigger_edge_snap(
+                    self.compositor.renderer_effects.trigger_edge_snap(
                         info.bounds,
                         info.mode_line_height,
                         at_top,
@@ -415,11 +417,11 @@ impl GuiFrameRenderState {
                 }
             }
         }
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn take_current_frame_for_render(&mut self) -> Option<FrameGlyphBuffer> {
-        self.current_frame.as_mut().map(Self::take_frame_for_render)
+        self.compositor.current_frame.as_mut().map(Self::take_frame_for_render)
     }
 
     pub(super) fn take_frame_for_render(current_frame: &mut FrameGlyphBuffer) -> FrameGlyphBuffer {
@@ -432,11 +434,11 @@ impl GuiFrameRenderState {
 
     pub(super) fn tick_cursor_animation(&mut self) -> bool {
         let mut dirty = self.cursor.tick_animation();
-        for cursor in self.visual_cursors.values_mut() {
+        for cursor in self.compositor.visual_cursors.values_mut() {
             dirty |= cursor.tick_animation();
         }
         if dirty {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         dirty
     }
@@ -461,9 +463,9 @@ impl GuiFrameRenderState {
             && cursor_wake_enabled
             && let Some(renderer) = renderer
         {
-            renderer.trigger_transient_cursor_wake(&mut self.renderer_effects, now);
+            renderer.trigger_transient_cursor_wake(&mut self.compositor.renderer_effects, now);
         }
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
         true
     }
 
@@ -471,43 +473,43 @@ impl GuiFrameRenderState {
         if !self.cursor.force_blink_on() {
             return false;
         }
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
         true
     }
 
     pub(super) fn mark_active_visuals_dirty(&mut self) -> bool {
-        if !self.renderer_effects.needs_redraw() && !self.transitions.has_active() {
+        if !self.compositor.renderer_effects.needs_redraw() && !self.compositor.transitions.has_active() {
             return false;
         }
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
         true
     }
 
     pub(super) fn trigger_click_halo(&mut self, x: f32, y: f32, now: Instant, duration_ms: u32) {
-        self.renderer_effects
+        self.compositor.renderer_effects
             .trigger_click_halo(x, y, now, duration_ms);
-        self.frame_dirty = true;
+        self.compositor.dirty = true;
     }
 
     pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
         let mut dirty = self.cursor.tick_size_animation();
-        for cursor in self.visual_cursors.values_mut() {
+        for cursor in self.compositor.visual_cursors.values_mut() {
             dirty |= cursor.tick_size_animation();
         }
         if dirty {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         dirty
     }
 
     pub(super) fn tick_idle_dim(&mut self, config: &IdleDimConfig) -> bool {
-        let idle_time = self.idle_dim.last_activity_time.elapsed();
+        let idle_time = self.overlays.idle_dim.last_activity_time.elapsed();
         let target_alpha = if idle_time >= config.delay {
             config.opacity
         } else {
             0.0
         };
-        let diff = target_alpha - self.idle_dim.current_alpha;
+        let diff = target_alpha - self.overlays.idle_dim.current_alpha;
         if diff.abs() > 0.001 {
             let fade_speed = if config.fade_duration.as_secs_f32() > 0.0 {
                 1.0 / config.fade_duration.as_secs_f32() * 0.016
@@ -515,35 +517,35 @@ impl GuiFrameRenderState {
                 1.0
             };
             if diff > 0.0 {
-                self.idle_dim.current_alpha =
-                    (self.idle_dim.current_alpha + fade_speed * config.opacity).min(target_alpha);
+                self.overlays.idle_dim.current_alpha =
+                    (self.overlays.idle_dim.current_alpha + fade_speed * config.opacity).min(target_alpha);
             } else {
-                self.idle_dim.current_alpha =
-                    (self.idle_dim.current_alpha - fade_speed * config.opacity).max(0.0);
+                self.overlays.idle_dim.current_alpha =
+                    (self.overlays.idle_dim.current_alpha - fade_speed * config.opacity).max(0.0);
             }
-            self.idle_dim.active = true;
-            self.frame_dirty = true;
+            self.overlays.idle_dim.active = true;
+            self.compositor.dirty = true;
             true
-        } else if self.idle_dim.current_alpha > 0.001 {
-            self.idle_dim.active = true;
+        } else if self.overlays.idle_dim.current_alpha > 0.001 {
+            self.overlays.idle_dim.active = true;
             false
         } else {
-            self.idle_dim.active = false;
+            self.overlays.idle_dim.active = false;
             false
         }
     }
 
     pub(super) fn clear_idle_dim(&mut self) {
-        self.idle_dim.active = false;
-        self.idle_dim.current_alpha = 0.0;
+        self.overlays.idle_dim.active = false;
+        self.overlays.idle_dim.current_alpha = 0.0;
     }
 
     pub(super) fn sync_visual_cursors_from_current_frame(
         &mut self,
         cursor_config: impl Fn(&mut CursorState),
     ) {
-        let Some(current_frame) = self.current_frame.as_ref() else {
-            self.visual_cursors.clear();
+        let Some(current_frame) = self.compositor.current_frame.as_ref() else {
+            self.compositor.visual_cursors.clear();
             return;
         };
         let mut live_visual_cursor_ids = HashSet::new();
@@ -552,7 +554,7 @@ impl GuiFrameRenderState {
                 continue;
             }
             live_visual_cursor_ids.insert(cursor.window_id);
-            let state = self.visual_cursors.entry(cursor.window_id).or_default();
+            let state = self.compositor.visual_cursors.entry(cursor.window_id).or_default();
             cursor_config(state);
             let (_, target_moved) = state.set_target(CursorTarget {
                 window_id: cursor.window_id,
@@ -565,29 +567,29 @@ impl GuiFrameRenderState {
                 frame_id: self.emacs_frame_id,
             });
             if target_moved {
-                self.frame_dirty = true;
+                self.compositor.dirty = true;
             }
         }
-        self.visual_cursors
+        self.compositor.visual_cursors
             .retain(|id, _| live_visual_cursor_ids.contains(id));
     }
 
     pub(super) fn sync_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {
         self.cursor.copy_config_from(defaults);
-        for cursor in self.visual_cursors.values_mut() {
+        for cursor in self.compositor.visual_cursors.values_mut() {
             cursor.copy_config_from(defaults);
         }
         if dirty {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
     }
 
     pub(super) fn apply_visual_cursor_animations(&mut self) {
-        if self.visual_cursors.is_empty() {
+        if self.compositor.visual_cursors.is_empty() {
             return;
         }
         let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
-            .visual_cursors
+            .compositor.visual_cursors
             .iter()
             .map(|(id, state)| {
                 (
@@ -601,7 +603,7 @@ impl GuiFrameRenderState {
                 )
             })
             .collect();
-        let Some(frame) = self.current_frame.as_mut() else {
+        let Some(frame) = self.compositor.current_frame.as_mut() else {
             return;
         };
         for cursor in &mut frame.window_cursors {
@@ -616,9 +618,9 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
-        let removed = self.child_frames.remove_frame(frame_id);
+        let removed = self.compositor.child_frames.remove_frame(frame_id);
         if removed {
-            self.frame_dirty = true;
+            self.compositor.dirty = true;
         }
         if self
             .cursor
@@ -626,17 +628,17 @@ impl GuiFrameRenderState {
             .is_some_and(|target| target.frame_id == frame_id)
         {
             self.cursor.clear_target();
-            self.ime_preedit_active = false;
-            self.ime_preedit_text.clear();
-            self.frame_dirty = true;
+            self.overlays.ime_preedit_active = false;
+            self.overlays.ime_preedit_text.clear();
+            self.compositor.dirty = true;
             return true;
         }
         removed
     }
 
     pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) {
-        self.child_frames.update_frame(frame);
-        self.frame_dirty = true;
+        self.compositor.child_frames.update_frame(frame);
+        self.compositor.dirty = true;
     }
 }
 
@@ -652,8 +654,8 @@ impl GuiFrameWindowState {
             native.surface_config.width = width;
             native.surface_config.height = height;
             native.surface.configure(device, &native.surface_config);
-            clear_frame_transition_textures(&mut self.render.transitions);
-            self.render.frame_dirty = true;
+            clear_frame_transition_textures(&mut self.render.compositor.transitions);
+            self.render.compositor.dirty = true;
         } else {
             self.pending_width = width;
             self.pending_height = height;
@@ -664,10 +666,10 @@ impl GuiFrameWindowState {
         let effective_scale = effective_window_scale_factor(scale_factor);
         if let Some(native) = &mut self.native {
             native.scale_factor = effective_scale;
-            if let Some(atlas) = self.render.glyph_atlas.as_mut() {
+            if let Some(atlas) = self.render.compositor.glyph_atlas.as_mut() {
                 atlas.set_scale_factor(effective_scale as f32);
             }
-            self.render.frame_dirty = true;
+            self.render.compositor.dirty = true;
         } else {
             self.pending_scale_factor = effective_scale;
         }
@@ -678,7 +680,7 @@ impl GuiFrameWindowState {
             native.chrome.title = title.clone();
             native.window.set_title(&title);
             if !native.chrome.decorations_enabled {
-                self.render.frame_dirty = true;
+                self.render.compositor.dirty = true;
             }
         } else {
             self.pending_chrome.title = title;
@@ -705,7 +707,7 @@ impl GuiFrameWindowState {
                 native.chrome.is_fullscreen = false;
             }
         }
-        self.render.frame_dirty = true;
+        self.render.compositor.dirty = true;
     }
 
     pub(super) fn request_inner_size(&mut self, width: u32, height: u32) {
@@ -730,7 +732,7 @@ impl GuiFrameWindowState {
         if let Some(native) = self.native.as_mut() {
             native.chrome.decorations_enabled = decorated;
             native.window.set_decorations(decorated);
-            self.render.frame_dirty = true;
+            self.render.compositor.dirty = true;
         } else {
             self.pending_chrome.decorations_enabled = decorated;
         }
@@ -775,10 +777,10 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn clear_ime_preedit(&mut self) {
-        self.render.ime_preedit_active = false;
-        self.render.ime_preedit_text.clear();
+        self.render.overlays.ime_preedit_active = false;
+        self.render.overlays.ime_preedit_text.clear();
         self.reset_ime_cursor_area();
-        self.render.frame_dirty = true;
+        self.render.compositor.dirty = true;
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
@@ -926,17 +928,33 @@ impl GuiFrameWindowState {
     }
 }
 
-const PRIMARY_PENDING_KEY: u64 = 0;
+/// Key for frame-window lookup in the manager's `windows` HashMap.
+///
+/// Matches GNU Emacs convention: 0 is never a valid frame ID
+/// (`frame_next_id = 1` in GNU Emacs `frame.c:343`).  The primary
+/// frame starts under [`FrameKey::Pending`] and is re-keyed to
+/// [`FrameKey::Adopted`] once `adopt_primary_frame_id` is called.
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+pub(crate) enum FrameKey {
+    /// Primary frame before Emacs assigns a real frame ID (bootstrap).
+    Pending,
+    /// Frame with a real Emacs-assigned frame ID.
+    Adopted(u64),
+}
+
+impl FrameKey {
+    pub(super) fn from_primary(emacs_id: Option<u64>) -> Self {
+        match emacs_id {
+            Some(id) => Self::Adopted(id),
+            None => Self::Pending,
+        }
+    }
+}
 
 /// Manages top-level GUI frame windows in the render thread.
-///
-/// All top-level windows (including the adopted primary process window) live in
-/// `windows`.  The primary starts under the sentinel key `PRIMARY_PENDING_KEY`
-/// (0) and is re-keyed to its adopted `emacs_frame_id` once
-/// `adopt_primary_frame_id` is called.
 pub(crate) struct GuiFrameWindowManager {
-    /// Emacs frame_id → native window-backed state for all top-level frames.
-    pub windows: HashMap<u64, GuiFrameWindowState>,
+    /// All top-level frame windows, keyed by [`FrameKey`].
+    pub windows: HashMap<FrameKey, GuiFrameWindowState>,
     /// Winit WindowId → Emacs frame_id (reverse mapping for event dispatch)
     pub winit_to_emacs: HashMap<WindowId, u64>,
     /// Emacs frame_id adopted by the primary process window.
@@ -993,12 +1011,12 @@ impl GuiFrameWindowManager {
     }
 
     pub fn adopt_primary_frame_id(&mut self, emacs_frame_id: u64) {
-        let old_key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        let old_key = FrameKey::from_primary(self.primary_emacs_frame_id);
         self.primary_emacs_frame_id = Some(emacs_frame_id);
         if let Some(window_state) = self.windows.remove(&old_key) {
-            self.windows.insert(emacs_frame_id, window_state);
+            self.windows.insert(FrameKey::Adopted(emacs_frame_id), window_state);
         }
-        if let Some(ws) = self.windows.get_mut(&emacs_frame_id) {
+        if let Some(ws) = self.windows.get_mut(&FrameKey::Adopted(emacs_frame_id)) {
             ws.render.set_emacs_frame_id(emacs_frame_id);
         }
         self.sync_primary_mapping();
@@ -1021,36 +1039,38 @@ impl GuiFrameWindowManager {
         emacs_frame_id == 0 || self.primary_emacs_frame_id == Some(emacs_frame_id)
     }
 
-    pub(super) fn has_secondary_window(&self, emacs_frame_id: u64) -> bool {
-        self.windows.contains_key(&emacs_frame_id)
+    pub fn has_secondary_window(&self, emacs_frame_id: u64) -> bool {
+        self.windows.contains_key(&FrameKey::Adopted(emacs_frame_id))
+    }
+
+    fn primary_frame_key(&self) -> FrameKey {
+        FrameKey::from_primary(self.primary_emacs_frame_id)
     }
 
     pub(super) fn primary_window(&self) -> Option<&GuiFrameWindowState> {
-        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-        self.windows.get(&key)
+        self.windows.get(&self.primary_frame_key())
     }
 
     pub(super) fn primary_window_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
-        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-        self.windows.get_mut(&key)
+        self.windows.get_mut(&self.primary_frame_key())
     }
 
     pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
         if let Some(native) = window_state.native.as_ref() {
             self.primary_winit_id = Some(native.window.id());
         }
-        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        let key = self.primary_frame_key();
         self.windows.insert(key, window_state);
         self.sync_primary_mapping();
     }
 
     pub(super) fn set_primary_pending(&mut self, window_state: GuiFrameWindowState) {
-        self.windows.insert(PRIMARY_PENDING_KEY, window_state);
+        self.windows.insert(FrameKey::Pending, window_state);
         self.sync_primary_mapping();
     }
 
     pub(super) fn populate_primary_native(&mut self, native: GuiFrameNativeWindowState) {
-        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        let key = self.primary_frame_key();
         if let Some(window_state) = self.windows.get_mut(&key) {
             let winit_id = native.window.id();
             self.primary_winit_id = Some(winit_id);
@@ -1060,7 +1080,7 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn take_primary_window(&mut self) -> Option<GuiFrameWindowState> {
-        let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
+        let key = self.primary_frame_key();
         if let Some(winit_id) = self.primary_winit_id.take() {
             self.winit_to_emacs.remove(&winit_id);
         }
@@ -1120,7 +1140,7 @@ impl GuiFrameWindowManager {
     ) {
         let pending = std::mem::take(&mut self.pending_creates);
         for req in pending {
-            if self.windows.contains_key(&req.emacs_frame_id) || req.emacs_frame_id == PRIMARY_PENDING_KEY {
+            if self.windows.contains_key(&FrameKey::Adopted(req.emacs_frame_id)) {
                 tracing::warn!("Window for frame {} already exists", req.emacs_frame_id);
                 continue;
             }
@@ -1204,7 +1224,7 @@ impl GuiFrameWindowManager {
                         ..self.chrome_defaults.clone()
                     };
                     self.windows.insert(
-                        req.emacs_frame_id,
+                        FrameKey::Adopted(req.emacs_frame_id),
                         GuiFrameWindowState {
                             native: Some(GuiFrameNativeWindowState {
                                 window,
@@ -1250,7 +1270,7 @@ impl GuiFrameWindowManager {
     pub fn process_destroys(&mut self) {
         let pending = std::mem::take(&mut self.pending_destroys);
         for frame_id in pending {
-            if let Some(state) = self.windows.remove(&frame_id) {
+            if let Some(state) = self.windows.remove(&FrameKey::Adopted(frame_id)) {
                 if let Some(native) = state.native {
                     self.winit_to_emacs.remove(&native.window.id());
                 }
@@ -1285,44 +1305,40 @@ impl GuiFrameWindowManager {
     /// Get a window state by Emacs frame_id.
     pub fn get(&self, emacs_frame_id: u64) -> Option<&GuiFrameWindowState> {
         if self.is_primary_frame_id(emacs_frame_id) {
-            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-            self.windows.get(&key)
+            self.primary_window()
         } else {
-            self.windows.get(&emacs_frame_id)
+            self.windows.get(&FrameKey::Adopted(emacs_frame_id))
         }
     }
 
     /// Get a mutable window state by Emacs frame_id.
     pub fn get_mut(&mut self, emacs_frame_id: u64) -> Option<&mut GuiFrameWindowState> {
         if self.is_primary_frame_id(emacs_frame_id) {
-            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-            self.windows.get_mut(&key)
+            self.primary_window_mut()
         } else {
-            self.windows.get_mut(&emacs_frame_id)
+            self.windows.get_mut(&FrameKey::Adopted(emacs_frame_id))
         }
     }
 
     /// Get a window state by winit WindowId.
     pub fn get_by_winit(&self, winit_id: WindowId) -> Option<&GuiFrameWindowState> {
         if self.primary_winit_id == Some(winit_id) {
-            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-            return self.windows.get(&key);
+            return self.primary_window();
         }
         self.winit_to_emacs
             .get(&winit_id)
-            .and_then(|id| self.windows.get(id))
+            .and_then(|id| self.windows.get(&FrameKey::Adopted(*id)))
     }
 
     /// Get a mutable window state by winit WindowId.
     pub fn get_by_winit_mut(&mut self, winit_id: WindowId) -> Option<&mut GuiFrameWindowState> {
         if self.primary_winit_id == Some(winit_id) {
-            let key = self.primary_emacs_frame_id.unwrap_or(PRIMARY_PENDING_KEY);
-            return self.windows.get_mut(&key);
+            return self.primary_window_mut();
         }
         self.winit_to_emacs
             .get(&winit_id)
             .copied()
-            .and_then(move |id| self.windows.get_mut(&id))
+            .and_then(move |id| self.windows.get_mut(&FrameKey::Adopted(id)))
     }
 
     pub(super) fn for_each_top_level_window(&self, mut f: impl FnMut(&GuiFrameWindowState)) {
@@ -1342,26 +1358,26 @@ impl GuiFrameWindowManager {
 
     pub(super) fn mark_top_level_dirty(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.frame_dirty = true;
+            window_state.render.compositor.dirty = true;
         });
     }
 
     pub(super) fn any_top_level_dirty(&self) -> bool {
         self.windows
             .values()
-            .any(|window_state| window_state.render.frame_dirty)
+            .any(|window_state| window_state.render.compositor.dirty)
     }
 
     pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
         self.windows
             .values()
-            .any(|window_state| window_state.render.renderer_effects.needs_redraw())
+            .any(|window_state| window_state.render.compositor.renderer_effects.needs_redraw())
     }
 
     pub(super) fn any_top_level_transitions_active(&self) -> bool {
         self.windows
             .values()
-            .any(|window_state| window_state.render.transitions.has_active())
+            .any(|window_state| window_state.render.compositor.transitions.has_active())
     }
 
     pub(super) fn mark_active_top_level_visuals_dirty(&mut self) -> bool {
@@ -1430,12 +1446,12 @@ impl GuiFrameWindowManager {
     pub(super) fn any_top_level_idle_dim_active(&self) -> bool {
         self.windows
             .values()
-            .any(|window_state| window_state.render.idle_dim.active)
+            .any(|window_state| window_state.render.overlays.idle_dim.active)
     }
 
     pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
         self.for_each_top_level_window(|window_state| {
-            if window_state.render.frame_dirty {
+            if window_state.render.compositor.dirty {
                 window_state.request_redraw();
             }
         });
@@ -1451,7 +1467,7 @@ impl GuiFrameWindowManager {
         self.chrome_defaults.titlebar_height = height;
         self.for_each_top_level_window_mut(|window_state| {
             window_state.chrome_mut().titlebar_height = height;
-            window_state.render.frame_dirty = true;
+            window_state.render.compositor.dirty = true;
         });
     }
 
@@ -1459,15 +1475,15 @@ impl GuiFrameWindowManager {
         self.chrome_defaults.corner_radius = radius;
         self.for_each_top_level_window_mut(|window_state| {
             window_state.chrome_mut().corner_radius = radius;
-            window_state.render.frame_dirty = true;
+            window_state.render.compositor.dirty = true;
         });
     }
 
     pub(super) fn set_top_level_fps_enabled(&mut self, enabled: bool) {
         self.fps_enabled = enabled;
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.fps.enabled = enabled;
-            window_state.render.frame_dirty = true;
+            window_state.render.overlays.fps.enabled = enabled;
+            window_state.render.compositor.dirty = true;
         });
     }
 
@@ -1480,38 +1496,38 @@ impl GuiFrameWindowManager {
 
     pub(super) fn hide_top_level_popup_menus(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            if window_state.render.popup_menu.is_some() {
-                window_state.render.popup_menu = None;
-                window_state.render.frame_dirty = true;
+            if window_state.render.overlays.popup_menu.is_some() {
+                window_state.render.overlays.popup_menu = None;
+                window_state.render.compositor.dirty = true;
             }
         });
     }
 
     pub(super) fn hide_top_level_tooltips(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            if window_state.render.tooltip.is_some() {
-                window_state.render.tooltip = None;
-                window_state.render.frame_dirty = true;
+            if window_state.render.overlays.tooltip.is_some() {
+                window_state.render.overlays.tooltip = None;
+                window_state.render.compositor.dirty = true;
             }
         });
     }
 
     pub(super) fn sync_top_level_transition_policy(&mut self, policy: TransitionPolicy) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.transitions.policy = policy;
-            window_state.render.frame_dirty = true;
+            window_state.render.compositor.transitions.policy = policy;
+            window_state.render.compositor.dirty = true;
         });
     }
 
     pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.transitions.crossfades.clear();
+            window_state.render.compositor.transitions.crossfades.clear();
         });
     }
 
     pub(super) fn clear_top_level_scroll_transitions(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.transitions.scroll_slides.clear();
+            window_state.render.compositor.transitions.scroll_slides.clear();
         });
     }
 
@@ -1531,7 +1547,7 @@ impl GuiFrameWindowManager {
 
     pub(super) fn tick_top_level_child_frames(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.child_frames.tick();
+            window_state.render.compositor.child_frames.tick();
         });
     }
 
@@ -1545,7 +1561,7 @@ impl GuiFrameWindowManager {
 
     pub(super) fn clear_top_level_glyph_atlases(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            if let Some(atlas) = window_state.render.glyph_atlas.as_mut() {
+            if let Some(atlas) = window_state.render.compositor.glyph_atlas.as_mut() {
                 atlas.clear();
             }
         });

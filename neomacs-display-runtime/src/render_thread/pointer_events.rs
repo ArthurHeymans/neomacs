@@ -58,7 +58,7 @@ impl RenderApp {
         if Self::floating_webkit_hit_test(&window_state.render.floating_webkits, x, y).is_some() {
             return (x, y, window_state.render.emacs_frame_id);
         }
-        if let Some((fid, local_x, local_y)) = window_state.render.child_frames.hit_test(x, y) {
+        if let Some((fid, local_x, local_y)) = window_state.render.compositor.child_frames.hit_test(x, y) {
             (local_x, local_y, fid)
         } else {
             (x, y, window_state.render.emacs_frame_id)
@@ -72,13 +72,13 @@ impl RenderApp {
         if target_fid == window_state.render.emacs_frame_id {
             window_state
                 .render
-                .current_frame
+                .compositor.current_frame
                 .as_ref()
                 .map(|frame| frame.glyphs.as_slice())
         } else {
             window_state
                 .render
-                .child_frames
+                .compositor.child_frames
                 .frames
                 .get(&target_fid)
                 .map(|entry| entry.frame.glyphs.as_slice())
@@ -105,7 +105,7 @@ impl RenderApp {
     }
 
     fn frame_window_char_width(window_state: &GuiFrameWindowState) -> f32 {
-        window_state.render.glyph_atlas.as_ref().map_or(8.0, |atlas| atlas.default_char_width())
+        window_state.render.compositor.glyph_atlas.as_ref().map_or(8.0, |atlas| atlas.default_char_width())
     }
 
     fn frame_window_menu_bar_hit_test(
@@ -113,7 +113,7 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<u32> {
-        let menu_bar = window_state.render.menu_bar.as_ref()?;
+        let menu_bar = window_state.render.chrome.menu_bar.as_ref()?;
         menu_bar_hit_test_items(
             &menu_bar.items,
             menu_bar.height,
@@ -128,7 +128,7 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<u32> {
-        let compact_bar = window_state.render.compact_bar.as_ref()?;
+        let compact_bar = window_state.render.chrome.compact_bar.as_ref()?;
         menu_bar_hit_test_items(
             &compact_bar.menu_items,
             compact_bar.height,
@@ -145,7 +145,7 @@ impl RenderApp {
         toolbar_padding: u32,
         toolbar_icon_size: u32,
     ) -> Option<u32> {
-        let compact_bar = window_state.render.compact_bar.as_ref()?;
+        let compact_bar = window_state.render.chrome.compact_bar.as_ref()?;
         let x = x - compact_bar_menu_width(
             &compact_bar.menu_items,
             Self::frame_window_char_width(window_state),
@@ -164,7 +164,7 @@ impl RenderApp {
     }
 
     fn frame_window_toolbar_y_origin(window_state: &GuiFrameWindowState) -> f32 {
-        if let Some(frame) = window_state.render.current_frame.as_ref()
+        if let Some(frame) = window_state.render.compositor.current_frame.as_ref()
             && let Some(tab_bar) = frame.tab_bar.as_ref()
             && tab_bar.height > 0.0
         {
@@ -172,12 +172,12 @@ impl RenderApp {
         }
         window_state
             .render
-            .menu_bar
+            .chrome.menu_bar
             .as_ref()
             .map_or(0.0, |menu_bar| menu_bar.height)
             + window_state
                 .render
-                .compact_bar
+                .chrome.compact_bar
                 .as_ref()
                 .map_or(0.0, |compact_bar| compact_bar.height)
     }
@@ -189,7 +189,7 @@ impl RenderApp {
         toolbar_padding: u32,
         toolbar_icon_size: u32,
     ) -> Option<u32> {
-        let tool_bar = window_state.render.tool_bar.as_ref()?;
+        let tool_bar = window_state.render.chrome.tool_bar.as_ref()?;
         let toolbar_y = Self::frame_window_toolbar_y_origin(window_state);
         if y < toolbar_y || y >= toolbar_y + tool_bar.height {
             return None;
@@ -211,7 +211,7 @@ impl RenderApp {
     ) -> Option<u32> {
         let tab_bar = window_state
             .render
-            .current_frame
+            .compositor.current_frame
             .as_ref()
             .and_then(|frame| frame.tab_bar.as_ref())?;
         if y < tab_bar.y || y >= tab_bar.y + tab_bar.height {
@@ -307,7 +307,7 @@ impl RenderApp {
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 let x = window_state.render.mouse_pos.0;
                 let y = window_state.render.mouse_pos.1;
-                let popup_was_open = window_state.render.popup_menu.is_some();
+                let popup_was_open = window_state.render.overlays.popup_menu.is_some();
                 if !popup_was_open && state == ElementState::Pressed && button == MouseButton::Left
                 {
                     if window_state.drag_resize_for_current_edge() {
@@ -342,7 +342,7 @@ impl RenderApp {
                 if popup_was_open {
                     if state == ElementState::Pressed && button == MouseButton::Left {
                         if !handled_chrome
-                            && let Some(compact_bar) = window_state.render.compact_bar.as_ref()
+                            && let Some(compact_bar) = window_state.render.chrome.compact_bar.as_ref()
                             && compact_bar.height > 0.0
                             && y < compact_bar.height
                         {
@@ -354,7 +354,7 @@ impl RenderApp {
                                 window_state.render.set_popup_menu(None);
                                 window_state
                                     .render
-                                    .chrome_interaction
+                                    .chrome.interaction
                                     .compact_bar_menu_active = Some(idx);
                                 event = Some(InputEvent::MenuBarClick {
                                     index: idx as i32,
@@ -365,12 +365,12 @@ impl RenderApp {
                                 window_state.render.set_popup_menu(None);
                                 window_state
                                     .render
-                                    .chrome_interaction
+                                    .chrome.interaction
                                     .compact_bar_menu_active = None;
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
-                        } else if let Some(menu_bar) = window_state.render.menu_bar.as_ref()
+                        } else if let Some(menu_bar) = window_state.render.chrome.menu_bar.as_ref()
                             && menu_bar.height > 0.0
                             && y < menu_bar.height
                         {
@@ -380,7 +380,7 @@ impl RenderApp {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
-                                window_state.render.chrome_interaction.menu_bar_active = Some(idx);
+                                window_state.render.chrome.interaction.menu_bar_active = Some(idx);
                                 event = Some(InputEvent::MenuBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -388,13 +388,13 @@ impl RenderApp {
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
-                                window_state.render.chrome_interaction.menu_bar_active = None;
+                                window_state.render.chrome.interaction.menu_bar_active = None;
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if let Some(tab_bar) = window_state
                             .render
-                            .current_frame
+                            .compositor.current_frame
                             .as_ref()
                             .and_then(|frame| frame.tab_bar.as_ref())
                             && y >= tab_bar.y
@@ -403,19 +403,19 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.set_popup_menu(None);
-                            window_state.render.chrome_interaction.menu_bar_active = None;
+                            window_state.render.chrome.interaction.menu_bar_active = None;
                             window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .compact_bar_menu_active = None;
                             window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .tab_bar_press_captured = true;
                             if let Some(idx) =
                                 Self::frame_window_tab_bar_hit_test(window_state, x, y)
                             {
-                                window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
+                                window_state.render.chrome.interaction.tab_bar_pressed = Some(idx);
                                 event = Some(InputEvent::TabBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -423,7 +423,7 @@ impl RenderApp {
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
-                        } else if let Some(tool_bar) = window_state.render.tool_bar.as_ref()
+                        } else if let Some(tool_bar) = window_state.render.chrome.tool_bar.as_ref()
                             && y >= Self::frame_window_toolbar_y_origin(window_state)
                             && y < Self::frame_window_toolbar_y_origin(window_state)
                                 + tool_bar.height
@@ -431,14 +431,14 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.set_popup_menu(None);
-                            window_state.render.chrome_interaction.menu_bar_active = None;
+                            window_state.render.chrome.interaction.menu_bar_active = None;
                             window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .compact_bar_menu_active = None;
                             window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .toolbar_press_captured = true;
                             if let Some(idx) = Self::frame_window_toolbar_hit_test(
                                 window_state,
@@ -447,7 +447,7 @@ impl RenderApp {
                                 self.toolbar.padding,
                                 self.toolbar.icon_size,
                             ) {
-                                window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
+                                window_state.render.chrome.interaction.toolbar_pressed = Some(idx);
                                 event = Some(InputEvent::ToolBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -458,7 +458,7 @@ impl RenderApp {
                         } else {
                             let idx = window_state
                                 .render
-                                .popup_menu
+                                .overlays.popup_menu
                                 .as_ref()
                                 .map_or(-1, |menu| menu.hit_test(x, y));
                             if idx >= 0 {
@@ -467,13 +467,13 @@ impl RenderApp {
                             } else {
                                 let (depth, local_idx) = window_state
                                     .render
-                                    .popup_menu
+                                    .overlays.popup_menu
                                     .as_ref()
                                     .map_or((-1, -1), |menu| menu.hit_test_all(x, y));
                                 if depth >= 0 && local_idx >= 0 {
                                     let is_submenu = window_state
                                         .render
-                                        .popup_menu
+                                        .overlays.popup_menu
                                         .as_ref()
                                         .is_some_and(|menu| {
                                             let panel = if depth == 0 {
@@ -511,7 +511,7 @@ impl RenderApp {
                     let x = window_state.render.mouse_pos.0;
                     let y = window_state.render.mouse_pos.1;
                     if !handled_chrome
-                        && let Some(compact_bar) = window_state.render.compact_bar.as_ref()
+                        && let Some(compact_bar) = window_state.render.chrome.compact_bar.as_ref()
                         && compact_bar.height > 0.0
                         && y < compact_bar.height
                     {
@@ -520,18 +520,18 @@ impl RenderApp {
                         {
                             if window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .compact_bar_menu_active
                                 == Some(idx)
                             {
                                 window_state
                                     .render
-                                    .chrome_interaction
+                                    .chrome.interaction
                                     .compact_bar_menu_active = None;
                             } else {
                                 window_state
                                     .render
-                                    .chrome_interaction
+                                    .chrome.interaction
                                     .compact_bar_menu_active = Some(idx);
                                 event = Some(InputEvent::MenuBarClick {
                                     index: idx as i32,
@@ -552,7 +552,7 @@ impl RenderApp {
                         {
                             window_state
                                 .render
-                                .chrome_interaction
+                                .chrome.interaction
                                 .compact_bar_tool_pressed = Some(idx);
                             event = Some(InputEvent::ToolBarClick {
                                 index: idx as i32,
@@ -562,13 +562,13 @@ impl RenderApp {
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
-                        && let Some(menu_bar) = window_state.render.menu_bar.as_ref()
+                        && let Some(menu_bar) = window_state.render.chrome.menu_bar.as_ref()
                         && menu_bar.height > 0.0
                         && y < menu_bar.height
                     {
                         if let Some(idx) = Self::frame_window_menu_bar_hit_test(window_state, x, y)
                         {
-                            window_state.render.chrome_interaction.menu_bar_active = Some(idx);
+                            window_state.render.chrome.interaction.menu_bar_active = Some(idx);
                             event = Some(InputEvent::MenuBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
@@ -579,7 +579,7 @@ impl RenderApp {
                     } else if !handled_chrome
                         && let Some(tab_bar) = window_state
                             .render
-                            .current_frame
+                            .compositor.current_frame
                             .as_ref()
                             .and_then(|frame| frame.tab_bar.as_ref())
                         && y >= tab_bar.y
@@ -587,10 +587,10 @@ impl RenderApp {
                     {
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .tab_bar_press_captured = true;
                         if let Some(idx) = Self::frame_window_tab_bar_hit_test(window_state, x, y) {
-                            window_state.render.chrome_interaction.tab_bar_pressed = Some(idx);
+                            window_state.render.chrome.interaction.tab_bar_pressed = Some(idx);
                             event = Some(InputEvent::TabBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
@@ -599,13 +599,13 @@ impl RenderApp {
                         }
                         handled_chrome = true;
                     } else if !handled_chrome
-                        && let Some(tool_bar) = window_state.render.tool_bar.as_ref()
+                        && let Some(tool_bar) = window_state.render.chrome.tool_bar.as_ref()
                         && y >= Self::frame_window_toolbar_y_origin(window_state)
                         && y < Self::frame_window_toolbar_y_origin(window_state) + tool_bar.height
                     {
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .toolbar_press_captured = true;
                         if let Some(idx) = Self::frame_window_toolbar_hit_test(
                             window_state,
@@ -614,7 +614,7 @@ impl RenderApp {
                             self.toolbar.padding,
                             self.toolbar.icon_size,
                         ) {
-                            window_state.render.chrome_interaction.toolbar_pressed = Some(idx);
+                            window_state.render.chrome.interaction.toolbar_pressed = Some(idx);
                             event = Some(InputEvent::ToolBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
@@ -626,25 +626,25 @@ impl RenderApp {
                 } else if state == ElementState::Released && button == MouseButton::Left {
                     if window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .tab_bar_press_captured
                         || window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .toolbar_press_captured
                         || window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .tab_bar_pressed
                             .is_some()
                         || window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .compact_bar_tool_pressed
                             .is_some()
                         || window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .toolbar_pressed
                             .is_some()
                     {
@@ -689,11 +689,11 @@ impl RenderApp {
                     if state == ElementState::Pressed {
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .tab_bar_press_captured = false;
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .toolbar_press_captured = false;
                     }
                     delivered_mouse_button = true;
@@ -1233,51 +1233,51 @@ impl RenderApp {
                 }
             }
 
-            if let Some(menu_bar) = window_state.render.menu_bar.as_ref()
+            if let Some(menu_bar) = window_state.render.chrome.menu_bar.as_ref()
                 && menu_bar.height > 0.0
             {
-                let old_hover = window_state.render.chrome_interaction.menu_bar_hovered;
+                let old_hover = window_state.render.chrome.interaction.menu_bar_hovered;
                 if ly < menu_bar.height {
                     let new_hover = Self::frame_window_menu_bar_hit_test(window_state, lx, ly);
-                    window_state.render.chrome_interaction.menu_bar_hovered = new_hover;
+                    window_state.render.chrome.interaction.menu_bar_hovered = new_hover;
                     if let (Some(active), Some(hov)) = (
-                        window_state.render.chrome_interaction.menu_bar_active,
+                        window_state.render.chrome.interaction.menu_bar_active,
                         new_hover,
                     ) && hov != active
                     {
-                        window_state.render.chrome_interaction.menu_bar_active = Some(hov);
+                        window_state.render.chrome.interaction.menu_bar_active = Some(hov);
                         event = Some(InputEvent::MenuBarClick {
                             index: hov as i32,
                             emacs_frame_id: window_state.render.emacs_frame_id,
                         });
                     }
                 } else {
-                    window_state.render.chrome_interaction.menu_bar_hovered = None;
+                    window_state.render.chrome.interaction.menu_bar_hovered = None;
                 }
-                dirty |= window_state.render.chrome_interaction.menu_bar_hovered != old_hover;
+                dirty |= window_state.render.chrome.interaction.menu_bar_hovered != old_hover;
             }
 
-            if let Some(compact_bar) = window_state.render.compact_bar.as_ref()
+            if let Some(compact_bar) = window_state.render.chrome.compact_bar.as_ref()
                 && compact_bar.height > 0.0
             {
                 let old_menu_hover = window_state
                     .render
-                    .chrome_interaction
+                    .chrome.interaction
                     .compact_bar_menu_hovered;
                 let old_tool_hover = window_state
                     .render
-                    .chrome_interaction
+                    .chrome.interaction
                     .compact_bar_tool_hovered;
                 if ly < compact_bar.height {
                     let new_menu_hover =
                         Self::frame_window_compact_bar_menu_hit_test(window_state, lx, ly);
                     window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .compact_bar_menu_hovered = new_menu_hover;
                     window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .compact_bar_tool_hovered = if new_menu_hover.is_none() {
                         Self::frame_window_compact_bar_tool_hit_test(
                             window_state,
@@ -1292,14 +1292,14 @@ impl RenderApp {
                     if let (Some(active), Some(hov)) = (
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .compact_bar_menu_active,
                         new_menu_hover,
                     ) && hov != active
                     {
                         window_state
                             .render
-                            .chrome_interaction
+                            .chrome.interaction
                             .compact_bar_menu_active = Some(hov);
                         event = Some(InputEvent::MenuBarClick {
                             index: hov as i32,
@@ -1309,32 +1309,32 @@ impl RenderApp {
                 } else {
                     window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .compact_bar_menu_hovered = None;
                     window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .compact_bar_tool_hovered = None;
                 }
                 dirty |= window_state
                     .render
-                    .chrome_interaction
+                    .chrome.interaction
                     .compact_bar_menu_hovered
                     != old_menu_hover
                     || window_state
                         .render
-                        .chrome_interaction
+                        .chrome.interaction
                         .compact_bar_tool_hovered
                         != old_tool_hover;
             }
 
-            let old_tab_hover = window_state.render.chrome_interaction.tab_bar_hovered;
-            window_state.render.chrome_interaction.tab_bar_hovered =
+            let old_tab_hover = window_state.render.chrome.interaction.tab_bar_hovered;
+            window_state.render.chrome.interaction.tab_bar_hovered =
                 Self::frame_window_tab_bar_hit_test(window_state, lx, ly);
-            dirty |= window_state.render.chrome_interaction.tab_bar_hovered != old_tab_hover;
+            dirty |= window_state.render.chrome.interaction.tab_bar_hovered != old_tab_hover;
 
-            let old_toolbar_hover = window_state.render.chrome_interaction.toolbar_hovered;
-            window_state.render.chrome_interaction.toolbar_hovered =
+            let old_toolbar_hover = window_state.render.chrome.interaction.toolbar_hovered;
+            window_state.render.chrome.interaction.toolbar_hovered =
                 Self::frame_window_toolbar_hit_test(
                     window_state,
                     lx,
@@ -1342,7 +1342,7 @@ impl RenderApp {
                     toolbar_padding,
                     toolbar_icon_size,
                 );
-            dirty |= window_state.render.chrome_interaction.toolbar_hovered != old_toolbar_hover;
+            dirty |= window_state.render.chrome.interaction.toolbar_hovered != old_toolbar_hover;
 
             dirty |= window_state.render.update_popup_hover(lx, ly);
 

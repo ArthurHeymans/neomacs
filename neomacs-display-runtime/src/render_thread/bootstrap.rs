@@ -175,18 +175,18 @@ impl RenderApp {
             let primary = self.frame_windows.primary_window_mut().unwrap();
             primary.render.populate_glyph_atlas(&device, pending_scale_factor);
             primary.render.cursor.copy_config_from(&self.cursor_defaults);
-            primary.render.transitions.policy = self.transition_policy;
+            primary.render.compositor.transitions.policy = self.transition_policy;
         }
 
         let pending_tool_items = self
             .primary_render_state()
             .as_ref()
-            .and_then(|frame| frame.tool_bar.as_ref())
+            .and_then(|frame| frame.chrome.tool_bar.as_ref())
             .map(|tool_bar| tool_bar.items.clone());
         let pending_compact_tool_items = self
             .primary_render_state()
             .as_ref()
-            .and_then(|frame| frame.compact_bar.as_ref())
+            .and_then(|frame| frame.chrome.compact_bar.as_ref())
             .map(|compact_bar| compact_bar.tool_items.clone());
         if let Some(items) = pending_tool_items.as_ref() {
             self.ensure_toolbar_icon_textures(items);
@@ -242,7 +242,7 @@ impl RenderApp {
                 self.frame_windows.primary_window_mut(),
             ) {
                 renderer.trigger_transient_resize_padding(
-                    &mut primary_state.render.renderer_effects,
+                    &mut primary_state.render.compositor.renderer_effects,
                     std::time::Instant::now(),
                 );
             }
