@@ -16514,3 +16514,168 @@ fn ft_tachyon_face_set_face_properties_all_combined_deep() {
    (condition-case nil (progn (set-face-attribute 'my-all-combined-face nil :weight 'unspecified :slant 'unspecified :underline 'unspecified :overline 'unspecified :strike-through 'unspecified :box 'unspecified :inverse-video 'unspecified :foreground 'unspecified :background 'unspecified :height 'unspecified :width 'unspecified :extend 'unspecified :line-spacing 'unspecified) 'reset-done) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_wave_face_text_property_set_on_empty_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (list
+     'empty-face (get-text-property 1 'face)
+     'empty-intervals (length (object-intervals (current-buffer)))
+     (progn (insert "Now with text") (put-text-property 1 13 'face 'bold) (list 'after-insert-face (get-text-property 1 'face) 'intervals (length (object-intervals (current-buffer)))))
+     (progn (erase-buffer) (list 'after-erase-face (get-text-property 1 'face) 'intervals (length (object-intervals (current-buffer)))))
+     (progn (insert "Again") (put-text-property 1 6 'face 'italic) (list 'final-face (get-text-property 1 'face) 'intervals (length (object-intervals (current-buffer))))))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_font_lock_fontify_two_buffers_independently_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (let ((buf1 (generate-new-buffer "*ft-wave-1*"))
+        (buf2 (generate-new-buffer "*ft-wave-2*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf1 (emacs-lisp-mode) (insert "(defun buf1-test () 111)\n") (font-lock-fontify-buffer))
+          (with-current-buffer buf2 (emacs-lisp-mode) (insert "(defun buf2-test () 222)\n") (font-lock-fontify-buffer))
+          (list
+           'buf1-faces (with-current-buffer buf1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 22)))
+           'buf2-faces (with-current-buffer buf2 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 22))))
+           'buf1-fontified (with-current-buffer buf1 (get-text-property 1 'fontified))
+           'buf2-fontified (with-current-buffer buf2 (get-text-property 1 'fontified))))
+      (kill-buffer buf1) (kill-buffer buf2))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_overlay_start_end_equal_face_test() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Start end equal overlay face test content text data buffer")
+    (let ((ov (make-overlay 10 10)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'empty-start (overlay-start ov)
+       'empty-end (overlay-end ov)
+       'face-get (overlay-get ov 'face)
+       'face-at-9 (get-char-property 9 'face)
+       'face-at-10 (get-char-property 10 'face)
+       'face-at-11 (get-char-property 11 'face)
+       (progn (goto-char 10) (insert "FILL") (list 'after-fill-face-10 (get-char-property 10 'face) 'face-12 (get-char-property 12 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_font_lock_keywords_priority_resolution_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "PRIORITY RESOLUTION keyword test for font lock face buffer content")
+    (font-lock-add-keywords nil '(("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "red") t) ("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "green") t) ("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "blue") overwrite)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "PRIORITY") (get-text-property (match-beginning 0) 'face))))
+      (font-lock-remove-keywords nil '(("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "red") t) ("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "green") t) ("\\<\\(PRIORITY\\)\\>" 1 '(:foreground "blue") overwrite)))
+      v0))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_remap_reset_base_multiple_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'alist-before (face-remapping-alist)
+   'add-default (condition-case nil (progn (face-remap-add-relative 'default '(:weight bold)) 'ok) (error 'no))
+   'add-bold (condition-case nil (progn (face-remap-add-relative 'bold '(:foreground "red")) 'ok) (error 'no))
+   'add-italic (condition-case nil (progn (face-remap-add-relative 'italic '(:slant oblique)) 'ok) (error 'no))
+   'alist-after-adds (face-remapping-alist)
+   'reset-default (condition-case nil (progn (face-remap-reset-base 'default) 'ok) (error 'no))
+   'reset-bold (condition-case nil (progn (face-remap-reset-base 'bold) 'ok) (error 'no))
+   'reset-italic (condition-case nil (progn (face-remap-reset-base 'italic) 'ok) (error 'no))
+   'alist-after-all (face-remapping-alist))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_overlay_face_at_edge_of_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Edge of buffer overlay face test content text data buffer here now end")
+    (let ((ov-start (make-overlay 1 10))) (overlay-put ov-start 'face '(:background "red")))
+    (let ((ov-end (make-overlay 50 60))) (overlay-put ov-end 'face '(:background "blue")))
+    (let ((ov-full (make-overlay 1 60))) (overlay-put ov-full 'face '(:foreground "green")) (overlay-put ov-full 'priority -100))
+    (list
+     'face-at-1 (get-char-property 1 'face)
+     'face-at-5 (get-char-property 5 'face)
+     'face-at-10 (get-char-property 10 'face)
+     'face-at-50 (get-char-property 50 'face)
+     'face-at-55 (get-char-property 55 'face)
+     'face-at-60 (get-char-property 60 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_property_set_all_clear_then_set_new_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Set all clear set new face property test buffer content text here done")
+    (add-text-properties 1 60 (list 'face 'bold 'a 1 'b 2 'c 3))
+    (list
+     'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (length (text-properties-at pos)))) '(1 20 40 59))
+     'clear-all (progn (set-text-properties 1 60 nil) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (length (text-properties-at pos)))) '(1 20 40 59)))
+     'set-new (progn (put-text-property 1 30 'face 'italic) (put-text-property 30 60 'face 'underline) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 15 30 45 59)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_overlay_copy_and_paste_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Copy and paste overlay face test content text data buffer content here now end done final")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "Copy source overlay")
+      (list
+       'source-face (overlay-get ov 'face)
+       'source-priority (overlay-get ov 'priority)
+       'source-help (overlay-get ov 'help-echo)
+       'source-string (buffer-substring 15 35)
+       (progn (delete-overlay ov) 'cleaned)
+       ;; Recreate similar overlay
+       'recreate (progn
+                   (let ((ov2 (make-overlay 40 55)))
+                     (overlay-put ov2 'face '(:background "yellow"))
+                     (overlay-put ov2 'priority 50)
+                     (list 'new-face (overlay-get ov2 'face) 'new-priority (overlay-get ov2 'priority) 'char-prop-at-45 (get-char-property 45 'face) (progn (delete-overlay ov2) 'new-cleaned)))))))))"##,
+    );
+}
