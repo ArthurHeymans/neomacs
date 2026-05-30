@@ -21628,3 +21628,153 @@ fn ft_eternity_face_text_properties_all_at_interval_bounds() {
      'props-count-11 (length (text-properties-at 11)))))"##,
     );
 }
+
+#[test]
+fn ft_neverstop_face_overlay_face_and_nil_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority nil)
+      (list
+       'nil-prio (overlay-get ov 'priority)
+       'face (overlay-get ov 'face)
+       'char-prop (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_font_lock_unfontify_buffer_after_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun insert-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (get-text-property 1 'fontified)))
+      (goto-char (point-max))
+      (insert "\n(defun inserted-test () 99)\n")
+      (font-lock-unfontify-buffer)
+      (font-lock-fontify-buffer)
+      (list v0 (get-text-property 1 'fontified) (get-text-property 30 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_face_overlay_with_category_and_face_both() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'category 'my-cat)
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'cat (overlay-get ov 'category)
+       'face (overlay-get ov 'face)
+       'char-prop (get-char-property 5 'face)
+       'char-prop-cat (get-char-property 5 'category)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_face_set_face_attribute_width_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-w-cycle-face) (error nil))
+  (list
+   'set-condensed (condition-case nil (progn (set-face-attribute 'my-w-cycle-face nil :width 'condensed) (face-attribute 'my-w-cycle-face :width nil 'default-on)) (error 'no))
+   'set-normal (condition-case nil (progn (set-face-attribute 'my-w-cycle-face nil :width 'normal) (face-attribute 'my-w-cycle-face :width nil 'default-on)) (error 'no))
+   'set-expanded (condition-case nil (progn (set-face-attribute 'my-w-cycle-face nil :width 'expanded) (face-attribute 'my-w-cycle-face :width nil 'default-on)) (error 'no))
+   'set-ultra-condensed (condition-case nil (progn (set-face-attribute 'my-w-cycle-face nil :width 'ultra-condensed) (face-attribute 'my-w-cycle-face :width nil 'default-on)) (error 'no))
+   'set-unspec (condition-case nil (progn (set-face-attribute 'my-w-cycle-face nil :width 'unspecified) (face-attribute 'my-w-cycle-face :width nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_face_text_properties_put_then_get_then_remove() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Put get remove face property test buffer content data")
+    (list
+     'put (progn (put-text-property 1 15 'face 'bold) (get-text-property 1 'face))
+     'get (get-text-property 1 'face)
+     'get-again (get-text-property 1 'face)
+     'remove (progn (remove-text-properties 1 15 '(face nil)) (get-text-property 1 'face))
+     'put-new (progn (put-text-property 1 15 'face 'italic) (get-text-property 1 'face))
+     'remove-new (progn (remove-text-properties 1 15 '(face nil)) (get-text-property 1 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_font_lock_fontify_buffer_with_keywords_append() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "APPEND-KW keywords test font lock face buffer content text end now")
+    (font-lock-add-keywords nil '(("\\<\\(APPEND-KW\\)\\>" 1 '(:foreground "red" :weight bold) append)))
+    (font-lock-fontify-buffer)
+    (list
+     'append-face (save-excursion (goto-char (point-min)) (search-forward "APPEND-KW") (get-text-property (match-beginning 0) 'face))
+     'other-face (save-excursion (goto-char (point-min)) (search-forward "keywords") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_face_overlay_face_clear_then_reapply() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'before (get-char-property 5 'face)
+       'clear (progn (overlay-put ov 'face nil) (get-char-property 5 'face))
+       'reapply (progn (overlay-put ov 'face '(:foreground "red" :weight bold)) (get-char-property 5 'face))
+       'clear-again (progn (overlay-put ov 'face nil) (get-char-property 5 'face))
+       'reapply-again (progn (overlay-put ov 'face '(:background "blue")) (get-char-property 5 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_neverstop_face_color_value_get_frame_specific() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'fg-nil-frame (condition-case nil (face-foreground 'default nil 'default-on) (error 'no))
+   'fg-frame (condition-case nil (face-foreground 'default (selected-frame) 'default-on) (error 'no))
+   'bg-nil-frame (condition-case nil (face-background 'default nil 'default-on) (error 'no))
+   'bg-frame (condition-case nil (face-background 'default (selected-frame) 'default-on) (error 'no))
+   'fg-no-frame (condition-case nil (face-foreground 'default) (error 'no))
+   'font-nil-frame (condition-case nil (face-font 'default nil) (error 'no))
+   'font-frame (condition-case nil (face-font 'default (selected-frame)) (error 'no))
+   'font-no-frame (condition-case nil (face-font 'default) (error 'no)))))"##,
+    );
+}
