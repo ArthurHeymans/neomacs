@@ -2513,10 +2513,7 @@ fn apply_derived_font_face_overrides(
     Ok(())
 }
 
-fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, defaults_frame: bool) -> Value {
-    if defaults_frame {
-        return Value::symbol("unspecified");
-    }
+fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, _defaults_frame: bool) -> Value {
     if face == "default" {
         return default_face_attribute_value(attr);
     }
