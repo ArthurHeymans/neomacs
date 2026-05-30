@@ -2670,3 +2670,300 @@ fn ft_hunt_org_face_multiple_cycle_edit_cycle_edit_deep() {
                       (list v0 v1 v2 v3 v4 v5 v6))))))))))))))"##,
     );
 }
+
+#[test]
+fn ft_probe_face_read_only_buffer_ops_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Read only face test buffer text")
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 10 20 'face 'italic)
+    (put-text-property 20 31 'face 'underline)
+    ;; Check faces before read-only
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25))))
+      ;; Set read-only
+      (put-text-property 1 31 'read-only t)
+      ;; Check faces still accessible
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'read-only))) '(1 5 10 15 20 25))))
+        ;; Try to modify with inhibit-read-only
+        (let ((inhibit-read-only t))
+          (put-text-property 10 20 'face '(:foreground "red" :weight bold))
+          (list v0 v1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_text_property_at_eob_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "End of buffer face test")
+    (let ((eob (point-max)))
+      (put-text-property 1 eob 'face 'bold)
+      ;; Check at EOB and beyond
+      (list
+       'at-eob (text-properties-at eob)
+       'at-1-before-eob (text-properties-at (1- eob))
+       'face-at-eob (get-text-property eob 'face)
+       'face-at-before (get-text-property (1- eob) 'face)
+       ;; Insert at EOB - check face propagation
+       (progn
+         (goto-char eob)
+         (insert " APPENDED")
+         (list 'after-append
+               (mapcar (lambda (pos) (list pos (get-text-property pos 'face))) (list (1- eob) eob (1+ eob) (point-max)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_with_invisible_text_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Visible HIDDEN Visible")
+    (put-text-property 1 9 'face 'bold)
+    (put-text-property 9 15 'face 'italic)
+    (put-text-property 9 15 'invisible t)
+    (put-text-property 15 23 'face 'underline)
+    (list
+     'with-invisible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (invisible-p pos))) '(1 5 9 12 15 20))
+     ;; Remove invisible
+     'after-remove-invisible (progn
+                               (remove-text-properties 9 15 '(invisible nil))
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 9 12 15 20)))
+     ;; Re-add invisible and check
+     'after-re-add-invisible (progn
+                               (put-text-property 9 15 'invisible t)
+                               (put-text-property 9 15 'face '(:foreground "red"))
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 9 12 15 20))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_char_property_vs_text_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Char vs text property comparison")
+    (put-text-property 1 8 'face 'bold)
+    (let ((ov (make-overlay 8 14)))
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'priority 100))
+    (let ((ov2 (make-overlay 14 24)))
+      (overlay-put ov2 'face 'underline)
+      (overlay-put ov2 'priority 50))
+    (put-text-property 24 34 'face '(:foreground "blue"))
+    (list
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (get-text-property pos 'face)
+                     (get-char-property pos 'face)
+                     (get-char-property-and-overlay pos 'face)))
+             '(1 5 8 10 12 14 18 24 28))
+     ;; After modifying overlay
+     (progn
+       (overlay-put ov 'face '(:foreground "green" :weight bold))
+       (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(8 10 12)))
+     ;; After deleting overlay
+     (progn
+       (delete-overlay ov)
+       (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-text-property pos 'face))) '(8 10 12 14))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_with_field_text_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Field-A Field-B Field-C")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 1 8 'field 'field-a)
+    (put-text-property 9 16 'face 'italic)
+    (put-text-property 9 16 'field 'field-b)
+    (put-text-property 17 24 'face 'underline)
+    (put-text-property 17 24 'field 'field-c)
+    (list
+     (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'field) (get-char-property pos 'field))) '(1 5 9 12 17 20))
+     ;; Field boundaries
+     (list 'field-beg (field-beginning) 'field-end (field-end))
+     ;; Move to next field
+     (progn
+       (goto-char 1)
+       (list 'field-at-1 (get-text-property (point) 'field)
+             'field-after-move (progn (goto-char (field-end)) (get-text-property (point) 'field)))))
+    ;; After clearing field
+    (progn
+      (remove-text-properties 9 16 '(field nil))
+      (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'field))) '(9 12))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_org_face_after_insert_subtree_and_refontify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO Root :root:\n")
+      (insert ":PROPERTIES:\n:Owner: Alice\n:END:\n")
+      (insert "** DONE T1\nBody T1.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle (get-text-property (line-beginning-position) 'face) (invisible-p (match-beginning 0)))
+                                    (list needle 'not-found nil))))
+                            '("Root" "T1" "T2" "T3")))))
+        (let ((v0 (funcall snap)))
+          ;; Hide all
+          (org-fold-hide-all)
+          ;; Insert T2 and T3 under hidden Root
+          (goto-char (point-min))
+          (search-forward "Root")
+          (end-of-line)
+          (insert "\n** TODO T2 :fe:\nBody T2.\n** WAIT T3 :ops:\nBody T3.\n")
+          ;; Show all and fontify
+          (org-fold-show-all)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            ;; Global cycle
+            (org-global-cycle nil)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              (list v0 v1 v2)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_with_overlay_before_after_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with before/after strings")
+    (put-text-property 1 35 'face 'bold)
+    (let ((ov1 (make-overlay 1 10)))
+      (overlay-put ov1 'face 'italic)
+      (overlay-put ov1 'before-string "[[")
+      (overlay-put ov1 'after-string "]]"))
+    (let ((ov2 (make-overlay 15 25)))
+      (overlay-put ov2 'face 'underline)
+      (overlay-put ov2 'before-string "{{")
+      (overlay-put ov2 'after-string "}}"))
+    (list
+     (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25))
+     ;; after-string face check
+     (list 'ov1-before-face (overlay-get ov1 'before-string)
+           'ov2-after-face (overlay-get ov2 'after-string))
+     ;; Modify overlays
+     (progn
+       (overlay-put ov1 'face '(:foreground "red"))
+       (overlay-put ov2 'face '(:background "yellow"))
+       (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25))))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_with_text_property_not_all_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 11 'face 'underline)
+    ;; Add a property NOT on ALL chars
+    (put-text-property 1 11 'my-prop "all")
+    (remove-text-properties 4 7 '(my-prop nil))
+    (list
+     'face-all (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 8 10))
+     'my-prop-gaps (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'my-prop))) '(1 3 5 6 8 10))
+     'next-prop-change (mapcar (lambda (pos) (list pos (next-single-property-change pos 'my-prop))) '(1 5 8))
+     'text-props (text-properties-at 1)
+     'text-props-with-gap (text-properties-at 5)))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_org_face_with_org_adapt_indentation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-indent)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-adapt-indentation t))
+      (org-mode)
+      (insert "* TODO Indent test\nBody here.\n\n")
+      (insert "** DONE Sub indent\nBody sub here.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (mapcar
+       (lambda (needle)
+         (save-excursion
+           (goto-char (point-min))
+           (if (search-forward needle nil t)
+               (list needle
+                     (get-text-property (match-beginning 0) 'face)
+                     (get-text-property (match-beginning 0) 'wrap-prefix)
+                     (get-text-property (match-beginning 0) 'line-prefix)
+                     (get-text-property (match-beginning 0) 'fontified))
+               (list needle 'not-found nil nil nil))))
+       '("Indent test" "Sub indent" "Body here" "Body sub here")))))"##,
+    );
+}
+
+#[test]
+fn ft_probe_face_with_rear_nonsticky_custom_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Rear nonsticky test buffer")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 8 16 'face 'italic)
+    (put-text-property 8 16 'rear-nonsticky '(face))
+    (put-text-property 16 26 'face 'underline)
+    (put-text-property 16 26 'front-sticky t)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'rear-nonsticky) (get-text-property pos 'front-sticky))) '(1 5 8 12 16 20 25))
+     ;; Insert at rear-nonsticky boundary (face should NOT propagate backward)
+     'after-insert-at-rear-nonsticky (progn
+                                       (goto-char 16)
+                                       (insert "XYZ")
+                                       (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 8 12 16 19 22 25)))
+     ;; Insert at front-sticky boundary (face should propagate forward)
+     'after-insert-at-front-sticky (progn
+                                     (goto-char 5)
+                                     (insert "UVW")
+                                     (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 8 12 16 19 22 25))))))"##,
+    );
+}
