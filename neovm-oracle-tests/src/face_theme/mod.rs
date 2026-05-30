@@ -10457,3 +10457,183 @@ fn ft_beta_face_text_property_char_property_overlay_property_precedence() {
      (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned))))"##,
     );
 }
+
+#[test]
+fn ft_gamma_face_text_property_single_property_no_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Single property with no face test buffer content text")
+    (put-text-property 1 47 'my-property 'yes)
+    (list
+     'no-face-prop (get-text-property 1 'face)
+     'has-my-prop (get-text-property 1 'my-property)
+     'text-props-at-1 (text-properties-at 1)
+     'text-props-count (length (text-properties-at 1))
+     'next-prop-change (next-property-change 1)
+     'single-property-intervals (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_font_lock_add_keywords_with_override_flags_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "PREPEND vs APPEND vs OVERWRITE keyword flags test buffer")
+    ;; Prepend has lowest priority (won't override existing)
+    (font-lock-add-keywords nil '(("\\<\\(PREPEND\\)\\>" 1 font-lock-warning-face prepend) ("\\<\\(APPEND\\)\\>" 1 '(:foreground "red") append) ("\\<\\(OVERWRITE\\)\\>" 1 '(:foreground "green" :weight bold) overwrite)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face)))) '("PREPEND" "APPEND" "OVERWRITE" "vs" "flags" "buffer"))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_face_with_overlay_start_end_equal_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 5 5))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 10 15))) (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 20 20))) (overlay-put ov3 'face '(:background "blue")))
+    (list
+     'empty-overlay-1-start (overlay-start ov1)
+     'empty-overlay-1-end (overlay-end ov1)
+     'empty-overlay-3-start (overlay-start ov3)
+     'empty-overlay-3-end (overlay-end ov3)
+     'faces-at-boundaries (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(4 5 6 10 12 15 19 20 21))
+     ;; Insert at zero-width overlay
+     'after-insert (progn (goto-char 5) (insert "XX") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(4 5 7 10 12 15 20 21 22)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_face_set_face_underline_p_with_various_args_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-check-face) (error nil))
+  (condition-case nil (set-face-underline 'my-ul-check-face '(:color "red" :style wave) nil) (error nil))
+  (list
+   'underline-p-nil-frame (condition-case nil (face-underline-p 'my-ul-check-face nil t) (error 'no))
+   'underline-p-cur-frame (condition-case nil (face-underline-p 'my-ul-check-face (selected-frame) t) (error 'no))
+   'underline-p-inherit-t (condition-case nil (face-underline-p 'my-ul-check-face nil t) (error 'no))
+   'underline-p-inherit-nil (condition-case nil (face-underline-p 'my-ul-check-face nil nil) (error 'no))
+   'face-bold-p-default (condition-case nil (face-bold-p 'default nil t) (error 'no))
+   'face-bold-p-bold (condition-case nil (face-bold-p 'bold nil t) (error 'no))
+   'face-italic-p-default (condition-case nil (face-italic-p 'default nil t) (error 'no))
+   'face-italic-p-italic (condition-case nil (face-italic-p 'italic nil t) (error 'no))
+   'face-italic-p-ul (condition-case nil (face-italic-p 'my-ul-check-face nil t) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_face_color_rgb_hex_roundtrip_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'red-roundtrip (let ((rgb (color-name-to-rgb "red")))
+                    (list 'name-to-rgb rgb
+                          'rgb-to-hex (apply 'color-rgb-to-hex (append rgb '(2)))))
+   'blue-roundtrip (let ((rgb (color-name-to-rgb "blue")))
+                     (list 'name-to-rgb rgb
+                           'rgb-to-hex (apply 'color-rgb-to-hex (append rgb '(2)))))
+   'green-roundtrip (let ((rgb (color-name-to-rgb "green")))
+                      (list 'name-to-rgb rgb
+                            'rgb-to-hex (apply 'color-rgb-to-hex (append rgb '(2)))))
+   'black-roundtrip (let ((rgb (color-name-to-rgb "black")))
+                      (list 'name-to-rgb rgb
+                            'rgb-to-hex (apply 'color-rgb-to-hex (append rgb '(2)))))
+   'white-roundtrip (let ((rgb (color-name-to-rgb "white")))
+                      (list 'name-to-rgb rgb
+                            'rgb-to-hex (apply 'color-rgb-to-hex (append rgb '(2)))))
+   'hex-to-rgb (color-name-to-rgb "#FF8800")
+   'hex-magenta (color-name-to-rgb "#FF00FF"))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_font_lock_default_fontify_buffer_vs_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-default-fontify-buffer-fbound (fboundp 'font-lock-default-fontify-buffer)
+   'font-lock-default-fontify-region-fbound (fboundp 'font-lock-default-fontify-region)
+   'font-lock-default-unfontify-buffer-fbound (fboundp 'font-lock-default-unfontify-buffer)
+   'font-lock-default-unfontify-region-fbound (fboundp 'font-lock-default-unfontify-region)
+   (condition-case nil
+       (with-temp-buffer
+         (fundamental-mode)
+         (font-lock-mode 1)
+         (insert "Test buffer for default fontify")
+         (font-lock-default-fontify-buffer)
+         (list 'fontified-1 (get-text-property 1 'fontified) 'fontified-10 (get-text-property 10 'fontified)))
+     (error 'no-default-fontify))
+   (condition-case nil
+       (with-temp-buffer
+         (fundamental-mode)
+         (font-lock-mode 1)
+         (insert "Test region for default fontify region")
+         (font-lock-default-fontify-region 1 10 nil)
+         (list 'fontified-1 (get-text-property 1 'fontified) 'fontified-15 (get-text-property 15 'fontified)))
+     (error 'no-default-fontify-region)))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_face_text_property_front_sticky_backward_insertion() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Front sticky backward insertion test content buffer text")
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 1 10 'front-sticky '(face))
+    (put-text-property 10 20 'face 'italic)
+    (put-text-property 10 20 'rear-nonsticky nil)
+    (put-text-property 20 44 'face 'underline)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'front-sticky) (get-text-property pos 'rear-nonsticky))) '(1 5 10 12 15 20 30 40))
+     ;; Insert BEFORE front-sticky boundary - face should propagate BACKWARD
+     'after-insert-before (progn (goto-char 10) (insert "BACK") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(5 8 10 12 15 20 30)))
+     ;; Insert at end of buffer
+     'after-insert-end (progn (goto-char (point-max)) (insert "END") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(40 44 46 48))))))"##,
+    );
+}
+
+#[test]
+fn ft_gamma_face_with_all_face_listed_and_sorted_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'total-face-count (length (face-list))
+   'sample-10-faces (seq-take (face-list) 10)
+   'all-faces-facep (apply #'and (mapcar #'facep (seq-take (face-list) 20)))
+   'default-in-list (member 'default (face-list))
+   'bold-in-list (member 'bold (face-list))
+   'italic-in-list (member 'italic (face-list))
+   'sorted-list-head (seq-take (sort (copy-sequence (face-list)) #'string<) 10))
+   'face-list-no-duplicates (= (length (face-list)) (length (delete-dups (copy-sequence (face-list))))))))"##,
+    );
+}
