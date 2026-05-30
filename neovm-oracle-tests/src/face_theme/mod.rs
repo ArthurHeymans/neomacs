@@ -19612,3 +19612,172 @@ fn ft_ultimate_face_font_lock_fontify_with_c_major_mode_deep() {
     (error (list 'c-mode-error (fboundp 'c-mode) (fboundp 'font-lock-fontify-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_omega_final_face_overlay_string_with_face_and_display() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "<<" 'face '(:foreground "red" :weight bold)))
+      (overlay-put ov 'after-string (propertize ">>" 'face '(:foreground "blue" :slant italic)))
+      (overlay-put ov 'display "")
+      (list
+       'ov-face (overlay-get ov 'face)
+       'before-str (overlay-get ov 'before-string)
+       'after-str (overlay-get ov 'after-string)
+       'display-val (overlay-get ov 'display)
+       'char-prop-at-20 (get-char-property 20 'face)
+       'char-prop-at-5 (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_font_lock_keywords_regexp_group_special() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "test@example.com user@domain.org name@company.net end here")
+    (font-lock-add-keywords nil
+                            '(("\\([a-z]+\\)@\\([a-z]+\\)\\.\\([a-z]+\\)"
+                               (1 font-lock-function-name-face)
+                               (2 font-lock-warning-face)
+                               (3 font-lock-keyword-face))))
+    (font-lock-fontify-buffer)
+    (list
+     'user1-face (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face))
+     'dom1-face (save-excursion (goto-char (point-min)) (search-forward "example") (get-text-property (match-beginning 0) 'face))
+     'tld1-face (save-excursion (goto-char (point-min)) (search-forward "com") (get-text-property (match-beginning 0) 'face))
+     'user2-face (save-excursion (goto-char (point-min)) (search-forward "user") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_face_overlay_face_priority_order_verify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ovs (list (let ((ov (make-overlay 1 16))) (overlay-put ov 'face '(:background "red")) (overlay-put ov 'priority 30) ov)
+                     (let ((ov (make-overlay 1 16))) (overlay-put ov 'face '(:background "green")) (overlay-put ov 'priority 10) ov)
+                     (let ((ov (make-overlay 1 16))) (overlay-put ov 'face '(:background "blue")) (overlay-put ov 'priority 20) ov))))
+    (let ((sorted (sort (copy-sequence ovs) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0))))))
+      (list
+       'sorted-priorities (mapcar (lambda (ov) (overlay-get ov 'priority)) sorted)
+       'highest-face (overlay-get (car sorted) 'face)
+       'effective-face (get-char-property 5 'face)
+       (progn (mapc #'delete-overlay ovs) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_face_set_attribute_line_spacing_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ls-face) (error nil))
+  (list
+   'default-ls (condition-case nil (face-attribute 'default :line-spacing nil 'default-on) (error 'no))
+   'set-ls-5 (condition-case nil (progn (set-face-attribute 'my-ls-face nil :line-spacing 5) (face-attribute 'my-ls-face :line-spacing nil 'default-on)) (error 'no))
+   'set-ls-10 (condition-case nil (progn (set-face-attribute 'my-ls-face nil :line-spacing 10) (face-attribute 'my-ls-face :line-spacing nil 'default-on)) (error 'no))
+   'set-ls-1.5 (condition-case nil (progn (set-face-attribute 'my-ls-face nil :line-spacing 1.5) (face-attribute 'my-ls-face :line-spacing nil 'default-on)) (error 'no))
+   'set-ls-nil (condition-case nil (progn (set-face-attribute 'my-ls-face nil :line-spacing nil) (face-attribute 'my-ls-face :line-spacing nil 'default-on)) (error 'no))
+   'set-ls-unspec (condition-case nil (progn (set-face-attribute 'my-ls-face nil :line-spacing 'unspecified) (face-attribute 'my-ls-face :line-spacing nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_face_text_property_object_intervals_count() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (let ((counts nil))
+      (push (length (object-intervals (current-buffer))) counts)
+      (goto-char 2) (insert "A") (push (length (object-intervals (current-buffer))) counts)
+      (put-text-property 1 3 'face 'bold) (push (length (object-intervals (current-buffer))) counts)
+      (goto-char 2) (insert "B") (push (length (object-intervals (current-buffer))) counts)
+      (delete-region 1 3) (push (length (object-intervals (current-buffer))) counts)
+      (nreverse counts))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_font_lock_add_remove_then_readd_keywords() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "ADD-REMOVE-ADD keyword test font lock face buffer content text end now final done")
+    (let ((f (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face)))))
+      (font-lock-add-keywords nil '(("\\<\\(ADD-REMOVE-ADD\\)\\>" 1 '(:foreground "red") t)))
+      (font-lock-fontify-buffer)
+      (let ((v0 (funcall f "ADD-REMOVE-ADD")))
+        (font-lock-remove-keywords nil '(("\\<\\(ADD-REMOVE-ADD\\)\\>" 1 '(:foreground "red") t)))
+        (font-lock-fontify-buffer)
+        (let ((v1 (funcall f "ADD-REMOVE-ADD")))
+          (font-lock-add-keywords nil '(("\\<\\(ADD-REMOVE-ADD\\)\\>" 1 '(:foreground "blue" :weight bold) t)))
+          (font-lock-fontify-buffer)
+          (list v0 v1 (funcall f "ADD-REMOVE-ADD"))))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_face_overlay_properties_get_then_modify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-len-before (length props)
+         'add-help (progn (overlay-put ov 'help-echo "added later") (length (overlay-properties ov)))
+         'remove-help (progn (overlay-put ov 'help-echo nil) (length (overlay-properties ov)))
+         'face-still-there (overlay-get ov 'face)
+         'priority-still-there (overlay-get ov 'priority)
+         (progn (delete-overlay ov) 'cleaned))))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_final_face_remapping_alist_length_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'alist-before (length (face-remapping-alist))
+   'add-default (progn (face-remap-add-relative 'default '(:weight bold)) (length (face-remapping-alist)))
+   'add-bold (progn (face-remap-add-relative 'bold '(:foreground "red")) (length (face-remapping-alist)))
+   'add-italic (progn (face-remap-add-relative 'italic '(:slant oblique)) (length (face-remapping-alist)))
+   'reset-default (progn (face-remap-reset-base 'default) (length (face-remapping-alist)))
+   'reset-bold (progn (face-remap-reset-base 'bold) (length (face-remapping-alist)))
+   'reset-italic (progn (face-remap-reset-base 'italic) (length (face-remapping-alist)))
+   'final-empty (null (face-remapping-alist)))))"##,
+    );
+}
