@@ -2781,6 +2781,7 @@ fn bootstrap_buffers(
             *point = 0;
         }
     }
+    eval.create_window_markers_for_root(frame_id, scratch_id);
     if display.frontend == FrontendKind::Gui {
         initialize_reused_gui_startup_frame(eval, frame_id);
     } else {
@@ -2827,6 +2828,7 @@ fn bootstrap_buffers(
             }
         }
     }
+    eval.create_window_markers_for_minibuffer(frame_id, mini_id);
 
     BootstrapResult {
         scratch_id,

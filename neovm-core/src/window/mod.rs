@@ -17,6 +17,7 @@ mod display;
 mod frame_params;
 mod history;
 mod parameters;
+pub mod window_markers;
 
 pub use display::{
     WindowBufferDisplayDefaults, WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
@@ -421,15 +422,19 @@ pub enum Window {
         buffer_id: BufferId,
         /// Pixel bounds within the frame.
         bounds: Rect,
-        /// Character position of the first visible character.
+        /// Cached byte position of the first visible character.
         ///
-        /// GNU stores this as a marker (`w->start`) so that
-        /// buffer edits before the start position auto-shift it.
-        /// neomacs uses a `usize` byte offset and patches it
-        /// manually. Window audit Critical 9 in
-        /// `drafts/window-system-audit.md` — see the matching
-        /// note on `point` below.
+        /// GNU Emacs stores this as a marker (`w->start`) so that buffer
+        /// edits before the start position auto-shift it.  neomacs now
+        /// maintains a real marker (`start_marker_id`) alongside this
+        /// cached byte position.  The cache is refreshed from the marker
+        /// by `sync_window_positions_from_markers` after every text edit,
+        /// and on every explicit position write.  All read sites continue
+        /// to use this `usize` cache for zero-cost reads.
         window_start: usize,
+        /// Marker id backing `window_start`.  `None` until the window is
+        /// attached to a buffer via `create_window_markers`.
+        start_marker_id: Option<u64>,
         /// Offset of the last displayed character position from buffer `Z`.
         ///
         /// Mirrors GNU Emacs `w->window_end_pos`, so Lisp-visible
@@ -444,22 +449,24 @@ pub enum Window {
         window_end_vpos: usize,
         /// Whether the last completed redisplay recorded window-end state.
         window_end_valid: bool,
-        /// Cursor (point) position in this window.
+        /// Cached cursor (point) position in this window.
         ///
-        /// GNU stores this as a marker (`w->pointm`, a
-        /// `Lisp_Marker`) so that buffer insertions before the
-        /// position auto-shift it. neomacs uses a `usize` byte
-        /// offset and patches it manually from the buffer edit
-        /// hooks. Window audit Critical 9 in
-        /// `drafts/window-system-audit.md`: any path that misses
-        /// the manual patching can leave a stale point that GNU
-        /// would have updated automatically. Converting to a
-        /// real marker is a multi-day cross-cutting change that
-        /// touches every read site, every edit hook, and the
-        /// pdump round-trip.
+        /// GNU Emacs stores this as a marker (`w->pointm`) so that buffer
+        /// insertions before the position auto-shift it.  neomacs now
+        /// maintains a real marker (`point_marker_id`) alongside this
+        /// cached byte position.  The cache is refreshed from the marker
+        /// after every text edit.  For the selected window, reads should
+        /// prefer `buffer.pt` directly (GNU fast path); this cached value
+        /// is authoritative for non-selected windows.
         point: usize,
-        /// Previous point value mirrored from GNU `w->old_pointm`.
+        /// Marker id backing `point`.  `None` until the window is
+        /// attached to a buffer via `create_window_markers`.
+        point_marker_id: Option<u64>,
+        /// Cached previous point value mirrored from GNU `w->old_pointm`.
         old_point: usize,
+        /// Marker id backing `old_point`.  `None` until the window is
+        /// attached to a buffer via `create_window_markers`.
+        old_point_marker_id: Option<u64>,
         /// Whether this is a dedicated window.
         dedicated: bool,
         /// Lisp-visible per-window parameter alist, newest entries first.
@@ -551,12 +558,15 @@ impl Window {
             buffer_id,
             bounds,
             window_start: 1,
+            start_marker_id: None,
             window_end_pos: 0,
             window_end_bytepos: 0,
             window_end_vpos: 0,
             window_end_valid: false,
             point: 1,
+            point_marker_id: None,
             old_point: 1,
+            old_point_marker_id: None,
             dedicated: false,
             parameters: Vec::new(),
             history: WindowHistoryState::default(),
@@ -826,23 +836,27 @@ impl Window {
         if let Window::Leaf {
             buffer_id,
             window_start,
+            start_marker_id,
             window_end_pos,
             window_end_bytepos,
             window_end_vpos,
             window_end_valid,
             point,
+            point_marker_id,
+            old_point_marker_id,
             ..
         } = self
         {
             *buffer_id = new_id;
-            // Emacs positions are 1-based; switching the displayed buffer resets
-            // window-start/point to point-min.
             *window_start = 1;
+            *start_marker_id = None;
             *window_end_pos = 0;
             *window_end_bytepos = 0;
             *window_end_vpos = 0;
             *window_end_valid = false;
             *point = 1;
+            *point_marker_id = None;
+            *old_point_marker_id = None;
         }
     }
 
@@ -2372,6 +2386,10 @@ impl FrameManager {
         self.frames.get_mut(&id)
     }
 
+    pub fn frames_mut(&mut self) -> impl Iterator<Item = &mut Frame> {
+        self.frames.values_mut()
+    }
+
     /// Get the selected frame.
     pub fn selected_frame(&self) -> Option<&Frame> {
         self.selected.and_then(|id| self.frames.get(&id))
@@ -2911,12 +2929,15 @@ fn split_window_in_tree(
                 parameters,
                 history,
                 window_start,
+                start_marker_id,
                 window_end_pos,
                 window_end_bytepos,
                 window_end_vpos,
                 window_end_valid,
                 point,
+                point_marker_id,
                 old_point,
+                old_point_marker_id,
                 vscroll,
                 preserve_vscroll_p,
                 ..
@@ -2928,12 +2949,15 @@ fn split_window_in_tree(
                 parameters.clear();
                 *history = WindowHistoryState::default();
                 *window_start = 1;
+                *start_marker_id = None;
                 *window_end_pos = 0;
                 *window_end_bytepos = 0;
                 *window_end_vpos = 0;
                 *window_end_valid = false;
                 *point = 1;
+                *point_marker_id = None;
                 *old_point = 1;
+                *old_point_marker_id = None;
                 *vscroll = 0;
                 *preserve_vscroll_p = false;
             }

@@ -566,8 +566,11 @@ impl FrameManager {
         if let Some(Window::Leaf {
             buffer_id: leaf_buffer_id,
             window_start: leaf_window_start,
+            start_marker_id,
             point: leaf_point,
+            point_marker_id,
             old_point,
+            old_point_marker_id,
             hscroll,
             vscroll,
             preserve_vscroll_p,
@@ -579,9 +582,12 @@ impl FrameManager {
         {
             *leaf_buffer_id = buffer_id;
             *leaf_window_start = window_start.max(1);
+            *start_marker_id = None;
             *leaf_point = point.max(1);
+            *point_marker_id = None;
             if !preserve_display_state {
                 *old_point = point.max(1);
+                *old_point_marker_id = None;
                 *hscroll = 0;
                 *vscroll = 0;
                 *preserve_vscroll_p = false;

@@ -6228,11 +6228,22 @@ impl Context {
             return;
         }
         self.sync_pending_resize_events();
+        // Sync window position caches from markers.  After text edits,
+        // markers have auto-adjusted but the usize caches on Window::Leaf
+        // may be stale.  Refresh them before redisplay reads positions.
+        if let Some(buffer) = self.buffers.current_buffer() {
+            let buf_id = buffer.id;
+            crate::window::window_markers::sync_all_frames_for_buffer(
+                &mut self.frames,
+                &self.buffers,
+                buf_id,
+            );
+        }
         // GNU Emacs xdisp.c:20616 — sync selected window's pointm from
-        // the buffer's current PT before redisplay.  NeoMacs Window::point
-        // is a plain usize, not a marker, so it doesn't auto-update.
-        // Only sync when the buffer has been modified (to avoid breaking
-        // the initial render where window.point=1 is correct).
+        // the buffer's current PT before redisplay.  With markers this
+        // sync is less critical (markers auto-adjust), but we keep it
+        // for the selected window to ensure buffer.pt changes are
+        // reflected even when no text edit occurred.
         if let Some(buffer) = self.buffers.current_buffer() {
             if buffer.is_modified() {
                 let pt = buffer.point_char();
@@ -7160,6 +7171,45 @@ impl Context {
     /// Public mutable access to the frame manager.
     pub fn frame_manager_mut(&mut self) -> &mut FrameManager {
         &mut self.frames
+    }
+
+    pub fn create_window_markers_for_root(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        buffer_id: crate::buffer::BufferId,
+    ) {
+        let root = &mut self.frames.get_mut(frame_id).unwrap().root_window;
+        crate::window::window_markers::create_window_markers(&mut self.buffers, root, buffer_id);
+    }
+
+    pub fn create_window_markers_for_minibuffer(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        buffer_id: crate::buffer::BufferId,
+    ) {
+        let mini = self
+            .frames
+            .get_mut(frame_id)
+            .unwrap()
+            .minibuffer_leaf
+            .as_mut();
+        if let Some(mini) = mini {
+            crate::window::window_markers::create_window_markers(
+                &mut self.buffers,
+                mini,
+                buffer_id,
+            );
+        }
+    }
+
+    pub fn sync_window_positions(&mut self, buffer_id: crate::buffer::BufferId) {
+        for frame in self.frames.frames_mut() {
+            crate::window::window_markers::sync_window_positions_from_markers(
+                frame,
+                &self.buffers,
+                buffer_id,
+            );
+        }
     }
 
     pub fn current_message_text(&self) -> Option<String> {

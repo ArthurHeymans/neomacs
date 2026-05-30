@@ -767,14 +767,23 @@ fn ensure_selected_frame_id_in_state_with_policy(
             ..
         }) = frame.find_window_mut(frame.selected_window)
         {
-            // Batch-mode startup in GNU Emacs reports point/window-start as 1.
             *window_start = 1;
             *point = 1;
         }
+        {
+            let sel = frame.selected_window;
+            if let Some(w) = frame.find_window_mut(sel) {
+                crate::window::window_markers::create_window_markers(buffers, w, buf_id);
+            }
+        }
         if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_mut() {
-            // Keep minibuffer window accessors aligned with GNU Emacs batch startup.
             minibuffer_leaf.set_buffer(minibuffer_buf_id);
             minibuffer_leaf.set_bounds(Rect::new(0.0, 24.0, 80.0, 1.0));
+            crate::window::window_markers::create_window_markers(
+                buffers,
+                minibuffer_leaf,
+                minibuffer_buf_id,
+            );
         }
     }
     fid
@@ -4458,6 +4467,13 @@ pub(crate) fn builtin_set_window_buffer(
             },
         );
         update_buffer_display_metadata_in_state(buffers, buf_id)?;
+        if let Some(frame) = frames.get_mut(fid) {
+            if let Some(window) = frame.find_window_mut(wid) {
+                super::super::window::window_markers::create_window_markers(
+                    buffers, window, buf_id,
+                );
+            }
+        }
         if selected_window == Some(wid)
             && let Some(buffer) = buffers.get_mut(buf_id)
         {
