@@ -8690,3 +8690,198 @@ fn ft_nova_face_text_property_character_width_multi_column_deep() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_void_face_overlay_before_string_with_multiple_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before string with multiple face properties test data now end")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string
+                   (concat (propertize "[[BEFORE-FG]]" 'face '(:foreground "red" :weight bold))
+                           (propertize "[[BEFORE-BG]]" 'face '(:background "cyan" :slant italic))))
+      (overlay-put ov 'after-string
+                   (propertize "{{AFTER-FG-BG}}" 'face '(:foreground "blue" :background "white"))))
+    (list
+     'faces-around (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 15 25 35 45 54))
+     'before-string-length (length (overlay-get ov 'before-string))
+     'after-string-length (length (overlay-get ov 'after-string))
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_font_lock_comment_delimiter_face_in_modes_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'emacs-lisp-comment
+   (with-temp-buffer
+     (emacs-lisp-mode)
+     (insert ";; This is a comment\n(defun f (x) x)\n")
+     (font-lock-fontify-buffer)
+     (list (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'face))
+           (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))))
+   'c-mode-comment
+   (with-temp-buffer
+     (condition-case nil
+         (progn
+           (c-mode)
+           (insert "/* comment */ int x; // comment\n")
+           (font-lock-fontify-buffer)
+           (list (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'face))
+                 (save-excursion (goto-char (point-min)) (search-forward "int") (get-text-property (match-beginning 0) 'face))))
+       (error 'c-mode-fontify-failed))))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_text_property_next_change_with_object_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (put-text-property 31 36 'face '(:background "cyan"))
+    (list
+     'next-prop-change-with-limit (next-single-property-change 1 'face nil 20)
+     'next-prop-change-to-end (next-single-property-change 1 'face nil 36)
+     'prev-prop-change-with-limit (previous-single-property-change 36 'face nil (point-min))
+     'prop-any-first (text-property-any 1 20 'face 'bold)
+     'prop-any-middle (text-property-any 10 25 'face 'underline)
+     'prop-not-all-first-half (text-property-not-all 1 20 'face 'bold)
+     'prop-not-all-full (text-property-not-all 1 36 'face 'bold)
+     'object-intervals (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_overlay_line_prefix_wrap_prefix_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with line and wrap prefix and face combined")
+    (let ((ov (make-overlay 1 52)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'line-prefix (propertize "| " 'face '(:foreground "red")))
+      (overlay-put ov 'wrap-prefix (propertize "> " 'face '(:foreground "blue"))))
+    (list
+     'overlay-face (get-char-property 1 'face)
+     'text-prop-face (get-text-property 1 'face)
+     'line-prefix (overlay-get ov 'line-prefix)
+     'wrap-prefix (overlay-get ov 'wrap-prefix)
+     'line-prefix-face (get-text-property 0 (overlay-get ov 'line-prefix))
+     'wrap-prefix-face (get-text-property 0 (overlay-get ov 'wrap-prefix))
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_property_accumulation_via_multiple_add_calls_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property accumulation via multiple add calls test")
+    (add-text-properties 1 48 '(face (:foreground "blue") key1 val1))
+    (add-text-properties 1 25 '(face (:underline t) key2 val2))
+    (add-face-text-property 20 48 '(:weight bold))
+    (add-text-properties 10 35 '(face (:slant italic) key3 val3))
+    (list
+     'face-at-start (list (get-text-property 1 'face) (get-text-property 1 'key1) (get-text-property 1 'key2))
+     'face-at-middle (list (get-text-property 20 'face) (get-text-property 20 'key1) (get-text-property 20 'key2) (get-text-property 20 'key3))
+     'face-at-end (list (get-text-property 47 'face) (get-text-property 47 'key1))
+     'text-props-at-1 (length (text-properties-at 1))
+     'text-props-at-20 (length (text-properties-at 20))
+     'text-props-at-47 (length (text-properties-at 47)))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_font_lock_regexp_subgroup_highlight_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "email: user@example.com url: https://example.org path: /usr/local/bin")
+    (font-lock-add-keywords nil
+                            '(("\\(email\\): \\([a-z@.]+\\)" (1 font-lock-keyword-face) (2 font-lock-warning-face))
+                              ("\\(url\\): \\(https?://[^ ]+\\)" (1 font-lock-keyword-face) (2 font-lock-function-name-face))
+                              ("\\(path\\): \\(/[^ ]+\\)" (1 font-lock-keyword-face) (2 font-lock-string-face))))
+    (font-lock-fontify-buffer)
+    (mapcar
+     (lambda (needle)
+       (save-excursion
+         (goto-char (point-min))
+         (if (search-forward needle nil t)
+             (list needle (get-text-property (match-beginning 0) 'face))
+             (list needle 'not-found))))
+     '("email" "user@example.com" "url" "https://example.org" "path" "/usr/local/bin"))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_overlay_category_and_face_inheritance_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay category and face inheritance test buffer content area")
+    (put-text-property 1 56 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 20)))
+      (overlay-put ov1 'category 'my-category-1)
+      (overlay-put ov1 'face '(:background "yellow")))
+    (let ((ov2 (make-overlay 25 45)))
+      (overlay-put ov2 'category 'my-category-2)
+      (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+    (list
+     'category-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 15 20 25 30 40 45 50 55))
+     'overlay-categories (mapcar (lambda (ov) (list (overlay-get ov 'category) (overlay-get ov 'face) (overlay-start ov) (overlay-end ov))) (list ov1 ov2))
+     'overlay-props-count (mapcar (lambda (ov) (length (overlay-properties ov))) (list ov1 ov2))
+     (progn (mapc #'delete-overlay (overlays-in 1 56)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_void_face_with_zero_length_string_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((s1 "")
+        (s2 (propertize "" 'face 'bold))
+        (s3 (propertize "" 'face '(:foreground "red")))
+        (s4 "X"))
+    (list
+     'empty-string-face (get-text-property 0 'face s1)
+     'empty-string-bold-face (get-text-property 0 'face s2)
+     'empty-string-red-face (get-text-property 0 'face s3)
+     'normal-char-face (get-text-property 0 'face s4)
+     'empty-string-length (length s1)
+     'bold-empty-length (length s2)
+     'empty-string-props (text-properties-at 0 s2)
+     'empty-string-no-props (text-properties-at 0 s1)))))"##,
+    );
+}
