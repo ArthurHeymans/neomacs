@@ -26737,3 +26737,95 @@ fn ft_nuke_face_text_property_exhaustive_scan() {
        'intervals (length (object-intervals (current-buffer))))))))"##,
     );
 }
+
+#[test]
+fn ft_ignite_face_overlay_face_property_sort_order_with_same_prio() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 1))
+    (list
+     'tie-breaker (get-char-property 3 'face)
+     'flip (let ((tmp (overlay-get ov1 'face))) (overlay-put ov1 'face (overlay-get ov2 'face)) (overlay-put ov2 'face tmp) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_ignite_font_lock_fontify_with_timer_hooks_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-after-change-fbound (fboundp 'font-lock-after-change-function)
+   'font-lock-fontify-fbound (fboundp 'font-lock-fontify-buffer)
+   'font-lock-unfontify-fbound (fboundp 'font-lock-unfontify-buffer)
+   'font-lock-ensure-fbound (fboundp 'font-lock-ensure)
+   'font-lock-flush-fbound (fboundp 'font-lock-flush))))"##,
+    );
+}
+
+#[test]
+fn ft_ignite_face_overlay_insert_in_front_and_behind_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'before-string "START-")
+      (overlay-put ov 'after-string "-END")
+      (let ((v0 (buffer-string)))
+        (erase-buffer)
+        (insert "XXXXX")
+        (let ((ov2 (make-overlay 1 6)))
+          (overlay-put ov2 'face 'italic)
+          (overlay-put ov2 'before-string (overlay-get ov 'before-string))
+          (overlay-put ov2 'after-string (overlay-get ov 'after-string))
+          (list
+           'before-str (overlay-get ov2 'before-string)
+           'after-str (overlay-get ov2 'after-string)
+           'face (overlay-get ov2 'face)
+           (progn (delete-overlay ov) (delete-overlay ov2) 'cleaned))))))))"##,
+    );
+}
+
+#[test]
+fn ft_ignite_face_text_property_global_map_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (list
+     'text-property-default-nonsticky-fbound (fboundp 'text-property-default-nonsticky)
+     'default-nonsticky (condition-case nil text-property-default-nonsticky (error 'no))
+     'face-sticky-p (condition-case nil (get-text-property 1 'front-sticky) (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_ignite_font_lock_fontify_pcase_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(pcase value\n  (`(,a ,b) (+ a b))\n  (_ 0))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'pcase-face (save-excursion (goto-char (point-min)) (search-forward "pcase") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
