@@ -17849,3 +17849,166 @@ fn ft_wave2_face_set_face_font_by_family_only() {
    'reset (condition-case nil (progn (set-face-font 'my-family-only-face 'unspecified nil) 'ok) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_particle_face_font_lock_set_defaults_multiple_modes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (list
+     'fundamental-defaults (progn (fundamental-mode) (font-lock-set-defaults) (list 'mode major-mode 'keywords (if (boundp 'font-lock-keywords) (type-of font-lock-keywords) 'no))))
+     'text-mode-defaults (progn (text-mode) (font-lock-set-defaults) (list 'mode major-mode 'keywords (if (boundp 'font-lock-keywords) (type-of font-lock-keywords) 'no))))
+     'emacs-lisp-defaults (progn (emacs-lisp-mode) (font-lock-set-defaults) (list 'mode major-mode 'keywords (if (boundp 'font-lock-keywords) (type-of font-lock-keywords) 'no))))))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_overlay_with_display_string_and_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay display string and face combined test content text data buffer here")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'display "")
+      (overlay-put ov 'before-string "[[")
+      (overlay-put ov 'after-string "]]")
+      (list
+       'face (overlay-get ov 'face)
+       'display (overlay-get ov 'display)
+       'before (overlay-get ov 'before-string)
+       'after (overlay-get ov 'after-string)
+       'char-prop (get-char-property 25 'face)
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_text_property_read_multiple_same_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Read multiple times same property face test buffer content text")
+    (put-text-property 1 51 'face '(:foreground "red" :weight bold))
+    (list
+     'read-1 (get-text-property 1 'face)
+     'read-2 (get-text-property 1 'face)
+     'read-3 (get-text-property 1 'face)
+     'equal-1-2 (equal (get-text-property 1 'face) (get-text-property 1 'face))
+     'text-props-at (text-properties-at 1)
+     'read-10 (get-text-property 10 'face)
+     'read-50 (get-text-property 50 'face)
+     'all-equal (and (equal (get-text-property 1 'face) (get-text-property 25 'face)) (equal (get-text-property 25 'face) (get-text-property 50 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_overlay_category_with_face_both_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'category 'my-special-cat)
+      (overlay-put ov 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov 'priority 50)
+      (list
+       'face (overlay-get ov 'face)
+       'category (overlay-get ov 'category)
+       'priority (overlay-get ov 'priority)
+       'char-prop-at-10 (get-char-property 10 'face)
+       'char-prop-at-10-cat (get-char-property 10 'category)
+       'char-prop-at-5 (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_font_lock_fontify_no_keywords_just_syntax() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (setq font-lock-keywords nil)
+    (insert ";; comment only\n\"string only\"\n(defun syntax-only-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'keywords font-lock-keywords
+     'comment-face (save-excursion (goto-char (point-min)) (search-forward "comment") (get-text-property (match-beginning 0) 'face))
+     'string-face (save-excursion (goto-char (point-min)) (search-forward "string") (get-text-property (match-beginning 0) 'face))
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     '42-face (save-excursion (goto-char (point-min)) (search-forward "42") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_set_attribute_width_ultra_condensed_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-width-cycle-face) (error nil))
+  (list
+   'default-width (face-attribute 'default :width nil 'default-on)
+   'set-ultra-condensed (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'ultra-condensed) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no))
+   'set-condensed (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'condensed) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no))
+   'set-normal (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'normal) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no))
+   'set-expanded (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'expanded) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no))
+   'set-extra-expanded (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'extra-expanded) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no))
+   'set-unspec (condition-case nil (progn (set-face-attribute 'my-width-cycle-face nil :width 'unspecified) (face-attribute 'my-width-cycle-face :width nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_overlay_priority_stacking_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov1 (make-overlay 1 16))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 5))
+    (let ((ov2 (make-overlay 1 16))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 15))
+    (let ((ov3 (make-overlay 1 16))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 10))
+    (let ((sorted (sort (overlays-at 5) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0))))))
+      (list
+       'sorted-priorities (mapcar (lambda (ov) (overlay-get ov 'priority)) sorted)
+       'sorted-faces (mapcar (lambda (ov) (overlay-get ov 'face)) sorted)
+       'effective-face (get-char-property 5 'face)
+       (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_particle_face_text_properties_all_at_point_min_max() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Text properties at buffer boundaries face test content data")
+    (put-text-property 1 52 'face 'bold :key 'value)
+    (list
+     'at-point-min (text-properties-at 1)
+     'at-point-max (text-properties-at (point-max))
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-max (get-text-property (point-max) 'face)
+     'key-at-1 (get-text-property 1 'key)
+     'key-at-max (get-text-property (point-max) 'key)
+     'next-prop-from-min (next-single-property-change 1 'face)
+     'prev-prop-from-max (previous-single-property-change (point-max) 'face nil 1)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
