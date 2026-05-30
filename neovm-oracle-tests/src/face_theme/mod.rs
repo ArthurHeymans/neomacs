@@ -24950,3 +24950,127 @@ fn ft_trace_font_lock_fontify_nested_defun_struct() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_pursue_face_overlay_face_priority_string_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority "high"))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority "low"))
+    (list
+     'prio1-val (overlay-get ov1 'priority)
+     'prio2-val (overlay-get ov2 'priority)
+     'winning (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_font_lock_fontify_cl_macrolet_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(cl-macrolet ((double (x) `(* 2 ,x)))\n  (double 21))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'cl-macrolet-face (save-excursion (goto-char (point-min)) (search-forward "cl-macrolet") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_face_overlay_face_hidden_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (overlay-put (make-overlay 1 6) 'face 'italic)
+    (list
+     'text-prop-face (get-text-property 3 'face)
+     'char-prop-face (get-char-property 3 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_face_text_property_face_put_set_text_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (set-text-properties 1 6 '(face bold mouse-face highlight))
+    (list
+     'face (get-text-property 3 'face)
+     'mouse-face (get-text-property 3 'mouse-face)
+     'after-override (progn (set-text-properties 1 6 '(face italic)) (list (get-text-property 3 'face) (get-text-property 3 'mouse-face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_font_lock_fontify_a_dollar_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setq-local $var$ 42)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'var-face (save-excursion (goto-char (point-min)) (search-forward "$var$") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_face_overlay_face_put_with_inherit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:inherit bold :foreground "red"))
+      (list
+       'face (overlay-get ov 'face)
+       'inherit (plist-get (overlay-get ov 'face) :inherit)
+       'fg (plist-get (overlay-get ov 'face) :foreground)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pursue_face_set_face_inherit_multi_level() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-l1-face) (error nil))
+  (condition-case nil (copy-face 'default 'my-l2-face) (error nil))
+  (condition-case nil (copy-face 'default 'my-l3-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-l1-face nil :foreground "red") (error nil))
+  (condition-case nil (set-face-attribute 'my-l2-face nil :inherit 'my-l1-face :background "blue") (error nil))
+  (condition-case nil (set-face-attribute 'my-l3-face nil :inherit 'my-l2-face :weight 'bold) (error nil))
+  (list
+   'l1-fg (condition-case nil (face-attribute 'my-l1-face :foreground nil 'default-on) (error 'no))
+   'l2-bg (condition-case nil (face-attribute 'my-l2-face :background nil 'default-on) (error 'no))
+   'l2-inherit (condition-case nil (face-attribute 'my-l2-face :inherit nil) (error 'no))
+   'l3-weight (condition-case nil (face-attribute 'my-l3-face :weight nil 'default-on) (error 'no))
+   'l3-inherit (condition-case nil (face-attribute 'my-l3-face :inherit nil) (error 'no))
+   'l3-fg-chained (condition-case nil (face-attribute 'my-l3-face :foreground nil 'default-on) (error 'no)))))"##,
+    );
+}
