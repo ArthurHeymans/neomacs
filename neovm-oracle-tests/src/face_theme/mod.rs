@@ -7247,3 +7247,188 @@ fn ft_extreme_face_font_lock_with_overlay_priority_interleaving() {
      (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
     );
 }
+
+#[test]
+fn ft_hyper_face_cache_invalidation_after_face_modify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-cache-face) (error nil))
+  (list
+   'before-set (face-attribute 'my-cache-face :weight nil 'default-on)
+   'set-attr (condition-case nil (set-face-attribute 'my-cache-face nil :weight 'heavy) (error 'no))
+   'after-set (face-attribute 'my-cache-face :weight nil 'default-on)
+   'set-fg (condition-case nil (set-face-foreground 'my-cache-face "DarkSlateBlue" nil) (error 'no))
+   'get-fg (condition-case nil (face-foreground 'my-cache-face nil 'default-on) (error 'no))
+   'clear-cache (condition-case nil (clear-face-cache) (error 'no))
+   'after-clear-weight (face-attribute 'my-cache-face :weight nil 'default-on)
+   'after-clear-fg (condition-case nil (face-foreground 'my-cache-face nil 'default-on) (error 'no))
+   'set-again (condition-case nil (set-face-attribute 'my-cache-face nil :weight 'ultra-light :slant 'oblique) (error 'no))
+   'get-weight-again (face-attribute 'my-cache-face :weight nil 'default-on)
+   'get-slant-again (face-attribute 'my-cache-face :slant nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_with_display_table_slot_face_interaction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'display-table-fbound (fboundp 'display-table-slot)
+   'set-display-table-slot-fbound (fboundp 'set-display-table-slot)
+   (condition-case nil
+       (let ((dt (make-display-table)))
+         (set-display-table-slot dt 0 ?a)
+         (display-table-slot dt 0))
+     (error 'no-display-table-ops))
+   (condition-case nil
+       (let ((dt (make-display-table)))
+         (set-display-table-slot dt 'selective-display
+                                 (vector (make-glyph-code ?- 'highlight)))
+         'set-glyph-ok)
+     (error 'no-set-glyph))
+   'describe-display-table (if (fboundp 'describe-display-table) 'fbound 'not-fbound)
+   'standard-display-table (if (boundp 'standard-display-table)
+                                standard-display-table
+                              'no-standard-table)
+   'buffer-display-table (if (boundp 'buffer-display-table)
+                              buffer-display-table
+                            'no-buffer-table))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_font_lock_fontify_syntactically_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c-mode)
+    (insert "/* block comment */ int main() { return 0; }\n")
+    (insert "// line comment\nint x = 1;\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (list
+     'block-comment-face (save-excursion (goto-char (point-min)) (search-forward "block") (get-text-property (match-beginning 0) 'face))
+     'line-comment-face (save-excursion (goto-char (point-min)) (search-forward "line") (get-text-property (match-beginning 0) 'face))
+     'int-face (save-excursion (goto-char (point-min)) (search-forward "int main") (list (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))
+     'fontified-regions (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 15 30 45)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_with_overlay_created_from_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay created from text property face test area now")
+    (put-text-property 1 17 'face 'bold)
+    (put-text-property 17 36 'face 'italic)
+    (put-text-property 36 53 'face 'underline)
+    ;; Create overlays that mirror text property boundaries
+    (let ((ov1 (make-overlay 1 17)))
+      (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 17 36)))
+      (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 36 53)))
+      (overlay-put ov3 'face '(:background "yellow")))
+    (list
+     'text-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 25 36 45 52))
+     'char-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 17 25 36 45 52))
+     ;; Remove text props, keep overlays
+     'text-props-removed (progn
+                           (set-text-properties 1 53 nil)
+                           (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-char-property pos 'face))) '(1 10 17 25 36 45 52)))
+     ;; Remove overlays
+     (progn (mapc #'delete-overlay (overlays-in 1 53))
+            (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 17 36 45 52))))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_font_lock_string_literal_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(format \"hello %s world %d\" name count)\n")
+    (insert "(concat \"multi-\" \"line-\" \"string\")\n")
+    (insert "(defun f () \"docstring here\" nil)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'format-string-face (save-excursion (goto-char (point-min)) (search-forward "hello") (get-text-property (match-beginning 0) 'face))
+     'multi-string-fontified (save-excursion (goto-char (point-min)) (search-forward "multi") (get-text-property (match-beginning 0) 'fontified))
+     'docstring-face (save-excursion (goto-char (point-min)) (search-forward "docstring") (get-text-property (match-beginning 0) 'face))
+     'non-string-face (save-excursion (goto-char (point-min)) (search-forward "name") (get-text-property (match-beginning 0) 'face))
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_with_buffer_unibyte_multibyte_conversion_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Unibyte multibyte face test αβγ δεζ")
+    (put-text-property 1 16 'face 'bold)
+    (put-text-property 16 32 'face 'italic)
+    (put-text-property 32 38 'face 'underline)
+    (list
+     'multibyte-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (multibyte-string-p (buffer-string)) (char-width (or (char-after pos) 0)))) '(1 10 16 20 32 36))
+     'enable-multibyte (enable-multibyte-characters)
+     'buffer-multibyte-p (multibyte-string-p (buffer-string))
+     'face-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_font_lock_global_mode_toggle_effect_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'global-font-lock-mode-fbound (fboundp 'global-font-lock-mode)
+   'font-lock-global-modes (if (boundp 'font-lock-global-modes)
+                                font-lock-global-modes
+                              'no-bound)
+   'global-font-lock-enabled (condition-case nil
+                                 (list (if (boundp 'global-font-lock-mode) global-font-lock-mode 'no-var)
+                                       (if (fboundp 'font-lock-mode) 'fbound 'not-fbound)
+                                       (if (fboundp 'global-font-lock-mode-enable-in-buffers)
+                                           'has-enable-func
+                                         'no-enable-func))
+                               (error 'no-global-font-lock))))"##,
+    );
+}
+
+#[test]
+fn ft_hyper_face_changing_faces_on_different_frames_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((frame (selected-frame)))
+    (condition-case nil (copy-face 'default 'my-multi-frame-face) (error nil))
+    (list
+     'set-on-frame (condition-case nil (progn (set-face-attribute 'my-multi-frame-face frame :weight 'bold) 'ok) (error 'no))
+     'get-on-frame (face-attribute 'my-multi-frame-face :weight frame 'default-on)
+     'set-fg-on-frame (condition-case nil (progn (set-face-foreground 'my-multi-frame-face "red" frame) 'ok) (error 'no))
+     'get-fg-on-frame (condition-case nil (face-foreground 'my-multi-frame-face frame 'default-on) (error 'no))
+     'set-font-on-frame (condition-case nil (progn (set-face-font 'my-multi-frame-face "Monospace-12" frame) 'ok) (error 'no))
+     'get-font-on-frame (condition-case nil (face-font 'my-multi-frame-face frame) (error 'no))
+     'reset (condition-case nil (progn (set-face-attribute 'my-multi-frame-face frame :weight 'unspecified :foreground 'unspecified) 'ok) (error 'no))))))"##,
+    );
+}
