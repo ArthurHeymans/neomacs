@@ -19148,3 +19148,150 @@ fn ft_nucleon_face_text_property_find_with_complex_predicate() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_electron_face_font_lock_unfontify_partial_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun part-unfontify (x) x)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'all-fontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 7 15 22 25))
+     'unfontify-middle (progn (font-lock-unfontify-region 10 20) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 7 10 15 20 25)))
+     'unfontify-all (progn (font-lock-unfontify-region 1 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 7 15 22 25)))
+     'refontify (progn (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 7 15 22 25)))))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_overlay_face_with_category_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'category 'cat-a) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 30))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'category 'cat-b) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 25 36))) (overlay-put ov3 'category 'cat-c) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 10))
+    (list
+     'face-cat-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 15 20 25 30 35))
+     'all-cats (mapcar (lambda (ov) (overlay-get ov 'category)) (list ov1 ov2 ov3))
+     (progn (mapc #'delete-overlay (overlays-in 1 36)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_set_face_box_with_multiple_style_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-box-styles-face) (error nil))
+  (list
+   'box-t (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box t) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-width-3 (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:line-width 3)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-released (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style released-button :line-width 2)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-pressed (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style pressed-button :color "red" :line-width 3)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-flat (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style flat-button :line-width 1)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-none (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box nil) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_text_property_search_any_char_by_char() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 10 'face 'italic)
+    (put-text-property 10 15 'face 'underline)
+    (put-text-property 15 20 'face '(:foreground "red"))
+    (put-text-property 20 27 'face '(:background "yellow"))
+    (list
+     'char-faces (let ((i 1) (result nil))
+                   (while (< i 27)
+                     (push (list i (get-text-property i 'face)) result)
+                     (setq i (1+ i)))
+                   (nreverse result))
+     'prop-boundary-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_font_lock_fontify_syntactic_by_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; comment-only\n\"string-only\"\n(defun syn-region-test () 42)\n")
+    (font-lock-fontify-syntactically (point-min) (point-max) nil)
+    (list
+     'comment-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 5 10 13))
+     'string-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(15 20 25 28))
+     'after-keywords (progn (font-lock-fontify-keywords-region (point-min) (point-max) nil) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(28 35 40 46 49)))))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_overlay_before_string_empty_vs_nonempty() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov-empty (make-overlay 1 6))) (overlay-put ov-empty 'face '(:background "red")) (overlay-put ov-empty 'before-string ""))
+    (let ((ov-nonempty (make-overlay 6 11))) (overlay-put ov-nonempty 'face '(:background "green")) (overlay-put ov-nonempty 'before-string (propertize "B" 'face '(:foreground "blue"))))
+    (let ((ov-nil (make-overlay 11 16))) (overlay-put ov-nil 'face '(:background "yellow")))
+    (list
+     'empty-before (overlay-get ov-empty 'before-string)
+     'nonempty-before (overlay-get ov-nonempty 'before-string)
+     'nil-before (overlay-get ov-nil 'before-string)
+     'face-at-3 (get-char-property 3 'face)
+     'face-at-8 (get-char-property 8 'face)
+     'face-at-13 (get-char-property 13 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_set_attribute_stipple_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-stipple (condition-case nil (face-attribute 'default :stipple nil 'default-on) (error 'no))
+   'bold-stipple (condition-case nil (face-attribute 'bold :stipple nil 'default-on) (error 'no))
+   'italic-stipple (condition-case nil (face-attribute 'italic :stipple nil 'default-on) (error 'no))
+   'set-face-stipple-fbound (fboundp 'set-face-stipple)
+   'face-stipple-fbound (fboundp 'face-stipple))))"##,
+    );
+}
+
+#[test]
+fn ft_electron_face_face_documentation_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-doc (condition-case nil (face-documentation 'default) (error 'no))
+   'bold-doc (condition-case nil (face-documentation 'bold) (error 'no))
+   'fringe-doc (condition-case nil (face-documentation 'fringe) (error 'no))
+   'face-documentation-fbound (fboundp 'face-documentation)
+   'set-face-documentation-fbound (fboundp 'set-face-documentation))))"##,
+    );
+}
