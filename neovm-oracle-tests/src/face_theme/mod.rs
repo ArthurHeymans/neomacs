@@ -26651,3 +26651,89 @@ fn ft_melt_face_text_property_read_multiple_faces_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_nuke_face_overlay_all_properties_enum() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'priority 42)
+      (overlay-put ov 'category 'test-cat)
+      (overlay-put ov 'before-string "Before")
+      (overlay-put ov 'after-string "After")
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'modification-hooks '(test-hook))
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-length (length props)
+         'keys-included (mapcar (lambda (k) (if (member k (list 'face 'priority 'category 'before-string 'after-string 'evaporate 'modification-hooks)) k nil)) '(. 1 . 3 . 5 . 7 . 9 . 11 . 13))
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_nuke_font_lock_fontify_with_temp_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert (with-temp-buffer
+              (emacs-lisp-mode)
+              (insert "(defun nested () 99)")
+              (font-lock-fontify-buffer)
+              (buffer-string)))
+    (font-lock-fontify-buffer)
+    (list
+     'face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_nuke_face_overlay_final_faces_snapshot() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "FINAL-FACE-TEST")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face 'bold))
+    (let ((ov2 (make-overlay 6 11))) (overlay-put ov2 'face 'italic))
+    (let ((ov3 (make-overlay 11 16))) (overlay-put ov3 'face 'underline))
+    (list
+     'pos1-5 (get-char-property 3 'face)
+     'pos6-10 (get-char-property 8 'face)
+     'pos11-15 (get-char-property 13 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_nuke_face_text_property_exhaustive_scan() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 12 'face 'italic)
+    (put-text-property 12 18 'face 'underline)
+    (put-text-property 18 27 'face '(:foreground "red"))
+    (let ((result nil) (pos 1))
+      (while (<= pos 26)
+        (push (list pos (get-text-property pos 'face)) result)
+        (setq pos (1+ pos)))
+      (list
+       'scan-results (nreverse result)
+       'intervals (length (object-intervals (current-buffer))))))))"##,
+    );
+}
