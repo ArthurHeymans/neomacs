@@ -1550,6 +1550,84 @@ fn emacs_char_to_rust_char(code: u32) -> char {
 }
 
 /// Compile a character class `[...]` into charset bytecode.
+/// POSIX named character class kind, returned by `parse_posix_char_class`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PosixCharClassKind {
+    Word,
+    Space,
+    Upper,
+    Lower,
+    Alpha,
+    Alnum,
+    Digit,
+    Xdigit,
+    Punct,
+    Graph,
+    Print,
+    Blank,
+    Cntrl,
+    Ascii,
+    Unibyte,
+    NonAscii,
+    Multibyte,
+    /// `[:` was found but the name is not a valid class.
+    Error,
+}
+
+struct PosixCharClass {
+    kind: PosixCharClassKind,
+    byte_len: usize,
+}
+
+/// Parse a POSIX named character class `[:name:]` at `pattern[pos..]`.
+/// Returns `None` if `pattern[pos..]` doesn't start with `[:`.
+fn parse_posix_char_class(pattern: &[u8], pos: usize, plen: usize) -> Option<PosixCharClass> {
+    if pos + 4 > plen {
+        return None;
+    }
+    if pattern[pos] != b'[' || pattern[pos + 1] != b':' {
+        return None;
+    }
+    // Find closing ":]"
+    let name_start = pos + 2;
+    let mut end = name_start;
+    while end + 1 < plen {
+        if pattern[end] == b':' && pattern[end + 1] == b']' {
+            break;
+        }
+        end += 1;
+    }
+    if end + 1 >= plen {
+        // No closing ":]" found — treat "[:" as literal characters
+        return None;
+    }
+    let name = &pattern[name_start..end];
+    let kind = match name {
+        b"word" => PosixCharClassKind::Word,
+        b"alnum" => PosixCharClassKind::Alnum,
+        b"alpha" => PosixCharClassKind::Alpha,
+        b"space" => PosixCharClassKind::Space,
+        b"digit" => PosixCharClassKind::Digit,
+        b"blank" => PosixCharClassKind::Blank,
+        b"upper" => PosixCharClassKind::Upper,
+        b"lower" => PosixCharClassKind::Lower,
+        b"punct" => PosixCharClassKind::Punct,
+        b"ascii" => PosixCharClassKind::Ascii,
+        b"graph" => PosixCharClassKind::Graph,
+        b"print" => PosixCharClassKind::Print,
+        b"cntrl" => PosixCharClassKind::Cntrl,
+        b"xdigit" => PosixCharClassKind::Xdigit,
+        b"unibyte" => PosixCharClassKind::Unibyte,
+        b"nonascii" => PosixCharClassKind::NonAscii,
+        b"multibyte" => PosixCharClassKind::Multibyte,
+        _ => PosixCharClassKind::Error,
+    };
+    Some(PosixCharClass {
+        kind,
+        byte_len: end + 2 - pos, // include ":]" closing
+    })
+}
+
 fn compile_charset(
     pattern: &[u8],
     p: &mut usize,
@@ -1606,6 +1684,48 @@ fn compile_charset(
     let mut closed = false;
 
     while *p < plen {
+        // GNU `re_wctype_parse`: before reading a character, check if
+        // we're at `[:name:]` — a POSIX named character class inside
+        // the bracket expression.  The `]` in the closing `:]` must
+        // not close the outer `[...]`.
+        if let Some(cc) = parse_posix_char_class(pattern, *p, plen) {
+            *p += cc.byte_len;
+            class_bits |= match cc.kind {
+                PosixCharClassKind::Word => CHARSET_CLASS_BIT_WORD,
+                PosixCharClassKind::Space => CHARSET_CLASS_BIT_SPACE,
+                PosixCharClassKind::Upper => CHARSET_CLASS_BIT_UPPER,
+                PosixCharClassKind::Lower => CHARSET_CLASS_BIT_LOWER,
+                PosixCharClassKind::Alpha => CHARSET_CLASS_BIT_ALPHA,
+                PosixCharClassKind::Alnum => CHARSET_CLASS_BIT_ALNUM,
+                PosixCharClassKind::Digit => CHARSET_CLASS_BIT_DIGIT,
+                PosixCharClassKind::Xdigit => CHARSET_CLASS_BIT_XDIGIT,
+                PosixCharClassKind::Punct => CHARSET_CLASS_BIT_PUNCT,
+                PosixCharClassKind::Graph => CHARSET_CLASS_BIT_GRAPH,
+                PosixCharClassKind::Print => CHARSET_CLASS_BIT_PRINT,
+                PosixCharClassKind::Blank => CHARSET_CLASS_BIT_BLANK,
+                PosixCharClassKind::Cntrl => CHARSET_CLASS_BIT_CNTRL,
+                PosixCharClassKind::Ascii => CHARSET_CLASS_BIT_ASCII,
+                PosixCharClassKind::Unibyte => CHARSET_CLASS_BIT_UNIBYTE,
+                PosixCharClassKind::NonAscii => CHARSET_CLASS_BIT_NONASCII,
+                PosixCharClassKind::Multibyte => CHARSET_CLASS_BIT_MULTIBYTE,
+                PosixCharClassKind::Error => {
+                    return Err(RegexCompileError {
+                        message: "Invalid character class name".to_string(),
+                    });
+                }
+            };
+            if *p >= plen {
+                return Err(RegexCompileError {
+                    message: "Unmatched [ or [^".to_string(),
+                });
+            }
+            // Mark that we've consumed a character (prevents `]` from
+            // being treated as literal at position 0).
+            first = false;
+            pending_char = None;
+            continue;
+        }
+
         let b = pattern[*p];
 
         // Decode a full Emacs character from the pattern.
