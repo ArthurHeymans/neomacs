@@ -15063,3 +15063,198 @@ fn ft_voidspace_face_text_property_single_property_interval() {
      'multiple-reads-same (equal (get-text-property 1 'face) (get-text-property 30 'face) (get-text-property 60 'face)))))"##,
     );
 }
+
+#[test]
+fn ft_quark_face_text_property_interval_object_access_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIII")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:background "yellow"))
+    (put-text-property 21 25 'face '(:foreground "blue"))
+    (put-text-property 25 29 'face '(:background "cyan"))
+    (put-text-property 29 33 'face '(:slant italic))
+    (let ((intervals (object-intervals (current-buffer))))
+      (list
+       'count (length intervals)
+       'first-start (overlay-start (car intervals))
+       'first-end (overlay-end (car intervals))
+       'last-start (overlay-start (car (last intervals)))
+       'last-end (overlay-end (car (last intervals)))
+       'all-starts (mapcar #'overlay-start intervals)
+       'all-ends (mapcar #'overlay-end intervals))))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_font_lock_fontify_keywords_with_multiple_matches_in_line() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "MATCH MATCH MATCH multiple same keyword on one line MATCH end")
+    (font-lock-add-keywords nil '(("\\<\\(MATCH\\)\\>" 1 '(:foreground "red" :weight bold) t)))
+    (font-lock-fontify-buffer)
+    (list
+     'all-occurrences (let ((result nil))
+                        (save-excursion
+                          (goto-char (point-min))
+                          (while (search-forward "MATCH" nil t)
+                            (push (list (match-beginning 0) (get-text-property (match-beginning 0) 'face)) result)))
+                        (nreverse result))
+     'match-count (save-excursion (goto-char (point-min)) (how-many "MATCH"))
+     'non-match-face (save-excursion (goto-char (point-min)) (search-forward "same") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_face_set_face_all_properties_then_unset_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-all-unset-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-all-unset-face nil :weight 'bold :slant 'italic :underline '(:color "red") :overline t :strike-through t :box t :inverse-video t :foreground "red" :background "yellow" :height 150 :width 'condensed) (error nil))
+  (list
+   'before-weight (face-attribute 'my-all-unset-face :weight nil 'default-on)
+   'before-fg (condition-case nil (face-foreground 'my-all-unset-face nil 'default-on) (error 'no))
+   'unset-all (condition-case nil (progn (set-face-attribute 'my-all-unset-face nil :weight 'unspecified :slant 'unspecified :underline 'unspecified :overline 'unspecified :strike-through 'unspecified :box 'unspecified :inverse-video 'unspecified :foreground 'unspecified :background 'unspecified :height 'unspecified :width 'unspecified) 'ok) (error 'no))
+   'after-weight (face-attribute 'my-all-unset-face :weight nil 'default-on)
+   'after-fg (condition-case nil (face-foreground 'my-all-unset-face nil 'default-on) (error 'no))
+   'after-bg (condition-case nil (face-background 'my-all-unset-face nil 'default-on) (error 'no))
+   'after-height (face-attribute 'my-all-unset-face :height nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_face_overlay_category_property_inherit_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay category property inherit face test content text data buffer")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'category 'my-cat) (overlay-put ov1 'face '(:background "red" :inherit bold)))
+    (let ((ov2 (make-overlay 15 35))) (overlay-put ov2 'category 'my-cat) (overlay-put ov2 'face '(:foreground "green")))
+    (let ((ov3 (make-overlay 30 55))) (overlay-put ov3 'category 'other-cat) (overlay-put ov3 'face '(:background "blue" :inherit italic)))
+    (list
+     'cat-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 18 25 32 40 50 55))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_font_lock_fontify_whole_buffer_piece_by_piece() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun a () 1)\n(defun b () 2)\n(defun c () 3)\n(defun d () 4)\n(defun e () 5)\n")
+    (let ((chunk-size 15) (pos 1) (total (point-max)) (fontified nil))
+      (while (< pos total)
+        (font-lock-fontify-region pos (min (+ pos chunk-size) total))
+        (setq pos (+ pos chunk-size)))
+      (list
+       'fontified-1 (get-text-property 1 'fontified)
+       'fontified-15 (get-text-property 15 'fontified)
+       'fontified-30 (get-text-property 30 'fontified)
+       'fontified-45 (get-text-property 45 'fontified)
+       'fontified-60 (get-text-property 60 'fontified)
+       'fontified-75 (get-text-property 75 'fontified)
+       'all-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 18 25 35 42 52 60 70 78)))))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_face_property_all_text_properties_at_specific_pos() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Properties at specific positions face test content text data here now")
+    (add-text-properties 1 60 (list 'face 'bold 'a '1 'b '2 'c '3))
+    (add-text-properties 20 40 (list 'face 'italic 'd '4 'e '5))
+    (add-text-properties 40 60 (list 'face 'underline 'f '6))
+    (list
+     'at-1 (text-properties-at 1)
+     'at-20 (text-properties-at 20)
+     'at-30 (text-properties-at 30)
+     'at-40 (text-properties-at 40)
+     'at-50 (text-properties-at 50)
+     'at-59 (text-properties-at 59)
+     'props-count-at-1 (length (text-properties-at 1))
+     'props-count-at-20 (length (text-properties-at 20))
+     'props-count-at-40 (length (text-properties-at 40))))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_face_overlay_priority_and_face_get_after_move() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJ")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 100)
+      (list
+       'face-before (get-char-property 10 'face)
+       'start-before (overlay-start ov)
+       'end-before (overlay-end ov)
+       'move-right (progn (move-overlay ov 20 30) (list 'face (get-char-property 25 'face) 'start (overlay-start ov) 'end (overlay-end ov)))
+       'move-left (progn (move-overlay ov 1 10) (list 'face (get-char-property 5 'face) 'start (overlay-start ov) 'end (overlay-end ov)))
+       'move-to-end (progn (move-overlay ov 40 55) (list 'face (get-char-property 50 'face) 'start (overlay-start ov) 'end (overlay-end ov)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_quark_face_face_everything_all_fbounds_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'facep-fbound (fboundp 'facep)
+   'make-face-fbound (fboundp 'make-face)
+   'copy-face-fbound (fboundp 'copy-face)
+   'face-list-fbound (fboundp 'face-list)
+   'face-id-fbound (fboundp 'face-id)
+   'face-equal-fbound (fboundp 'face-equal)
+   'face-differs-from-default-p-fbound (fboundp 'face-differs-from-default-p)
+   'face-attribute-fbound (fboundp 'face-attribute)
+   'set-face-attribute-fbound (fboundp 'set-face-attribute)
+   'face-foreground-fbound (fboundp 'face-foreground)
+   'face-background-fbound (fboundp 'face-background)
+   'face-font-fbound (fboundp 'face-font)
+   'set-face-foreground-fbound (fboundp 'set-face-foreground)
+   'set-face-background-fbound (fboundp 'set-face-background)
+   'set-face-font-fbound (fboundp 'set-face-font)
+   'face-bold-p-fbound (fboundp 'face-bold-p)
+   'face-italic-p-fbound (fboundp 'face-italic-p)
+   'face-underline-p-fbound (fboundp 'face-underline-p)
+   'set-face-underline-fbound (fboundp 'set-face-underline)
+   'face-all-attributes-fbound (fboundp 'face-all-attributes)
+   'face-spec-set-fbound (fboundp 'face-spec-set)
+   'face-spec-choose-fbound (fboundp 'face-spec-choose)
+   'face-remap-add-relative-fbound (fboundp 'face-remap-add-relative)
+   'face-remap-set-base-fbound (fboundp 'face-remap-set-base)
+   'face-remap-reset-base-fbound (fboundp 'face-remap-reset-base))))"##,
+    );
+}
