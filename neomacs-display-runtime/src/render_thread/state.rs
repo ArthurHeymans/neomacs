@@ -351,9 +351,23 @@ pub(super) struct RenderApp {
     pub(super) last_monitor_snapshot: Vec<MonitorInfo>,
     pub(super) debug_first_frame_readback_pending: bool,
     pub(super) debug_surface_readback_frames_remaining: u32,
-    pub(super) resumed_seen: bool,
-    pub(super) about_to_wait_seen: bool,
-    pub(super) poll_when_idle: bool,
+    pub(super) lifecycle_flags: RenderLifecycle,
+}
+
+pub(super) struct RenderLifecycle {
+    pub resumed_seen: bool,
+    pub about_to_wait_seen: bool,
+    pub poll_when_idle: bool,
+}
+
+impl RenderLifecycle {
+    pub fn new(poll_when_idle: bool) -> Self {
+        Self {
+            resumed_seen: false,
+            about_to_wait_seen: false,
+            poll_when_idle,
+        }
+    }
 }
 
 impl RenderApp {
@@ -434,9 +448,7 @@ impl RenderApp {
                     0
                 }
             }),
-            resumed_seen: false,
-            about_to_wait_seen: false,
-            poll_when_idle,
+            lifecycle_flags: RenderLifecycle::new(poll_when_idle),
         }
     }
 

@@ -84,7 +84,7 @@ impl RenderApp {
     }
 
     pub(super) fn handle_resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.resumed_seen {
+        if !self.lifecycle_flags.resumed_seen {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
                 self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
@@ -92,7 +92,7 @@ impl RenderApp {
                 self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()).1,
                 self.frame_windows.primary_window().expect("primary window state").chrome().title
             );
-            self.resumed_seen = true;
+            self.lifecycle_flags.resumed_seen = true;
         }
         let needs_native = self.frame_windows.primary_window().is_some_and(|ws| !ws.lifecycle.is_active());
         if needs_native {
@@ -170,13 +170,13 @@ impl RenderApp {
     }
 
     pub(super) fn handle_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        if !self.about_to_wait_seen {
+        if !self.lifecycle_flags.about_to_wait_seen {
             tracing::info!(
                 "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
                 self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
                 self.frame_windows.count()
             );
-            self.about_to_wait_seen = true;
+            self.lifecycle_flags.about_to_wait_seen = true;
         }
         self.refresh_monitor_snapshot(event_loop, true);
         if self.process_commands() {
@@ -275,7 +275,7 @@ impl RenderApp {
             now + std::time::Duration::from_millis(4)
         } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
             next_blink
-        } else if self.poll_when_idle {
+        } else if self.lifecycle_flags.poll_when_idle {
             now + std::time::Duration::from_millis(16)
         } else {
             event_loop.set_control_flow(ControlFlow::Wait);
