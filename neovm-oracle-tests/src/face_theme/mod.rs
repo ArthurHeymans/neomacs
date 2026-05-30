@@ -3826,3 +3826,391 @@ fn ft_pure_frame_face_parameters_deep() {
    'display-pixel-width (display-pixel-width))))"##,
     );
 }
+
+#[test]
+fn ft_pure_set_face_attribute_nil_frame_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'set-face-attribute-nil-frame
+   (condition-case nil
+       (progn
+         (set-face-attribute 'default nil :weight 'normal :slant 'normal)
+         'ok)
+     (error "set-face-attribute with nil frame failed"))
+   'set-face-underline-nil-frame
+   (condition-case nil
+       (progn
+         (set-face-underline 'default nil nil)
+         'ok)
+     (error "set-face-underline with nil frame failed"))
+   'face-underline-p-nil-frame
+   (condition-case nil
+       (face-underline-p 'default nil t)
+     (error "face-underline-p with nil frame failed"))
+   'face-bold-p-nil-frame
+   (condition-case nil
+       (face-bold-p 'default nil t)
+     (error "face-bold-p with nil frame failed"))
+   'face-italic-p-nil-frame
+   (condition-case nil
+       (face-italic-p 'default nil t)
+     (error "face-italic-p with nil frame failed"))
+   'face-font-nil-frame
+   (condition-case nil
+       (face-font 'default nil)
+     (error "face-font with nil frame failed"))
+   'face-foreground-nil-frame
+   (condition-case nil
+       (face-foreground 'default nil 'default-on)
+     (error "face-foreground with nil frame failed"))
+   'face-background-nil-frame
+   (condition-case nil
+       (face-background 'default nil 'default-on)
+     (error "face-background with nil frame failed"))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_set_face_attribute_with_frame_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((frame (selected-frame)))
+    (list
+     'set-face-attr-with-frame
+     (condition-case nil
+         (progn
+           (set-face-attribute 'default frame :weight 'normal)
+           'ok)
+       (error "set-face-attribute with frame failed"))
+     'face-attr-weight
+     (condition-case nil
+         (face-attribute 'default :weight frame 'default-on)
+       (error 'no))
+     'face-bold-p-with-frame
+     (condition-case nil
+         (face-bold-p 'default frame t)
+       (error 'no))
+     'face-font-with-frame
+     (condition-case nil
+         (face-font 'default frame)
+       (error 'no))
+     'face-foreground-with-frame
+     (condition-case nil
+         (face-foreground 'default frame)
+       (error 'no))
+     (if (fboundp 'internal-set-lisp-face-attribute)
+         (condition-case nil
+             (progn (internal-set-lisp-face-attribute 'default :weight 'bold frame) 'internal-set-ok)
+           (error 'internal-set-failed))
+       'no-internal-set))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_font_spec_create_query_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'font-spec-fbound (fboundp 'font-spec)
+   'font-xlfd-name-fbound (fboundp 'font-xlfd-name)
+   'query-font-fbound (fboundp 'query-font)
+   'list-fonts-fbound (fboundp 'list-fonts)
+   'find-font-fbound (fboundp 'find-font)
+   (condition-case nil
+       (let ((spec (font-spec :family "Monospace" :size 12 :weight 'bold)))
+         (list 'font-spec-created (fontp spec)
+               'font-get-family (font-get spec :family)
+               'font-get-size (font-get spec :size)
+               'font-get-weight (font-get spec :weight)))
+     (error 'no-font-spec))
+   (condition-case nil
+       (let ((fonts (list-fonts (font-spec :family "Monospace"))))
+         (list 'list-fonts-count (length fonts) 'first-font-p (fontp (car fonts))))
+     (error 'no-list-fonts))
+   (condition-case nil
+       (font-xlfd-name (font-spec :family "Monospace"))
+     (error 'no-xlfd-name))
+   (condition-case nil
+       (let ((f (query-font (font-spec :family "Monospace"))))
+         (if f 'found 'not-found))
+     (error 'no-query-font)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_set_foreground_background_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-color-face)
+    (error nil))
+  (list
+   'set-fg
+   (condition-case nil
+       (progn (set-face-foreground 'my-color-face "red" nil) 'ok)
+     (error 'no-set-fg))
+   'set-bg
+   (condition-case nil
+       (progn (set-face-background 'my-color-face "yellow" nil) 'ok)
+     (error 'no-set-bg))
+   'get-fg
+   (condition-case nil
+       (face-foreground 'my-color-face nil 'default-on)
+     (error 'no-get-fg))
+   'get-bg
+   (condition-case nil
+       (face-background 'my-color-face nil 'default-on)
+     (error 'no-get-bg))
+   'set-fg-named
+   (condition-case nil
+       (progn (set-face-foreground 'my-color-face "blue" nil) 'ok)
+     (error 'no-set-fg2))
+   'set-bg-named
+   (condition-case nil
+       (progn (set-face-background 'my-color-face "white" nil) 'ok)
+     (error 'no-set-bg2))
+   'get-fg-after
+   (condition-case nil
+       (face-foreground 'my-color-face nil 'default-on)
+     (error 'no-get-fg2))
+   'get-bg-after
+   (condition-case nil
+       (face-background 'my-color-face nil 'default-on)
+     (error 'no-get-bg2))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_set_face_font_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-font-face)
+    (error nil))
+  (list
+   'set-face-font-string
+   (condition-case nil
+       (progn (set-face-font 'my-font-face "Monospace-12" nil) 'ok)
+     (error 'no-set-face-font-string))
+   'set-face-font-spec
+   (condition-case nil
+       (progn (set-face-font 'my-font-face (font-spec :family "Monospace" :size 12) nil) 'ok)
+     (error 'no-set-face-font-spec))
+   'get-face-font
+   (condition-case nil
+       (face-font 'my-font-face nil)
+     (error 'no-get-face-font))
+   'set-face-font-bold
+   (condition-case nil
+       (progn (set-face-font 'my-font-face "Monospace-Bold-12" nil) 'ok)
+     (error 'no-set-face-font-bold))
+   'get-face-font-after (condition-case nil (face-font 'my-font-face nil) (error 'no-get-face-font2)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_set_face_underline_over_line_strike_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-decoration-face)
+    (error nil))
+  (list
+   'set-underline-on
+   (condition-case nil
+       (progn (set-face-underline 'my-decoration-face t nil) 'ok)
+     (error 'no-set-underline))
+   'check-underline
+   (condition-case nil
+       (face-underline-p 'my-decoration-face nil t)
+     (error 'no-check-underline))
+   'set-underline-off
+   (condition-case nil
+       (progn (set-face-underline 'my-decoration-face nil nil) 'ok)
+     (error 'no-set-underline-off))
+   'check-underline-off
+   (condition-case nil
+       (face-underline-p 'my-decoration-face nil t)
+     (error 'no-check-underline2))
+   'set-underline-color
+   (condition-case nil
+       (progn (set-face-underline 'my-decoration-face '(:color "red" :style wave) nil) 'ok)
+     (error 'no-set-underline-color))
+   'get-underline-color
+   (condition-case nil
+       (face-attribute 'my-decoration-face :underline nil 'default-on)
+     (error 'no-get-underline))
+   'set-overline
+   (condition-case nil
+       (progn (set-face-attribute 'my-decoration-face nil :overline t) 'ok)
+     (error 'no-set-overline))
+   'set-strike-through
+   (condition-case nil
+       (progn (set-face-attribute 'my-decoration-face nil :strike-through t) 'ok)
+     (error 'no-set-strike))
+   'get-overline (condition-case nil (face-attribute 'my-decoration-face :overline nil 'default-on) (error 'no))
+   'get-strike (condition-case nil (face-attribute 'my-decoration-face :strike-through nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_inverse_video_and_box_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-box-face)
+    (error nil))
+  (list
+   'set-inverse-video
+   (condition-case nil
+       (progn (set-face-attribute 'my-box-face nil :inverse-video t) 'ok)
+     (error 'no))
+   'get-inverse-video
+   (condition-case nil
+       (face-attribute 'my-box-face :inverse-video nil 'default-on)
+     (error 'no))
+   'set-inverse-video-off
+   (condition-case nil
+       (progn (set-face-attribute 'my-box-face nil :inverse-video nil) 'ok)
+     (error 'no))
+   'set-box
+   (condition-case nil
+       (progn (set-face-attribute 'my-box-face nil :box '(:line-width 2 :color "red")) 'ok)
+     (error 'no))
+   'get-box
+   (condition-case nil
+       (face-attribute 'my-box-face :box nil 'default-on)
+     (error 'no))
+   'set-box-simple
+   (condition-case nil
+       (progn (set-face-attribute 'my-box-face nil :box t) 'ok)
+     (error 'no))
+   'get-box-simple
+   (condition-case nil
+       (face-attribute 'my-box-face :box nil 'default-on)
+     (error 'no))
+   'set-box-off
+   (condition-case nil
+       (progn (set-face-attribute 'my-box-face nil :box nil) 'ok)
+     (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_width_height_slant_weight_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-prop-face)
+    (error nil))
+  (list
+   'set-weight-bold
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :weight 'bold) 'ok)
+     (error 'no))
+   'get-weight (face-attribute 'my-prop-face :weight nil 'default-on)
+   'set-weight-light
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :weight 'light) 'ok)
+     (error 'no))
+   'get-weight-light (face-attribute 'my-prop-face :weight nil 'default-on)
+   'set-slant-italic
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :slant 'italic) 'ok)
+     (error 'no))
+   'get-slant-italic (face-attribute 'my-prop-face :slant nil 'default-on)
+   'set-slant-oblique
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :slant 'oblique) 'ok)
+     (error 'no))
+   'get-slant-oblique (face-attribute 'my-prop-face :slant nil 'default-on)
+   'set-width-condensed
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :width 'condensed) 'ok)
+     (error 'no))
+   'get-width (face-attribute 'my-prop-face :width nil 'default-on)
+   'set-height
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :height 120) 'ok)
+     (error 'no))
+   'get-height (face-attribute 'my-prop-face :height nil 'default-on)
+   'set-height-float
+   (condition-case nil
+       (progn (set-face-attribute 'my-prop-face nil :height 1.5) 'ok)
+     (error 'no))
+   'get-height-float (face-attribute 'my-prop-face :height nil 'default-on)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_stipple_and_inherit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil
+      (copy-face 'default 'my-inherit-face)
+    (error nil))
+  (list
+   'set-inherit
+   (condition-case nil
+       (progn (set-face-attribute 'my-inherit-face nil :inherit 'bold) 'ok)
+     (error 'no))
+   'get-inherit (condition-case nil (face-attribute 'my-inherit-face :inherit nil 'default-on) (error 'no))
+   'set-inherit-multiple
+   (condition-case nil
+       (progn (set-face-attribute 'my-inherit-face nil :inherit '(bold italic)) 'ok)
+     (error 'no))
+   'get-inherit-multi (condition-case nil (face-attribute 'my-inherit-face :inherit nil 'default-on) (error 'no))
+   'set-inherit-none
+   (condition-case nil
+       (progn (set-face-attribute 'my-inherit-face nil :inherit nil) 'ok)
+     (error 'no))
+   'stipple (condition-case nil (face-attribute 'default :stipple nil 'default-on) (error 'no))
+   'distant-fg (condition-case nil (face-attribute 'default :distant-foreground nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_merge_faces_and_face_filter_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'merge-faces-fbound (fboundp 'merge-faces)
+   (condition-case nil
+       (merge-faces 'bold 'italic)
+     (error 'no-merge-faces))
+   (condition-case nil
+       (face-spec-set 'default '((t :weight bold)) 'face-defface-spec)
+     (error 'no-face-spec-set))
+   'face-spec-choose (condition-case nil
+                         (face-spec-choose '((t :weight bold)))
+                       (error 'no-face-spec-choose))
+   'face-attribute-relative-p (if (fboundp 'face-attribute-relative-p)
+                                   (face-attribute-relative-p :height)
+                                 'no-func)
+   'face-spec-match-p (if (fboundp 'face-spec-match-p)
+                           (face-spec-match-p 'default '((t :weight bold)))
+                         'no-func)
+   'face-filters (if (fboundp 'face-filters) (face-filters) 'no-func))))"##,
+    );
+}
