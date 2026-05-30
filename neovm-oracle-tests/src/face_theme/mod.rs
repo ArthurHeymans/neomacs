@@ -14396,3 +14396,183 @@ fn ft_omega3_text_property_previous_single_change_deep() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_cosmic3_face_font_lock_keywords_case_fold_disabled_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Case Sensitive MATCH case sensitive match CASE MATCH")
+    (let ((font-lock-keywords-case-fold-search nil))
+      (font-lock-add-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t)))
+      (font-lock-fontify-buffer)
+      (list
+       'case-upper (save-excursion (goto-char (point-min)) (search-forward "CASE") (get-text-property (match-beginning 0) 'face))
+       'case-lower (save-excursion (goto-char (point-min)) (search-forward " case") (get-text-property (match-beginning 0) 'face))
+       'case-mixed (save-excursion (goto-char (point-min)) (search-forward "Case") (get-text-property (match-beginning 0) 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_overlay_properties_plist_access_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay plist access face test content data text here now end final done")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "help")
+      (overlay-put ov 'evaporate t)
+      (let ((plist (overlay-properties ov)))
+        (list
+         'plist-length (length plist)
+         'plist-contains-face (plist-member plist 'face)
+         'plist-get-face (plist-get plist 'face)
+         'plist-get-priority (plist-get plist 'priority)
+         'plist-get-help (plist-get plist 'help-echo)
+         'plist-get-evap (plist-get plist 'evaporate)
+         'plist-get-none (plist-get plist 'nonexistent-property)
+         'last-key (car (last plist 2))
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_spec_set_with_face_defface_spec_type() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (condition-case nil (copy-face 'default 'my-defface-spec-face) (error nil))
+  (list
+   'set-spec (condition-case nil (face-spec-set 'my-defface-spec-face '((t :weight bold :foreground "blue")) 'face-defface-spec) (error 'no-set))
+   'weight-after (face-attribute 'my-defface-spec-face :weight nil 'default-on)
+   'fg-after (condition-case nil (face-attribute 'my-defface-spec-face :foreground nil 'default-on) (error 'no))
+   'set-spec-2 (condition-case nil (face-spec-set 'my-defface-spec-face '((t :slant italic :background "yellow")) 'face-defface-spec) (error 'no))
+   'weight-after-2 (face-attribute 'my-defface-spec-face :weight nil 'default-on)
+   'slant-after-2 (face-attribute 'my-defface-spec-face :slant nil 'default-on)
+   'reset-spec (condition-case nil (face-spec-set 'my-defface-spec-face '((t)) 'face-defface-spec) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_text_property_sticky_advanced_boundary_cases() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "FrontStickyBackNonstickyMiddleRegionEndHereNowDoneFinalLast")
+    (put-text-property 1 12 'face 'bold :front-sticky t :rear-nonsticky nil)
+    (put-text-property 12 24 'face 'italic :front-sticky nil :rear-nonsticky '(face))
+    (put-text-property 24 36 'face 'underline :front-sticky '(face) :rear-nonsticky nil)
+    (put-text-property 36 52 'face '(:foreground "red") :front-sticky nil)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'front-sticky) (get-text-property pos 'rear-nonsticky))) '(1 6 12 18 24 30 36 42 48 51))
+     'insert-at-12 (progn (goto-char 12) (insert "IN") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(10 12 14 16 20 26 38)))
+     'insert-at-24 (progn (goto-char 24) (insert "AT") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(10 14 20 24 26 30 38)))
+     'insert-at-36 (progn (goto-char 36) (insert "END") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(10 16 24 30 36 39 42 48 54))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_font_lock_mode_disabled_state_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (font-lock-mode -1)
+      (insert "* TODO Disabled mode\nBody.\n\n")
+      (list
+       'font-lock-mode font-lock-mode
+       'face-at-heading (get-text-property 1 'face)
+       'fontified-at-1 (get-text-property 1 'fontified)
+       'face-at-body (save-excursion (goto-char (point-min)) (search-forward "Body") (get-text-property (match-beginning 0) 'face))
+       ;; Enable and check
+       (progn
+         (font-lock-mode 1)
+         (font-lock-ensure (point-min) (point-max))
+         (list
+          'face-after-enable (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))
+          'fontified-after (get-text-property 1 'fontified))))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_overlay_empty_insert_behind_at_start() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Empty overlay insert at buffer start face test text here now end")
+    (let ((ov-start (make-overlay 1 1)))
+      (overlay-put ov-start 'face '(:background "red")))
+    (let ((ov-mid (make-overlay 20 20)))
+      (overlay-put ov-mid 'face '(:foreground "green")))
+    (let ((ov-end (make-overlay 52 52)))
+      (overlay-put ov-end 'face '(:background "blue")))
+    (list
+     'before-insert (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 50 52))
+     'after-insert-start (progn (goto-char 1) (insert "START-") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 8 10 15 25 35 45 55 58)))
+     'after-insert-mid (progn (goto-char 25) (insert "MID-") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 15 25 30 35 45 55 60)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_property_overlay_text_combined_layers_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property overlay text combined layers face test content data buffer")
+    ;; Layer 1: text properties
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 20 40 'face '(:foreground "blue"))
+    (put-text-property 40 55 'face 'underline)
+    ;; Layer 2: font-lock-face
+    (put-text-property 10 30 'font-lock-face 'italic)
+    (put-text-property 30 50 'font-lock-face '(:foreground "red"))
+    ;; Layer 3: overlays
+    (let ((ov1 (make-overlay 5 25))) (overlay-put ov1 'face '(:background "yellow")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 20 45))) (overlay-put ov2 'face '(:weight bold)) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 35 55))) (overlay-put ov3 'face '(:slant italic)) (overlay-put ov3 'priority 15))
+    (list
+     'layered-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'font-lock-face) (get-char-property pos 'face))) '(1 10 20 30 40 50 55))
+     'prop-counts (mapcar (lambda (pos) (goto-char pos) (list pos (length (text-properties-at pos)) (length (overlays-at pos)))) '(1 10 20 30 40 50))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic3_face_set_face_box_multiple_styles_roundtrip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-box-roundtrip-face) (error nil))
+  (list
+   'set-none (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box t) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no))
+   'set-width-2 (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box '(:line-width 2)) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no))
+   'set-released (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box '(:style released-button)) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no))
+   'set-pressed-color (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box '(:style pressed-button :color "red" :line-width 3)) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no))
+   'set-flat (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box '(:style flat-button :line-width 1)) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box nil) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no)))))"##,
+    );
+}
