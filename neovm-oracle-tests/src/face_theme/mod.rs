@@ -26349,3 +26349,96 @@ fn ft_dive_font_lock_fontify_with_rest_args() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_smash_face_overlay_face_end_after_content_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char (point-max))
+      (insert "BBBBB")
+      (list
+       'expanded (list (overlay-start ov) (overlay-end ov))
+       'face-at-end (get-char-property 8 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_smash_font_lock_fontify_save_restriction_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(save-restriction\n  (narrow-to-region 1 10)\n  (font-lock-fontify-buffer))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'save-restriction-face (save-excursion (goto-char (point-min)) (search-forward "save-restriction") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_smash_face_overlay_face_before_front_advance_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'front-advance t)
+      (overlay-put ov 'rear-advance nil)
+      (list
+       'front-adv (overlay-get ov 'front-advance)
+       'rear-adv (overlay-get ov 'rear-advance)
+       'face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_smash_face_text_property_find_all_bold_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 2 4 'face 'bold)
+    (put-text-property 6 9 'face 'bold)
+    (list
+     'any-bold-fbound (fboundp 'text-property-any)
+     'first-bold (text-property-any 1 11 'face 'bold)
+     'from-after-first (text-property-any 4 11 'face 'bold)
+     'no-more (text-property-any 9 11 'face 'bold)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_smash_font_lock_fontify_dolist_dotimes_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(dolist (item list)\n  (dotimes (i 10)\n    (collect (list i item))))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'dolist-face (save-excursion (goto-char (point-min)) (search-forward "dolist") (get-text-property (match-beginning 0) 'face))
+     'dotimes-face (save-excursion (goto-char (point-min)) (search-forward "dotimes") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
