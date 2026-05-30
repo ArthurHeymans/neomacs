@@ -11919,3 +11919,168 @@ fn ft_kappa_face_font_lock_remove_nonexistent_keyword() {
      (error 'mixed-error)))))"##,
     );
 }
+
+#[test]
+fn ft_lambda_face_display_table_set_then_clear_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Display table set and clear face test buffer content")
+    (put-text-property 1 47 'face '(:foreground "blue"))
+    (let ((dt (make-display-table)))
+      (condition-case nil
+          (progn
+            (set-display-table-slot dt 'selective-display (vector (make-glyph-code ?- 'highlight)))
+            (list
+             'table-created 'ok
+             'face-still-there (get-text-property 1 'face)
+             'slot-0 (display-table-slot dt 0)
+             'slot-selective (display-table-slot dt 'selective-display)))
+        (error (list 'table-error (get-text-property 1 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_font_lock_fontify_by_chunks_incremental() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun chunk1 () 1)\n(defun chunk2 () 2)\n(defun chunk3 () 3)\n")
+    (list
+     'fontify-chunk1 (progn (font-lock-fontify-region 1 17) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 17 18)))
+     'fontify-chunk2 (progn (font-lock-fontify-region 18 34) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 18 25 34 35)))
+     'fontify-chunk3 (progn (font-lock-fontify-region 35 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 35 40 47)))
+     'all-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 30 38 45))))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_text_property_sticky_after_multiple_inserts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold :front-sticky t :rear-nonsticky nil)
+    (put-text-property 6 11 'face 'italic :front-sticky nil :rear-nonsticky '(face))
+    (put-text-property 11 16 'face 'underline :front-sticky t)
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 8 11 13 15)))))
+      (let ((v0 (funcall snap)))
+        (goto-char 6) (insert "X")
+        (goto-char 11) (insert "Y")
+        (goto-char 16) (insert "Z")
+        (goto-char 1) (insert "P")
+        (let ((v1 (funcall snap)))
+          (list v0 v1))))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_set_attribute_width_variants_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-width-face) (error nil))
+  (list
+   'set-width-ultra-condensed (condition-case nil (progn (set-face-attribute 'my-width-face nil :width 'ultra-condensed) (face-attribute 'my-width-face :width nil 'default-on)) (error 'no))
+   'set-width-condensed (condition-case nil (progn (set-face-attribute 'my-width-face nil :width 'condensed) (face-attribute 'my-width-face :width nil 'default-on)) (error 'no))
+   'set-width-normal (condition-case nil (progn (set-face-attribute 'my-width-face nil :width 'normal) (face-attribute 'my-width-face :width nil 'default-on)) (error 'no))
+   'set-width-expanded (condition-case nil (progn (set-face-attribute 'my-width-face nil :width 'expanded) (face-attribute 'my-width-face :width nil 'default-on)) (error 'no))
+   'set-width-unspec (condition-case nil (progn (set-face-attribute 'my-width-face nil :width 'unspecified) (face-attribute 'my-width-face :width nil 'default-on)) (error 'no))
+   'default-width (face-attribute 'default :width nil 'default-on)
+   'bold-width (face-attribute 'bold :width nil 'default-on)
+   'width-table (if (boundp 'font-width-table) (memq 'condensed font-width-table) 'no-table))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_font_lock_add_keywords_globally_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'global-font-lock-mode-fbound (fboundp 'global-font-lock-mode)
+   'font-lock-global-modes-bound (boundp 'font-lock-global-modes)
+   'font-lock-global-modes-value (if (boundp 'font-lock-global-modes) font-lock-global-modes 'no)
+   'font-lock-set-defaults-global (condition-case nil (font-lock-set-defaults) (error 'no))
+   'font-lock-refresh-defaults-global (condition-case nil (font-lock-refresh-defaults) (error 'no))
+   'font-lock-ensure-global (condition-case nil (progn (font-lock-flush) 'flushed) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_overlay_line_properties_combined_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay line-spacing and face combined test content text data here end now")
+    (let ((ov (make-overlay 1 62)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'line-spacing 5)
+      (overlay-put ov 'line-height 1.5)
+      (overlay-put ov 'wrap-prefix (propertize "> " 'face '(:foreground "blue"))))
+    (list
+     'face (overlay-get ov 'face)
+     'line-spacing (overlay-get ov 'line-spacing)
+     'line-height (overlay-get ov 'line-height)
+     'wrap-prefix-face (get-text-property 0 (overlay-get ov 'wrap-prefix))
+     'char-face (get-char-property 30 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_set_face_overline_various_options() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-overline-face) (error nil))
+  (list
+   'set-overline-t (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline t) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'set-overline-nil (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline nil) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'set-overline-color (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline '(:color "red")) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'set-overline-unspec (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline 'unspecified) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'default-overline (condition-case nil (face-attribute 'default :overline nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_lambda_face_property_interval_edge_boundary_stress() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyz")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 6 'face 'italic)
+    (put-text-property 6 7 'face 'underline)
+    (put-text-property 7 8 'face '(:foreground "red"))
+    (put-text-property 8 63 'face '(:background "yellow"))
+    (list
+     'every-char (let ((i 1) (result nil))
+                   (while (< i 10)
+                     (push (list i (get-text-property i 'face)) result)
+                     (setq i (1+ i)))
+                   (nreverse result))
+     'prop-changes-all (let ((pos 1) (changes nil))
+                         (while pos
+                           (setq pos (next-single-property-change pos 'face nil 63))
+                           (when pos (push (list pos (get-text-property pos 'face)) changes)))
+                         (nreverse changes))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
