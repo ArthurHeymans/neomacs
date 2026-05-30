@@ -27051,3 +27051,74 @@ fn ft_rush_face_text_property_remove_from_middle_of_face() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_crush_face_overlay_face_attribute_get_unspecified() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red"))
+      (list
+       'specified-fg (plist-get (overlay-get ov 'face) :foreground)
+       'unspecified-bg (plist-get (overlay-get ov 'face) :background)
+       'unspecified-weight (plist-get (overlay-get ov 'face) :weight)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_crush_font_lock_fontify_advice_add_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(advice-add 'my-fn :around '#'advice-wrapper)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'advice-add-face (save-excursion (goto-char (point-min)) (search-forward "advice-add") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_crush_face_overlay_face_at_beginning_of_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 3)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'pos1 (get-char-property 1 'face)
+       'pos2 (get-char-property 2 'face)
+       'pos3-after (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_crush_face_text_property_get_interval_plists_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAA")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 1 4 'fontified t)
+    (let ((ints (object-intervals (current-buffer))))
+      (list
+       'interval-count (length ints)
+       'first-interval (car ints)
+       'plist (cddr (car ints)))))))"##,
+    );
+}
