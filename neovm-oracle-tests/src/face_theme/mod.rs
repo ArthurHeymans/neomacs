@@ -5222,3 +5222,182 @@ fn ft_deep_face_with_minibuffer_text_properties_deep() {
      'completions-first-difference-facep (condition-case nil (facep 'completions-first-difference) (error 'no-face))))))"##,
     );
 }
+
+#[test]
+fn ft_hard_face_defface_custom_spec_set_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'defface-fbound (fboundp 'defface)
+   'custom-declare-face-fbound (fboundp 'custom-declare-face)
+   (condition-case nil
+       (progn
+         (defface my-custom-test-face '((t :weight bold :foreground "blue")) "Test face")
+         (facep 'my-custom-test-face))
+     (error 'no-defface))
+   'face-spec-after (condition-case nil (face-spec 'my-custom-test-face) (error 'no-spec))
+   'face-attr-weight (condition-case nil (face-attribute 'my-custom-test-face :weight nil 'default-on) (error 'no))
+   'face-attr-fg (condition-case nil (face-attribute 'my-custom-test-face :foreground nil 'default-on) (error 'no))
+   (condition-case nil
+       (progn (set-face-attribute 'my-custom-test-face nil :foreground 'unspecified :weight 'unspecified) 'reset-ok)
+     (error 'no-reset))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_spec_set_with_display_conditions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-spec-set-fbound (fboundp 'face-spec-set)
+   (condition-case nil
+       (progn
+         (face-spec-set 'default
+                        '(((class color) (min-colors 88) (background light))
+                          (:foreground "black" :background "white"))
+                        'face-defface-spec)
+         'set-with-condition-ok)
+     (error 'no-condition-set))
+   'face-spec-choose-with-display
+   (condition-case nil
+       (face-spec-choose '(((class color) :foreground "red")
+                           ((class mono) :foreground "black")
+                           (t :foreground "blue")))
+     (error 'no-choose))
+   'face-spec-match-p
+   (condition-case nil
+       (face-spec-match-p 'default
+                           '(((class color) (min-colors 88))
+                             (:foreground "black"))
+                           (selected-frame))
+     (error 'no-match-p))
+   'display-graphic-check (display-graphic-p)
+   'display-color-check (display-color-p)
+   (if (fboundp 'display-color-cells) (display-color-cells) 'no-cells))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_with_custom_theme_load_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'custom)
+  (list
+   'load-theme-fbound (fboundp 'load-theme)
+   'enable-theme-fbound (fboundp 'enable-theme)
+   'disable-theme-fbound (fboundp 'disable-theme)
+   'custom-enabled-themes-fbound (boundp 'custom-enabled-themes)
+   (if (boundp 'custom-enabled-themes)
+       (length custom-enabled-themes)
+     'no-enabled-themes)
+   'face-attr-before (face-attribute 'default :weight nil 'default-on)
+   (condition-case nil
+       (progn
+         (custom-theme-set-faces 'user
+                                 '(default ((t (:weight bold :slant italic)))))
+         'set-user-theme-ok)
+     (error 'no-set-user-theme))
+   'face-attr-after (face-attribute 'default :weight nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_set_face_attribute_foreground_background_rgb_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-rgb-face) (error nil))
+  (list
+   'set-fg-hex (condition-case nil (progn (set-face-foreground 'my-rgb-face "#FF0000" nil) 'ok) (error 'no))
+   'get-fg-hex (condition-case nil (face-foreground 'my-rgb-face nil 'default-on) (error 'no))
+   'set-fg-name (condition-case nil (progn (set-face-foreground 'my-rgb-face "DarkGreen" nil) 'ok) (error 'no))
+   'get-fg-name (condition-case nil (face-foreground 'my-rgb-face nil 'default-on) (error 'no))
+   'set-bg-hex (condition-case nil (progn (set-face-background 'my-rgb-face "#FFFF00" nil) 'ok) (error 'no))
+   'get-bg-hex (condition-case nil (face-background 'my-rgb-face nil 'default-on) (error 'no))
+   'set-fg-rgb (condition-case nil (progn (set-face-foreground 'my-rgb-face "#00FF00" nil) 'ok) (error 'no))
+   'set-bg-rgb (condition-case nil (progn (set-face-background 'my-rgb-face "#0000FF" nil) 'ok) (error 'no))
+   'get-fg-rgb (condition-case nil (face-foreground 'my-rgb-face nil 'default-on) (error 'no))
+   'get-bg-rgb (condition-case nil (face-background 'my-rgb-face nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_multiple_displays_face_attr_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'display-list-fbound (fboundp 'display-list)
+   (condition-case nil
+       (let ((displays (display-list)))
+         (list 'count (length displays) 'type (type-of displays)))
+     (error 'no-display-list))
+   'framep-selected (framep (selected-frame))
+   'face-attr-on-terminal (condition-case nil (face-attribute 'default :family nil t) (error 'no-term))
+   'face-attr-defaults (condition-case nil (face-attribute 'default :family) (error 'no-defs))
+   'x-display-list (if (fboundp 'x-display-list) (x-display-list) 'no-x-display)
+   'default-font-on-frame (condition-case nil (face-font 'default (selected-frame)) (error 'no-font))
+   'face-attr-multiple-frames (condition-case nil (list (face-attribute 'default :family nil 'default-on)
+                                                         (face-attribute 'default :family nil t)
+                                                         (face-attribute 'default :family))
+                                                        (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_add_text_properties_vs_put_text_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Add vs put text property test text here")
+    (put-text-property 1 5 'face 'bold)
+    (add-text-properties 5 15 '(face italic key1 val1 key2 val2))
+    (add-face-text-property 15 25 '(:foreground "red"))
+    (add-face-text-property 15 25 '(:weight bold))
+    (put-text-property 25 35 'face 'underline)
+    (put-text-property 25 35 'face '(:foreground "blue"))
+    (list
+     'put-only (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3))
+     'add-text-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1) (get-text-property pos 'key2))) '(5 10))
+     'add-face-text-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(15 20))
+     'put-override (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(25 30))
+     'all-text-properties (mapcar (lambda (pos) (goto-char pos) (text-properties-at pos)) '(3 10 20 30)))))"##,
+    );
+}
+
+#[test]
+fn ft_hard_face_with_nested_invisible_and_display() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Nested invisible display face buffer content")
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 10 20 'invisible t)
+    (put-text-property 10 20 'face 'italic)
+    (put-text-property 20 30 'display "REPLACED")
+    (put-text-property 20 30 'face 'underline)
+    (put-text-property 30 43 'face '(:foreground "red" :weight bold))
+    (put-text-property 30 43 'invisible t)
+    (put-text-property 30 43 'display "HIDDEN")
+    (list
+     'face-visible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5))
+     'face-invisible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible))) '(10 15))
+     'face-displayed (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'display))) '(20 25))
+     'face-both (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (get-text-property pos 'display))) '(30 35 40))
+     ;; Check char-property (considers overlays and text properties)
+     'char-prop-visible (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 20 30)))))"##,
+    );
+}
