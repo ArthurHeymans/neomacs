@@ -12921,3 +12921,165 @@ fn ft_pi_face_color_defined_p_various_formats_deep() {
    'color-values-fbound (fboundp 'color-values))))"##,
     );
 }
+
+#[test]
+fn ft_rho_face_property_overlap_precise_regions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHH")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 3 11 'face 'italic)
+    (put-text-property 8 16 'face 'underline)
+    (put-text-property 13 21 'face '(:foreground "red"))
+    (put-text-property 18 26 'face '(:background "yellow"))
+    (put-text-property 23 31 'face '(:foreground "blue"))
+    (put-text-property 28 36 'face '(:background "cyan"))
+    (put-text-property 33 41 'face '(:slant italic))
+    (list
+     'overlapping-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 6 8 11 13 16 18 21 23 26 28 31 33 36 40))
+     'last-write-wins-check (list (= (length (delete-dups (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 5))) 2)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_font_lock_syntactic_keyword_regions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c-mode)
+    (insert "int main() {\n  return 42;\n}\n")
+    (font-lock-fontify-buffer)
+    (mapcar
+     (lambda (needle)
+       (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))))
+     '("int" "main" "return" "42"))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_face_overlay_move_with_negative_start_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWW")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'initial-face (get-char-property 10 'face)
+       ;; Move backward (negative direction)
+       'after-move-back (progn (move-overlay ov 1 10) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 8 10 12 15 20)))
+       ;; Move forward
+       'after-move-fwd (progn (move-overlay ov 15 20) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 15 18 20 21)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_face_text_property_inherit_in_face_plist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Face plist with inherit property in text property test here end")
+    (put-text-property 1 56 'face '(:foreground "blue" :inherit bold :weight extra-bold :slant italic))
+    (list
+     'face-value (get-text-property 1 'face)
+     'facep (facep (get-text-property 1 'face))
+     'face-listp (listp (get-text-property 1 'face))
+     'face-plistp (plistp (get-text-property 1 'face))
+     'extract-fg (plist-get (get-text-property 1 'face) :foreground)
+     'extract-inherit (plist-get (get-text-property 1 'face) :inherit)
+     'extract-weight (plist-get (get-text-property 1 'face) :weight)
+     'extract-slant (plist-get (get-text-property 1 'face) :slant))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_font_lock_unfontify_region_exact_boundary_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun a () 1)\n")
+    (font-lock-ensure (point-min) (point-max))
+    (list
+     'all-fontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15))
+     ;; Unfontify exact region boundary
+     'unfontify-1-10 (progn (font-lock-unfontify-region 1 11) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 11)))
+     ;; Unfontify rest
+     'unfontify-rest (progn (font-lock-unfontify-region 11 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 11)))
+     ;; Re-fontify all
+     'refontify-all (progn (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 11)))))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_face_overlay_string_length_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string length face test content buffer data text here")
+    (let* ((before-str (propertize "[[[LONG-BEFORE-STRING]]]" 'face '(:foreground "red" :weight bold)))
+           (after-str (propertize "{{{LONG-AFTER-STRING}}}" 'face '(:foreground "blue" :slant italic)))
+           (ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string before-str)
+      (overlay-put ov 'after-string after-str)
+      (list
+       'before-len (length before-str)
+       'after-len (length after-str)
+       'before-face (get-text-property 0 before-str)
+       'after-face (get-text-property 0 after-str)
+       'overlay-face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_face_set_font_attribute_with_frame_parameter() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-frame-font-face) (error nil))
+  (list
+   'frame-font (condition-case nil (frame-parameter nil 'font) (error 'no))
+   'face-font (condition-case nil (face-font 'default nil) (error 'no))
+   'set-font-by-frame-param (condition-case nil (progn (set-face-font 'my-frame-font-face (frame-parameter nil 'font) nil) 'set) (error 'no))
+   'face-font-after-set (condition-case nil (face-font 'my-frame-font-face nil) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_rho_face_text_property_line_number_line_begin_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Line one with face property\nLine two with face property\nLine three with face property")
+    (put-text-property 1 27 'face 'bold)
+    (put-text-property 28 52 'face 'italic)
+    (put-text-property 53 78 'face 'underline)
+    (list
+     'faces-at-line-beginnings (mapcar (lambda (pos) (goto-char pos) (list pos (line-number-at-pos) (get-text-property pos 'face))) '(1 28 53))
+     'faces-at-line-ends (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(26 27 51 52 77 78))
+     'line-end-positions (save-excursion (goto-char (point-min)) (list (line-end-position 1) (line-end-position 2) (line-end-position 3)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
