@@ -25691,3 +25691,144 @@ fn ft_crack_face_face_attributes_merge_deep() {
    'merge-unspecified (condition-case nil (progn (set-face-attribute 'my-merge-face nil :foreground 'unspecified) (face-attribute 'my-merge-face :foreground nil 'default-on)) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_reach_face_overlay_face_variable_width_regions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 5 15)))
+      (overlay-put ov 'face 'italic)
+      (list
+       'inside (get-char-property 10 'face)
+       'before (get-char-property 3 'face)
+       'after (get-char-property 18 'face)
+       'on-boundary-start (get-char-property 5 'face)
+       'on-boundary-end (get-char-property 14 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_font_lock_fontify_declare_form() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun fn (x)\n  (declare (indent 1))\n  x)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'declare-face (save-excursion (goto-char (point-min)) (search-forward "declare") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_face_overlay_face_property_intervals_merge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'bold)
+    (list
+     'intervals (length (object-intervals (current-buffer)))
+     'face-pos1 (get-text-property 1 'face)
+     'face-pos5 (get-text-property 5 'face)
+     'face-pos6 (get-text-property 6 'face)
+     'face-pos10 (get-text-property 10 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_face_set_face_underline_only_color_no_style() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-simple-face) (error nil))
+  (list
+   'default (condition-case nil (face-attribute 'default :underline nil 'default-on) (error 'no))
+   'set-color-plain (condition-case nil (progn (set-face-underline 'my-ul-simple-face "red" nil) (face-attribute 'my-ul-simple-face :underline nil 'default-on)) (error 'no))
+   'set-t-toggle (condition-case nil (progn (set-face-underline 'my-ul-simple-face t nil) (face-attribute 'my-ul-simple-face :underline nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-underline 'my-ul-simple-face nil nil) (face-attribute 'my-ul-simple-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_font_lock_fontify_function_quote() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "#'my-function\n")
+    (font-lock-fontify-buffer)
+    (list
+     'fn-ref-face (save-excursion (goto-char (point-min)) (search-forward "#'") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_face_overlay_face_after_move_overlay_start() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 3 18)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'before (list (overlay-start ov) (overlay-end ov))
+       'after-move-start (progn (move-overlay ov 10 18) (list (overlay-start ov) (overlay-end ov) (get-char-property 5 'face) (get-char-property 12 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_face_text_property_interval_lengths_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 7 'face 'italic)
+    (put-text-property 7 11 'face 'underline)
+    (let ((ints (object-intervals (current-buffer))))
+      (list
+       'num-intervals (length ints)
+       'interval-lengths (mapcar (lambda (i) (- (cadr i) (car i))) ints)
+       'face-at-each-pos (mapcar (lambda (pos) (list pos (get-text-property pos 'face))) '(1 2 3 5 7 9 10)))))))"##,
+    );
+}
+
+#[test]
+fn ft_reach_font_lock_fontify_with_clause_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(let ((a 1) (b 2))\n  (+ a b))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'let-face (save-excursion (goto-char (point-min)) (search-forward "let") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
