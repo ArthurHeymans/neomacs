@@ -1863,3 +1863,216 @@ fn ft_extreme_org_face_cycle_edit_show_hide_repeat_deep() {
                         (list v0 v1 v2 v3 v4 v5 v6 v7)))))))))))))))"##,
     );
 }
+
+#[test]
+fn ft_yotta_face_with_undo_and_redo_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Undo redo face test")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 14 'face 'underline)
+    (put-text-property 14 19 'face '(:foreground "red"))
+    (let ((snap (lambda ()
+                  (mapcar (lambda (pos)
+                            (goto-char pos)
+                            (list pos (get-text-property pos 'face)))
+                          '(1 3 5 7 9 12 14 17)))))
+      (let ((v0 (funcall snap)))
+        ;; Edit: change some text
+        (goto-char 9)
+        (insert " NEW")
+        (let ((v1 (funcall snap)))
+          ;; Undo
+          (undo)
+          (let ((v2 (funcall snap)))
+            ;; Redo
+            (condition-case nil (and (fboundp 'redo) (redo)) (error nil))
+            (let ((v3 (funcall snap)))
+              ;; Another undo
+              (undo)
+              (let ((v4 (funcall snap)))
+                (list v0 v1 v2 v3 v4)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_yotta_face_empty_and_single_char_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    ;; Empty buffer
+    (let ((empty-faces (text-properties-at 1)))
+      ;; Single char buffer
+      (insert "X")
+      (put-text-property 1 2 'face 'bold)
+      (let ((single-face (get-text-property 1 'face)))
+        ;; Two chars: different faces
+        (goto-char 2)
+        (insert "Y")
+        (put-text-property 2 3 'face 'italic)
+        (list
+         'empty empty-faces
+         'single single-face
+         'two-chars (mapcar (lambda (pos) (list pos (get-text-property pos 'face))) '(1 2))
+         'property-boundaries (list (next-single-property-change 1 'face)
+                                     (next-single-property-change 2 'face))
+         'no-boundary (next-single-property-change 3 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_yotta_face_very_long_text_property_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    ;; Create a long chain of alternating face properties
+    (dotimes (i 20)
+      (insert (make-string 5 (+ ?A i))))
+    (let ((colors '("red" "green" "blue" "orange" "purple" "brown" "cyan" "magenta" "olive" "navy")))
+      (let ((i 0))
+        (while (< i 100)
+          (let ((fi (nth (mod i (length colors)) colors)))
+            (put-text-property (1+ i) (+ i 6) 'face (list :foreground fi :weight 'bold)))
+          (setq i (+ i 5))))
+      (list
+       ;; Spot checks
+       (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 20 30 50 75 95))
+       ;; Property intervals
+       (list 'intervals (length (object-intervals (current-buffer))))
+       ;; Next property changes
+       (mapcar (lambda (pos) (list pos (next-single-property-change pos 'face))) '(1 6 11 25 50))))))"##,
+    );
+}
+
+#[test]
+fn ft_yotta_face_property_copy_via_buffer_substring_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Copy-source\nBody content.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Capture rendered faces in source
+      (let ((source-faces
+             (mapcar (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (get-text-property (match-beginning 0) 'face)
+                                   (get-text-property (match-beginning 0) 'fontified))
+                             (list needle 'not-found nil))))
+                     '("TODO" "DONE" "Copy-source" "Body content"))))
+        ;; Copy text to another buffer
+        (let ((buf-content (buffer-substring (point-min) (point-max))))
+          (with-temp-buffer
+            (org-mode)
+            (insert buf-content)
+            (font-lock-ensure (point-min) (point-max))
+            (list
+             'source-faces source-faces
+             'target-faces
+             (mapcar (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (get-text-property (match-beginning 0) 'face)
+                                   (get-text-property (match-beginning 0) 'fontified))
+                             (list needle 'not-found nil))))
+                     '("TODO" "DONE" "Copy-source" "Body content")))))))))"##,
+    );
+}
+
+#[test]
+fn ft_yotta_face_with_eieio_object_text_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'eieio)
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "* TODO EIEIO face test\nBody.\n\n")
+    (font-lock-ensure (point-min) (point-max))
+    ;; Mix EIEIO objects as text properties
+    (condition-case nil
+        (let ((obj (list :name "test-obj" :value 42)))
+          (put-text-property 1 5 'eieio-object obj)
+          (put-text-property 1 5 'face 'bold)
+          (list 'with-eieio
+                (mapcar (lambda (pos)
+                          (goto-char pos)
+                          (list pos
+                                (get-text-property pos 'face)
+                                (get-text-property pos 'eieio-object)
+                                (get-text-property pos 'fontified)))
+                        '(1 3 5))
+                'eieio-props (text-properties-at 1)))
+      (error (list 'eieio-error
+                   (fboundp 'eieio-oref)
+                   (facep 'bold)
+                   (get-text-property 1 'face)
+                   (text-properties-at 1)))))))"##,
+    );
+}
+
+#[test]
+fn ft_yotta_face_with_buffer_local_variable_affects_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'face-remap)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO Buffer-local-test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "TODO")
+                      (list 'todo-face (get-text-property (match-beginning 0) 'face)
+                            'todo-line-face (get-text-property (line-beginning-position) 'face))))))
+        (let ((v0 (funcall snap)))
+          ;; Toggle org-fontify-todo-headline
+          (setq-local org-fontify-todo-headline nil)
+          (font-lock-flush)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            ;; Re-enable
+            (setq-local org-fontify-todo-headline t)
+            (font-lock-flush)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              ;; Toggle org-fontify-whole-heading-line
+              (setq-local org-fontify-whole-heading-line nil)
+              (font-lock-flush)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Re-enable
+                (setq-local org-fontify-whole-heading-line t)
+                (font-lock-flush)
+                (font-lock-ensure (point-min) (point-max))
+                (let ((v4 (funcall snap)))
+                  (list v0 v1 v2 v3 v4)))))))))))"##,
+    );
+}
