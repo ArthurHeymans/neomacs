@@ -12435,3 +12435,164 @@ fn ft_nu_face_text_property_read_after_write_deep() {
       (list (nreverse result) (length (object-intervals (current-buffer))))))))"##,
     );
 }
+
+#[test]
+fn ft_xi_face_font_lock_add_duplicate_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "DUPLICATE keyword test for font lock face duplicate check now")
+    ;; Add same keyword twice with different faces
+    (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 font-lock-warning-face t)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "DUPLICATE") (get-text-property (match-beginning 0) 'face))))
+      ;; Add duplicate with different face
+      (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "red") t)))
+      (font-lock-fontify-buffer)
+      (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "DUPLICATE") (get-text-property (match-beginning 0) 'face))))
+        ;; Add again with overwrite
+        (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "green" :weight bold) overwrite)))
+        (font-lock-fontify-buffer)
+        (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "DUPLICATE") (get-text-property (match-beginning 0) 'face))))
+          (list v0 v1 v2))))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_overlay_evaporate_with_insert_before_and_after() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Evaporate overlay before after insert face test content text data here")
+    (let ((ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'evaporate t)
+      (overlay-put ov 'before-string (propertize "<<<" 'face '(:foreground "red")))
+      (overlay-put ov 'after-string (propertize ">>>" 'face '(:foreground "blue"))))
+    (list
+     'before-evaporate (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(10 15 20 25 30 35))
+     'overlay-alive (and ov (overlay-buffer ov))
+     ;; Delete region to evaporate
+     'after-delete (progn (delete-region 15 30) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25 30 35)))
+     'overlay-dead (not (and ov (overlay-buffer ov)))))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_set_face_font_registry_attribute() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-registry-face) (error nil))
+  (list
+   'default-registry (face-attribute 'default :registry nil 'default-on)
+   'set-registry (condition-case nil (progn (set-face-attribute 'my-registry-face nil :registry "iso10646-1") (face-attribute 'my-registry-face :registry nil 'default-on)) (error 'no))
+   'set-registry-unspec (condition-case nil (progn (set-face-attribute 'my-registry-face nil :registry 'unspecified) (face-attribute 'my-registry-face :registry nil 'default-on)) (error 'no))
+   'font-registry-alternatives (if (boundp 'face-font-registry-alternatives) (length face-font-registry-alternatives) 'no-bound)))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_font_lock_mode_toggle_and_check_consistency() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* TODO Consistency test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        (font-lock-mode -1)
+        (font-lock-mode 1)
+        (font-lock-ensure (point-min) (point-max))
+        (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+          (list v0 v1)))))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_text_property_remove_list_of_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Remove list of properties face test buffer content text data here")
+    (add-text-properties 1 57 (list 'face 'bold 'prop1 'val1 'prop2 'val2 'prop3 'val3 'prop4 'val4 'fontified t))
+    (list
+     'before-remove (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'prop1) (get-text-property pos 'prop2) (get-text-property pos 'prop3) (get-text-property pos 'prop4))) '(1 20 40 56))
+     'after-remove-some (progn
+                          (remove-list-of-text-properties 10 45 '(face prop1 prop3))
+                          (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'prop1) (get-text-property pos 'prop2) (get-text-property pos 'prop3) (get-text-property pos 'prop4))) '(1 10 20 30 40 45 56)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_overlay_variable_width_properties_after_mods() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Variable width overlay after modifications face test content data")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'before-mod (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 15 20 25 30 35))
+       'after-resize (progn (move-overlay ov 15 25) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25 30 35)))
+       'after-move (progn (move-overlay ov 30 45) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25 30 35 40 45 50)))
+       (progn (delete-overlay ov) 'cleaned)))))
+"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_font_lock_no_mode_fontify_buffer_manually() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    ;; Don't set major mode at all, just font-lock manually
+    (font-lock-mode 1)
+    (insert "Manual font lock without mode buffer content text area")
+    (font-lock-fontify-buffer)
+    (list
+     'font-lock-mode font-lock-mode
+     'fontified-at-1 (get-text-property 1 'fontified)
+     'face-at-1 (get-text-property 1 'face)
+     'fontified-at-end (get-text-property (point-max) 'fontified)
+     'face-at-end (get-text-property (point-max) 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_xi_face_set_attribute_slant_weight_combo_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-slamt-weight-face) (error nil))
+  (list
+   'set-bold-italic (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'bold :slant 'italic) (list (face-attribute 'my-slamt-weight-face :weight nil 'default-on) (face-attribute 'my-slamt-weight-face :slant nil 'default-on))) (error 'no))
+   'set-light-oblique (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'light :slant 'oblique) (list (face-attribute 'my-slamt-weight-face :weight nil 'default-on) (face-attribute 'my-slamt-weight-face :slant nil 'default-on))) (error 'no))
+   'set-normal-normal (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'normal :slant 'normal) (list (face-attribute 'my-slamt-weight-face :weight nil 'default-on) (face-attribute 'my-slamt-weight-face :slant nil 'default-on))) (error 'no))
+   'set-heavy-italic (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'heavy :slant 'italic) (list (face-attribute 'my-slamt-weight-face :weight nil 'default-on) (face-attribute 'my-slamt-weight-face :slant nil 'default-on))) (error 'no))
+   'unspec-both (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'unspecified :slant 'unspecified) 'ok) (error 'no)))))"##,
+    );
+}
