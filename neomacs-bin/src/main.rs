@@ -1065,7 +1065,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn hide_popup_menu(&mut self) -> Result<(), String> {
-        self.send_render_command(RenderCommand::Ui(UiCommand::HidePopupMenu), "failed to hide popup menu")
+        self.send_render_command(
+            RenderCommand::Ui(UiCommand::HidePopupMenu),
+            "failed to hide popup menu",
+        )
     }
 
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
@@ -1098,12 +1101,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         frame_id: neovm_core::window::FrameId,
         geometry_hints: neovm_core::window::GuiFrameGeometryHints,
     ) -> Result<(), String> {
-        let frame =
-            if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
-                FrameRef::Primary
-            } else {
-                FrameRef::Frame(frame_id.0)
-            };
+        let frame = if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
+            FrameRef::Primary
+        } else {
+            FrameRef::Frame(frame_id.0)
+        };
         self.send_render_command(
             RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
                 frame,
@@ -1991,7 +1993,8 @@ fn spawn_gui_evaluator_worker(
             match outcome {
                 Ok(exit) => exit,
                 Err(payload) => {
-                    let _ = cmd_tx_for_panic.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
+                    let _ = cmd_tx_for_panic
+                        .try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
                     render_waker_for_panic.wake();
                     std::panic::resume_unwind(payload);
                 }
@@ -2106,7 +2109,9 @@ fn run_gui_evaluator_worker(
     }
 
     tracing::info!("GUI evaluator shutting down render loop...");
-    let _ = emacs_comms.cmd_tx.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
+    let _ = emacs_comms
+        .cmd_tx
+        .try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
     render_waker.wake();
 
     if let Some(request) = evaluator.shutdown_request() {
@@ -2380,9 +2385,9 @@ pub fn run(mode: RuntimeMode) {
 
     // 11. Shutdown
     tracing::info!("Shutting down...");
-    let _ = emacs_comms
-        .cmd_tx
-        .try_send(neomacs_display_runtime::thread_comm::RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
+    let _ = emacs_comms.cmd_tx.try_send(
+        neomacs_display_runtime::thread_comm::RenderCommand::Lifecycle(LifecycleCommand::Shutdown),
+    );
     frontend.join();
     if tty_init::should_enable_live_tty_io(&startup) {
         tty_init::tty_shutdown_terminal();

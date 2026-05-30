@@ -2,8 +2,13 @@ use std::collections::HashMap;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
-use super::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
-use super::state::{ChildFrameStyle, FpsCounter, GuiChromeInteractionState, ToolbarResources, TypingSpeedState, WindowChrome};
+use super::frame_windows::{
+    FrameLifecycle, GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState,
+};
+use super::state::{
+    ChildFrameStyle, FpsCounter, GuiChromeInteractionState, ToolbarResources, TypingSpeedState,
+    WindowChrome,
+};
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
 };
@@ -469,7 +474,8 @@ impl RenderApp {
         let cursor_visible = render.cursor.blink_on;
 
         if need_offscreen {
-            render.compositor.transitions.current_is_a = !render.compositor.transitions.current_is_a;
+            render.compositor.transitions.current_is_a =
+                !render.compositor.transitions.current_is_a;
             ensure_frame_offscreen_textures(
                 renderer,
                 &mut render.compositor.transitions,
@@ -479,13 +485,15 @@ impl RenderApp {
 
             let current_view = if render.compositor.transitions.current_is_a {
                 render
-                    .compositor.transitions
+                    .compositor
+                    .transitions
                     .offscreen_a
                     .as_ref()
                     .map(|(_, view, _)| view as *const wgpu::TextureView)
             } else {
                 render
-                    .compositor.transitions
+                    .compositor
+                    .transitions
                     .offscreen_b
                     .as_ref()
                     .map(|(_, view, _)| view as *const wgpu::TextureView)
@@ -512,13 +520,15 @@ impl RenderApp {
 
             let current_bg = if render.compositor.transitions.current_is_a {
                 render
-                    .compositor.transitions
+                    .compositor
+                    .transitions
                     .offscreen_a
                     .as_ref()
                     .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
             } else {
                 render
-                    .compositor.transitions
+                    .compositor
+                    .transitions
                     .offscreen_b
                     .as_ref()
                     .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
@@ -662,11 +672,13 @@ impl RenderApp {
         );
 
         let menu_bar_height = render
-            .chrome.menu_bar
+            .chrome
+            .menu_bar
             .as_ref()
             .map_or(0.0, |menu_bar| menu_bar.height);
         let compact_bar_height = render
-            .chrome.compact_bar
+            .chrome
+            .compact_bar
             .as_ref()
             .map_or(0.0, |compact_bar| compact_bar.height);
         Self::render_frame_chrome_overlays(
@@ -682,7 +694,8 @@ impl RenderApp {
                 )),
                 chrome_interaction: render.chrome.interaction,
                 menu_bar: render
-                    .chrome.menu_bar
+                    .chrome
+                    .menu_bar
                     .as_ref()
                     .map(|menu_bar| GuiFrameMenuBarOverlay {
                         items: &menu_bar.items,
@@ -691,7 +704,8 @@ impl RenderApp {
                         bg: menu_bar.bg,
                     }),
                 tool_bar: render
-                    .chrome.tool_bar
+                    .chrome
+                    .tool_bar
                     .as_ref()
                     .map(|tool_bar| GuiFrameToolBarOverlay {
                         items: &tool_bar.items,
@@ -755,7 +769,8 @@ impl RenderApp {
             &mut render.overlays.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
-            render.compositor.transitions.crossfades.len() + render.compositor.transitions.scroll_slides.len(),
+            render.compositor.transitions.crossfades.len()
+                + render.compositor.transitions.scroll_slides.len(),
             native.width,
             native.height,
         ) {
@@ -950,7 +965,9 @@ impl RenderApp {
             self.extra_letter_spacing,
         ) {
             if is_primary_frame {
-                let (w, h) = self.frame_windows.get(emacs_frame_id)
+                let (w, h) = self
+                    .frame_windows
+                    .get(emacs_frame_id)
                     .map(|ws| ws.native_size())
                     .unwrap_or((0, 0));
                 surface_readback::maybe_log_first_frame_surface_readback(

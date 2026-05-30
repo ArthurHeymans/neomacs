@@ -342,7 +342,8 @@ impl GuiFrameRenderState {
 
     pub(super) fn populate_glyph_atlas(&mut self, device: &wgpu::Device, scale_factor: f64) {
         if self.compositor.glyph_atlas.is_none() {
-            self.compositor.glyph_atlas = Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
+            self.compositor.glyph_atlas =
+                Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
         }
     }
 
@@ -351,9 +352,16 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
-        self.compositor.glyph_atlas.as_ref().map_or((13.0, 17.0, 13.0 * 0.6), |atlas| {
-            (atlas.default_font_size(), atlas.default_line_height(), atlas.default_char_width())
-        })
+        self.compositor
+            .glyph_atlas
+            .as_ref()
+            .map_or((13.0, 17.0, 13.0 * 0.6), |atlas| {
+                (
+                    atlas.default_font_size(),
+                    atlas.default_line_height(),
+                    atlas.default_char_width(),
+                )
+            })
     }
 
     pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
@@ -539,7 +547,9 @@ impl GuiFrameRenderState {
     ) {
         self.overlays.visual_bell_start = Some(now);
         if cursor_error_pulse_enabled {
-            self.compositor.renderer_effects.trigger_cursor_error_pulse(now);
+            self.compositor
+                .renderer_effects
+                .trigger_cursor_error_pulse(now);
         }
         if edge_snap_enabled {
             let selected_info = self.compositor.current_frame.as_ref().and_then(|frame| {
@@ -568,7 +578,10 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn take_current_frame_for_render(&mut self) -> Option<FrameGlyphBuffer> {
-        self.compositor.current_frame.as_mut().map(Self::take_frame_for_render)
+        self.compositor
+            .current_frame
+            .as_mut()
+            .map(Self::take_frame_for_render)
     }
 
     pub(super) fn take_frame_for_render(current_frame: &mut FrameGlyphBuffer) -> FrameGlyphBuffer {
@@ -625,7 +638,9 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn mark_active_visuals_dirty(&mut self) -> bool {
-        if !self.compositor.renderer_effects.needs_redraw() && !self.compositor.transitions.has_active() {
+        if !self.compositor.renderer_effects.needs_redraw()
+            && !self.compositor.transitions.has_active()
+        {
             return false;
         }
         self.compositor.dirty = true;
@@ -633,7 +648,8 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn trigger_click_halo(&mut self, x: f32, y: f32, now: Instant, duration_ms: u32) {
-        self.compositor.renderer_effects
+        self.compositor
+            .renderer_effects
             .trigger_click_halo(x, y, now, duration_ms);
         self.compositor.dirty = true;
     }
@@ -664,8 +680,9 @@ impl GuiFrameRenderState {
                 1.0
             };
             if diff > 0.0 {
-                self.overlays.idle_dim.current_alpha =
-                    (self.overlays.idle_dim.current_alpha + fade_speed * config.opacity).min(target_alpha);
+                self.overlays.idle_dim.current_alpha = (self.overlays.idle_dim.current_alpha
+                    + fade_speed * config.opacity)
+                    .min(target_alpha);
             } else {
                 self.overlays.idle_dim.current_alpha =
                     (self.overlays.idle_dim.current_alpha - fade_speed * config.opacity).max(0.0);
@@ -701,7 +718,11 @@ impl GuiFrameRenderState {
                 continue;
             }
             live_visual_cursor_ids.insert(cursor.window_id);
-            let state = self.compositor.visual_cursors.entry(cursor.window_id).or_default();
+            let state = self
+                .compositor
+                .visual_cursors
+                .entry(cursor.window_id)
+                .or_default();
             cursor_config(state);
             let (_, target_moved) = state.set_target(CursorTarget {
                 window_id: cursor.window_id,
@@ -717,7 +738,8 @@ impl GuiFrameRenderState {
                 self.compositor.dirty = true;
             }
         }
-        self.compositor.visual_cursors
+        self.compositor
+            .visual_cursors
             .retain(|id, _| live_visual_cursor_ids.contains(id));
     }
 
@@ -736,7 +758,8 @@ impl GuiFrameRenderState {
             return;
         }
         let visual_cursor_rects: HashMap<i64, (f32, f32, f32, f32)> = self
-            .compositor.visual_cursors
+            .compositor
+            .visual_cursors
             .iter()
             .map(|(id, state)| {
                 (
@@ -853,36 +876,64 @@ impl FrameLifecycle {
 
     pub fn set_ime_enabled(&mut self, enabled: bool) {
         match self {
-            Self::Active { ime_enabled: ie, .. } => *ie = enabled,
-            Self::Pending { ime_enabled: ie, .. } => *ie = enabled,
+            Self::Active {
+                ime_enabled: ie, ..
+            } => *ie = enabled,
+            Self::Pending {
+                ime_enabled: ie, ..
+            } => *ie = enabled,
         }
     }
 
     pub fn mouse_hidden_for_typing(&self) -> bool {
         match self {
-            Self::Active { mouse_hidden_for_typing: m, .. } => *m,
-            Self::Pending { mouse_hidden_for_typing: m, .. } => *m,
+            Self::Active {
+                mouse_hidden_for_typing: m,
+                ..
+            } => *m,
+            Self::Pending {
+                mouse_hidden_for_typing: m,
+                ..
+            } => *m,
         }
     }
 
     pub fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
         match self {
-            Self::Active { mouse_hidden_for_typing: m, .. } => *m = hidden,
-            Self::Pending { mouse_hidden_for_typing: m, .. } => *m = hidden,
+            Self::Active {
+                mouse_hidden_for_typing: m,
+                ..
+            } => *m = hidden,
+            Self::Pending {
+                mouse_hidden_for_typing: m,
+                ..
+            } => *m = hidden,
         }
     }
 
     pub fn last_ime_cursor_area(&self) -> Option<ImeCursorArea> {
         match self {
-            Self::Active { last_ime_cursor_area, .. } => *last_ime_cursor_area,
-            Self::Pending { last_ime_cursor_area, .. } => *last_ime_cursor_area,
+            Self::Active {
+                last_ime_cursor_area,
+                ..
+            } => *last_ime_cursor_area,
+            Self::Pending {
+                last_ime_cursor_area,
+                ..
+            } => *last_ime_cursor_area,
         }
     }
 
     pub fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
         match self {
-            Self::Active { last_ime_cursor_area: l, .. } => *l = area,
-            Self::Pending { last_ime_cursor_area: l, .. } => *l = area,
+            Self::Active {
+                last_ime_cursor_area: l,
+                ..
+            } => *l = area,
+            Self::Pending {
+                last_ime_cursor_area: l,
+                ..
+            } => *l = area,
         }
     }
 
@@ -915,7 +966,11 @@ impl GuiFrameWindowState {
                 clear_frame_transition_textures(&mut self.render.compositor.transitions);
                 self.render.compositor.dirty = true;
             }
-            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+            FrameLifecycle::Pending {
+                width: pw,
+                height: ph,
+                ..
+            } => {
                 *pw = width;
                 *ph = height;
             }
@@ -932,7 +987,9 @@ impl GuiFrameWindowState {
                 }
                 self.render.compositor.dirty = true;
             }
-            FrameLifecycle::Pending { scale_factor: sf, .. } => {
+            FrameLifecycle::Pending {
+                scale_factor: sf, ..
+            } => {
                 *sf = effective_scale;
             }
         }
@@ -959,7 +1016,9 @@ impl GuiFrameWindowState {
         };
         match mode {
             3 => {
-                native.window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+                native
+                    .window
+                    .set_fullscreen(Some(Fullscreen::Borderless(None)));
                 native.chrome.is_fullscreen = true;
             }
             4 => {
@@ -981,7 +1040,11 @@ impl GuiFrameWindowState {
                 let size = window_size_from_emacs_pixels(width, height);
                 let _ = native.window.request_inner_size(size);
             }
-            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+            FrameLifecycle::Pending {
+                width: pw,
+                height: ph,
+                ..
+            } => {
                 *pw = width;
                 *ph = height;
             }
@@ -993,7 +1056,9 @@ impl GuiFrameWindowState {
             FrameLifecycle::Active { native, .. } => {
                 apply_window_geometry_hints(&native.window, geometry_hints);
             }
-            FrameLifecycle::Pending { geometry_hints: gh, .. } => {
+            FrameLifecycle::Pending {
+                geometry_hints: gh, ..
+            } => {
                 *gh = Some(geometry_hints);
             }
         }
@@ -1013,7 +1078,12 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if let FrameLifecycle::Active { native, mouse_hidden_for_typing, .. } = &mut self.lifecycle {
+        if let FrameLifecycle::Active {
+            native,
+            mouse_hidden_for_typing,
+            ..
+        } = &mut self.lifecycle
+        {
             if *mouse_hidden_for_typing != hidden {
                 native.window.set_cursor_visible(!hidden);
             }
@@ -1023,14 +1093,21 @@ impl GuiFrameWindowState {
 
     pub(super) fn reset_ime_cursor_area(&mut self) {
         match &mut self.lifecycle {
-            FrameLifecycle::Active { native, last_ime_cursor_area, .. } => {
+            FrameLifecycle::Active {
+                native,
+                last_ime_cursor_area,
+                ..
+            } => {
                 *last_ime_cursor_area = None;
                 native.window.set_ime_cursor_area(
                     PhysicalPosition::new(0.0, 0.0),
                     PhysicalSize::new(1.0, 1.0),
                 );
             }
-            FrameLifecycle::Pending { last_ime_cursor_area, .. } => {
+            FrameLifecycle::Pending {
+                last_ime_cursor_area,
+                ..
+            } => {
                 *last_ime_cursor_area = None;
             }
         }
@@ -1038,7 +1115,11 @@ impl GuiFrameWindowState {
 
     pub(super) fn update_ime_cursor_area(&mut self, area: ImeCursorArea) {
         match &mut self.lifecycle {
-            FrameLifecycle::Active { native, last_ime_cursor_area, .. } => {
+            FrameLifecycle::Active {
+                native,
+                last_ime_cursor_area,
+                ..
+            } => {
                 if *last_ime_cursor_area == Some(area) {
                     return;
                 }
@@ -1048,7 +1129,10 @@ impl GuiFrameWindowState {
                 );
                 *last_ime_cursor_area = Some(area);
             }
-            FrameLifecycle::Pending { last_ime_cursor_area, .. } => {
+            FrameLifecycle::Pending {
+                last_ime_cursor_area,
+                ..
+            } => {
                 *last_ime_cursor_area = Some(area);
             }
         }
@@ -1187,7 +1271,11 @@ impl GuiFrameWindowState {
 
     pub fn set_pending_size(&mut self, width: u32, height: u32) {
         match &mut self.lifecycle {
-            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+            FrameLifecycle::Pending {
+                width: pw,
+                height: ph,
+                ..
+            } => {
                 *pw = width;
                 *ph = height;
             }
@@ -1282,7 +1370,8 @@ impl GuiFrameWindowManager {
         let old_key = FrameKey::from_primary(self.primary_emacs_frame_id);
         self.primary_emacs_frame_id = Some(emacs_frame_id);
         if let Some(window_state) = self.windows.remove(&old_key) {
-            self.windows.insert(FrameKey::Adopted(emacs_frame_id), window_state);
+            self.windows
+                .insert(FrameKey::Adopted(emacs_frame_id), window_state);
         }
         if let Some(ws) = self.windows.get_mut(&FrameKey::Adopted(emacs_frame_id)) {
             ws.render.set_emacs_frame_id(emacs_frame_id);
@@ -1308,7 +1397,8 @@ impl GuiFrameWindowManager {
     }
 
     pub fn has_secondary_window(&self, emacs_frame_id: u64) -> bool {
-        self.windows.contains_key(&FrameKey::Adopted(emacs_frame_id))
+        self.windows
+            .contains_key(&FrameKey::Adopted(emacs_frame_id))
     }
 
     fn primary_frame_key(&self) -> FrameKey {
@@ -1413,7 +1503,10 @@ impl GuiFrameWindowManager {
     ) {
         let pending = std::mem::take(&mut self.pending_creates);
         for req in pending {
-            if self.windows.contains_key(&FrameKey::Adopted(req.emacs_frame_id)) {
+            if self
+                .windows
+                .contains_key(&FrameKey::Adopted(req.emacs_frame_id))
+            {
                 tracing::warn!("Window for frame {} already exists", req.emacs_frame_id);
                 continue;
             }
@@ -1639,9 +1732,13 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
-        self.windows
-            .values()
-            .any(|window_state| window_state.render.compositor.renderer_effects.needs_redraw())
+        self.windows.values().any(|window_state| {
+            window_state
+                .render
+                .compositor
+                .renderer_effects
+                .needs_redraw()
+        })
     }
 
     pub(super) fn any_top_level_transitions_active(&self) -> bool {
@@ -1667,7 +1764,10 @@ impl GuiFrameWindowManager {
         let primary_winit_id = self.primary_winit_id;
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            let is_primary = window_state.lifecycle.native().is_some_and(|n| primary_winit_id == Some(n.window.id()));
+            let is_primary = window_state
+                .lifecycle
+                .native()
+                .is_some_and(|n| primary_winit_id == Some(n.window.id()));
             dirty |= window_state.render.tick_cursor_blink(
                 now,
                 cursor_wake_enabled && is_primary,
@@ -1791,13 +1891,23 @@ impl GuiFrameWindowManager {
 
     pub(super) fn clear_top_level_crossfade_transitions(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.compositor.transitions.crossfades.clear();
+            window_state
+                .render
+                .compositor
+                .transitions
+                .crossfades
+                .clear();
         });
     }
 
     pub(super) fn clear_top_level_scroll_transitions(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
-            window_state.render.compositor.transitions.scroll_slides.clear();
+            window_state
+                .render
+                .compositor
+                .transitions
+                .scroll_slides
+                .clear();
         });
     }
 

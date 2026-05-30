@@ -230,42 +230,22 @@ pub enum WindowCommand {
         bg_b: f32,
     },
     /// Change the mouse pointer cursor shape (arrow, hand, ibeam, etc.)
-    SetMouseCursor {
-        cursor_type: i32,
-    },
+    SetMouseCursor { cursor_type: i32 },
     /// Warp (move) the mouse pointer to given pixel position
-    WarpMouse {
-        x: i32,
-        y: i32,
-    },
+    WarpMouse { x: i32, y: i32 },
     /// Set the window title
-    SetWindowTitle {
-        title: String,
-    },
+    SetWindowTitle { title: String },
     /// Set the title for a specific GUI frame window.
     /// `frame.raw_id() == 0` also targets the adopted primary window.
-    SetFrameWindowTitle {
-        frame: FrameRef,
-        title: String,
-    },
+    SetFrameWindowTitle { frame: FrameRef, title: String },
     /// Set fullscreen mode (0=none, 1=fullscreen, 4=maximized)
-    SetWindowFullscreen {
-        mode: u32,
-    },
+    SetWindowFullscreen { mode: u32 },
     /// Minimize/iconify the window
-    SetWindowMinimized {
-        minimized: bool,
-    },
+    SetWindowMinimized { minimized: bool },
     /// Set window position
-    SetWindowPosition {
-        x: i32,
-        y: i32,
-    },
+    SetWindowPosition { x: i32, y: i32 },
     /// Request window inner size change
-    SetWindowSize {
-        width: u32,
-        height: u32,
-    },
+    SetWindowSize { width: u32, height: u32 },
     /// Request resizing a specific GUI frame window.
     /// `frame.raw_id() == 0` also targets the adopted primary window.
     ResizeWindow {
@@ -281,9 +261,7 @@ pub enum WindowCommand {
         geometry_hints: GuiFrameGeometryHints,
     },
     /// Set window decorations (title bar, borders)
-    SetWindowDecorated {
-        decorated: bool,
-    },
+    SetWindowDecorated { decorated: bool },
     /// Create a new OS window for a top-level Emacs frame
     CreateWindow {
         frame: FrameRef,
@@ -293,21 +271,13 @@ pub enum WindowCommand {
         geometry_hints: GuiFrameGeometryHints,
     },
     /// Associate the already-created primary OS window with its real Emacs frame ID.
-    AdoptPrimaryFrame {
-        frame: FrameRef,
-    },
+    AdoptPrimaryFrame { frame: FrameRef },
     /// Destroy an OS window for a top-level Emacs frame
-    DestroyWindow {
-        frame: FrameRef,
-    },
+    DestroyWindow { frame: FrameRef },
     /// Remove a child frame (sent when frame is deleted or unparented)
-    RemoveChildFrame {
-        frame_id: u64,
-    },
+    RemoveChildFrame { frame_id: u64 },
     /// Request window attention (urgency hint / taskbar flash)
-    RequestAttention {
-        urgent: bool,
-    },
+    RequestAttention { urgent: bool },
 }
 
 /// Asset and embedded-content commands.
@@ -472,20 +442,11 @@ pub enum TerminalCommand {
         shell: Option<String>,
     },
     /// Write input to a terminal
-    TerminalWrite {
-        id: u32,
-        data: Vec<u8>,
-    },
+    TerminalWrite { id: u32, data: Vec<u8> },
     /// Resize a terminal
-    TerminalResize {
-        id: u32,
-        cols: u16,
-        rows: u16,
-    },
+    TerminalResize { id: u32, cols: u16, rows: u16 },
     /// Destroy a terminal
-    TerminalDestroy {
-        id: u32,
-    },
+    TerminalDestroy { id: u32 },
     /// Set floating terminal position and opacity
     TerminalSetFloat {
         id: u32,
@@ -545,10 +506,7 @@ pub enum UiCommand {
         bg_b: f32,
     },
     /// Configure toolbar appearance
-    SetToolBarConfig {
-        icon_size: u32,
-        padding: u32,
-    },
+    SetToolBarConfig { icon_size: u32, padding: u32 },
     /// Set menu bar items (sent each frame when items change)
     SetMenuBar {
         items: Vec<MenuBarItem>,
@@ -566,15 +524,9 @@ pub enum UiCommand {
 #[derive(Debug)]
 pub enum ConfigCommand {
     /// Configure cursor blinking
-    SetCursorBlink {
-        enabled: bool,
-        interval_ms: u32,
-    },
+    SetCursorBlink { enabled: bool, interval_ms: u32 },
     /// Configure cursor animation (smooth motion)
-    SetCursorAnimation {
-        enabled: bool,
-        speed: f32,
-    },
+    SetCursorAnimation { enabled: bool, speed: f32 },
     /// Configure all animations
     SetAnimationConfig {
         cursor_enabled: bool,
@@ -591,30 +543,20 @@ pub enum ConfigCommand {
         duration_ms: u32,
     },
     /// Enable or disable font ligatures
-    SetLigaturesEnabled {
-        enabled: bool,
-    },
+    SetLigaturesEnabled { enabled: bool },
     /// Update visual effect configuration.
     /// The closure modifies the shared EffectsConfig in-place.
     UpdateEffect(EffectUpdater),
     /// Update a named cursor effect configuration.
     SetCursorEffect(CursorEffectCommand),
     /// Toggle scroll indicators and focus ring
-    SetScrollIndicators {
-        enabled: bool,
-    },
+    SetScrollIndicators { enabled: bool },
     /// Set custom title bar height (0 = hidden, >0 = show with given height)
-    SetTitlebarHeight {
-        height: f32,
-    },
+    SetTitlebarHeight { height: f32 },
     /// Toggle FPS counter overlay
-    SetShowFps {
-        enabled: bool,
-    },
+    SetShowFps { enabled: bool },
     /// Set window corner radius for borderless mode (0 = no rounding)
-    SetCornerRadius {
-        radius: f32,
-    },
+    SetCornerRadius { radius: f32 },
     /// Set extra spacing (line spacing in pixels, letter spacing in pixels)
     SetExtraSpacing {
         line_spacing: f32,

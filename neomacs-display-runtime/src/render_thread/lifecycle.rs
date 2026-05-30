@@ -87,14 +87,30 @@ impl RenderApp {
         if !self.lifecycle_flags.resumed_seen {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
-                self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
-                self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()).0,
-                self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()).1,
-                self.frame_windows.primary_window().expect("primary window state").chrome().title
+                self.frame_windows
+                    .primary_window()
+                    .and_then(|ws| ws.window())
+                    .is_some(),
+                self.frame_windows
+                    .primary_window()
+                    .map_or((0, 0), |ws| ws.native_size())
+                    .0,
+                self.frame_windows
+                    .primary_window()
+                    .map_or((0, 0), |ws| ws.native_size())
+                    .1,
+                self.frame_windows
+                    .primary_window()
+                    .expect("primary window state")
+                    .chrome()
+                    .title
             );
             self.lifecycle_flags.resumed_seen = true;
         }
-        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| !ws.lifecycle.is_active());
+        let needs_native = self
+            .frame_windows
+            .primary_window()
+            .is_some_and(|ws| !ws.lifecycle.is_active());
         if needs_native {
             let (width, height, title, decorations_enabled) = {
                 let primary = self.frame_windows.primary_window().unwrap();
@@ -139,7 +155,11 @@ impl RenderApp {
                     {
                         let primary = self.frame_windows.primary_window_mut().unwrap();
                         match &mut primary.lifecycle {
-                            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+                            FrameLifecycle::Pending {
+                                width: pw,
+                                height: ph,
+                                ..
+                            } => {
                                 *pw = phys.width;
                                 *ph = phys.height;
                             }
@@ -154,7 +174,13 @@ impl RenderApp {
 
                     self.init_wgpu(event_loop, window.clone());
 
-                    if let Some(geometry_hints) = self.frame_windows.primary_window().unwrap().lifecycle.geometry_hints() {
+                    if let Some(geometry_hints) = self
+                        .frame_windows
+                        .primary_window()
+                        .unwrap()
+                        .lifecycle
+                        .geometry_hints()
+                    {
                         apply_window_geometry_hints(&window, geometry_hints);
                     }
 
@@ -173,7 +199,10 @@ impl RenderApp {
         if !self.lifecycle_flags.about_to_wait_seen {
             tracing::info!(
                 "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
-                self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
+                self.frame_windows
+                    .primary_window()
+                    .and_then(|ws| ws.window())
+                    .is_some(),
                 self.frame_windows.count()
             );
             self.lifecycle_flags.about_to_wait_seen = true;
@@ -258,7 +287,11 @@ impl RenderApp {
                 self.frame_windows.request_redraw_for_top_level_windows();
             }
             if has_active_content {
-                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
+                if let Some(window) = self
+                    .frame_windows
+                    .primary_window()
+                    .and_then(|ws| ws.window())
+                {
                     window.request_redraw();
                 }
             }

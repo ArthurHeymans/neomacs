@@ -34,7 +34,10 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
     );
     {
         let primary = app.frame_windows.primary_window_mut().unwrap();
-        if let FrameLifecycle::Pending { scale_factor: sf, .. } = &mut primary.lifecycle {
+        if let FrameLifecycle::Pending {
+            scale_factor: sf, ..
+        } = &mut primary.lifecycle
+        {
             *sf = scale_factor;
         }
     }
@@ -60,17 +63,28 @@ fn make_test_device() -> Option<wgpu::Device> {
 }
 
 fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState> {
-    if app.frame_windows.primary_window().map(|ws| &ws.render).is_none() {
+    if app
+        .frame_windows
+        .primary_window()
+        .map(|ws| &ws.render)
+        .is_none()
+    {
         let device = make_test_device()?;
         let __render = GuiFrameRenderState::new(
             0,
             &device,
-            app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+            app.frame_windows
+                .primary_window()
+                .map_or(1.0, |ws| ws.scale_factor()),
             false,
         );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+        if let Some(window_state) = app.frame_windows.primary_window_mut() {
+            window_state.render = __render;
+        }
     }
-    app.frame_windows.primary_window_mut().map(|ws| &mut ws.render)
+    app.frame_windows
+        .primary_window_mut()
+        .map(|ws| &mut ws.render)
 }
 
 fn toolbar_item(index: u32) -> ToolBarItem {
@@ -189,19 +203,20 @@ fn compact_bar_tool_hit_test_offsets_after_menu_items() {
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.chrome.compact_bar = Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
-        menu_items: vec![MenuBarItem {
-            index: 1,
-            label: "File".to_string(),
-            key: "file".to_string(),
-        }],
-        tool_items: vec![toolbar_item(9)],
-        height: 30.0,
-        menu_fg: (0.0, 0.0, 0.0),
-        menu_bg: (0.0, 0.0, 0.0),
-        tool_fg: (0.0, 0.0, 0.0),
-        tool_bg: (0.0, 0.0, 0.0),
-    });
+    primary_frame.chrome.compact_bar =
+        Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
+            menu_items: vec![MenuBarItem {
+                index: 1,
+                label: "File".to_string(),
+                key: "file".to_string(),
+            }],
+            tool_items: vec![toolbar_item(9)],
+            height: 30.0,
+            menu_fg: (0.0, 0.0, 0.0),
+            menu_bg: (0.0, 0.0, 0.0),
+            tool_fg: (0.0, 0.0, 0.0),
+            tool_bg: (0.0, 0.0, 0.0),
+        });
     let x = app.compact_bar_menu_width() + app.toolbar.padding as f32 + 1.0;
 
     assert_eq!(app.compact_bar_tool_hit_test(x, 12.0), Some(9));
@@ -503,7 +518,13 @@ fn translate_control_text_ignores_printable_and_multi_char_text() {
 fn resize_edge_returns_none_when_decorations_enabled() {
     let app = make_test_app(800, 600, 1.0);
     // Default chrome has decorations_enabled = true
-    assert!(app.frame_windows.primary_window().expect("primary window state").chrome().decorations_enabled);
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .expect("primary window state")
+            .chrome()
+            .decorations_enabled
+    );
     assert_eq!(app.detect_resize_edge(0.0, 0.0), None);
     assert_eq!(app.detect_resize_edge(400.0, 300.0), None);
 }
@@ -515,7 +536,11 @@ fn resize_edge_returns_none_when_decorations_enabled() {
 #[test]
 fn resize_edge_top_left_corner() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     assert_eq!(
         app.detect_resize_edge(0.0, 0.0),
         Some(ResizeDirection::NorthWest)
@@ -529,7 +554,11 @@ fn resize_edge_top_left_corner() {
 #[test]
 fn resize_edge_top_right_corner() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // w=800, border=5 => on_right when x >= 795
     assert_eq!(
         app.detect_resize_edge(795.0, 0.0),
@@ -544,7 +573,11 @@ fn resize_edge_top_right_corner() {
 #[test]
 fn resize_edge_bottom_left_corner() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // h=600, border=5 => on_bottom when y >= 595
     assert_eq!(
         app.detect_resize_edge(0.0, 595.0),
@@ -559,7 +592,11 @@ fn resize_edge_bottom_left_corner() {
 #[test]
 fn resize_edge_bottom_right_corner() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     assert_eq!(
         app.detect_resize_edge(795.0, 595.0),
         Some(ResizeDirection::SouthEast)
@@ -577,7 +614,11 @@ fn resize_edge_bottom_right_corner() {
 #[test]
 fn resize_edge_left() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // Left edge, but not in top or bottom border zone
     assert_eq!(
         app.detect_resize_edge(0.0, 300.0),
@@ -592,7 +633,11 @@ fn resize_edge_left() {
 #[test]
 fn resize_edge_right() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     assert_eq!(
         app.detect_resize_edge(795.0, 300.0),
         Some(ResizeDirection::East)
@@ -606,7 +651,11 @@ fn resize_edge_right() {
 #[test]
 fn resize_edge_top() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // Top edge, but not in left or right border zone
     assert_eq!(
         app.detect_resize_edge(400.0, 0.0),
@@ -621,7 +670,11 @@ fn resize_edge_top() {
 #[test]
 fn resize_edge_bottom() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     assert_eq!(
         app.detect_resize_edge(400.0, 595.0),
         Some(ResizeDirection::South)
@@ -639,7 +692,11 @@ fn resize_edge_bottom() {
 #[test]
 fn resize_edge_interior_returns_none() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // Center of the window — well inside border zone
     assert_eq!(app.detect_resize_edge(400.0, 300.0), None);
     // Just inside each border
@@ -654,7 +711,11 @@ fn resize_edge_interior_returns_none() {
 #[test]
 fn resize_edge_boundary_exact() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // x=5.0 is NOT on_left (on_left requires x < 5.0)
     assert_eq!(app.detect_resize_edge(5.0, 300.0), None);
     // x=4.999... is still on_left
@@ -687,7 +748,11 @@ fn resize_edge_boundary_exact() {
 #[test]
 fn resize_edge_small_window() {
     let mut app = make_test_app(10, 10, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
     // At (0,0) — top-left corner (left and top overlap)
     assert_eq!(
         app.detect_resize_edge(0.0, 0.0),
@@ -714,7 +779,13 @@ fn resize_edge_small_window() {
 #[test]
 fn titlebar_returns_zero_when_decorations_enabled() {
     let app = make_test_app(800, 600, 1.0);
-    assert!(app.frame_windows.primary_window().expect("primary window state").chrome().decorations_enabled);
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .expect("primary window state")
+            .chrome()
+            .decorations_enabled
+    );
     assert_eq!(app.titlebar_hit_test(0.0, 0.0), 0);
     assert_eq!(app.titlebar_hit_test(400.0, 10.0), 0);
 }
@@ -726,8 +797,16 @@ fn titlebar_returns_zero_when_decorations_enabled() {
 #[test]
 fn titlebar_returns_zero_when_fullscreen() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().is_fullscreen = true;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .is_fullscreen = true;
     assert_eq!(app.titlebar_hit_test(400.0, 10.0), 0);
 }
 
@@ -738,16 +817,32 @@ fn titlebar_returns_zero_when_fullscreen() {
 #[test]
 fn titlebar_returns_zero_when_height_is_zero() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 0.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 0.0;
     assert_eq!(app.titlebar_hit_test(400.0, 10.0), 0);
 }
 
 #[test]
 fn titlebar_returns_zero_when_height_is_negative() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = -5.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = -5.0;
     assert_eq!(app.titlebar_hit_test(400.0, 0.0), 0);
 }
 
@@ -758,8 +853,16 @@ fn titlebar_returns_zero_when_height_is_negative() {
 #[test]
 fn titlebar_returns_zero_below_titlebar() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     // y >= titlebar_height means below
     assert_eq!(app.titlebar_hit_test(400.0, 30.0), 0);
     assert_eq!(app.titlebar_hit_test(400.0, 100.0), 0);
@@ -777,8 +880,16 @@ fn titlebar_returns_zero_below_titlebar() {
 #[test]
 fn titlebar_close_button() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     assert_eq!(app.titlebar_hit_test(754.0, 15.0), 2);
     assert_eq!(app.titlebar_hit_test(799.0, 0.0), 2);
 }
@@ -786,8 +897,16 @@ fn titlebar_close_button() {
 #[test]
 fn titlebar_maximize_button() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     assert_eq!(app.titlebar_hit_test(708.0, 15.0), 3);
     assert_eq!(app.titlebar_hit_test(753.9, 15.0), 3);
 }
@@ -795,8 +914,16 @@ fn titlebar_maximize_button() {
 #[test]
 fn titlebar_minimize_button() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     assert_eq!(app.titlebar_hit_test(662.0, 15.0), 4);
     assert_eq!(app.titlebar_hit_test(707.9, 15.0), 4);
 }
@@ -804,8 +931,16 @@ fn titlebar_minimize_button() {
 #[test]
 fn titlebar_drag_area() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     assert_eq!(app.titlebar_hit_test(0.0, 15.0), 1);
     assert_eq!(app.titlebar_hit_test(300.0, 15.0), 1);
     assert_eq!(app.titlebar_hit_test(661.9, 15.0), 1);
@@ -820,8 +955,16 @@ fn titlebar_drag_area() {
 #[test]
 fn titlebar_with_scale_factor() {
     let mut app = make_test_app(1600, 1200, 2.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     // Logical width = 1600/2.0 = 800
     // close_x = 800-46 = 754, max_x = 708, min_x = 662
     assert_eq!(app.titlebar_hit_test(760.0, 10.0), 2); // close
@@ -837,8 +980,16 @@ fn titlebar_with_scale_factor() {
 #[test]
 fn titlebar_button_boundaries() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     // Exact boundary: close_x = 754
     assert_eq!(app.titlebar_hit_test(754.0, 15.0), 2); // close
     assert_eq!(app.titlebar_hit_test(753.9, 15.0), 3); // maximize (just left of close)
@@ -857,8 +1008,16 @@ fn titlebar_button_boundaries() {
 #[test]
 fn titlebar_y_boundary() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 30.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 30.0;
     // Just inside (y=29.9 < 30.0)
     assert_eq!(app.titlebar_hit_test(100.0, 29.9), 1);
     // Exactly at boundary (y=30.0 >= 30.0)
@@ -872,8 +1031,16 @@ fn titlebar_y_boundary() {
 #[test]
 fn titlebar_custom_height() {
     let mut app = make_test_app(800, 600, 1.0);
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = false;
-    app.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().titlebar_height = 50.0;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .decorations_enabled = false;
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary window state")
+        .chrome_mut()
+        .titlebar_height = 50.0;
     // y=49 is in the titlebar
     assert_eq!(app.titlebar_hit_test(100.0, 49.0), 1);
     // y=50 is below

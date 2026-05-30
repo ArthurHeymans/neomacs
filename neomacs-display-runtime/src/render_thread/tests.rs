@@ -1,7 +1,7 @@
-use crate::thread_comm::FrameRef;
 use super::RenderApp;
 use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::thread_comm::FrameRef;
 use crate::thread_comm::{ThreadComms, ToolBarItem, UiCommand, WindowCommand};
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
@@ -144,12 +144,28 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     let mut app = make_test_app();
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_window(WindowCommand::DestroyWindow { frame: FrameRef::Primary });
+    app.handle_window(WindowCommand::DestroyWindow {
+        frame: FrameRef::Primary,
+    });
 
     assert!(app.frame_windows.primary_window().is_none());
-    assert!(app.frame_windows.primary_window().map(|ws| &ws.render).is_none());
-    assert!(app.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).is_none());
-    assert!(!app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
+            .is_none()
+    );
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.compositor.current_frame.as_ref())
+            .is_none()
+    );
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
     assert!(app.frame_windows.primary_window().is_none());
     assert_eq!(app.frame_windows.primary_frame_id(), None);
 }
@@ -164,8 +180,17 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
     });
 
     assert!(app.frame_windows.primary_window().is_none());
-    assert!(app.frame_windows.primary_window().map(|ws| &ws.render).is_none());
-    assert!(!app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
+            .is_none()
+    );
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
     assert!(app.frame_windows.primary_window().is_none());
     assert_eq!(app.frame_windows.primary_frame_id(), None);
     assert!(app.frame_windows.pending_destroys.is_empty());
@@ -190,12 +215,14 @@ fn pre_bootstrap_primary_resize_updates_pending_size() {
         geometry_hints,
     });
 
-    assert_eq!(app.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()), (1024, 768));
-    let primary = app.frame_windows.primary_window().unwrap();
     assert_eq!(
-        primary.lifecycle.geometry_hints(),
-        Some(geometry_hints)
+        app.frame_windows
+            .primary_window()
+            .map_or((0, 0), |ws| ws.native_size()),
+        (1024, 768)
     );
+    let primary = app.frame_windows.primary_window().unwrap();
+    assert_eq!(primary.lifecycle.geometry_hints(), Some(geometry_hints));
 }
 
 #[test]
@@ -207,7 +234,12 @@ fn pre_bootstrap_set_window_size_updates_native_fallback_size() {
         height: 700,
     });
 
-    assert_eq!(app.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()), (900, 700));
+    assert_eq!(
+        app.frame_windows
+            .primary_window()
+            .map_or((0, 0), |ws| ws.native_size()),
+        (900, 700)
+    );
 }
 
 #[test]
@@ -216,7 +248,13 @@ fn pre_bootstrap_window_decorations_update_native_fallback_chrome() {
 
     app.handle_window(WindowCommand::SetWindowDecorated { decorated: false });
 
-    assert!(!app.frame_windows.primary_window().expect("primary window state").chrome().decorations_enabled);
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .expect("primary window state")
+            .chrome()
+            .decorations_enabled
+    );
 }
 
 #[test]
@@ -228,10 +266,14 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_window(WindowCommand::AdoptPrimaryFrame {
         frame: FrameRef::Frame(0x1000),
@@ -239,7 +281,10 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
 
     assert_eq!(app.frame_windows.primary_frame_id(), Some(0x1000));
     assert_eq!(
-        app.frame_windows.primary_window().map(|ws| &ws.render).map(|frame| frame.emacs_frame_id),
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
+            .map(|frame| frame.emacs_frame_id),
         Some(0x1000)
     );
 }
@@ -253,10 +298,14 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
     app.handle_ui(UiCommand::ShowPopupMenu {
@@ -276,8 +325,17 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
         bg: None,
     });
 
-    assert!(app.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_some());
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.overlays.popup_menu.as_ref())
+            .is_some()
+    );
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -289,10 +347,14 @@ fn primary_toolbar_command_marks_render_state_dirty() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_ui(UiCommand::SetToolBar {
         items: vec![ToolBarItem {
@@ -313,8 +375,17 @@ fn primary_toolbar_command_marks_render_state_dirty() {
         bg_b: 0.0,
     });
 
-    assert!(app.frame_windows.primary_window().and_then(|ws| ws.render.chrome.tool_bar.as_ref()).is_some());
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.chrome.tool_bar.as_ref())
+            .is_some()
+    );
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -326,10 +397,14 @@ fn primary_menubar_command_marks_render_state_dirty() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_ui(UiCommand::SetMenuBar {
         items: vec![MenuBarItem {
@@ -346,8 +421,17 @@ fn primary_menubar_command_marks_render_state_dirty() {
         bg_b: 0.0,
     });
 
-    assert!(app.frame_windows.primary_window().and_then(|ws| ws.render.chrome.menu_bar.as_ref()).is_some());
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.chrome.menu_bar.as_ref())
+            .is_some()
+    );
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -359,10 +443,14 @@ fn primary_tooltip_command_marks_render_state_dirty() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_ui(UiCommand::ShowTooltip {
         frame: FrameRef::Primary,
@@ -378,11 +466,17 @@ fn primary_tooltip_command_marks_render_state_dirty() {
     });
 
     assert!(
-        app.frame_windows.primary_window().map(|ws| &ws.render)
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
             .and_then(|frame| frame.overlays.tooltip.as_ref())
             .is_some()
     );
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -394,17 +488,41 @@ fn hide_popup_menu_marks_primary_chrome_dirty_without_popup() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.menu_bar_active = Some(3)) } else { false };
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.compositor.dirty = false };
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render
+            .with_chrome_interaction_mut(|chrome| chrome.menu_bar_active = Some(3))
+    } else {
+        false
+    };
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render.compositor.dirty = false
+    };
 
     app.handle_ui(UiCommand::HidePopupMenu);
 
-    assert_eq!(app.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).menu_bar_active, None);
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert_eq!(
+        app.frame_windows
+            .primary_window()
+            .map_or(GuiChromeInteractionState::default(), |ws| ws
+                .render
+                .chrome
+                .interaction)
+            .menu_bar_active,
+        None
+    );
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -416,10 +534,14 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x2000),
@@ -438,8 +560,17 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
         bg: None,
     });
 
-    assert!(app.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_none());
-    assert!(!app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.overlays.popup_menu.as_ref())
+            .is_none()
+    );
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -451,10 +582,14 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
 
     app.handle_ui(UiCommand::ShowTooltip {
         frame: FrameRef::Frame(0x2000),
@@ -470,11 +605,17 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
     });
 
     assert!(
-        app.frame_windows.primary_window().map(|ws| &ws.render)
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
             .and_then(|frame| frame.overlays.tooltip.as_ref())
             .is_none()
     );
-    assert!(!app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        !app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -486,10 +627,14 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
     app.handle_ui(UiCommand::VisualBell {
@@ -497,11 +642,17 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
     });
 
     assert!(
-        app.frame_windows.primary_window().map(|ws| &ws.render)
+        app.frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
             .and_then(|frame| frame.overlays.visual_bell_start)
             .is_some()
     );
-    assert!(app.frame_windows.primary_window().is_some_and(|ws| ws.render.compositor.dirty));
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .is_some_and(|ws| ws.render.compositor.dirty)
+    );
 }
 
 #[test]
@@ -549,12 +700,19 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
     app.frame_windows.adopt_primary_frame_id(0x1000);
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0))) };
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)))
+    };
 
     let (x, y, frame_id) = app.pointer_target_at(12.0, 34.0);
 
@@ -583,12 +741,21 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     let __render = super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0))) };
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.compositor.dirty = false };
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)))
+    };
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render.compositor.dirty = false
+    };
 
     let mut secondary = FrameGlyphBuffer::with_size(320.0, 240.0);
     secondary.frame_id = 0x2000;
@@ -601,7 +768,10 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     app.poll_frame();
 
     assert_eq!(
-        app.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).map(|frame| frame.width),
+        app.frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.compositor.current_frame.as_ref())
+            .map(|frame| frame.width),
         Some(800.0)
     );
 }

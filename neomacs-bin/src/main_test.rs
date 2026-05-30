@@ -671,7 +671,9 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
     ));
     assert!(matches!(
         commands[1],
-        RenderCommand::Window(WindowCommand::DestroyWindow { frame: FrameRef::Primary })
+        RenderCommand::Window(WindowCommand::DestroyWindow {
+            frame: FrameRef::Primary
+        })
     ));
     assert_eq!(host.primary_frame_id, None);
     let cached_titles = host.last_window_titles.lock().expect("title cache");
@@ -938,9 +940,10 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
 
     let commands: Vec<_> = cmd_rx.try_iter().collect();
     assert!(
-        commands
-            .iter()
-            .any(|cmd| matches!(cmd, RenderCommand::Window(WindowCommand::SetWindowTitle { .. }))),
+        commands.iter().any(|cmd| matches!(
+            cmd,
+            RenderCommand::Window(WindowCommand::SetWindowTitle { .. })
+        )),
         "expected bootstrap adoption to set the primary window title, got {commands:?}"
     );
     assert!(
@@ -954,9 +957,10 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         "expected bootstrap adoption to publish primary window geometry hints, got {commands:?}"
     );
     assert!(
-        commands
-            .iter()
-            .any(|cmd| matches!(cmd, RenderCommand::Window(WindowCommand::AdoptPrimaryFrame { .. }))),
+        commands.iter().any(|cmd| matches!(
+            cmd,
+            RenderCommand::Window(WindowCommand::AdoptPrimaryFrame { .. })
+        )),
         "expected bootstrap adoption to publish the primary frame identity, got {commands:?}"
     );
     assert!(

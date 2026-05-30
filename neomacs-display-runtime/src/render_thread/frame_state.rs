@@ -47,12 +47,25 @@ impl RenderApp {
                 }
             });
 
-        if let Some(frame) = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()) {
+        if let Some(frame) = self
+            .frame_windows
+            .primary_window()
+            .and_then(|ws| ws.render.compositor.current_frame.as_ref())
+        {
             for (face_id, face) in &frame.faces {
                 faces.entry(*face_id).or_insert_with(|| face.clone());
             }
         }
-        for entry in self.frame_windows.primary_window().expect("primary child frames").render.compositor.child_frames.frames.values() {
+        for entry in self
+            .frame_windows
+            .primary_window()
+            .expect("primary child frames")
+            .render
+            .compositor
+            .child_frames
+            .frames
+            .values()
+        {
             for (face_id, face) in &entry.frame.faces {
                 faces.entry(*face_id).or_insert_with(|| face.clone());
             }
@@ -62,7 +75,11 @@ impl RenderApp {
         let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
         if has_new_faces {
             let face_count = self.faces.len();
-            if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
+            if let Some(primary_frame) = self
+                .frame_windows
+                .primary_window_mut()
+                .map(|ws| &mut ws.render)
+            {
                 tracing::info!(
                     "New face_ids detected (old={}, new={}), clearing primary glyph cache",
                     old_face_ids.len(),
@@ -77,7 +94,11 @@ impl RenderApp {
     }
 
     fn apply_primary_fallback_visual_cursor_animations(&mut self) {
-        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
+        if let Some(primary_frame) = self
+            .frame_windows
+            .primary_window_mut()
+            .map(|ws| &mut ws.render)
+        {
             primary_frame.apply_visual_cursor_animations();
         }
     }

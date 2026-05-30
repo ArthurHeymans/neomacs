@@ -194,7 +194,10 @@ fn thread_comms_input_channel_roundtrip() {
 fn thread_comms_cmd_channel_roundtrip() {
     let comms = ThreadComms::new().unwrap();
 
-    comms.cmd_tx.send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown)).unwrap();
+    comms
+        .cmd_tx
+        .send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown))
+        .unwrap();
 
     let received = comms.cmd_rx.try_recv().unwrap();
     match received {
@@ -240,11 +243,16 @@ fn thread_comms_cmd_channel_bounded_capacity() {
 
     // Fill up the command channel to capacity
     for _ in 0..COMMAND_CHANNEL_CAPACITY {
-        comms.cmd_tx.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown)).unwrap();
+        comms
+            .cmd_tx
+            .try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown))
+            .unwrap();
     }
 
     // Next try_send should fail (channel full)
-    let result = comms.cmd_tx.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
+    let result = comms
+        .cmd_tx
+        .try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
     assert!(
         result.is_err(),
         "cmd channel should be full after {} sends",
@@ -293,7 +301,9 @@ fn thread_comms_split_channels_work() {
     // Emacs sends command, render receives
     emacs
         .cmd_tx
-        .send(RenderCommand::Ui(UiCommand::VisualBell { frame: FrameRef::Frame(7) }))
+        .send(RenderCommand::Ui(UiCommand::VisualBell {
+            frame: FrameRef::Frame(7),
+        }))
         .unwrap();
     let cmd = render.cmd_rx.try_recv().unwrap();
     match cmd {
@@ -814,7 +824,9 @@ fn render_command_webkit_load_uri() {
 fn render_command_set_mouse_cursor() {
     let cmd = RenderCommand::Window(WindowCommand::SetMouseCursor { cursor_type: 2 });
     match cmd {
-        RenderCommand::Window(WindowCommand::SetMouseCursor { cursor_type }) => assert_eq!(cursor_type, 2),
+        RenderCommand::Window(WindowCommand::SetMouseCursor { cursor_type }) => {
+            assert_eq!(cursor_type, 2)
+        }
         other => panic!("Expected SetMouseCursor, got {:?}", other),
     }
 }
@@ -850,7 +862,9 @@ fn render_command_set_window_fullscreen() {
     for mode in [0u32, 1, 4] {
         let cmd = RenderCommand::Window(WindowCommand::SetWindowFullscreen { mode });
         match cmd {
-            RenderCommand::Window(WindowCommand::SetWindowFullscreen { mode: m }) => assert_eq!(m, mode),
+            RenderCommand::Window(WindowCommand::SetWindowFullscreen { mode: m }) => {
+                assert_eq!(m, mode)
+            }
             other => panic!("Expected SetWindowFullscreen, got {:?}", other),
         }
     }
@@ -860,7 +874,9 @@ fn render_command_set_window_fullscreen() {
 fn render_command_set_window_minimized() {
     let cmd = RenderCommand::Window(WindowCommand::SetWindowMinimized { minimized: true });
     match cmd {
-        RenderCommand::Window(WindowCommand::SetWindowMinimized { minimized }) => assert!(minimized),
+        RenderCommand::Window(WindowCommand::SetWindowMinimized { minimized }) => {
+            assert!(minimized)
+        }
         other => panic!("Expected SetWindowMinimized, got {:?}", other),
     }
 }
@@ -954,7 +970,9 @@ fn render_command_set_frame_geometry_hints() {
 fn render_command_set_window_decorated() {
     let cmd = RenderCommand::Window(WindowCommand::SetWindowDecorated { decorated: false });
     match cmd {
-        RenderCommand::Window(WindowCommand::SetWindowDecorated { decorated }) => assert!(!decorated),
+        RenderCommand::Window(WindowCommand::SetWindowDecorated { decorated }) => {
+            assert!(!decorated)
+        }
         other => panic!("Expected SetWindowDecorated, got {:?}", other),
     }
 }
@@ -1159,7 +1177,9 @@ fn render_command_hide_tooltip() {
 
 #[test]
 fn render_command_visual_bell() {
-    let cmd = RenderCommand::Ui(UiCommand::VisualBell { frame: FrameRef::Frame(99) });
+    let cmd = RenderCommand::Ui(UiCommand::VisualBell {
+        frame: FrameRef::Frame(99),
+    });
     match cmd {
         RenderCommand::Ui(UiCommand::VisualBell { frame }) => assert_eq!(frame.raw_id(), 99),
         other => panic!("Expected VisualBell, got {:?}", other),
@@ -1177,9 +1197,11 @@ fn render_command_request_attention() {
 
 #[test]
 fn render_command_update_effect() {
-    let cmd = RenderCommand::Config(ConfigCommand::UpdateEffect(EffectUpdater(Box::new(|_config| {
-        // no-op for testing
-    }))));
+    let cmd = RenderCommand::Config(ConfigCommand::UpdateEffect(EffectUpdater(Box::new(
+        |_config| {
+            // no-op for testing
+        },
+    ))));
     match cmd {
         RenderCommand::Config(ConfigCommand::UpdateEffect(_)) => {}
         other => panic!("Expected UpdateEffect, got {:?}", other),
@@ -1199,7 +1221,9 @@ fn render_command_set_scroll_indicators() {
 fn render_command_set_titlebar_height() {
     let cmd = RenderCommand::Config(ConfigCommand::SetTitlebarHeight { height: 32.0 });
     match cmd {
-        RenderCommand::Config(ConfigCommand::SetTitlebarHeight { height }) => assert_eq!(height, 32.0),
+        RenderCommand::Config(ConfigCommand::SetTitlebarHeight { height }) => {
+            assert_eq!(height, 32.0)
+        }
         other => panic!("Expected SetTitlebarHeight, got {:?}", other),
     }
 }
@@ -1292,7 +1316,9 @@ fn render_command_set_ligatures_enabled() {
 fn render_command_remove_child_frame() {
     let cmd = RenderCommand::Window(WindowCommand::RemoveChildFrame { frame_id: 0xDEAD });
     match cmd {
-        RenderCommand::Window(WindowCommand::RemoveChildFrame { frame_id }) => assert_eq!(frame_id, 0xDEAD),
+        RenderCommand::Window(WindowCommand::RemoveChildFrame { frame_id }) => {
+            assert_eq!(frame_id, 0xDEAD)
+        }
         other => panic!("Expected RemoveChildFrame, got {:?}", other),
     }
 }
@@ -1334,9 +1360,13 @@ fn render_command_create_window() {
 
 #[test]
 fn render_command_destroy_window() {
-    let cmd = RenderCommand::Window(WindowCommand::DestroyWindow { frame: FrameRef::Frame(99) });
+    let cmd = RenderCommand::Window(WindowCommand::DestroyWindow {
+        frame: FrameRef::Frame(99),
+    });
     match cmd {
-        RenderCommand::Window(WindowCommand::DestroyWindow { frame }) => assert_eq!(frame.raw_id(), 99),
+        RenderCommand::Window(WindowCommand::DestroyWindow { frame }) => {
+            assert_eq!(frame.raw_id(), 99)
+        }
         other => panic!("Expected DestroyWindow, got {:?}", other),
     }
 }
@@ -1796,12 +1826,20 @@ fn channel_sends_multiple_input_events_in_order() {
 fn channel_sends_multiple_commands_in_order() {
     let comms = ThreadComms::new().unwrap();
 
-    comms.cmd_tx.send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown)).unwrap();
     comms
         .cmd_tx
-        .send(RenderCommand::Ui(UiCommand::VisualBell { frame: FrameRef::Primary }))
+        .send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown))
         .unwrap();
-    comms.cmd_tx.send(RenderCommand::Ui(UiCommand::HideTooltip)).unwrap();
+    comms
+        .cmd_tx
+        .send(RenderCommand::Ui(UiCommand::VisualBell {
+            frame: FrameRef::Primary,
+        }))
+        .unwrap();
+    comms
+        .cmd_tx
+        .send(RenderCommand::Ui(UiCommand::HideTooltip))
+        .unwrap();
 
     match comms.cmd_rx.try_recv().unwrap() {
         RenderCommand::Lifecycle(LifecycleCommand::Shutdown) => {}

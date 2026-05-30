@@ -102,20 +102,33 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     let __render = super::super::frame_windows::GuiFrameRenderState::new(
         0,
         &device,
-        app.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor()),
+        app.frame_windows
+            .primary_window()
+            .map_or(1.0, |ws| ws.scale_factor()),
         app.frame_windows.fps_enabled,
     );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() { window_state.render = __render; }app.faces.insert(99, face(99));
+    if let Some(window_state) = app.frame_windows.primary_window_mut() {
+        window_state.render = __render;
+    }
+    app.faces.insert(99, face(99));
 
     let mut root = FrameGlyphBuffer::with_size(80.0, 32.0);
     root.faces.insert(7, face(7));
-    if let Some(ws) = app.frame_windows.primary_window_mut() { ws.render.set_current_frame(Some(root)) };
+    if let Some(ws) = app.frame_windows.primary_window_mut() {
+        ws.render.set_current_frame(Some(root))
+    };
 
     let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);
     child.frame_id = 0x2000;
     child.parent_id = 0;
     child.faces.insert(8, face(8));
-    app.frame_windows.primary_window_mut().expect("primary child frames mut").render.compositor.child_frames.update_frame(child);
+    app.frame_windows
+        .primary_window_mut()
+        .expect("primary child frames mut")
+        .render
+        .compositor
+        .child_frames
+        .update_frame(child);
 
     app.refresh_faces_from_frames();
 

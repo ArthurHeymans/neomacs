@@ -125,7 +125,11 @@ fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
 
     render.sync_cursor_config(&defaults, true);
 
-    let visual = render.compositor.visual_cursors.get(&7).expect("visual cursor");
+    let visual = render
+        .compositor
+        .visual_cursors
+        .get(&7)
+        .expect("visual cursor");
     assert!(!render.cursor.anim_enabled);
     assert!(!visual.anim_enabled);
     assert_eq!(visual.trail_size, 17.0);
@@ -166,7 +170,12 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
 
     render.apply_visual_cursor_animations();
 
-    let cursor = &render.compositor.current_frame.as_ref().unwrap().window_cursors[0];
+    let cursor = &render
+        .compositor
+        .current_frame
+        .as_ref()
+        .unwrap()
+        .window_cursors[0];
     assert_eq!(cursor.x, 11.0);
     assert_eq!(cursor.y, 12.0);
     assert_eq!(cursor.width, 13.0);

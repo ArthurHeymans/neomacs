@@ -110,7 +110,12 @@ impl RenderApp {
         {
             let primary = self.frame_windows.primary_window_mut().unwrap();
             match &mut primary.lifecycle {
-                FrameLifecycle::Pending { width: pw, height: ph, scale_factor: sf, .. } => {
+                FrameLifecycle::Pending {
+                    width: pw,
+                    height: ph,
+                    scale_factor: sf,
+                    ..
+                } => {
                     *pw = phys.width;
                     *ph = phys.height;
                     *sf = effective_scale;
@@ -168,36 +173,46 @@ impl RenderApp {
         });
         self.renderer = Some(renderer);
 
-        self.frame_windows.populate_primary_native(GuiFrameNativeWindowState {
-            window,
-            surface,
-            surface_config: config,
-            width: pending_width,
-            height: pending_height,
-            scale_factor: pending_scale_factor,
-            mouse_hidden_for_typing: false,
-            ime_enabled: false,
-            last_ime_cursor_area: None,
-            chrome: {
-                let primary = self.frame_windows.primary_window().unwrap();
-                primary.lifecycle.chrome().clone()
-            },
-        });
+        self.frame_windows
+            .populate_primary_native(GuiFrameNativeWindowState {
+                window,
+                surface,
+                surface_config: config,
+                width: pending_width,
+                height: pending_height,
+                scale_factor: pending_scale_factor,
+                mouse_hidden_for_typing: false,
+                ime_enabled: false,
+                last_ime_cursor_area: None,
+                chrome: {
+                    let primary = self.frame_windows.primary_window().unwrap();
+                    primary.lifecycle.chrome().clone()
+                },
+            });
 
         {
             let primary = self.frame_windows.primary_window_mut().unwrap();
-            primary.render.populate_glyph_atlas(&device, pending_scale_factor);
-            primary.render.cursor.copy_config_from(&self.cursor_defaults);
+            primary
+                .render
+                .populate_glyph_atlas(&device, pending_scale_factor);
+            primary
+                .render
+                .cursor
+                .copy_config_from(&self.cursor_defaults);
             primary.render.compositor.transitions.policy = self.transition_policy;
         }
 
         let pending_tool_items = self
-            .frame_windows.primary_window().map(|ws| &ws.render)
+            .frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
             .as_ref()
             .and_then(|frame| frame.chrome.tool_bar.as_ref())
             .map(|tool_bar| tool_bar.items.clone());
         let pending_compact_tool_items = self
-            .frame_windows.primary_window().map(|ws| &ws.render)
+            .frame_windows
+            .primary_window()
+            .map(|ws| &ws.render)
             .as_ref()
             .and_then(|frame| frame.chrome.compact_bar.as_ref())
             .map(|compact_bar| compact_bar.tool_items.clone());
@@ -261,7 +276,9 @@ impl RenderApp {
             }
         }
 
-        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.compositor.dirty = true };
+        if let Some(ws) = self.frame_windows.primary_window_mut() {
+            ws.render.compositor.dirty = true
+        };
 
         tracing::debug!("Surface resized to {}x{}", width, height);
     }

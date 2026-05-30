@@ -161,11 +161,8 @@ impl RenderApp {
                             ws.render.mark_dirty();
                         }
                         let scale_factor = ws.scale_factor();
-                        let (emacs_w, emacs_h) = emacs_pixels_from_window_size(
-                            size.width,
-                            size.height,
-                            scale_factor,
-                        );
+                        let (emacs_w, emacs_h) =
+                            emacs_pixels_from_window_size(size.width, size.height, scale_factor);
                         self.comms.send_input(InputEvent::WindowResize {
                             width: emacs_w,
                             height: emacs_h,
@@ -202,12 +199,20 @@ impl RenderApp {
                         physical_key,
                         text,
                         self.modifiers,
-                        self.frame_windows.primary_window().is_some_and(|ws| ws.render.overlays.ime_preedit_active)
+                        self.frame_windows
+                            .primary_window()
+                            .is_some_and(|ws| ws.render.overlays.ime_preedit_active)
                     );
                 }
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
                 let ime_preedit_active = self.frame_windows.get_by_winit(window_id).map_or_else(
-                    || is_primary && self.frame_windows.primary_window().is_some_and(|ws| ws.render.overlays.ime_preedit_active),
+                    || {
+                        is_primary
+                            && self
+                                .frame_windows
+                                .primary_window()
+                                .is_some_and(|ws| ws.render.overlays.ime_preedit_active)
+                    },
                     |ws| ws.render.overlays.ime_preedit_active,
                 );
                 let handled_managed_popup = state == ElementState::Pressed
@@ -223,9 +228,17 @@ impl RenderApp {
                     if let Some(event) = event {
                         self.comms.send_input(event);
                     }
-                } else if self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_some() && state == ElementState::Pressed {
+                } else if self
+                    .frame_windows
+                    .primary_window()
+                    .and_then(|ws| ws.render.overlays.popup_menu.as_ref())
+                    .is_some()
+                    && state == ElementState::Pressed
+                {
                     let event = self
-                        .frame_windows.primary_window_mut().map(|ws| &mut ws.render)
+                        .frame_windows
+                        .primary_window_mut()
+                        .map(|ws| &mut ws.render)
                         .and_then(|render| Self::handle_render_popup_key(render, &logical_key));
                     if let Some(event) = event {
                         self.comms.send_input(event);
@@ -401,9 +414,18 @@ impl RenderApp {
                             );
                         }
                     } else if self.frame_windows.is_primary_winit(window_id) {
-                        if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.set_ime_enabled(true) };
-                        if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.reset_ime_cursor_area() };
-                        if let Some(target) = self.frame_windows.primary_window().map_or(&self.cursor_defaults, |ws| &ws.render.cursor).target_cloned() {
+                        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+                            window_state.set_ime_enabled(true)
+                        };
+                        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+                            window_state.reset_ime_cursor_area()
+                        };
+                        if let Some(target) = self
+                            .frame_windows
+                            .primary_window()
+                            .map_or(&self.cursor_defaults, |ws| &ws.render.cursor)
+                            .target_cloned()
+                        {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
                     }
@@ -414,9 +436,15 @@ impl RenderApp {
                         window_state.set_ime_enabled(false);
                         window_state.clear_ime_preedit();
                     } else if self.frame_windows.is_primary_winit(window_id) {
-                        if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.set_ime_enabled(false) };
-                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.clear_ime_preedit() };
-                        if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.reset_ime_cursor_area() };
+                        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+                            window_state.set_ime_enabled(false)
+                        };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() {
+                            ws.render.clear_ime_preedit()
+                        };
+                        if let Some(window_state) = self.frame_windows.primary_window_mut() {
+                            window_state.reset_ime_cursor_area()
+                        };
                     }
                     tracing::info!("IME disabled");
                 }
@@ -425,7 +453,9 @@ impl RenderApp {
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.render.clear_ime_preedit();
                     } else if self.frame_windows.is_primary_winit(window_id) {
-                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.clear_ime_preedit() };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() {
+                            ws.render.clear_ime_preedit()
+                        };
                     }
                     for ch in text.chars() {
                         let keysym = ch as u32;
@@ -452,8 +482,15 @@ impl RenderApp {
                             );
                         }
                     } else if self.frame_windows.is_primary_winit(window_id) {
-                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_ime_preedit(text.clone()) };
-                        if let Some(target) = self.frame_windows.primary_window().map_or(&self.cursor_defaults, |ws| &ws.render.cursor).target_cloned() {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() {
+                            ws.render.set_ime_preedit(text.clone())
+                        };
+                        if let Some(target) = self
+                            .frame_windows
+                            .primary_window()
+                            .map_or(&self.cursor_defaults, |ws| &ws.render.cursor)
+                            .target_cloned()
+                        {
                             self.update_ime_cursor_area_if_needed(&target);
                         }
                     }

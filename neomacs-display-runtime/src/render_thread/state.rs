@@ -451,5 +451,4 @@ impl RenderApp {
             lifecycle_flags: RenderLifecycle::new(poll_when_idle),
         }
     }
-
 }
