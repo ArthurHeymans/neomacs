@@ -16145,3 +16145,198 @@ fn ft_gluon_face_text_property_cursor_sensor_and_face_deep() {
      'sensor-functions-fbound (fboundp 'cursor-sensor-functions))))"##,
     );
 }
+
+#[test]
+fn ft_higgs_face_text_property_any_and_not_all_combined_search() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJ")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face 'bold)
+    (put-text-property 21 26 'face 'italic)
+    (put-text-property 26 31 'face 'underline)
+    (put-text-property 31 36 'face 'bold)
+    (put-text-property 36 41 'face 'italic)
+    (put-text-property 41 46 'face 'underline)
+    (put-text-property 46 51 'face '(:foreground "red"))
+    (list
+     'any-bold (text-property-any 1 51 'face 'bold)
+     'any-italic (text-property-any 1 51 'face 'italic)
+     'not-all-bold (text-property-not-all 1 51 'face 'bold)
+     'any-red-first (text-property-any 1 51 'face '(:foreground "red"))
+     'not-all-red (text-property-not-all 1 51 'face '(:foreground "red"))
+     'any-nonexistent (text-property-any 1 51 'face 'none)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_font_lock_fontify_with_font_lock_maximum_decoration_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'max-dec-bound (boundp 'font-lock-maximum-decoration)
+   'max-dec-value (if (boundp 'font-lock-maximum-decoration) font-lock-maximum-decoration 'no-bound)
+   (if (boundp 'font-lock-maximum-decoration)
+       (condition-case nil
+           (let ((font-lock-maximum-decoration t))
+             (with-temp-buffer
+               (emacs-lisp-mode)
+               (insert "(defun max-dec-test (x) (* x x))\n")
+               (font-lock-fontify-buffer)
+               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 26 30))))
+         (error 'max-dec-test-failed))
+     'no-max-dec-bound)
+   (if (boundp 'font-lock-maximum-decoration)
+       (condition-case nil
+           (let ((font-lock-maximum-decoration nil))
+             (with-temp-buffer
+               (emacs-lisp-mode)
+               (insert "(defun no-max-dec-test (x) (* x x))\n")
+               (font-lock-fontify-buffer)
+               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 15 20 26 30))))
+         (error 'no-max-dec-test-failed))
+     'no-max-dec-bound-2))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_face_overlay_before_after_string_with_complex_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before after string complex overlay props face test content data buffer")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov 'before-string (propertize "[[BUFFER]]" 'face '(:foreground "red" :weight bold :slant italic :underline t :height 1.2) 'key1 'val1 'key2 'val2))
+      (overlay-put ov 'after-string (propertize "{{AFTER}}" 'face '(:foreground "blue" :background "white" :overline t :width condensed) 'key3 'val3))
+      (list
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'before-extra-props (length (text-properties-at 0 (overlay-get ov 'before-string)))
+       'after-face (get-text-property 0 (overlay-get ov 'after-string))
+       'after-extra-props (length (text-properties-at 0 (overlay-get ov 'after-string)))
+       'overlay-props (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_face_font_lock_default_unfontify_buffer_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-default-unfontify-buffer-fbound (fboundp 'font-lock-default-unfontify-buffer)
+   'font-lock-default-unfontify-region-fbound (fboundp 'font-lock-default-unfontify-region)
+   'font-lock-default-fontify-buffer-fbound (fboundp 'font-lock-default-fontify-buffer)
+   'font-lock-default-fontify-region-fbound (fboundp 'font-lock-default-fontify-region)
+   (condition-case nil
+       (with-temp-buffer
+         (fundamental-mode)
+         (font-lock-mode 1)
+         (insert "Default unfontify buffer face test content text here")
+         (font-lock-fontify-buffer)
+         (let ((v0 (get-text-property 1 'fontified)))
+           (font-lock-unfontify-buffer)
+           (list 'before v0 'after (get-text-property 1 'fontified))))
+     (error 'no-default-unfontify))
+   (condition-case nil
+       (with-temp-buffer
+         (fundamental-mode)
+         (font-lock-mode 1)
+         (insert "Default fontify buffer face test content text here")
+         (font-lock-default-fontify-buffer)
+         (list 'fontified-after-default (get-text-property 1 'fontified)))
+     (error 'no-default-fontify)))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_face_overlay_put_then_get_then_put_again_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay put get put cycle face test content text data buffer here now")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (let ((v0 (overlay-get ov 'face)))
+        (overlay-put ov 'face '(:foreground "red" :weight bold))
+        (let ((v1 (overlay-get ov 'face)))
+          (overlay-put ov 'priority 50)
+          (overlay-put ov 'face '(:foreground "blue" :slant italic :underline t))
+          (let ((v2 (overlay-get ov 'face)))
+            (list v0 v1 v2 (overlay-get ov 'priority) (progn (delete-overlay ov) 'cleaned)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_face_property_text_property_any_with_complex_value() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEE")
+    (put-text-property 1 5 'face '(:foreground "red"))
+    (put-text-property 5 9 'face '(:foreground "red" :weight bold))
+    (put-text-property 9 13 'face '(:foreground "red"))
+    (put-text-property 13 17 'face '(:foreground "green"))
+    (put-text-property 17 21 'face '(:foreground "red" :weight bold :slant italic))
+    (list
+     'find-plain-red (text-property-any 1 21 'face '(:foreground "red"))
+     'find-bold-red (text-property-any 1 21 'face '(:foreground "red" :weight bold))
+     'find-complex-red (text-property-any 1 21 'face '(:foreground "red" :weight bold :slant italic))
+     'find-green (text-property-any 1 21 'face '(:foreground "green"))
+     'not-all-bold-red (text-property-not-all 1 21 'face '(:foreground "red" :weight bold)))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_font_lock_add_keywords_prepend_append_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "PREPEND keyword APPEND keyword test prepend append order check end")
+    (font-lock-add-keywords nil '(("\\<\\(PREPEND\\)\\>" 1 '(:foreground "blue") prepend) ("\\<\\(APPEND\\)\\>" 1 '(:foreground "green") append)))
+    (font-lock-fontify-buffer)
+    (list
+     'prepend-face (save-excursion (goto-char (point-min)) (search-forward "PREPEND") (get-text-property (match-beginning 0) 'face))
+     'append-face (save-excursion (goto-char (point-min)) (search-forward "APPEND") (get-text-property (match-beginning 0) 'face))
+     'non-keyword-face (save-excursion (goto-char (point-min)) (search-forward "keyword") (get-text-property (match-beginning 0) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_higgs_face_remap_add_relative_to_inherited_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (list
+   'italic-weight-before (face-attribute 'italic :weight nil 'default-on)
+   'add-relative-to-italic (condition-case nil (progn (face-remap-add-relative 'italic '(:weight bold :foreground "red")) 'ok) (error 'no))
+   'italic-weight-after (condition-case nil (face-attribute 'italic :weight nil 'default-on) (error 'no))
+   'remap-alist (face-remapping-alist)
+   (condition-case nil (progn (face-remap-reset-base 'italic) 'reset) (error 'no)))))"##,
+    );
+}
