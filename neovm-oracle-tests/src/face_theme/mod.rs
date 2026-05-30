@@ -4214,3 +4214,402 @@ fn ft_pure_merge_faces_and_face_filter_deep() {
    'face-filters (if (fboundp 'face-filters) (face-filters) 'no-func))))"##,
     );
 }
+
+#[test]
+fn ft_pure_fontset_and_charset_operations_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'set-fontset-font-fbound (fboundp 'set-fontset-font)
+   'fontset-plain-fbound (fboundp 'fontset-plain-name)
+   'new-fontset-fbound (fboundp 'new-fontset)
+   'set-face-font-fbound (fboundp 'set-face-font)
+   'internal-char-font-fbound (fboundp 'internal-char-font)
+   (condition-case nil
+       (let ((fs (create-fontset-from-fontset-spec
+                  (fontset-plain-name "fontset-default") nil 'noerror)))
+         (if fs 'created 'not-created))
+     (error 'no-fontset))
+   (condition-case nil
+       (internal-char-font nil ?A)
+     (error 'no-internal-char-font))
+   (if (fboundp 'fontset-info)
+       (condition-case nil
+           (fontset-info "fontset-default")
+         (error 'no-fontset-info))
+     'no-fontset-info)
+   (if (fboundp 'fontset-list)
+       (condition-case nil
+           (length (fontset-list))
+         (error 'no-fontset-list))
+     'no-fontset-list)
+   (if (boundp 'font-encoding-alist)
+       (length font-encoding-alist)
+     'no-encoding-alist))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_variable_font_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'describe-font-fbound (fboundp 'describe-font)
+   'font-face-attributes-fbound (fboundp 'font-face-attributes)
+   'clear-face-cache-fbound (fboundp 'clear-face-cache)
+   (condition-case nil
+       (clear-face-cache)
+     (error 'no-clear-cache))
+   (if (fboundp 'frame-parameter)
+       (condition-case nil
+           (frame-parameter nil 'font-backend)
+         (error 'no-font-backend))
+     'no-frame-param)
+   (condition-case nil
+       (list-fonts (font-spec))
+     (error 'no-list-all-fonts))
+   (condition-case nil
+       (let ((font (face-font 'default nil)))
+         (if (fontp font)
+             (list 'font-family (font-get font :family)
+                   'font-size (font-get font :size)
+                   'font-weight (font-get font :weight)
+                   'font-slant (font-get font :slant)
+                   'font-width (font-get font :width)
+                   'font-adstyle (font-get font :adstyle)
+                   'font-registry (font-get font :registry))
+           'not-a-font))
+     (error 'no-font-get))
+   (cond ((fboundp 'font-xlfd-name)
+          (condition-case nil
+              (font-xlfd-name (face-font 'default nil))
+            (error 'no-xlfd-name)))
+         (t 'no-xlfd-func)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_readable_x_resources_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-set-after-frame-default-fbound (fboundp 'face-set-after-frame-default)
+   'x-get-resource-fbound (fboundp 'x-get-resource)
+   (condition-case nil
+       (face-set-after-frame-default (selected-frame))
+     (error 'no-face-set-after-default))
+   (condition-case nil
+       (x-get-resource "font" "Font")
+     (error 'no-x-resource))
+   (condition-case nil
+       (let ((res (x-get-resource "face.attributeForeground" "Face.AttributeForeground")))
+         (if res (format "got: %s" res) 'no-res))
+     (error 'no-x-resource))
+   (if (fboundp 'display-backing-store)
+       (display-backing-store)
+     'no-backing-store)
+   (if (fboundp 'display-save-under)
+       (display-save-under)
+     'no-save-under)
+   (if (fboundp 'display-visual-class)
+       (display-visual-class)
+     'no-visual-class)
+   (if (fboundp 'x-display-color-p)
+       (x-display-color-p)
+     'no-x-display-color)
+   (if (fboundp 'x-display-grayscale-p)
+       (x-display-grayscale-p)
+     'no-x-display-grayscale))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_documentation_and_error_handling_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-documentation-fbound (fboundp 'face-documentation)
+   (condition-case nil
+       (face-documentation 'default)
+     (error 'no-doc))
+   (condition-case nil
+       (face-documentation 'bold)
+     (error 'no-doc-bold))
+   'error-invalid-face
+   (condition-case err
+       (face-attribute 'this-is-not-a-valid-face-at-all-nope :weight)
+     (error (list 'caught-error (car err))))
+   'error-invalid-face-fg
+   (condition-case err
+       (face-foreground 'not-a-face)
+     (error (list 'caught-error (car err))))
+   'error-invalid-face-bg
+   (condition-case err
+       (face-background 'not-a-face)
+     (error (list 'caught-error (car err))))
+   'error-invalid-face-font
+   (condition-case err
+       (face-font 'not-a-face nil)
+     (error (list 'caught-error (car err))))
+   'error-set-attribute-invalid-face
+   (condition-case err
+       (set-face-attribute 'not-a-face nil :weight 'bold)
+     (error (list 'caught-error (car err))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_convenience_functions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'internal-find-face-fbound (fboundp 'internal-find-face)
+   'face-equal-fbound (fboundp 'face-equal)
+   'face-differs-from-default-p-fbound (fboundp 'face-differs-from-default-p)
+   'face-nontrivial-faces-fbound (fboundp 'face-nontrivial-faces)
+   (condition-case nil
+       (face-equal 'default 'default)
+     (error 'no-face-equal))
+   (condition-case nil
+       (face-equal 'default 'bold)
+     (error 'no-face-equal2))
+   (condition-case nil
+       (face-differs-from-default-p 'bold)
+     (error 'no-face-differs))
+   (condition-case nil
+       (face-differs-from-default-p 'default)
+     (error 'no-face-differs2))
+   (condition-case nil
+       (internal-find-face 'default)
+     (error 'no-internal-find-face))
+   (if (fboundp 'face-nontrivial-faces)
+       (condition-case nil
+           (length (face-nontrivial-faces))
+         (error 'no-length))
+     'no-func)
+   (if (fboundp 'face-nontrivial-faces)
+       (condition-case nil
+           (member 'bold (face-nontrivial-faces))
+         (error 'no-member))
+     'no-func2))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_buffer_face_mode_interactions_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Buffer face mode test")
+    (put-text-property 1 23 'face 'bold)
+    (list
+     'initial-face (get-text-property 1 'face)
+     'buffer-face-mode-fbound (fboundp 'buffer-face-mode)
+     'variable-pitch-mode-fbound (fboundp 'variable-pitch-mode)
+     'turn-on-buffer-face
+     (condition-case nil
+         (progn
+           (buffer-face-mode 1)
+           'ok)
+       (error 'no-buffer-face-mode))
+     'turn-on-variable-pitch
+     (condition-case nil
+         (progn
+           (variable-pitch-mode 1)
+           'ok)
+       (error 'no-variable-pitch-mode))
+     'turn-off-buffer-face
+     (condition-case nil
+         (progn
+           (buffer-face-mode -1)
+           'ok)
+       (error 'no-buffer-face-mode-off))
+     'turn-off-variable-pitch
+     (condition-case nil
+         (progn
+           (variable-pitch-mode -1)
+           'ok)
+       (error 'no-variable-pitch-off))
+     'face-remap-set-base
+     (condition-case nil
+         (progn
+           (face-remap-set-base 'default '(:height 1.5))
+           'ok)
+       (error 'no-remap-set-base))
+     'face-remap-reset
+     (condition-case nil
+         (progn
+           (face-remap-reset-base 'default)
+           'ok)
+       (error 'no-remap-reset))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_with_derived_mode_font_lock_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-defaults-bound (boundp 'font-lock-defaults)
+   (if (fboundp 'font-lock-defaults)
+       (condition-case nil
+           (font-lock-defaults t)
+         (error 'no-defaults))
+     'no-font-lock-defaults-func)
+   (if (fboundp 'font-lock-choose-keywords)
+       (condition-case nil
+           (font-lock-choose-keywords
+            '(("\\<FOO\\>" . font-lock-warning-face))
+            'emacs-lisp-mode)
+         (error 'no-choose-keywords))
+     'no-choose-func)
+   (if (boundp 'font-lock-support-mode)
+       font-lock-support-mode
+     'no-support-mode)
+   (if (boundp 'font-lock-maximum-decoration)
+       font-lock-maximum-decoration
+     'no-max-dec)
+   (if (boundp 'font-lock-verbose)
+       font-lock-verbose
+     'no-verbose)
+   (if (fboundp 'font-lock-value-in-major-mode)
+       (condition-case nil
+           (font-lock-value-in-major-mode)
+         (error 'no-value-in-mode))
+     'no-func)
+   (if (fboundp 'font-lock-refresh-defaults)
+       (condition-case nil
+           (font-lock-refresh-defaults)
+         (error 'no-refresh))
+     'no-refresh-func))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_invisible_intangible_display_text_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Invisible intangible display face test here now")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 1 11 'invisible t)
+    (put-text-property 11 23 'face 'italic)
+    (put-text-property 11 23 'intangible t)
+    (put-text-property 23 40 'face 'underline)
+    (put-text-property 23 40 'display "[[replaced]]")
+    (list
+     'invisible-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (invisible-p pos))) '(1 5 11))
+     'intangible-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'intangible))) '(11 15 20))
+     'display-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'display))) '(23 30 38))
+     'text-properties-full (mapcar (lambda (pos) (goto-char pos) (text-properties-at pos)) '(1 11 23))
+     ;; Remove invisible and recheck
+     'after-remove-invisible (progn
+                               (remove-text-properties 1 11 '(invisible nil))
+                               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 11)))
+     ;; Remove intangible
+     'after-remove-intangible (progn
+                                (remove-text-properties 11 23 '(intangible nil))
+                                (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'intangible))) '(11 15 20))))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_face_conditional_face_with_eval_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'custom-declare-face-fbound (fboundp 'custom-declare-face)
+   'face-spec-set-fbound (fboundp 'face-spec-set)
+   'face-spec-choose-fbound (fboundp 'face-spec-choose)
+   (condition-case nil
+       (face-spec-choose '((t :weight bold)
+                           (((class color) (min-colors 88)) :foreground "red")
+                           (((class mono)) :foreground "black")))
+     (error 'no-spec-choose))
+   (condition-case nil
+       (face-all-attributes 'default (selected-frame))
+     (error 'no-all-atts))
+   (condition-case nil
+       (let ((atts (face-all-attributes 'default (selected-frame))))
+         (if atts (list 'count (length atts) 'has-weight (plist-get atts :weight)) 'no-atts))
+     (error 'no-all-atts2))
+   (condition-case nil
+       (face-spec-set 'default
+                      '((t :weight bold :slant italic))
+                      'face-defface-spec)
+     (error 'no-face-spec-set))
+   (condition-case nil
+       (face-spec-set 'default
+                      '((t :weight normal :slant normal))
+                      'face-defface-spec)
+     (error 'no-face-spec-reset)))))"##,
+    );
+}
+
+#[test]
+fn ft_pure_font_lock_fontify_buffer_region_syntactically_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (insert "/* comment */ int x = 42; // line comment")
+    (c-mode)
+    (font-lock-ensure (point-min) (point-max))
+    (list
+     'faces-after-fontify
+     (mapcar (lambda (needle)
+               (save-excursion
+                 (goto-char (point-min))
+                 (if (search-forward needle nil t)
+                     (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))
+                     (list needle 'not-found nil))))
+             '("comment" "int" "x" "42" "line"))
+     'font-lock-fontify-region
+     (condition-case nil
+         (progn (font-lock-fontify-region (point-min) (point-max) t) 'ok)
+       (error 'no-fontify-region))
+     'font-lock-fontify-syntactically
+     (condition-case nil
+         (progn (font-lock-fontify-syntactically (point-min) (point-max) nil) 'ok)
+       (error 'no-fontify-syn))
+     'font-lock-fontify-keywords
+     (condition-case nil
+         (progn (font-lock-fontify-keywords-region (point-min) (point-max) nil) 'ok)
+       (error 'no-fontify-keywords))
+     'font-lock-unfontify
+     (condition-case nil
+         (progn (font-lock-unfontify-region (point-min) (point-max)) 'ok)
+       (error 'no-unfontify))
+     'after-unfontify
+     (mapcar (lambda (needle)
+               (save-excursion
+                 (goto-char (point-min))
+                 (if (search-forward needle nil t)
+                     (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))
+                     (list needle 'not-found nil))))
+             '("comment" "int" "x"))))))"##,
+    );
+}
