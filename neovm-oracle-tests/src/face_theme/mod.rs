@@ -14732,3 +14732,174 @@ fn ft_deepspace_face_rear_nonsticky_face_propagation_deep() {
      'insert-at-rear-2 (progn (goto-char 11) (insert "Y") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 6 7 8 12 13 15 17))))))"##,
     );
 }
+
+#[test]
+fn ft_hyperspace_face_set_attribute_multiple_in_one_call() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-multi-attrs-2-face) (error nil))
+  (list
+   'set-5-attrs (condition-case nil (progn (set-face-attribute 'my-multi-attrs-2-face nil :weight 'bold :slant 'italic :underline '(:color "red") :foreground "blue" :background "yellow") 'ok) (error 'no))
+   'weight (face-attribute 'my-multi-attrs-2-face :weight nil 'default-on)
+   'slant (face-attribute 'my-multi-attrs-2-face :slant nil 'default-on)
+   'underline (condition-case nil (face-attribute 'my-multi-attrs-2-face :underline nil 'default-on) (error 'no))
+   'fg (condition-case nil (face-foreground 'my-multi-attrs-2-face nil 'default-on) (error 'no))
+   'bg (condition-case nil (face-background 'my-multi-attrs-2-face nil 'default-on) (error 'no))
+   'reset (condition-case nil (progn (set-face-attribute 'my-multi-attrs-2-face nil :weight 'unspecified :slant 'unspecified :underline 'unspecified :foreground 'unspecified :background 'unspecified) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_font_lock_fontify_region_outside_bounds_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun out-bounds (x) x)\n")
+    (list
+     'fontify-before-buffer (condition-case nil (progn (font-lock-fontify-region -10 10) 'ok) (error 'clamped))
+     'fontify-beyond-buffer (condition-case nil (progn (font-lock-fontify-region 1 (+ (point-max) 50)) 'ok) (error 'clamped))
+     'unfontify-before (condition-case nil (progn (font-lock-unfontify-region -5 5) 'ok) (error 'clamped))
+     'unfontify-beyond (condition-case nil (progn (font-lock-unfontify-region (point-max) (+ (point-max) 10)) 'ok) (error 'clamped))
+     'fontified-after-all (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_face_overlay_get_all_props_as_alist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay get all properties as plist alist face test content data")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'category 'my-test-cat)
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "test overlay help text")
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-length (length props)
+         'face-get (plist-get props 'face)
+         'category-get (plist-get props 'category)
+         'priority-get (plist-get props 'priority)
+         'help-get (plist-get props 'help-echo)
+         'none-get (plist-get props 'nonexistent-property-key)
+         'all-keys (let ((keys nil) (i 0))
+                     (while (< i (length props))
+                       (push (nth i props) keys)
+                       (setq i (+ i 2)))
+                     (nreverse keys))
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_face_text_property_with_custom_plist_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Custom plist face in text property test content buffer text data here")
+    (put-text-property 1 57 'face '(:foreground "#FF6600" :weight bold :slant italic :underline (:color "blue" :style wave) :height 1.2 :extend t))
+    (list
+     'face-value (get-text-property 1 'face)
+     'is-plist (plistp (get-text-property 1 'face))
+     'plist-length (/ (length (get-text-property 1 'face)) 2)
+     'all-keys (let ((plist (get-text-property 1 'face)) (keys nil) (i 0))
+                 (while (< i (length plist))
+                   (push (nth i plist) keys)
+                   (setq i (+ i 2)))
+                 (nreverse keys))
+     'facep-result (facep (get-text-property 1 'face))
+     'listp-result (listp (get-text-property 1 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_font_lock_fontify_with_empty_font_lock_defaults() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (setq font-lock-keywords nil)
+    (insert "No keywords no default font lock test buffer content text")
+    (font-lock-fontify-buffer)
+    (list
+     'font-lock-keywords font-lock-keywords
+     'fontified (get-text-property 1 'fontified)
+     'face (get-text-property 1 'face)
+     'font-lock-keywords-case-fold font-lock-keywords-case-fold
+     'font-lock-keywords-only (if (boundp 'font-lock-keywords-only) font-lock-keywords-only 'no-bound)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_face_overlay_face_with_priority_interleave() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Face priority interleave overlay test content text data buffer here now")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 20))
+    (let ((ov2 (make-overlay 15 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 40))
+    (let ((ov3 (make-overlay 25 45))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 10))
+    (let ((ov4 (make-overlay 40 60))) (overlay-put ov4 'face '(:background "yellow")) (overlay-put ov4 'priority 60))
+    (list
+     'face-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at pos) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority))))))) '(1 10 18 22 28 35 42 50 58))
+     (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_face_add_face_text_property_incremental_build() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Incremental face text property build test content text data here end")
+    (list
+     'step-0 (get-text-property 1 'face)
+     'step-1 (progn (add-face-text-property 1 58 '(:foreground "blue")) (get-text-property 1 'face))
+     'step-2 (progn (add-face-text-property 1 58 '(:weight bold)) (get-text-property 1 'face))
+     'step-3 (progn (add-face-text-property 1 30 '(:slant italic)) (get-text-property 1 'face))
+     'step-4 (progn (add-face-text-property 30 58 '(:underline t)) (get-text-property 30 'face))
+     'step-5 (progn (add-face-text-property 1 58 '(:background "yellow")) (get-text-property 1 'face))
+     'step-6 (progn (add-face-text-property 40 58 '(:overline t)) (get-text-property 50 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_hyperspace_face_overlay_string_length_and_face_attrs() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string length and face attributes test content text data")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string
+                   (propertize "[[BEFORE-LONG-TEXT-STRING]]" 'face '(:foreground "red" :weight bold :slant italic :underline t)))
+      (list
+       'before-len (length (overlay-get ov 'before-string))
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'before-face-attrs-count (length (get-text-property 0 (overlay-get ov 'before-string)))
+       'before-props-count (length (text-properties-at 0 (overlay-get ov 'before-string)))
+       'overlay-face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
