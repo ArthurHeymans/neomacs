@@ -25832,3 +25832,114 @@ fn ft_reach_font_lock_fontify_with_clause_deep() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_push_face_overlay_face_at_eob_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char (point-max))
+      (insert "BBBBB")
+      (list
+       'face-at-1 (get-char-property 1 'face)
+       'face-at-5 (get-char-property 5 'face)
+       'face-at-8 (get-char-property 8 'face)
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_push_font_lock_fontify_lambda_form() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(mapcar (lambda (x) (* x x)) '(1 2 3))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'lambda-face (save-excursion (goto-char (point-min)) (search-forward "lambda") (get-text-property (match-beginning 0) 'face))
+     'mapcar-face (save-excursion (goto-char (point-min)) (search-forward "mapcar") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_push_face_overlay_face_with_face_remap_alist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-remap-fbound (fboundp 'face-remap-add-relative)
+   'face-remap-remove-fbound (fboundp 'face-remap-remove-relative)
+   'remap-in-buffer (condition-case nil
+                       (with-temp-buffer
+                         (face-remap-add-relative 'default 'bold)
+                         (list 'cookie-type (type-of (car face-remapping-alist)) 'after-reset (progn (face-remap-reset-base 'default) t)))
+                       (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_push_face_text_property_char_equal_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "!")
+    (put-text-property 1 2 'face 'bold)
+    (list
+     'char-before-face (get-text-property 1 'face)
+     'char-after (char-after 1)
+     'intervals (length (object-intervals (current-buffer)))
+     'next-prop-change (next-single-property-change 1 'face)
+     'prev-prop-change (previous-single-property-change 2 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_push_font_lock_fontify_unwind_protect() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(unwind-protect\n    (do-something)\n  (cleanup))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'unwind-face (save-excursion (goto-char (point-min)) (search-forward "unwind-protect") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_push_face_overlay_face_dangling_after_buffer_kill() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((buf (generate-new-buffer "temp-overlay-buf")))
+    (with-current-buffer buf
+      (insert "AAAAA")
+      (let ((ov (make-overlay 1 6)))
+        (overlay-put ov 'face 'bold)
+        (list
+         'face (overlay-get ov 'face)
+         'buffer-before (overlay-buffer ov)
+         (progn (kill-buffer buf) 'killed)
+         'buffer-after (condition-case nil (overlay-buffer ov) (error 'none))))))))"##,
+    );
+}
