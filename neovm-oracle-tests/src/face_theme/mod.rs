@@ -15791,3 +15791,179 @@ fn ft_boson_face_default_face_attributes_all_checked() {
    'default-inherit (condition-case nil (face-attribute 'default :inherit nil 'default-on) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_fermion_face_font_lock_ensure_full_vs_partial_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun full-partial-test (a b c) (+ a b c))\n")
+    (list
+     'partial-first-half (progn (font-lock-fontify-region 1 20) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 25 35 38)))
+     'ensure-full (progn (font-lock-ensure (point-min) (point-max)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 25 35 38)))
+     'consistent (progn (font-lock-unfontify-buffer) (font-lock-fontify-buffer) (let ((fb (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 10 25 35 38)))) (font-lock-unfontify-buffer) (font-lock-ensure (point-min) (point-max)) (equal fb (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 10 25 35 38)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_overlay_multiple_priority_interleave_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHH")
+    (let ((ov1 (make-overlay 6 15))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 30))
+    (let ((ov2 (make-overlay 10 25))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 40))
+    (let ((ov3 (make-overlay 20 35))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 10))
+    (let ((ov4 (make-overlay 30 40))) (overlay-put ov4 'face '(:foreground "orange")) (overlay-put ov4 'priority 50))
+    (list
+     'before-flip (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25 30 35 40 45))
+     'flip-priorities (progn (overlay-put ov1 'priority 50) (overlay-put ov3 'priority 60) (overlay-put ov2 'priority 5) (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25 30 35 40 45)))
+     (progn (mapc #'delete-overlay (overlays-in 1 45)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_property_search_with_limit_advanced_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAABBBCCCDDDEEEFFFGGGHHHIIIJJJKKKLLLMMMNNNOOOPPPQQQRRRSSSTTTUUUVVVWWWXXXYYYZZZ")
+    (put-text-property 1 4 'face 'bold :tag 'first)
+    (put-text-property 4 7 'face 'italic :tag 'second)
+    (put-text-property 10 13 'face 'underline :tag 'third)
+    (put-text-property 34 37 'face '(:foreground "red") :tag 'fourth)
+    (put-text-property 55 58 'face '(:background "yellow") :tag 'fifth)
+    (put-text-property 73 76 'face '(:foreground "blue") :tag 'sixth)
+    (list
+     'find-bold (text-property-any 1 76 'face 'bold)
+     'find-italic (text-property-any 1 76 'face 'italic)
+     'find-underline-limited (text-property-any 1 20 'face 'underline)
+     'find-underline-full (text-property-any 1 76 'face 'underline)
+     'find-red (text-property-any 1 76 'face '(:foreground "red"))
+     'find-yellow (text-property-any 1 76 'face '(:background "yellow"))
+     'find-blue (text-property-any 1 76 'face '(:foreground "blue"))
+     'find-nil (text-property-any 1 76 'face nil)
+     'find-none (text-property-any 1 76 'face 'nonexistent)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_font_lock_keywords_add_remove_cycles_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "CYCLE-A CYCLE-B CYCLE-C font lock keyword cycle test end now")
+    (let ((results nil))
+      (font-lock-add-keywords nil '(("\\<\\(CYCLE-A\\)\\>" 1 '(:foreground "red") t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-add-A (save-excursion (goto-char (point-min)) (search-forward "CYCLE-A") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-add-keywords nil '(("\\<\\(CYCLE-B\\)\\>" 1 '(:foreground "green") t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-add-B (save-excursion (goto-char (point-min)) (search-forward "CYCLE-B") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-add-keywords nil '(("\\<\\(CYCLE-C\\)\\>" 1 '(:foreground "blue") t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-add-C (save-excursion (goto-char (point-min)) (search-forward "CYCLE-C") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-remove-keywords nil '(("\\<\\(CYCLE-A\\)\\>" 1 '(:foreground "red") t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-remove-A (save-excursion (goto-char (point-min)) (search-forward "CYCLE-A") (get-text-property (match-beginning 0) 'face))) results)
+      (font-lock-remove-keywords nil '(("\\<\\(CYCLE-B\\)\\>" 1 '(:foreground "green") t) ("\\<\\(CYCLE-C\\)\\>" 1 '(:foreground "blue") t)))
+      (font-lock-fontify-buffer)
+      (push (list 'after-remove-all (save-excursion (goto-char (point-min)) (search-forward "CYCLE-B") (get-text-property (match-beginning 0) 'face))) results)
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_overlay_string_face_inheritance_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string face inheritance chain test content text data buffer here now done")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov 'before-string (propertize "[[BEFORE-INHERIT]]" 'face '(:foreground "red" :inherit italic :weight extra-bold)))
+      (list
+       'overlay-face (overlay-get ov 'face)
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'before-face-attrs (length (get-text-property 0 (overlay-get ov 'before-string)))
+       'before-str-length (length (overlay-get ov 'before-string))
+       'overlay-props (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_font_lock_inhibit_fontification_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun inhibit-test () 42)\n")
+    (let ((font-lock-mode nil))
+      (list
+       'before-fontify (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20))
+       'inhibit-font-lock-bound (boundp 'inhibit-font-lock)
+       'inhibit-font-lock-val (if (boundp 'inhibit-font-lock) inhibit-font-lock 'no-bound)
+       'fontify-anyway (progn (font-lock-fontify-buffer) (get-text-property 1 'fontified))
+       'face-after (get-text-property 1 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_with_buffer_unibyte_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Unibyte multibyte face comparison test αβγδε text here")
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 20 32 'face 'italic)
+    (put-text-property 32 48 'face 'underline)
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (char-width (or (char-after pos) 0)))) '(1 10 20 25 32 40 47))
+     'multibyte-p (multibyte-string-p (buffer-string))
+     'buffer-string-length (length (buffer-string))
+     'narrow-to-region (progn (narrow-to-region 1 25) (multibyte-string-p (buffer-string)))
+     (widen)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_fermion_face_overlay_make_multiple_delete_all_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multiple overlay creation and deletion face test content text data here now end final done")
+    (let ((ov1 (make-overlay 1 15))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 20 35))) (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 40 60))) (overlay-put ov3 'face '(:background "blue")))
+    (let ((ov4 (make-overlay 50 70))) (overlay-put ov4 'face '(:foreground "orange" :weight bold)))
+    (list
+     'before-delete (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 15 20 25 35 40 50 60 70))
+     'delete-ov1-ov2 (progn (delete-overlay ov1) (delete-overlay ov2) (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 20 30 40 50 60 70)))
+     'delete-all (progn (mapc #'delete-overlay (overlays-in 1 70)) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 10 20 40 50 60 70)))))))"##,
+    );
+}
