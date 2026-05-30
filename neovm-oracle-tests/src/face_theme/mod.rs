@@ -5946,3 +5946,160 @@ fn ft_omega_face_inherit_chain_and_resolution_deep() {
    'grand-fg (condition-case nil (face-attribute 'my-inherit-grandchild :foreground nil 'default-on) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_max_face_empty_and_space_only_buffer_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (list
+     'empty-buffer-face (get-text-property 1 'face)
+     'empty-buffer-fontified (get-text-property 1 'fontified)
+     'empty-text-props (text-properties-at 1)
+     ;; Insert whitespace only
+     (progn (insert "   ") (list 'spaces-face (get-text-property 1 'face) 'spaces-props (text-properties-at 1)))
+     ;; Put face on whitespace
+     (progn (put-text-property 1 4 'face 'bold) (list 'spaces-bold-face (get-text-property 1 'face)))
+     ;; Insert newlines
+     (progn (insert "\n\n") (list 'newline-face (get-text-property 4 'face) 'newline-props (text-properties-at 4))))))"##,
+    );
+}
+
+#[test]
+fn ft_max_face_cursor_intangible_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Cursor intangible face test buffer")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 8 19 'cursor-intangible t)
+    (put-text-property 8 19 'face 'italic)
+    (put-text-property 19 30 'face 'underline)
+    (put-text-property 19 30 'cursor-intangible nil)
+    (list
+     'cursor-intangible-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'cursor-intangible) (get-char-property pos 'cursor-intangible))) '(1 5 10 15 20 25))
+     'cursor-sensor-functions (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'cursor-sensor-functions)) '(1 10 20)))))"##,
+    );
+}
+
+#[test]
+fn ft_max_face_point_entered_exited_text_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Point entered exited face test buffer")
+    (put-text-property 1 7 'face 'bold)
+    (put-text-property 7 15 'point-entered (lambda (&rest _) (message "entered")))
+    (put-text-property 7 15 'face 'italic)
+    (put-text-property 15 24 'point-left (lambda (&rest _) (message "left")))
+    (put-text-property 15 24 'face 'underline)
+    (put-text-property 24 36 'face '(:foreground "red"))
+    (list
+     'faces-with-point-hooks (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'point-entered) (get-text-property pos 'point-left))) '(1 5 10 15 20 25 30))
+     'all-props-at-entered (text-properties-at 10)
+     'all-props-at-left (text-properties-at 20))))"##,
+    );
+}
+
+#[test]
+fn ft_max_face_font_lock_fontify_after_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Fontify after string test here")
+    (font-lock-add-keywords nil '(("\\<\\(Fontify\\)\\>" 1 font-lock-warning-face t)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (if (search-forward needle nil t)
+                              (list needle (get-text-property (match-beginning 0) 'face))
+                              (list needle 'not-found))))
+                      '("Fontify" "after" "string" "test"))))
+      ;; Edit and re-fontify
+      (goto-char (point-min))
+      (search-forward "after")
+      (replace-match "AFTER")
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (if (search-forward needle nil t)
+                                (list needle (get-text-property (match-beginning 0) 'face))
+                                (list needle 'not-found))))
+                        '("Fontify" "AFTER" "string" "test"))))
+        (list v0 v1)))))"##,
+    );
+}
+
+#[test]
+fn ft_max_face_text_property_stickiness_advanced_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Stickiness advanced test buffer here")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 1 11 'front-sticky '(face))
+    (put-text-property 1 11 'rear-nonsticky nil)
+    (put-text-property 11 21 'face 'italic)
+    (put-text-property 11 21 'front-sticky nil)
+    (put-text-property 11 21 'rear-nonsticky '(face))
+    (put-text-property 21 34 'face 'underline)
+    (put-text-property 21 34 'front-sticky t)
+    (put-text-property 21 34 'rear-nonsticky t)
+    (list
+     'initial-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'front-sticky) (get-text-property pos 'rear-nonsticky))) '(1 5 11 15 21 25 30))
+     ;; Insert at front-sticky boundary
+     'after-insert-front-sticky (progn
+                                  (goto-char 11)
+                                  (insert "X")
+                                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 12 15 22))))
+     ;; Insert at rear-nonsticky boundary
+     'after-insert-rear-nonsticky (progn
+                                    (goto-char 21)
+                                    (insert "Z")
+                                    (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(12 15 21 23 26 35))))))"##,
+    );
+}
+
+#[test]
+fn ft_max_face_with_number_conversion_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-attribute-relative-p-fbound (fboundp 'face-attribute-relative-p)
+   (condition-case nil
+       (face-attribute-relative-p :height)
+     (error 'no-rel-p))
+   (condition-case nil
+       (face-attribute-relative-p :width)
+     (error 'no-rel-p2))
+   'face-font-family-alternatives (if (boundp 'face-font-family-alternatives)
+                                       (length face-font-family-family-alternatives)
+                                     'no-alternatives)
+   'face-font-registry-alternatives (if (boundp 'face-font-registry-alternatives)
+                                         (length face-font-registry-alternatives)
+                                       'no-alternatives)
+   'scalable-fonts-allowed-p (condition-case nil
+                                 (and (boundp 'scalable-fonts-allowed) scalable-fonts-allowed)
+                               (error 'no))
+   'bitmap-fonts-allowed (if (boundp 'bitmap-fonts-allowed)
+                              bitmap-fonts-allowed
+                            'no-bound))))"##,
+    );
+}
