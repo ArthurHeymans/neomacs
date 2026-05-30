@@ -123,6 +123,28 @@ impl TuiSession {
         Self::spawn(&cmd, "GNU")
     }
 
+    /// Spawn GNU Emacs in TUI mode WITHOUT `-Q`, loading the user's init
+    /// file (e.g. Doom config).  For face/theme comparison tests.
+    pub fn gnu_emacs_with_init() -> Self {
+        let cmd = "emacs -nw".to_string();
+        Self::spawn(&cmd, "GNU")
+    }
+
+    /// Spawn Neomacs in TUI mode WITHOUT `-Q` so the user's init file
+    /// (e.g. Doom Emacs config) is loaded. For face/theme tests.
+    pub fn neomacs_with_init(extra_args: &str) -> Self {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workspace = manifest.parent().expect("workspace root");
+        let bin = neomacs_binary_path(workspace);
+        assert!(
+            bin.exists(),
+            "neomacs binary not found at {}",
+            bin.display()
+        );
+        let cmd = format!("{} -nw {extra_args}", bin.display());
+        Self::spawn(&cmd, "NEO")
+    }
+
     /// Spawn Neomacs in TUI mode.
     ///
     /// `NEOMACS_TUI_NEOMACS_BIN` can override the binary path.  Otherwise,
