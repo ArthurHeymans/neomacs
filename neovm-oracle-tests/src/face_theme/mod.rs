@@ -11005,3 +11005,192 @@ fn ft_epsilon_face_font_lock_inhibit_font_lock_flag() {
    'font-lock-unfontify-buffer-function (if (boundp 'font-lock-unfontify-buffer-function) (fboundp 'font-lock-unfontify-buffer-function) 'no-bound))))"##,
     );
 }
+
+#[test]
+fn ft_zeta3_face_with_force_face_attribute_inheritance_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-weight (face-attribute 'default :weight nil 'default-on)
+   'default-fg (condition-case nil (face-attribute 'default :foreground nil 'default-on) (error 'no))
+   'bold-weight (face-attribute 'bold :weight nil 'default-on)
+   'bold-fg (condition-case nil (face-attribute 'bold :foreground nil 'default-on) (error 'no))
+   'bold-slant (face-attribute 'bold :slant nil 'default-on)
+   'italic-slant (face-attribute 'italic :slant nil 'default-on)
+   'face-equal-default-default (condition-case nil (face-equal 'default 'default) (error 'no))
+   'face-differs-bold (face-differs-from-default-p 'bold)
+   'face-differs-italic (face-differs-from-default-p 'italic)
+   'face-differs-underline (condition-case nil (face-differs-from-default-p 'underline) (error 'no))
+   'face-differs-bold-italic (condition-case nil (face-differs-from-default-p 'bold-italic) (error 'no))
+   'face-differs-fringe (condition-case nil (face-differs-from-default-p 'fringe) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_font_lock_fontify_but_no_syntactic_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c-mode)
+    (insert "int main() { return 0; }\n")
+    (condition-case nil
+        (progn
+          (font-lock-fontify-buffer)
+          (list
+           'int-face (save-excursion (goto-char (point-min)) (search-forward "int") (get-text-property (match-beginning 0) 'face))
+           'main-face (save-excursion (goto-char (point-min)) (search-forward "main") (get-text-property (match-beginning 0) 'face))
+           'return-face (save-excursion (goto-char (point-min)) (search-forward "return") (get-text-property (match-beginning 0) 'face))
+           '0-face (save-excursion (goto-char (point-min)) (search-forward "0") (get-text-property (match-beginning 0) 'face))
+           'fontified-all (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15 20))))
+      (error 'c-mode-fontify-failed)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_overlay_with_line_prefix_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay line prefix face combined test content data area here now")
+    (let ((ov (make-overlay 1 58)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'line-prefix (propertize "| " 'face '(:foreground "red" :weight bold)))
+      (overlay-put ov 'wrap-prefix (propertize "> " 'face '(:foreground "blue" :slant italic))))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'line-prefix (overlay-get ov 'line-prefix)
+     'line-prefix-face (get-text-property 0 (overlay-get ov 'line-prefix))
+     'wrap-prefix (overlay-get ov 'wrap-prefix)
+     'wrap-prefix-face (get-text-property 0 (overlay-get ov 'wrap-prefix))
+     'current-face (get-char-property 1 'face)
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_set_strike_through_various_options_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-strike-face) (error nil))
+  (list
+   'set-strike-t (condition-case nil (progn (set-face-attribute 'my-strike-face nil :strike-through t) (face-attribute 'my-strike-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-nil (condition-case nil (progn (set-face-attribute 'my-strike-face nil :strike-through nil) (face-attribute 'my-strike-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-color (condition-case nil (progn (set-face-attribute 'my-strike-face nil :strike-through '(:color "red")) (face-attribute 'my-strike-face :strike-through nil 'default-on)) (error 'no))
+   'set-strike-off (condition-case nil (progn (set-face-attribute 'my-strike-face nil :strike-through 'unspecified) (face-attribute 'my-strike-face :strike-through nil 'default-on)) (error 'no))
+   'default-strike (condition-case nil (face-attribute 'default :strike-through nil 'default-on) (error 'no))
+   'bold-strike (condition-case nil (face-attribute 'bold :strike-through nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_text_property_interval_collision_insert_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZ")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 8 11 13 15)))))
+      (let ((v0 (funcall snap)))
+        ;; Insert at exact boundary (should NOT merge)
+        (goto-char 6) (insert "QQ")
+        (let ((v1 (funcall snap)))
+          ;; Insert within interval (should split)
+          (goto-char 10) (insert "RR")
+          (let ((v2 (funcall snap)))
+            ;; Delete overlapping boundary
+            (delete-region 8 12)
+            (let ((v3 (funcall snap)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_font_lock_mode_without_font_lock_support() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (setq-local font-lock-support-mode nil)
+    (font-lock-mode 1)
+    (insert "Font lock with no support mode test buffer content text")
+    (font-lock-fontify-buffer)
+    (list
+     'font-lock-mode font-lock-mode
+     'font-lock-support-mode (if (boundp 'font-lock-support-mode) font-lock-support-mode 'no-bound)
+     'fontified-region (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40))
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-20 (get-text-property 20 'face)
+     (progn (kill-local-variable 'font-lock-support-mode) (font-lock-mode -1) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_overlay_before_string_face_vs_overlay_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before string face vs overlay face test content data text here end")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "[[BEFORE]]" 'face '(:foreground "red" :weight bold))))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'before-string-face (get-text-property 0 (overlay-get ov 'before-string))
+     'before-string (overlay-get ov 'before-string)
+     'at-overlay-start (get-char-property 15 'face)
+     'at-overlay-middle (get-char-property 25 'face)
+     'at-overlay-before (get-char-property 14 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta3_face_put_all_text_properties_and_read_them_back_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "All text properties read back test buffer content text here end")
+    (add-text-properties 1 57 (list 'face 'bold 'key1 'val1 'key2 'val2 'key3 'val3 'key4 'val4))
+    (add-text-properties 20 40 (list 'face 'italic 'key5 'val5 'key6 'val6))
+    (list
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-20 (get-text-property 20 'face)
+     'face-at-40 (get-text-property 40 'face)
+     'face-at-56 (get-text-property 56 'face)
+     'all-keys-at-1 (let ((props (text-properties-at 1)) (keys nil) (i 0))
+                     (while (< i (length props))
+                       (push (nth i props) keys)
+                       (setq i (+ i 2)))
+                     (nreverse keys))
+     'all-keys-at-20 (let ((props (text-properties-at 20)) (keys nil) (i 0))
+                       (while (< i (length props))
+                         (push (nth i props) keys)
+                         (setq i (+ i 2)))
+                       (nreverse keys))
+     'all-keys-at-56 (let ((props (text-properties-at 56)) (keys nil) (i 0))
+                       (while (< i (length props))
+                         (push (nth i props) keys)
+                         (setq i (+ i 2)))
+                       (nreverse keys)))))"##,
+    );
+}
