@@ -6395,3 +6395,150 @@ fn ft_giga_face_with_property_list_remove_list_face_deep() {
                (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 20 30 40))))))"##,
     );
 }
+
+#[test]
+fn ft_tera_face_buffer_swapping_text_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((buf1 (generate-new-buffer "*ft-swap1*"))
+        (buf2 (generate-new-buffer "*ft-swap2*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf1
+            (insert "Buffer one text with face")
+            (put-text-property 1 13 'face 'bold)
+            (put-text-property 13 23 'face 'italic))
+          (with-current-buffer buf2
+            (insert "Buffer two text with face")
+            (put-text-property 1 13 'face 'underline)
+            (put-text-property 13 23 'face '(:foreground "red")))
+          (list
+           'buf1-faces (with-current-buffer buf1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 13 18)))
+           'buf2-faces (with-current-buffer buf2 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 13 18)))))
+      (kill-buffer buf1)
+      (kill-buffer buf2))))"##,
+    );
+}
+
+#[test]
+fn ft_tera_face_indirect_buffer_clone_text_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Indirect buffer face propagation test")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 11 21 'face 'italic)
+    (put-text-property 21 32 'face 'underline)
+    (put-text-property 32 41 'face '(:foreground "red"))
+    (let* ((clone-name (generate-new-buffer-name "*ft-clone*"))
+           (clone (make-indirect-buffer (current-buffer) clone-name t)))
+      (unwind-protect
+          (list
+           'base-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 11 15 21 25 32 38))
+           'clone-faces (with-current-buffer clone
+                          (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 11 15 21 25 32 38)))
+           ;; Edit in clone
+           (progn
+             (with-current-buffer clone
+               (goto-char 11)
+               (insert "INSERTED")
+               (put-text-property 11 19 'face '(:background "yellow"))
+               (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 11 15 19 25))))
+           ;; Check base after clone edit
+           'base-after-clone-edit (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 11 15 21 30)))
+        (when (get-buffer clone-name) (kill-buffer clone-name))))))"##,
+    );
+}
+
+#[test]
+fn ft_tera_face_with_overlay_isearch_open_overlay_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Isearch overlay face test buffer content here now")
+    (put-text-property 1 47 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 10)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'isearch-open-invisible 'ignore))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold))
+      (overlay-put ov2 'isearch-open-invisible-temporary 'ignore))
+    (list
+     'faces-with-isearch (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'isearch-open-invisible))) '(1 5 10 15 20 25 30 40 46))
+     'overlay-props (list (overlay-get ov1 'isearch-open-invisible) (overlay-get ov2 'isearch-open-invisible-temporary))
+     (progn (delete-overlay ov1) (delete-overlay ov2) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_tera_face_overlay_display_margin_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay display margin face test buffer")
+    (put-text-property 1 42 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 5 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'display '(left-fringe right-arrow))
+      (overlay-put ov 'line-prefix "> "))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'display) (get-char-property pos 'line-prefix))) '(1 5 10 15 20 25 30 40))
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_tera_face_with_compose_region_decompose_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((text "compose-test"))
+      (insert text)
+      (put-text-property 1 13 'face 'bold)
+      (condition-case nil
+          (list
+           'before-compose (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'composition))) '(1 5 10 12))
+           'after-compose (progn
+                            (compose-region 1 13 "COMPOSED")
+                            (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'composition))) '(1 5 10 12)))
+           'after-decompose (progn
+                              (decompose-region 1 13)
+                              (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'composition))) '(1 5 10 12))))
+        (error (list
+                'before-compose (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'composition))) '(1 5 10 12))
+                'compose-error (fboundp 'compose-region))))))))"##,
+    );
+}
+
+#[test]
+fn ft_tera_face_font_lock_prepend_vs_append_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "PREPEND and APPEND keyword test")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(PREPEND\\)\\>" 1 font-lock-warning-face prepend)
+                              ("\\<\\(APPEND\\)\\>" 1 '(:foreground "red" :weight bold) append)))
+    (font-lock-fontify-buffer)
+    (list
+     'prepend-face (save-excursion (goto-char (point-min)) (search-forward "PREPEND") (get-text-property (match-beginning 0) 'face))
+     'append-face (save-excursion (goto-char (point-min)) (search-forward "APPEND") (get-text-property (match-beginning 0) 'face))
+     'keyword-override (save-excursion (goto-char (point-min)) (search-forward "keyword") (get-text-property (match-beginning 0) 'face))
+     'test-override (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face)))))"##,
+    );
+}
