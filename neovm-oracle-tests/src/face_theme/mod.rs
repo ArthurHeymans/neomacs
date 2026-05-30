@@ -13412,3 +13412,161 @@ fn ft_tau_face_set_fill_column_indicator_face_deep() {
    'display-fill-column-indicator-bound (boundp 'display-fill-column-indicator))))"##,
     );
 }
+
+#[test]
+fn ft_upsilon_face_property_every_other_char_different_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABABABABABABABABABAB")
+    (let ((i 0))
+      (while (< i 20)
+        (put-text-property (1+ i) (+ i 2) 'face (if (evenp i) 'bold 'italic))
+        (setq i (1+ i))))
+    (list
+     'every-other (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 4 5 6 7 8 9 10))
+     'interval-count (length (object-intervals (current-buffer)))
+     'next-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 21)) '(1 3 5 7 9 11 13 15 17 19)))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_font_lock_add_keywords_with_eval_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "EVAL keyword test with font lock face now here end")
+    (font-lock-add-keywords nil
+                            (list (list "\\<\\(EVAL\\)\\>"
+                                        1
+                                        '(if (> (point) 15) '(:foreground "red") '(:foreground "blue"))
+                                        t)))
+    (font-lock-fontify-buffer)
+    (list
+     'first-eval (save-excursion (goto-char (point-min)) (search-forward "EVAL") (get-text-property (match-beginning 0) 'face))
+     'all-fontified (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40 50))))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_face_overlay_local_map_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay local map face test content data text here now end final")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'keymap (make-sparse-keymap))
+      (overlay-put ov 'local-map (make-sparse-keymap))
+      (list
+       'face (overlay-get ov 'face)
+       'has-keymap (keymapp (overlay-get ov 'keymap))
+       'has-local-map (keymapp (overlay-get ov 'local-map))
+       'overlay-props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_face_text_property_handle_nil_values_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Handle nil values in text properties face test content text data")
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 20 40 'face nil)
+    (put-text-property 40 53 'face '(:foreground "red"))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 20 30 40 50 52))
+     'find-bold (text-property-any 1 53 'face 'bold)
+     'find-nil (text-property-any 1 53 'face nil)
+     'find-red (text-property-any 1 53 'face '(:foreground "red"))
+     'find-italic (text-property-any 1 53 'face 'italic)
+     'not-all-nil (text-property-not-all 1 53 'face nil)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_Font_lock_defaults_after_mode_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (list
+     'fundamental-defaults (condition-case nil (progn (fundamental-mode) (font-lock-set-defaults) 'ok) (error 'no))
+     'text-mode-defaults (condition-case nil (progn (text-mode) (font-lock-set-defaults) 'ok) (error 'no))
+     'emacs-lisp-defaults (condition-case nil (progn (emacs-lisp-mode) (font-lock-mode 1) (font-lock-set-defaults) 'ok) (error 'no))
+     'after-modes (list 'font-lock-mode font-lock-mode 'defaults-bound (boundp 'font-lock-keywords))))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_face_overlay_insert_behind_hooks_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-behind-count 0)
+  (defun my-behind-fn (ov after beg end &optional len) (setq my-behind-count (1+ my-behind-count)))
+  (with-temp-buffer
+    (insert "Insert behind hooks overlay face test content text data here")
+    (let ((ov (make-overlay 15 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'insert-behind-hooks (list 'my-behind-fn))
+      (list
+       'before-insert my-behind-count
+       'face-before (get-char-property 20 'face)
+       (progn (goto-char 30) (insert "BEHIND") (list 'after-insert my-behind-count 'face-after (get-char-property 20 'face)))
+       (progn (goto-char 15) (insert "FRONT") (list 'after-front-insert my-behind-count 'face-after (get-char-property 20 'face)))
+       (progn (delete-overlay ov) (setq my-behind-count 0) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_face_set_attribute_font_unspecified_comparison() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-unspec-font-face) (error nil))
+  (list
+   'default-font (condition-case nil (face-font 'default nil) (error 'no))
+   'set-font (condition-case nil (progn (set-face-font 'my-unspec-font-face "Monospace-12" nil) (face-font 'my-unspec-font-face nil)) (error 'no))
+   'set-font-unspec (condition-case nil (progn (set-face-font 'my-unspec-font-face 'unspecified nil) (face-font 'my-unspec-font-face nil)) (error 'no))
+   'set-font-nil (condition-case nil (progn (set-face-font 'my-unspec-font-face nil nil) (face-font 'my-unspec-font-face nil)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_upsilon_face_text_properties_at_overlay_boundary_buffer_edge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay boundary buffer edge face test content text data")
+    (let ((ov-start (make-overlay 1 10)))
+      (overlay-put ov-start 'face '(:background "red")))
+    (let ((ov-end (make-overlay 40 50)))
+      (overlay-put ov-end 'face '(:background "blue")))
+    (list
+     'at-start (list (get-char-property 1 'face) (get-char-property 10 'face))
+     'at-end (list (get-char-property 39 'face) (get-char-property 40 'face) (get-char-property 49 'face))
+     'at-middle (get-char-property 25 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 51)) 'cleaned)))))"##,
+    );
+}
