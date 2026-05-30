@@ -9679,3 +9679,200 @@ fn ft_omega2_face_set_unspecified_then_recheck_attrs_deep() {
                      (face-attribute 'my-reset-attrs-face :underline nil 'default-on))))))"##,
     );
 }
+
+#[test]
+fn ft_xero_face_char_property_vs_text_property_precedence_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Char vs text property precedence test text here now end")
+    (put-text-property 1 50 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 100))
+    (let ((ov2 (make-overlay 15 25)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold))
+      (overlay-put ov2 'priority 200))
+    (list
+     'text-prop-only (get-text-property 1 'face)
+     'char-prop-overlay1 (get-char-property 12 'face)
+     'char-prop-overlay2 (get-char-property 20 'face)
+     'char-prop-and-overlay-12 (get-char-property-and-overlay 12 'face)
+     'char-prop-and-overlay-20 (get-char-property-and-overlay 20 'face)
+     'text-prop-inside-overlays (get-text-property 20 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 50)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_font_lock_fontify_region_with_fontified_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun test () 42)\n")
+    (list
+     'before-any-fontify (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15))
+     'after-region-1-to-10 (progn
+                             (font-lock-fontify-region 1 10)
+                             (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15)))
+     'after-full (progn
+                   (font-lock-fontify-region 10 (point-max))
+                   (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15)))
+     'faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 10 15))))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_text_property_all_intervals_list_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (put-text-property 31 36 'face '(:background "cyan"))
+    (list
+     'interval-count (length (object-intervals (current-buffer)))
+     'interval-list (mapcar (lambda (ov) (list (overlay-start (car (overlays-in (overlay-start ov) (overlay-end ov)))) (overlay-end (car (overlays-in (overlay-start ov) (overlay-end ov))))))
+                            (object-intervals (current-buffer)))
+     'manual-interval-walk (let ((pos 1) (result nil))
+                             (while pos
+                               (let ((next (next-single-property-change pos 'face nil 36)))
+                                 (when next (push (list pos next (get-text-property pos 'face)) result))
+                                 (setq pos next)))
+                             (nreverse result))))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_font_lock_add_keywords_with_keep_flag_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Keep keyword flag test with font-lock keywords")
+    ;; Add with keep flag
+    (font-lock-add-keywords nil '(("\\<\\(keep\\)\\>" 1 font-lock-warning-face keep)
+                                  ("\\<\\(flag\\)\\>" 1 '(:foreground "blue") t)))
+    (font-lock-fontify-buffer)
+    (list
+     'keep-word-face (save-excursion (goto-char (point-min)) (search-forward "keep") (get-text-property (match-beginning 0) 'face))
+     'flag-word-face (save-excursion (goto-char (point-min)) (search-forward "flag") (get-text-property (match-beginning 0) 'face))
+     'remove-keep (condition-case nil
+                      (progn
+                        (font-lock-remove-keywords nil '(("\\<\\(keep\\)\\>" 1 font-lock-warning-face keep)))
+                        'removed)
+                    (error 'remove-failed))
+     'remove-flag (condition-case nil
+                      (progn
+                        (font-lock-remove-keywords nil '(("\\<\\(flag\\)\\>" 1 '(:foreground "blue") t)))
+                        'removed)
+                    (error 'remove-failed))))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_overlay_modification_hooks_trigger_face_preserve() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-ov-mod-count 0)
+  (defun my-ov-mod-fn (ov after beg end &optional len)
+    (setq my-ov-mod-count (1+ my-ov-mod-count)))
+  (with-temp-buffer
+    (insert "Overlay modification hooks face preservation test text")
+    (put-text-property 1 52 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'modification-hooks (list 'my-ov-mod-fn)))
+    (list
+     'before-count my-ov-mod-count
+     'before-face (get-char-property 15 'face)
+     ;; Modify inside overlay
+     (progn (goto-char 20) (insert "X") (list 'after-mod-count my-ov-mod-count 'face-after-mod (get-char-property 20 'face)))
+     ;; Delete inside overlay
+     (progn (delete-region 15 25) (list 'after-delete-count my-ov-mod-count 'face-after-delete (get-char-property 15 'face)))
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_with_text_property_face_and_category_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Text property face and category combined test buffer content")
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 1 10 'category 'cat-bold)
+    (put-text-property 10 20 'face 'italic)
+    (put-text-property 10 20 'category 'cat-italic)
+    (put-text-property 20 30 'face 'underline)
+    (put-text-property 20 30 'category 'cat-underline)
+    (put-text-property 30 40 'face '(:foreground "red"))
+    (put-text-property 30 40 'category 'cat-red)
+    (put-text-property 40 55 'face '(:background "yellow"))
+    (list
+     'face-and-category (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'category) (get-char-property pos 'category))) '(1 5 10 15 20 25 30 35 40 50 54))
+     'prop-search (text-property-any 1 55 'category 'cat-italic)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_font_lock_after_fontify_functions_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-after-fontify-buffer-fbound (fboundp 'font-lock-after-fontify-buffer)
+   'font-lock-after-fontify-region-fbound (fboundp 'font-lock-after-fontify-region)
+   'font-lock-after-change-function-fbound (fboundp 'font-lock-after-change-function)
+   'font-lock-unfontify-buffer-fbound (fboundp 'font-lock-unfontify-buffer)
+   'font-lock-unfontify-region-fbound (fboundp 'font-lock-unfontify-region)
+   'font-lock-default-fontify-buffer-fbound (fboundp 'font-lock-default-fontify-buffer)
+   'font-lock-default-fontify-region-fbound (fboundp 'font-lock-default-fontify-region)
+   'font-lock-default-unfontify-buffer-fbound (fboundp 'font-lock-default-unfontify-buffer)
+   'font-lock-default-unfontify-region-fbound (fboundp 'font-lock-default-unfontify-region)
+   'font-lock-fontify-syntactically-region-fbound (fboundp 'font-lock-fontify-syntactically-region)
+   'font-lock-fontify-keywords-region-fbound (fboundp 'font-lock-fontify-keywords-region))))"##,
+    );
+}
+
+#[test]
+fn ft_xero_face_set_face_attribute_int_vs_float_height_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-int-float-face) (error nil))
+  (list
+   'set-height-int-100 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 100) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'set-height-int-200 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 200) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'set-height-float-1.0 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 1.0) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'set-height-float-1.5 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 1.5) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'set-height-float-0.8 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 0.8) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'set-height-int-300 (condition-case nil (progn (set-face-attribute 'my-int-float-face nil :height 300) (face-attribute 'my-int-float-face :height nil 'default-on)) (error 'no))
+   'default-height (face-attribute 'default :height nil 'default-on))))"##,
+    );
+}
