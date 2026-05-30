@@ -12755,3 +12755,167 @@ fn ft_omicron_face_with_face_spec_match_display_deep() {
    'min-colors-88 (>= (if (fboundp 'display-color-cells) (display-color-cells) 0) 88))))"##,
     );
 }
+
+#[test]
+fn ft_pi_face_set_property_then_read_then_modify_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Set read modify cycle face property test buffer data")
+    (put-text-property 1 15 'face 'bold)
+    (let ((v0 (get-text-property 1 'face)))
+      (put-text-property 1 15 'face 'italic)
+      (let ((v1 (get-text-property 1 'face)))
+        (put-text-property 15 30 'face 'underline)
+        (let ((v2 (get-text-property 15 'face)))
+          (remove-text-properties 1 30 '(face nil))
+          (put-text-property 1 30 'face '(:foreground "red" :weight bold))
+          (list v0 v1 v2 (get-text-property 1 'face) (get-text-property 15 'face) (get-text-property 29 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_font_lock_global_mode_vs_buffer_local_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'global-font-lock-mode-fbound (fboundp 'global-font-lock-mode)
+   'font-lock-mode-fbound (fboundp 'font-lock-mode)
+   (if (boundp 'global-font-lock-mode) (list 'global-var global-font-lock-mode) (list 'no-global-var))
+   (condition-case nil
+       (with-temp-buffer
+         (fundamental-mode)
+         (list
+          'buffer-mode-before font-lock-mode
+          'turn-on (progn (font-lock-mode 1) font-lock-mode)
+          'turn-off (progn (font-lock-mode -1) font-lock-mode)
+          'turn-on-again (progn (font-lock-mode 1) font-lock-mode)))
+     (error 'no-font-lock-mode))
+   'font-lock-global-modes (if (boundp 'font-lock-global-modes) font-lock-global-modes 'no-bound)
+   'font-lock-defaults-function (fboundp 'font-lock-defaults))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_face_overlay_with_line_height_and_face_combined() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with line height and face combined test content text data here")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'line-height 2.0)
+      (overlay-put ov 'line-spacing 10))
+    (list
+     'face (overlay-get ov 'face)
+     'line-height (overlay-get ov 'line-height)
+     'line-spacing (overlay-get ov 'line-spacing)
+     'face-at-overlay (get-char-property 20 'face)
+     'face-at-outside (get-char-property 5 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_face_text_property_change_at_single_point_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (list
+     'before-face (get-text-property 1 'face)
+     'interval-count-0 (length (object-intervals (current-buffer)))
+     'set-face (progn (put-text-property 1 2 'face 'bold) (get-text-property 1 'face))
+     'interval-count-1 (length (object-intervals (current-buffer)))
+     'change-face (progn (put-text-property 1 2 'face 'italic) (get-text-property 1 'face))
+     'interval-count-2 (length (object-intervals (current-buffer)))
+     'remove-face (progn (remove-text-properties 1 2 '(face nil)) (get-text-property 1 'face))
+     'interval-count-3 (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_font_lock_fontify_region_with_limit_bounds_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun limit-test (x y) (+ x y))\n")
+    (list
+     'fontify-first-half (progn (font-lock-fontify-region 1 15) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15)))
+     'fontify-rest (progn (font-lock-fontify-region 15 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 15 20 25 30)))
+     'all-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 10 15 20 25 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_face_extend_property_various_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-extend (condition-case nil (face-attribute 'default :extend nil 'default-on) (error 'no))
+   'bold-extend (condition-case nil (face-attribute 'bold :extend nil 'default-on) (error 'no))
+   'italic-extend (condition-case nil (face-attribute 'italic :extend nil 'default-on) (error 'no))
+   'underline-extend (condition-case nil (face-attribute 'underline :extend nil 'default-on) (error 'no))
+   'fringe-extend (condition-case nil (face-attribute 'fringe :extend nil 'default-on) (error 'no))
+   'region-extend (condition-case nil (face-attribute 'region :extend nil 'default-on) (error 'no))
+   'highlight-extend (condition-case nil (face-attribute 'highlight :extend nil 'default-on) (error 'no))
+   'mode-line-extend (condition-case nil (face-attribute 'mode-line :extend nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_face_overlay_delete_from_inside_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Delete from inside overlay region face test text data buffer content here")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'before-delete (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 20 30 40 45))
+       ;; Delete from inside overlay (partial)
+       'after-delete-partial (progn (delete-region 20 35) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25 30 35)))
+       ;; Delete entire overlay region
+       'after-delete-full (progn (delete-region 10 40) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 10 15 20 25)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pi_face_color_defined_p_various_formats_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'color-defined-red (condition-case nil (color-defined-p "red") (error 'no))
+   'color-defined-green (condition-case nil (color-defined-p "green") (error 'no))
+   'color-defined-blue (condition-case nil (color-defined-p "blue") (error 'no))
+   'color-defined-black (condition-case nil (color-defined-p "black") (error 'no))
+   'color-defined-white (condition-case nil (color-defined-p "white") (error 'no))
+   'color-defined-ff0000 (condition-case nil (color-defined-p "#FF0000") (error 'no))
+   'color-defined-00ff00 (condition-case nil (color-defined-p "#00FF00") (error 'no))
+   'color-defined-0000ff (condition-case nil (color-defined-p "#0000FF") (error 'no))
+   'color-defined-invalid (condition-case nil (color-defined-p "#INVALID") (error 'no))
+   'color-defined-notacolor (condition-case nil (color-defined-p "not-a-real-color-name-at-all") (error 'no))
+   'color-values-fbound (fboundp 'color-values))))"##,
+    );
+}
