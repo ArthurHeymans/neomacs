@@ -2967,3 +2967,293 @@ fn ft_probe_face_with_rear_nonsticky_custom_deep() {
                                      (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 8 12 16 19 22 25))))))"##,
     );
 }
+
+#[test]
+fn ft_surface_font_lock_after_narrow_widen_cycle_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t))
+      (org-mode)
+      (insert "* TODO A\nBody A.\n\n")
+      (insert "** DONE B\nBody B.\n\n")
+      (insert "* TODO C\nBody C.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle
+                                          (get-text-property (line-beginning-position) 'face)
+                                          (invisible-p (match-beginning 0)))
+                                    (list needle 'not-found nil))))
+                            '("A" "B" "C")))))
+        (let ((v0 (funcall snap)))
+          ;; Narrow to A
+          (goto-char (point-min))
+          (search-forward "A")
+          (beginning-of-line)
+          (org-narrow-to-subtree)
+          (font-lock-fontify-buffer)
+          (let ((v1 (funcall snap)))
+            ;; Widen, hide all, narrow to C
+            (widen)
+            (org-fold-hide-all)
+            (goto-char (point-min))
+            (search-forward "C")
+            (beginning-of-line)
+            (org-narrow-to-subtree)
+            (font-lock-fontify-buffer)
+            (let ((v2 (funcall snap)))
+              ;; Widen, show all, refontify
+              (widen)
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Global cycle
+                (org-global-cycle nil)
+                (font-lock-ensure (point-min) (point-max))
+                (let ((v4 (funcall snap)))
+                  (list v0 v1 v2 v3 v4)))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_surface_org_face_set_delete_set_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Alpha\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle
+                                          (get-text-property (match-beginning 0) 'face)
+                                          (org-entry-get nil "Effort")
+                                          (org-entry-get nil "Status")
+                                          (org-entry-get nil "Owner"))
+                                    (list needle 'not-found nil nil nil))))
+                            '("TODO" ":PROPERTIES:" ":Effort:" ":END:")))))
+        (let ((v0 (funcall snap)))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-set-property "Effort" "2h")
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            (org-delete-property "Effort")
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              (org-set-property "Status" "active")
+              (org-set-property "Owner" "Alice")
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                (org-fold-hide-drawer-all)
+                (let ((v4 (funcall snap)))
+                  (org-fold-show-all)
+                  (font-lock-ensure (point-min) (point-max))
+                  (let ((v5 (funcall snap)))
+                    (list v0 v1 v2 v3 v4 v5))))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_surface_face_overlay_create_delete_recreate_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay create delete recreate test buffer content here")
+    (put-text-property 1 50 'face '(:foreground "blue"))
+    (let ((snap (lambda ()
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 20 30 40 50)))))
+      (let ((v0 (funcall snap)))
+        ;; Create overlay
+        (let ((ov1 (make-overlay 5 25)))
+          (overlay-put ov1 'face '(:background "yellow"))
+          (overlay-put ov1 'priority 50))
+        (let ((v1 (funcall snap)))
+          ;; Delete overlay
+          (mapc #'delete-overlay (overlays-at 10))
+          (let ((v2 (funcall snap)))
+            ;; Recreate different overlay
+            (let ((ov2 (make-overlay 15 40)))
+              (overlay-put ov2 'face '(:foreground "red" :weight bold))
+              (overlay-put ov2 'priority 100))
+            (let ((v3 (funcall snap)))
+              ;; Delete partial region
+              (delete-region 10 20)
+              (let ((v4 (funcall snap)))
+                (list v0 v1 v2 v3 v4)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_surface_face_after_fold_cycle_edit_show_property_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* TODO Root :root:wip:\n")
+      (insert ":PROPERTIES:\n:Owner: Alice\n:Effort: 10h\n:END:\n")
+      (insert "** DONE Leaf1 :fe:\nBody L1.\n\n")
+      (insert "** TODO Leaf2 :be:\nBody L2.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle
+                                          (get-text-property (line-beginning-position) 'face)
+                                          (invisible-p (match-beginning 0))
+                                          (org-outline-level)
+                                          (org-get-tags nil t))
+                                    (list needle 'not-found nil nil nil nil))))
+                            '("Root" "Leaf1" "Leaf2")))))
+        (let ((v0 (funcall snap)))
+          ;; Fold all
+          (org-fold-hide-all)
+          ;; Edit under hidden: insert Leaf3
+          (goto-char (point-min))
+          (search-forward "Root")
+          (end-of-line)
+          (insert "\n** WAIT Leaf3 :ops:\nBody L3.\n")
+          ;; Cycle Root: children
+          (goto-char (point-min))
+          (search-forward "Root :root:")
+          (beginning-of-line)
+          (org-cycle nil)
+          (org-cycle nil)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            ;; Change Leaf2 to DONE
+            (goto-char (point-min))
+            (search-forward "TODO Leaf2")
+            (replace-match "DONE Leaf2")
+            (font-lock-ensure (point-min) (point-max))
+            ;; Cycle Root: overview
+            (goto-char (point-min))
+            (search-forward "Root :root:")
+            (beginning-of-line)
+            (org-cycle nil)
+            (let ((v2 (funcall snap)))
+              ;; Show all
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Global cycle
+                (org-global-cycle nil)
+                (let ((v4 (funcall snap)))
+                  (list v0 v1 v2 v3 v4)))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_surface_face_text_property_with_property_list_remove_add() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Property list manipulation test text zone")
+    (add-text-properties 1 43 (list 'face 'bold 'key1 'val1 'key2 'val2 'key3 'val3))
+    (add-text-properties 15 30 (list 'face 'italic 'key4 'val4))
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1) (get-text-property pos 'key4))) '(1 10 15 20 30 40))
+     ;; Remove face only
+     'after-remove-face (progn
+                          (remove-text-properties 1 43 '(face nil))
+                          (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1) (get-text-property pos 'key4))) '(1 10 15 20 30 40)))
+     ;; Remove key1
+     'after-remove-key1 (progn
+                          (remove-text-properties 1 43 '(key1 nil))
+                          (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'key1) (get-text-property pos 'key2))) '(1 15 30)))
+     ;; Add face back differently
+     'after-re-add-face (progn
+                          (put-text-property 1 15 'face 'underline)
+                          (put-text-property 15 43 'face '(:foreground "red"))
+                          (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 15 25 40))))))"##,
+    );
+}
+
+#[test]
+fn ft_surface_org_face_with_global_cycle_two_levels_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* TODO L1-A :tag-a:\n")
+      (insert "** DONE L2-A :tag-a1:\nBody A.\n\n")
+      (insert "** TODO L2-B :tag-a2:\nBody B.\n\n")
+      (insert "* NEXT L1-B :tag-b:\n")
+      (insert "** WAIT L2-C :tag-b1:\nBody C.\n\n")
+      (insert "** DONE L2-D :tag-b2:\nBody D.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle
+                                          (get-text-property (line-beginning-position) 'face)
+                                          (invisible-p (match-beginning 0))
+                                          (org-outline-level)
+                                          (org-get-tags nil t))
+                                    (list needle 'not-found nil nil nil nil))))
+                            '("L1-A" "L2-A" "L2-B" "L1-B" "L2-C" "L2-D")))))
+        (let ((v0 (funcall snap)))
+          ;; Global cycle: overview
+          (org-global-cycle nil)
+          (let ((v1 (funcall snap)))
+            ;; Global cycle: children
+            (org-global-cycle nil)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              ;; Global cycle: all
+              (org-global-cycle nil)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Local cycle L1-A: overview
+                (goto-char (point-min))
+                (search-forward "L1-A :tag-a:")
+                (beginning-of-line)
+                (org-cycle nil)
+                (let ((v4 (funcall snap)))
+                  (list v0 v1 v2 v3 v4)))))))))))"##,
+    );
+}
