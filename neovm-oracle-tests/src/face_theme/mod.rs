@@ -27279,3 +27279,75 @@ fn ft_drill_face_text_property_prop_stack_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_hammer_face_overlay_face_with_fringe_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'line-spacing 5)
+      (list
+       'face (overlay-get ov 'face)
+       'line-spacing (overlay-get ov 'line-spacing)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hammer_font_lock_fontify_char_syntax_table() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(modify-syntax-entry ?- \"w\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'modify-syntax-face (save-excursion (goto-char (point-min)) (search-forward "modify-syntax-entry") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_hammer_face_overlay_buffer_substring_face_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'substring (buffer-substring 1 6)
+       'substring-face (get-text-property 1 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hammer_face_text_property_face_overlay_prop_priority_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'italic)
+      (list
+       'text-prop (get-text-property 3 'face)
+       'char-prop (get-char-property 3 'face)
+       'overlay-prop (overlay-get ov 'face)
+       'overlay-wins (not (eq (get-text-property 3 'face) (get-char-property 3 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
