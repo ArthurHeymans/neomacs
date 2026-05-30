@@ -18514,3 +18514,173 @@ fn ft_meson_face_text_property_interval_count_after_edits() {
       (nreverse counts))))"##,
     );
 }
+
+#[test]
+fn ft_lepton_face_overlay_with_string_propertize_face_roundtrip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string propertize face roundtrip test content data buffer")
+    (let* ((s (propertize "[[BEFORE-STRING-FACE-TEST]]" 'face '(:foreground "red" :weight bold :slant italic :underline t)))
+           (ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string s)
+      (list
+       'overlay-face (overlay-get ov 'face)
+       'before-string (overlay-get ov 'before-string)
+       'before-face (get-text-property 0 (overlay-get ov 'before-string))
+       'before-fg (plist-get (get-text-property 0 (overlay-get ov 'before-string)) :foreground)
+       'before-weight (plist-get (get-text-property 0 (overlay-get ov 'before-string)) :weight)
+       'before-slant (plist-get (get-text-property 0 (overlay-get ov 'before-string)) :slant)
+       'before-under (plist-get (get-text-property 0 (overlay-get ov 'before-string)) :underline)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_font_lock_fontify_buffer_double_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun double-check-test (x) (+ x 1))\n")
+    (let ((r1 nil) (r2 nil))
+      (font-lock-fontify-buffer)
+      (setq r1 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 26 32)))
+      (font-lock-unfontify-buffer)
+      (font-lock-fontify-buffer)
+      (setq r2 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 26 32)))
+      (list r1 r2 (equal r1 r2))))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_face_set_face_attribute_height_absolute_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-abs-height-face) (error nil))
+  (list
+   'set-height-80 (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 80) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'set-height-120 (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 120) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'set-height-200 (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 200) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'set-height-0.5 (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 0.5) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'set-height-2.0 (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 2.0) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'set-height-unspec (condition-case nil (progn (set-face-attribute 'my-abs-height-face nil :height 'unspecified) (face-attribute 'my-abs-height-face :height nil 'default-on)) (error 'no))
+   'default-height (face-attribute 'default :height nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_face_property_get_intangible_text_prop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Intangible text property face test buffer content data")
+    (put-text-property 1 15 'face 'bold)
+    (put-text-property 15 25 'intangible t)
+    (put-text-property 15 25 'face 'italic)
+    (put-text-property 25 45 'face 'underline)
+    (list
+     'face-and-intangible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'intangible))) '(1 10 15 20 25 30 40 44))
+     'prop-change-intangible (next-single-property-change 1 'intangible nil 45)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_face_overlay_multiple_overlays_same_region_merge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov1 (make-overlay 1 16))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 1 16))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 10))
+    (let ((ov3 (make-overlay 1 16))) (overlay-put ov3 'face '(:slant italic)) (overlay-put ov3 'priority 20))
+    (list
+     'same-prio-count (length (overlays-at 5))
+     'effective-face (get-char-property 5 'face)
+     'all-overlay-faces (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 5) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_font_lock_global_font_lock_available_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'global-font-lock-mode-fbound (fboundp 'global-font-lock-mode)
+   'global-font-lock-mode-bound (boundp 'global-font-lock-mode)
+   'global-font-lock-mode-value (if (boundp 'global-font-lock-mode) global-font-lock-mode 'no-bound)
+   'font-lock-global-modes-bound (boundp 'font-lock-global-modes)
+   'font-lock-global-modes-value (if (boundp 'font-lock-global-modes) font-lock-global-modes 'no-bound)
+   'font-lock-support-mode-bound (boundp 'font-lock-support-mode)
+   'font-lock-support-mode-value (if (boundp 'font-lock-support-mode) font-lock-support-mode 'no-bound)
+   'jit-lock-mode-fbound (fboundp 'jit-lock-mode))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_face_text_property_prev_single_property_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (put-text-property 31 36 'face '(:background "cyan"))
+    (list
+     'prev-from-36 (previous-single-property-change 36 'face nil 1)
+     'prev-from-25 (previous-single-property-change 25 'face nil 1)
+     'prev-from-15 (previous-single-property-change 15 'face nil 1)
+     'prev-from-5 (previous-single-property-change 5 'face nil 1)
+     'all-prev (let ((pos 36) (result nil))
+                 (while pos
+                   (setq pos (previous-single-property-change pos 'face nil 1))
+                   (when pos (push pos result)))
+                 (nreverse result)))))"##,
+    );
+}
+
+#[test]
+fn ft_lepton_face_overlay_face_remap_and_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (put-text-property 1 26 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'before-remap (get-char-property 10 'face)
+       'add-remap-to-bold (condition-case nil (progn (face-remap-add-relative 'bold '(:foreground "red")) 'ok) (error 'no))
+       'after-remap (get-char-property 10 'face)
+       'remap-alist (face-remapping-alist)
+       (condition-case nil (progn (face-remap-reset-base 'bold) 'reset) (error 'no))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
