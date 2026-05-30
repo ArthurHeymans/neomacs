@@ -2976,12 +2976,20 @@ pub(crate) fn builtin_internal_copy_lisp_face(
     copy_defaults_overrides(&from_name, &to_name);
     let result = args[1];
 
+    // Copy the Rust FaceTable entry.
+    eval.face_table.ensure_face(&to_name);
     let copied = eval
         .face_table
         .get(&from_name)
         .cloned()
         .unwrap_or_else(|| eval.face_table.resolve(&from_name));
     eval.face_table.define(&to_name, copied);
+    // Copy the Lisp face vector — mirrors GNU's `vcopy(copy, 0,
+    // xvector_contents(lface), LFACE_VECTOR_SIZE)` in
+    // Finternal_copy_lisp_face (xfaces.c:3183).
+    if let Some(face_vec) = eval.obarray().get_property(&from_name, "face") {
+        let _ = eval.obarray_mut().put_property(&to_name, "face", face_vec);
+    }
     eval.face_change_count += 1;
 
     Ok(result)
