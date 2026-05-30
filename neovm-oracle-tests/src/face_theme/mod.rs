@@ -5065,3 +5065,160 @@ fn ft_deep_face_font_lock_with_python_mode_colors() {
       (error (list 'python-error (fboundp 'python-mode))))))"##,
     );
 }
+
+#[test]
+fn ft_deep_font_lock_ruby_mode_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (progn
+          (ruby-mode)
+          (insert "def my_method(x)\n  x + 1\nend\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face))
+                   (list needle 'not-found))))
+           '("def" "my_method" "end")))
+      (error (list 'ruby-error (fboundp 'ruby-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_font_lock_cpp_mode_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (progn
+          (c++-mode)
+          (insert "#include <stdio.h>\nint main() { return 0; }\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face))
+                   (list needle 'not-found))))
+           '("include" "int" "main" "return")))
+      (error (list 'cpp-error (fboundp 'c++-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_with_js_mode_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (let ((js-indent-level 2))
+          (js-mode)
+          (insert "function hello(name) {\n  return 'hi ' + name;\n}\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face))
+                   (list needle 'not-found))))
+           '("function" "hello" "return")))
+      (error (list 'js-error (fboundp 'js-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_markdown_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (progn
+          (markdown-mode)
+          (insert "# Heading\n**Bold** text *italic* text\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face))
+                   (list needle 'not-found))))
+           '("Heading" "Bold" "italic")))
+      (error (list 'md-error (fboundp 'markdown-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_font_lock_rust_mode_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (condition-case nil
+        (progn
+          (rust-mode)
+          (insert "fn main() { let x = 42; println!(\"{}\", x); }\n")
+          (font-lock-ensure (point-min) (point-max))
+          (mapcar
+           (lambda (needle)
+             (save-excursion
+               (goto-char (point-min))
+               (if (search-forward needle nil t)
+                   (list needle (get-text-property (match-beginning 0) 'face))
+                   (list needle 'not-found))))
+           '("fn" "main" "let" "println")))
+      (error (list 'rust-error (fboundp 'rust-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_multiple_windows_same_buffer_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multi-window same buffer face test text")
+    (put-text-property 1 13 'face 'bold)
+    (put-text-property 13 25 'face 'italic)
+    (put-text-property 25 40 'face 'underline)
+    (save-selected-window
+      (list
+       'face-in-original (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 20 30))
+       'buffer-name (buffer-name))))))"##,
+    );
+}
+
+#[test]
+fn ft_deep_face_with_minibuffer_text_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Minibuffer-like text properties test")
+    (put-text-property 1 12 'face 'minibuffer-prompt)
+    (put-text-property 12 35 'face '(:foreground "gray"))
+    (list
+     'minibuffer-prompt-face (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'field))) '(1 5 10))
+     'normal-text (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(15 20 30))
+     'minibuffer-prompt-facep (facep 'minibuffer-prompt)
+     'completions-common-part-facep (condition-case nil (facep 'completions-common-part) (error 'no-face))
+     'completions-first-difference-facep (condition-case nil (facep 'completions-first-difference) (error 'no-face))))))"##,
+    );
+}
