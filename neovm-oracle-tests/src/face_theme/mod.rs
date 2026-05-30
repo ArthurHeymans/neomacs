@@ -27595,3 +27595,77 @@ fn ft_vault_font_lock_fontify_with_char_classes() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_climax_face_overlay_face_interleave_text_prop_and_ov_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
+    (put-text-property 1 11 'face 'bold)
+    (let ((ov (make-overlay 5 26)))
+      (overlay-put ov 'face 'italic))
+    (put-text-property 21 31 'face 'underline)
+    (list
+     'txt-only (get-char-property 3 'face)
+     'txt+ov (get-char-property 8 'face)
+     'ov-only (get-char-property 15 'face)
+     'ov+txt2 (get-char-property 24 'face)
+     'txt2-only (get-char-property 28 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_climax_font_lock_fontify_defalias_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defalias 'my-fn 'list)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defalias-face (save-excursion (goto-char (point-min)) (search-forward "defalias") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_climax_face_overlay_face_empty_overlay_iteration_test() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((empty-ov (make-overlay 1 1))) (overlay-put empty-ov 'face '(:foreground "red")))
+    (let ((non-empty (make-overlay 1 6))) (overlay-put non-empty 'face '(:foreground "green")))
+    (list
+     'overlays-at-pos1 (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 1))
+     'overlays-at-pos3 (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 3))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_climax_face_text_property_exhaustive_plist_extract() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face '(:foreground "red" :weight bold :slant italic :underline t :height 1.1 :extend t))
+    (let ((pl (get-text-property 3 'face))
+          (result nil))
+      (while pl
+        (push (list (car pl) (cadr pl)) result)
+        (setq pl (cddr pl)))
+      (nreverse result))))"##,
+    );
+}
