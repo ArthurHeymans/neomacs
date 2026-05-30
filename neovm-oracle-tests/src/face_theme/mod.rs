@@ -24226,3 +24226,173 @@ fn ft_divergence_face_font_xlfd_parse_deep() {
    'font-put-fbound (fboundp 'font-put))))"##,
     );
 }
+
+#[test]
+fn ft_hunt_face_overlay_face_multi_priority_chain_reverse() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 3))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 2))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face '(:foreground "blue")) (overlay-put ov3 'priority 1))
+    (list
+     'highest-prio-wins (get-char-property 3 'face)
+     'reverse (progn (overlay-put ov3 'priority 5) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_font_lock_fontify_after_global_font_lock_mode() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'global-font-lock-fbound (fboundp 'global-font-lock-mode)
+   'font-lock-support-mode (condition-case nil (symbol-value 'font-lock-support-mode) (error 'no))
+   'global-font-lock-state (condition-case nil (if (and (boundp 'global-font-lock-mode) (symbol-value 'global-font-lock-mode)) 'on 'off) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_face_overlay_face_with_text_scale_adjustment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:height 1.5 :weight bold))
+      (list
+       'face (overlay-get ov 'face)
+       'height (plist-get (overlay-get ov 'face) :height)
+       'weight (plist-get (overlay-get ov 'face) :weight)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_face_text_property_face_plist_inherit_and_extend() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face '(:inherit bold :extend t :foreground "red"))
+    (list
+     'face-pos1 (get-text-property 1 'face)
+     'face-pos7 (get-text-property 7 'face)
+     'face-pos8-extend (get-text-property 8 'face)
+     'face-at-pos9 (get-text-property 9 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_font_lock_fontify_after_buffer_switch_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (let ((buf1 (generate-new-buffer "test-buf1"))
+        (buf2 (generate-new-buffer "test-buf2")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buf1
+            (emacs-lisp-mode)
+            (insert "(setq x 42)\n")
+            (font-lock-fontify-buffer))
+          (with-current-buffer buf2
+            (emacs-lisp-mode)
+            (insert "(defun y (z) (* z 2))\n")
+            (font-lock-fontify-buffer))
+          (list
+           'buf1-face (with-current-buffer buf1 (get-text-property 2 'face))
+           'buf2-face (with-current-buffer buf2 (get-text-property 2 'face))
+           'buf1-fontified (with-current-buffer buf1 (get-text-property 1 'fontified))
+           'buf2-fontified (with-current-buffer buf2 (get-text-property 1 'fontified))))
+      (kill-buffer buf1)
+      (kill-buffer buf2))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_face_set_face_underline_color_style_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-color-face) (error nil))
+  (list
+   'default (condition-case nil (face-attribute 'default :underline nil 'default-on) (error 'no))
+   'set-color-only (condition-case nil (progn (set-face-attribute 'my-ul-color-face nil :underline '(:color "red")) (face-attribute 'my-ul-color-face :underline nil 'default-on)) (error 'no))
+   'set-color-wave (condition-case nil (progn (set-face-attribute 'my-ul-color-face nil :underline '(:color "blue" :style wave)) (face-attribute 'my-ul-color-face :underline nil 'default-on)) (error 'no))
+   'set-color-double (condition-case nil (progn (set-face-attribute 'my-ul-color-face nil :underline '(:color "green" :style double-line)) (face-attribute 'my-ul-color-face :underline nil 'default-on)) (error 'no))
+   'set-color-dot (condition-case nil (progn (set-face-attribute 'my-ul-color-face nil :underline '(:color "purple" :style dots)) (face-attribute 'my-ul-color-face :underline nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-attribute 'my-ul-color-face nil :underline nil) (face-attribute 'my-ul-color-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_face_overlay_face_filter_insert_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 3)
+      (insert "XYZ")
+      (list
+       'face-before-insert (get-text-property 1 'face)
+       'face-after-insert (get-text-property 4 'face)
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_face_face_number_to_face_and_back() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'face-id-default (condition-case nil (face-id 'default) (error 'no))
+   'face-id-bold (condition-case nil (face-id 'bold) (error 'no))
+   'face-id-italic (condition-case nil (face-id 'italic) (error 'no))
+   'face-id-nonface (condition-case nil (face-id 'non-existent-face) (error 'no))
+   'face-id-from-face (condition-case nil (face-id (face-name 'default)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt_font_lock_fontify_set_buffer_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (let ((font-lock-keyword-face 'font-lock-warning-face))
+      (insert "(setq var 42)\n")
+      (font-lock-fontify-buffer)
+      (list
+       'keyword-face (save-excursion (goto-char (point-min)) (search-forward "setq") (get-text-property (match-beginning 0) 'face))
+       'var-face (save-excursion (goto-char (point-min)) (search-forward "var") (get-text-property (match-beginning 0) 'face))
+       'fontified (get-text-property 1 'fontified))))))"##,
+    );
+}
