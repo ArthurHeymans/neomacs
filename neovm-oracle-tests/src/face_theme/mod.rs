@@ -928,3 +928,518 @@ fn ft_complex_face_with_org_indent_mode_deep() {
          "Body alpha" "Body beta" "Body gamma")))))"##,
     );
 }
+
+// ==========================================================
+// Very strict, complex multi-layer divergence tests
+// ==========================================================
+
+#[test]
+fn ft_strict_face_remap_buffer_face_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Buffer face mode test text here")
+    (put-text-property 1 8 'face 'bold)
+    (put-text-property 8 17 'face 'italic)
+    (let ((snap (lambda ()
+                  (list
+                   (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'font-lock-face))) '(1 5 8 12 17))
+                   (face-remapping-alist)))))
+      (let ((v0 (funcall snap)))
+        ;; Apply buffer face remapping
+        (condition-case nil
+            (face-remap-add-relative 'default '(:height 1.2 :weight bold))
+          (error nil))
+        (let ((v1 (funcall snap)))
+          ;; Remap italic to underline
+          (condition-case nil
+              (face-remap-add-relative 'italic '(:underline t))
+            (error nil))
+          (let ((v2 (funcall snap)))
+            ;; Remove remaps
+            (condition-case nil
+                (face-remap-reset-base 'default)
+              (error nil))
+            (condition-case nil
+                (face-remap-reset-base 'italic)
+              (error nil))
+            (let ((v3 (funcall snap)))
+              (list v0 v1 v2 v3)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_font_lock_add_keywords_custom_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "IMPORTANT: This is a WARNING message with NOTE highlighted.")
+    ;; Add custom keywords
+    (let ((kwds '(("\\<\\(IMPORTANT\\)\\>" 1 'font-lock-warning-face prepend)
+                  ("\\<\\(WARNING\\)\\>" 1 '(:foreground "red" :weight bold) prepend)
+                  ("\\<\\(NOTE\\)\\>" 1 '(:foreground "blue" :slant italic) prepend))))
+      (font-lock-add-keywords nil kwds)
+      (font-lock-fontify-buffer)
+      (list
+       (mapcar (lambda (needle)
+                 (save-excursion
+                   (goto-char (point-min))
+                   (if (search-forward needle nil t)
+                       (list needle
+                             (get-text-property (match-beginning 0) 'face)
+                             (get-text-property (match-beginning 0) 'fontified)
+                             (get-text-property (match-beginning 0) 'font-lock-face))
+                       (list needle 'not-found nil nil))))
+               '("IMPORTANT" "WARNING" "NOTE" "message" "highlighted"))
+       ;; Edit and re-fontify
+       (progn
+         (goto-char (point-min))
+         (search-forward "WARNING")
+         (replace-match "CRITICAL")
+         (search-forward "NOTE")
+         (replace-match "INFO")
+         (font-lock-fontify-buffer)
+         (mapcar (lambda (needle)
+                   (save-excursion
+                     (goto-char (point-min))
+                     (if (search-forward needle nil t)
+                         (list needle
+                               (get-text-property (match-beginning 0) 'face))
+                         (list needle 'not-found))))
+                 '("IMPORTANT" "CRITICAL" "INFO")))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_cache_invalidation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (newline-and-indent)
+  (with-temp-buffer
+    (insert "Face caching test - repeated face lookups")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 13 'face 'italic)
+    (put-text-property 13 23 'face 'underline)
+    (put-text-property 23 36 'face '(:foreground "red"))
+    (list
+     ;; Multiple reads from same position
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (let ((f1 (get-text-property pos 'face))
+                     (f2 (get-text-property pos 'face))
+                     (f3 (get-text-property pos 'face)))
+                 (list pos f1 (eq f1 f2) (eq f2 f3))))
+             '(1 6 13 23 30))
+     ;; Face at prop change boundary
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (get-text-property pos 'face)
+                     (let ((next (next-single-property-change pos 'face)))
+                       (list 'next-face-at next
+                             (get-text-property next 'face)))))
+             '(1 5 6 8 13 18 23 28 35))
+     ;; Verify text-properties-at returns all props
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos (length (text-properties-at pos))))
+             '(1 6 13 23 30)))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_org_emphasis_list_modify_render_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "*bold* /italic/ _under_ +strike+ ~code~ =verb=\n")
+    (font-lock-ensure (point-min) (point-max))
+    (let ((snap (lambda ()
+                  (mapcar (lambda (what pos)
+                            (goto-char pos)
+                            (list what pos (get-text-property pos 'face)))
+                          '("b" "i" "u" "s" "c" "v")
+                          '(2 4 6 8 10 12)))))
+      (let ((v0 (funcall snap)))
+        ;; Modify org-emphasis-alist to change face
+        (let ((org-emphasis-alist
+               '(("*" bold)
+                 ("/" italic)
+                 ("_" (:foreground "blue" :underline t))
+                 ("+" strike-through)
+                 ("~" (:foreground "green"))
+                 ("=" (:foreground "purple" :slant italic)))))
+          (font-lock-flush)
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            ;; Restore and re-render
+            (let ((org-emphasis-alist
+                   '(("*" bold)
+                     ("/" italic)
+                     ("_" underline)
+                     ("+" strike-through)
+                     ("~" org-code)
+                     ("=" org-verbatim))))
+              (font-lock-flush)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v2 (funcall snap)))
+                (list v0 v1 v2)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_text_scale_adjust_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'face-remap)
+  (with-temp-buffer
+    (insert "Text scale adjust test line")
+    (put-text-property 1 7 'face 'bold)
+    (put-text-property 7 14 'face 'italic)
+    (put-text-property 14 24 'face '(:foreground "blue"))
+    (let ((snap (lambda ()
+                  (list
+                   (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'font-lock-face))) '(1 5 7 10 14 18 22))
+                   (face-attribute 'default :height nil 'default-on)))))
+      (let ((v0 (funcall snap)))
+        ;; Apply text-scale
+        (condition-case nil
+            (text-scale-increase 2)
+          (error nil))
+        (let ((v1 (funcall snap)))
+          ;; Reset
+          (condition-case nil
+              (text-scale-set 0)
+            (error nil))
+          (let ((v2 (funcall snap)))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_clone_buffer_face_propagation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Original\nBody orig.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let* ((original (current-buffer))
+             (reader (lambda (buf)
+                       (with-current-buffer buf
+                         (mapcar (lambda (needle)
+                                   (goto-char (point-min))
+                                   (if (search-forward needle nil t)
+                                       (list needle
+                                             (get-text-property (match-beginning 0) 'face)
+                                             (get-text-property (match-beginning 0) 'fontified)
+                                             (get-text-property (match-beginning 0) 'font-lock-face))
+                                       (list needle 'not-found nil nil)))
+                                 '("TODO" "DONE" "Body orig"))))))
+        (let ((v0 (funcall reader original)))
+          ;; Clone indirect buffer
+          (let* ((clone-name (generate-new-buffer-name "*clone*"))
+                 (clone (make-indirect-buffer original clone-name t)))
+            (unwind-protect
+                (let ((v1 (funcall reader clone)))
+                  ;; Edit in clone: change TODO to DONE
+                  (with-current-buffer clone
+                    (goto-char (point-min))
+                    (search-forward "TODO")
+                    (replace-match "DONE")
+                    (font-lock-ensure (point-min) (point-max)))
+                  (let ((v2 (funcall reader clone))
+                        (v2o (funcall reader original)))
+                    ;; Edit in original: insert new heading
+                    (with-current-buffer original
+                      (goto-char (point-max))
+                      (insert "* NEXT New heading\nBody new.\n")
+                      (font-lock-ensure (point-min) (point-max)))
+                    (let ((v3 (funcall reader original))
+                          (v3c (funcall reader clone)))
+                      (list v0 v1 v2 v2o v3 v3c)))))
+              (when (get-buffer clone-name) (kill-buffer clone-name)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_multiple_overlay_faces_at_point_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multi overlay face test text zone")
+    ;; Base text property
+    (put-text-property 1 31 'face '(:foreground "gray"))
+    ;; Multiple overlays with different priorities and windows
+    (let ((ov1 (make-overlay 1 10)))
+      (overlay-put ov1 'face '(:background "red"))
+      (overlay-put ov1 'priority 50))
+    (let ((ov2 (make-overlay 5 15)))
+      (overlay-put ov2 'face '(:foreground "green" :weight bold))
+      (overlay-put ov2 'priority 100))
+    (let ((ov3 (make-overlay 10 20)))
+      (overlay-put ov3 'face '(:foreground "blue"))
+      (overlay-put ov3 'priority 75))
+    (let ((ov4 (make-overlay 15 25)))
+      (overlay-put ov4 'face '(:background "yellow" :foreground "black"))
+      (overlay-put ov4 'priority 200))
+    (let ((ov5 (make-overlay 20 31)))
+      (overlay-put ov5 'face '(:slant italic :weight bold))
+      (overlay-put ov5 'priority 25))
+    (list
+     ;; Face at each position
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (get-char-property pos 'face)
+                     (get-text-property pos 'face)
+                     (length (overlays-at pos))))
+             '(1 5 8 10 12 15 18 20 22 25 28 30))
+     ;; Remove highest priority overlay
+     (progn
+       (delete-overlay ov4)
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-char-property pos 'face)))
+               '(1 5 10 15 18 20 25)))
+     ;; Change priority
+     (progn
+       (overlay-put ov1 'priority 300)
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-char-property pos 'face)))
+               '(1 5 8 10)))
+     ;; Add an overlay with nil face (should expose lower priority)
+     (progn
+       (let ((ov6 (make-overlay 1 31)))
+         (overlay-put ov6 'face nil)
+         (overlay-put ov6 'priority 999))
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-char-property pos 'face)))
+               '(1 5 10 15 20 25 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_glyphless_char_display_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (if (fboundp 'glyphless-char-display-control)
+        ;; Test glyphless display
+        (list
+         'glyphless-available
+         (glyphless-char-display-control))
+      (list 'no-glyphless-control))
+    (if (fboundp 'standard-display-table)
+        ;; Test display table
+        (list
+         'display-table-available
+         (standard-display-table))
+      (list 'no-display-table))
+    ;; Test with actual text
+    (insert "\x200B\x200C\x200D")
+    (font-lock-ensure (point-min) (point-max))
+    (mapcar (lambda (pos)
+              (goto-char pos)
+              (list pos
+                    (get-text-property pos 'face)
+                    (get-text-property pos 'display)
+                    (get-text-property pos 'glyphless-char)))
+            '(1 2 3))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_org_face_hide_show_refile_combo_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* TODO Project\n")
+      (insert ":PROPERTIES:\n:Owner: Alice\n:END:\n")
+      (insert "** DONE Task-A\nBody A.\n\n")
+      (insert "** TODO Task-B\nBody B.\n\n")
+      (insert "** WAIT Task-C\nBody C.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (get-text-property (match-beginning 0) 'face)
+                                   (invisible-p (match-beginning 0))
+                                   (org-outline-level))
+                             (list needle 'not-found nil nil nil))))
+                     '("Project" "Task-A" "Task-B" "Task-C")))))
+        (let ((v0 (funcall snap)))
+          ;; Hide all
+          (org-fold-hide-all)
+          (let ((v1 (funcall snap)))
+            ;; Edit: insert Task-D under hidden Project
+            (goto-char (point-min))
+            (search-forward "Project")
+            (end-of-line)
+            (insert "\n** TODO Task-D\nBody D.\n")
+            (let ((v2 (funcall snap)))
+              ;; Show all and refontify
+              (org-fold-show-all)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Change Task-B to DONE
+                (goto-char (point-min))
+                (search-forward "TODO Task-B")
+                (replace-match "DONE Task-B")
+                (font-lock-ensure (point-min) (point-max))
+                (let ((v4 (funcall snap)))
+                  ;; Global cycle
+                  (org-global-cycle nil)
+                  (let ((v5 (funcall snap)))
+                    (org-global-cycle nil)
+                    (font-lock-ensure (point-min) (point-max))
+                    (let ((v6 (funcall snap)))
+                      (list v0 v1 v2 v3 v4 v5 v6)))))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_custom_theme_load_unload_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'custom)
+  (require 'cus-face)
+  (list
+   ;; Theme functions
+   (list 'custom-available-themes
+         (fboundp 'custom-available-themes)
+         (condition-case nil
+             (and (fboundp 'custom-available-themes)
+                  (custom-available-themes))
+           (error 'no-available-themes)))
+   ;; Load theme
+   (condition-case nil
+       (progn
+         (if (fboundp 'load-theme)
+             (let ((before-weight (face-attribute 'default :weight nil 'default-on))
+                   (before-slant (face-attribute 'default :slant nil 'default-on)))
+               (list 'load-theme-ok
+                     before-weight
+                     before-slant))
+           (list 'no-load-theme)))
+     (error 'themes-error))
+   ;; face-spec functions
+   (list 'face-spec
+         (fboundp 'face-spec-set)
+         (fboundp 'face-spec-choose)
+         (fboundp 'face-spec-recalc)
+         (fboundp 'face-spec-match-p))
+   ;; Default face attributes after all ops
+   (list 'final-attrs
+         (face-attribute 'default :family nil 'default-on)
+         (face-attribute 'default :foundry nil 'default-on)
+         (face-attribute 'default :width nil 'default-on)
+         (face-attribute 'default :height nil 'default-on)
+         (face-attribute 'default :weight nil 'default-on)
+         (face-attribute 'default :slant nil 'default-on)
+         (face-attribute 'default :underline nil 'default-on)
+         (face-attribute 'default :overline nil 'default-on)
+         (face-attribute 'default :strike-through nil 'default-on)
+         (face-attribute 'default :box nil 'default-on)
+         (face-attribute 'default :inverse-video nil 'default-on)
+         (face-attribute 'default :foreground nil 'default-on)
+         (face-attribute 'default :background nil 'default-on)
+         (face-attribute 'default :stipple nil 'default-on)
+         (face-attribute 'default :inherit nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_strict_face_with_special_text_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Special text property test buffer content")
+    ;; Various special properties
+    (put-text-property 1 9 'face 'bold)
+    (put-text-property 1 9 'read-only t)
+    (put-text-property 9 15 'face 'italic)
+    (put-text-property 9 15 'intangible t)
+    (put-text-property 15 24 'face 'underline)
+    (put-text-property 15 24 'invisible t)
+    (put-text-property 24 33 'face '(:foreground "red"))
+    (put-text-property 24 33 'field 'test-field)
+    (put-text-property 33 40 'face '(:background "yellow"))
+    (put-text-property 33 40 'category 'test-cat)
+    (list
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (get-text-property pos 'face)
+                     (get-text-property pos 'read-only)
+                     (get-text-property pos 'intangible)
+                     (get-text-property pos 'invisible)
+                     (get-text-property pos 'field)
+                     (get-text-property pos 'category)
+                     (get-text-property pos 'fontified)))
+             '(1 5 9 12 15 20 24 28 33 37))
+     ;; After removing read-only
+     (progn
+       (let ((inhibit-read-only t))
+         (remove-text-properties 1 9 '(read-only nil face nil))
+         (put-text-property 1 9 'face '(:slant italic))
+         (mapcar (lambda (pos)
+                   (goto-char pos)
+                   (list pos
+                         (get-text-property pos 'face)
+                         (get-text-property pos 'read-only)))
+                 '(1 5))))
+     ;; After removing invisible
+     (progn
+       (remove-text-properties 15 24 '(invisible nil))
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-text-property pos 'face) (get-text-property pos 'invisible)))
+               '(15 20))))))"##,
+    );
+}
