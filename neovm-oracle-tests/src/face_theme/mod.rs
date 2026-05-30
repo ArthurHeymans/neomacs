@@ -11750,3 +11750,172 @@ fn ft_iota_face_with_face_list_dedup_and_sort() {
    'has-tool-bar (if (member 'tool-bar (face-list)) 'present 'absent))))"##,
     );
 }
+
+#[test]
+fn ft_kappa_face_last_char_property_survival_after_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "LAST")
+    (put-text-property 1 5 'face 'bold)
+    (list
+     'before-insert (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 4 5))
+     'after-insert-end (progn (goto-char 5) (insert " INSERTION") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 4 5 6 10 14)))
+     'after-insert-beginning (progn (goto-char 1) (insert "START ") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 6 7 8 12 16)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_font_lock_fontify_keyword_with_special_chars() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Special $chars *test* with ++font-lock++ and ==highlight==")
+    (font-lock-add-keywords nil
+                            '(("\\*\\*\\*" 0 font-lock-warning-face t)
+                              ("\\+\\+[^+]\\+\\+\\+" 0 '(:foreground "red") t)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (needle)
+              (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face))))
+            '("*test*" "++font-lock++"))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_set_attribute_with_integer_weight_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'weight-thin (face-attribute 'default :weight nil 'default-on)
+   'weight-ultra-light (if (member 'ultra-light (font-weight-table)) 'available 'not-available)
+   'weight-light (if (member 'light (font-weight-table)) 'available 'not-available)
+   'weight-normal (if (member 'normal (font-weight-table)) 'available 'not-available)
+   'weight-regular (if (member 'regular (font-weight-table)) 'available 'not-available)
+   'weight-medium (if (member 'medium (font-weight-table)) 'available 'not-available)
+   'weight-semi-bold (if (member 'semi-bold (font-weight-table)) 'available 'not-available)
+   'weight-bold (if (member 'bold (font-weight-table)) 'available 'not-available)
+   'weight-extra-bold (if (member 'extra-bold (font-weight-table)) 'available 'not-available)
+   'weight-heavy (if (member 'heavy (font-weight-table)) 'available 'not-available)
+   'weight-ultra-heavy (if (member 'ultra-heavy (font-weight-table)) 'available 'not-available)
+   'font-weight-table-full (if (boundp 'font-weight-table) font-weight-table 'no-table))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_object_intervals_with_multiple_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXYYYZZZWWW")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 10 'face 'underline)
+    (put-text-property 10 13 'face '(:foreground "red"))
+    (put-text-property 1 13 'shared-prop 'shared-value)
+    (list
+     'interval-count (length (object-intervals (current-buffer)))
+     'interval-objects (mapcar (lambda (obj) (list (overlay-start obj) (overlay-end obj))) (object-intervals (current-buffer)))
+     'spot-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'shared-prop))) '(1 3 5 8 10 12)))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_font_lock_ensure_with_no_font_lock_mode() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    ;; Don't enable font-lock-mode
+    (insert "Font lock ensure without font lock mode enabled test")
+    (list
+     'font-lock-mode font-lock-mode
+     'before-ensure-face (get-text-property 1 'face)
+     'after-ensure (condition-case nil (progn (font-lock-ensure (point-min) (point-max)) 'ensured) (error 'ensure-failed))
+     'after-ensure-mode font-lock-mode
+     'after-ensure-face (get-text-property 1 'face)
+     'after-ensure-fontified (get-text-property 1 'fontified))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_text_property_remove_in_middle_of_interval() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAAAAAABBBBBBBBBBBBBBCCCCCCCCCCCCCC")
+    (put-text-property 1 17 'face 'bold)
+    (put-text-property 17 33 'face 'italic)
+    (put-text-property 33 49 'face 'underline)
+    ;; Remove face from middle of bold region
+    (remove-text-properties 5 12 '(face nil))
+    ;; Remove face from middle of italic region
+    (remove-text-properties 22 28 '(face nil))
+    (list
+     'face-gaps (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 8 12 17 22 25 28 33 40 48))
+     'find-bold (text-property-any 1 49 'face 'bold)
+     'find-italic (text-property-any 1 49 'face 'italic)
+     'find-underline (text-property-any 1 49 'face 'underline)
+     'find-nil (text-property-any 1 49 'face nil)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_set_face_attribute_box_styles_variants() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-box-styles-face) (error nil))
+  (list
+   'box-simple (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box t) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-width (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:line-width 3)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-released (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style released-button)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-pressed (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style pressed-button :color "red")) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-flat (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box '(:style flat-button)) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no))
+   'box-none (condition-case nil (progn (set-face-attribute 'my-box-styles-face nil :box nil) (face-attribute 'my-box-styles-face :box nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_kappa_face_font_lock_remove_nonexistent_keyword() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'remove-nonexistent
+   (condition-case nil
+       (progn
+         (font-lock-remove-keywords nil '(("\\<\\(nonexistent-kw\\)\\>" 1 font-lock-warning-face t)))
+         'removed-silently)
+     (error 'remove-error))
+   'remove-valid-with-nonexistent
+   (condition-case nil
+       (progn
+         (font-lock-add-keywords nil '(("\\<\\(VALID-KW\\)\\>" 1 '(:foreground "red") t)))
+         (font-lock-remove-keywords nil
+                                    '(("\\<\\(VALID-KW\\)\\>" 1 '(:foreground "red") t)
+                                      ("\\<\\(nonexistent-kw2\\)\\>" 1 font-lock-warning-face t)))
+         'mixed-removed)
+     (error 'mixed-error)))))"##,
+    );
+}
