@@ -427,6 +427,11 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     remove_stale_generated_leim_sources(options, &paths)?;
     remove_stale_generated_custom_finder_sources(options, &paths)?;
     remove_stale_generated_unidata_sources(options, &paths)?;
+    // GNU admin/grammars/Makefile.in has an intentionally empty
+    // bootstrap-clean (with a comment "IMO this should run gen-clean"),
+    // so stale grammar outputs can survive across rebuilds and cause
+    // hard-to-diagnose bootstrap failures when the engine binary changes.
+    remove_stale_semantic_grammar_outputs(options, &paths)?;
     // GNU src/Makefile.in makes temacs depend on the generated charset
     // translation tables plus the AWK-generated Unicode helpers needed by
     // early loadup.  These are source artifacts in lisp/international/, but
@@ -1842,6 +1847,37 @@ fn remove_stale_generated_custom_finder_sources(
         }
     }
     println!("  INFO  removed {removed} stale generated custom/finder source files");
+    Ok(())
+}
+
+fn remove_stale_semantic_grammar_outputs(
+    options: &FreshBuildOptions,
+    paths: &PipelinePaths,
+) -> Result<()> {
+    let files: Vec<PathBuf> = semantic_grammar_targets(paths)
+        .into_iter()
+        .map(|target| target.output)
+        .filter(|path| options.dry_run || path.exists())
+        .collect();
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    print_synthetic_step("remove stale semantic grammar outputs");
+    if options.dry_run {
+        for file in &files {
+            println!("  would remove: {}", file.display());
+        }
+        return Ok(());
+    }
+
+    let mut removed = 0usize;
+    for file in &files {
+        if remove_file_if_exists(file)? {
+            removed += 1;
+        }
+    }
+    println!("  INFO  removed {removed} stale semantic grammar outputs");
     Ok(())
 }
 
