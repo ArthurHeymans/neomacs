@@ -16845,3 +16845,164 @@ fn ft_ray_face_property_list_access_cycle_deep() {
        'check-p6-at-30 (get-text-property 30 'p6))))))"##,
     );
 }
+
+#[test]
+fn ft_beam_face_overlay_with_both_start_end_empty_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Both start end empty overlay test content text data buffer here now")
+    (let ((ov1 (make-overlay 1 1))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'before-string "[START]"))
+    (let ((ov2 (make-overlay 57 57))) (overlay-put ov2 'face '(:background "blue")) (overlay-put ov2 'after-string "[END]"))
+    (list
+     'start-face (overlay-get ov1 'face)
+     'end-face (overlay-get ov2 'face)
+     'start-before (overlay-get ov1 'before-string)
+     'end-after (overlay-get ov2 'after-string)
+     'faces-at-boundaries (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 30 57))
+     (progn (mapc #'delete-overlay (overlays-in 1 57)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_font_lock_fontify_after_keyword_removal_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "REMOVE-ONE REMOVE-TWO REMOVE-ALL font lock keyword removal test end")
+    (font-lock-add-keywords nil '(("\\<\\(REMOVE-ONE\\)\\>" 1 '(:foreground "red") t) ("\\<\\(REMOVE-TWO\\)\\>" 1 '(:foreground "green") t) ("\\<\\(REMOVE-ALL\\)\\>" 1 '(:foreground "blue") t)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("REMOVE-ONE" "REMOVE-TWO" "REMOVE-ALL"))))
+      (font-lock-remove-keywords nil '(("\\<\\(REMOVE-ONE\\)\\>" 1 '(:foreground "red") t) ("\\<\\(REMOVE-TWO\\)\\>" 1 '(:foreground "green") t) ("\\<\\(REMOVE-ALL\\)\\>" 1 '(:foreground "blue") t)))
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("REMOVE-ONE" "REMOVE-TWO" "REMOVE-ALL"))))
+        (list v0 v1))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_text_property_with_complex_nested_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Complex nested face property test buffer content text data here now")
+    (put-text-property 1 60 'face (list :foreground "blue" :weight (list 'quote 'bold) :slant (list 'quote 'italic)))
+    (list
+     'face-value (get-text-property 1 'face)
+     'facep (facep (get-text-property 1 'face))
+     'plistp (plistp (get-text-property 1 'face))
+     'extract-fg (plist-get (get-text-property 1 'face) :foreground)
+     'extract-weight (plist-get (get-text-property 1 'face) :weight)
+     'extract-slant (plist-get (get-text-property 1 'face) :slant)
+     'length (length (get-text-property 1 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_overlay_insert_behind_front_combo_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov-front (make-overlay 6 15)))
+      (overlay-put ov-front 'face '(:background "yellow"))
+      (overlay-put ov-front 'insert-in-front-hooks (list 'ignore)))
+    (let ((ov-behind (make-overlay 20 30)))
+      (overlay-put ov-behind 'face '(:foreground "red" :weight bold))
+      (overlay-put ov-behind 'insert-behind-hooks (list 'ignore)))
+    (list
+     'faces-before (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25 30 35))
+     'after-insert-front (progn (goto-char 15) (insert "FRONT-INSERT") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 6 10 15 20 28 35)))
+     'after-insert-behind (progn (goto-char 30) (insert "BEHIND-INSERT") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 6 10 15 20 28 35 40)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_font_lock_fontify_batch_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (let ((noninteractive t))
+      (emacs-lisp-mode)
+      (insert "(defun batch-test (x) x)\n")
+      (font-lock-fontify-buffer)
+      (list
+       'noninteractive noninteractive
+       'face-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+       'fontified (get-text-property 1 'fontified)
+       'font-lock-verbose (if (boundp 'font-lock-verbose) font-lock-verbose 'no-bound))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_text_property_fontished_flag_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Fontified flag check face property test buffer content text data here end")
+    (list
+     'before-fontify (get-text-property 1 'fontified)
+     'set-face-prop (progn (put-text-property 1 20 'face 'bold) (get-text-property 1 'fontified))
+     'set-fontified-prop (progn (put-text-property 1 20 'fontified t) (get-text-property 1 'fontified))
+     'remove-fontified (progn (remove-text-properties 1 20 '(fontified nil)) (get-text-property 1 'fontified))
+     'set-fontified-back (progn (put-text-property 1 20 'fontified t) (get-text-property 1 'fontified))
+     'face-still-there (get-text-property 1 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_overlay_priority_within_range_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHH")
+    (let ((ov (make-overlay 5 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 20 30 40 45))
+       'change-priority-100 (progn (overlay-put ov 'priority 100) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 20 30 40 45)))
+       'change-priority-0 (progn (overlay-put ov 'priority 0) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 20 30 40 45)))
+       'change-face (progn (overlay-put ov 'face '(:foreground "red" :weight bold)) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 20 30 40 45)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_propertize_multiple_props_and_read() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((s (propertize "PROPERTIZED" 'face 'bold 'key1 'value1 'key2 'value2 'fontified t)))
+    (list
+     'face (get-text-property 0 'face s)
+     'key1 (get-text-property 0 'key1 s)
+     'key2 (get-text-property 0 'key2 s)
+     'fontified (get-text-property 0 'fontified s)
+     'length (length s)
+     'all-props (text-properties-at 0 s)
+     'props-count (length (text-properties-at 0 s))
+     ;; Modify and re-read
+     (progn (set-text-properties 0 (length s) (list 'face 'italic 'key3 'newval) s) (list 'modified-face (get-text-property 0 'face s) 'old-key1 (get-text-property 0 'key1 s) 'new-key3 (get-text-property 0 'key3 s)))))))"##,
+    );
+}
