@@ -27122,3 +27122,87 @@ fn ft_crush_face_text_property_get_interval_plists_deep() {
        'plist (cddr (car ints)))))))"##,
     );
 }
+
+#[test]
+fn ft_pound_face_overlay_face_display_then_invisible_interaction() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'display "REPLACED")
+      (overlay-put ov 'invisible t)
+      (list
+       'face (overlay-get ov 'face)
+       'display (overlay-get ov 'display)
+       'invisible (overlay-get ov 'invisible)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pound_font_lock_fontify_define_minor_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(define-minor-mode my-mode\n  \"My minor mode\"\n  :lighter \" MM\"\n  (if my-mode (message \"on\") (message \"off\")))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'define-minor-face (save-excursion (goto-char (point-min)) (search-forward "define-minor-mode") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_pound_face_overlay_face_get_from_outside_visible() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'get-outside (condition-case nil
+                       (with-temp-buffer
+                         (progn
+                           (let ((other-buf (current-buffer)))
+                             'ok)))
+                       (error 'no))
+       'face-in-buf (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_pound_face_text_property_put_get_many_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'font-lock-face 'italic)
+    (put-text-property 1 6 'mouse-face 'highlight)
+    (put-text-property 1 6 'help-echo "Hello")
+    (put-text-property 1 6 'pointer 'arrow)
+    (let ((props (text-properties-at 3)))
+      (list
+       'props-count (length props)
+       'face-in (member 'face props)
+       'font-lock-face-in (member 'font-lock-face props)
+       'mouse-face-in (member 'mouse-face props)
+       'help-echo-in (member 'help-echo props)
+       'pointer-in (member 'pointer props)
+       'true-count (/ (length props) 2))))))"##,
+    );
+}
