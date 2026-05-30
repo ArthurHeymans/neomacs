@@ -20243,3 +20243,161 @@ fn ft_final_fermion_face_color_hex_roundtrip_deep() {
    'hex-roundtrip (equal (color-name-to-rgb "red") (color-name-to-rgb "#FF0000")))))"##,
     );
 }
+
+#[test]
+fn ft_final_quark_face_overlay_face_string_at_buffer_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov-start (make-overlay 1 5))) (overlay-put ov-start 'face '(:background "red")) (overlay-put ov-start 'before-string "[S]"))
+    (let ((ov-end (make-overlay 35 36))) (overlay-put ov-end 'face '(:background "blue")) (overlay-put ov-end 'after-string "[E]"))
+    (list
+     'start-face (overlay-get ov-start 'face)
+     'end-face (overlay-get ov-end 'face)
+     'face-at-1 (get-char-property 1 'face)
+     'face-at-5 (get-char-property 5 'face)
+     'face-at-35 (get-char-property 35 'face)
+     'face-at-36 (get-char-property 36 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 36)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_font_lock_add_keywords_with_null_match() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "NULL-MATCH keyword test font lock face buffer content text")
+    (font-lock-add-keywords nil '(("\\<\\(NULL-MATCH\\)\\>" 1 font-lock-warning-face t)))
+    (font-lock-fontify-buffer)
+    (list
+     'match-face (save-excursion (goto-char (point-min)) (search-forward "NULL-MATCH") (get-text-property (match-beginning 0) 'face))
+     'non-match-face (save-excursion (goto-char (point-min)) (search-forward "keyword") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_face_set_attribute_inherit_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inherit-chain-face) (error nil))
+  (list
+   'set-inherit-bold (condition-case nil (progn (set-face-attribute 'my-inherit-chain-face nil :inherit 'bold) (face-attribute 'my-inherit-chain-face :inherit nil 'default-on)) (error 'no))
+   'weight-from-bold (face-attribute 'my-inherit-chain-face :weight nil 'default-on)
+   'set-inherit-italic (condition-case nil (progn (set-face-attribute 'my-inherit-chain-face nil :inherit 'italic) (face-attribute 'my-inherit-chain-face :inherit nil 'default-on)) (error 'no))
+   'slant-from-italic (face-attribute 'my-inherit-chain-face :slant nil 'default-on)
+   'set-inherit-list (condition-case nil (progn (set-face-attribute 'my-inherit-chain-face nil :inherit '(bold italic)) (face-attribute 'my-inherit-chain-face :inherit nil 'default-on)) (error 'no))
+   'inherit-list-get (face-attribute 'my-inherit-chain-face :inherit nil 'default-on)
+   'reset (condition-case nil (progn (set-face-attribute 'my-inherit-chain-face nil :inherit 'unspecified) (face-attribute 'my-inherit-chain-face :inherit nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_face_overlay_face_priority_sort_verify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ovs (list (let ((ov (make-overlay 1 21))) (overlay-put ov 'face '(:background "red")) (overlay-put ov 'priority 5) ov)
+                     (let ((ov (make-overlay 1 21))) (overlay-put ov 'face '(:background "green")) (overlay-put ov 'priority 25) ov)
+                     (let ((ov (make-overlay 1 21))) (overlay-put ov 'face '(:background "blue")) (overlay-put ov 'priority 15) ov))))
+    (let ((sorted (sort (copy-sequence ovs) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0))))))
+      (list
+       'sorted-prios (mapcar (lambda (ov) (overlay-get ov 'priority)) sorted)
+       'highest-prio (overlay-get (car sorted) 'priority)
+       'highest-face (overlay-get (car sorted) 'face)
+       'effective-face (get-char-property 5 'face)
+       (progn (mapc #'delete-overlay ovs) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_face_property_read_write_read_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Read write read cycle face property test buffer content data")
+    (list
+     'read-1 (get-text-property 1 'face)
+     'write-bold (progn (put-text-property 1 20 'face 'bold) (get-text-property 1 'face))
+     'write-italic (progn (put-text-property 1 20 'face 'italic) (get-text-property 1 'face))
+     'write-underline (progn (put-text-property 1 20 'face 'underline) (get-text-property 1 'face))
+     'write-plist (progn (put-text-property 1 20 'face '(:foreground "red" :weight bold)) (get-text-property 1 'face))
+     'remove (progn (remove-text-properties 1 20 '(face nil)) (get-text-property 1 'face))
+     'final (get-text-property 1 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_font_lock_fontify_with_custom_keywords() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "CUSTOM-KW-1 CUSTOM-KW-2 CUSTOM-KW-3 font lock face test buffer end")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(CUSTOM-KW-1\\)\\>" 1 '(:foreground "red") t)
+                              ("\\<\\(CUSTOM-KW-2\\)\\>" 1 '(:foreground "green") t)
+                              ("\\<\\(CUSTOM-KW-3\\)\\>" 1 '(:foreground "blue" :weight bold) t)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (list n (get-text-property (match-beginning 0) 'face)))) '("CUSTOM-KW-1" "CUSTOM-KW-2" "CUSTOM-KW-3"))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_face_color_defined_p_various_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'color-red (condition-case nil (color-defined-p "red") (error 'no))
+   'color-green (condition-case nil (color-defined-p "green") (error 'no))
+   'color-blue (condition-case nil (color-defined-p "blue") (error 'no))
+   'color-ff0000 (condition-case nil (color-defined-p "#FF0000") (error 'no))
+   'color-00ff00 (condition-case nil (color-defined-p "#00FF00") (error 'no))
+   'color-0000ff (condition-case nil (color-defined-p "#0000FF") (error 'no))
+   'color-invalid (condition-case nil (color-defined-p "#ZYXWVU") (error 'no))
+   'color-not-a-color (condition-case nil (color-defined-p "not-a-color-name-at-all") (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_final_quark_face_overlay_face_with_zero_width_regions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov-z1 (make-overlay 5 5))) (overlay-put ov-z1 'face '(:background "red")))
+    (let ((ov-z2 (make-overlay 15 15))) (overlay-put ov-z2 'face '(:background "green")))
+    (let ((ov-z3 (make-overlay 25 25))) (overlay-put ov-z3 'face '(:background "blue")))
+    (list
+     'zero-width-faces (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov) (overlay-get ov 'face))) (list ov-z1 ov-z2 ov-z3))
+     'face-at-5 (get-char-property 5 'face)
+     'face-at-15 (get-char-property 15 'face)
+     'face-at-25 (get-char-property 25 'face)
+     'after-insert (progn (goto-char 5) (insert "X") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(4 5 6 10 15 25)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned)))))"##,
+    );
+}
