@@ -2560,7 +2560,10 @@ fn apply_derived_font_face_overrides(
     Ok(())
 }
 
-fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, _defaults_frame: bool) -> Value {
+fn lisp_face_attribute_base_value(face: &str, attr: LFaceAttr, defaults_frame: bool) -> Value {
+    if defaults_frame {
+        return Value::symbol("unspecified");
+    }
     if face == "default" {
         return default_face_attribute_value(attr);
     }
@@ -2966,9 +2969,9 @@ pub(crate) fn builtin_internal_lisp_face_p(args: Vec<Value>) -> EvalResult {
     };
     if let Some(face_name) = known_face_name(&args[0]) {
         if frame_designator {
-            Ok(make_lisp_face_vector_merged(&face_name))
+            Ok(make_lisp_face_vector_for_domain(&face_name, false))
         } else {
-            Ok(make_lisp_face_vector_merged(&face_name))
+            Ok(make_lisp_face_vector_for_domain(&face_name, true))
         }
     } else {
         Ok(Value::NIL)
@@ -3689,8 +3692,8 @@ pub(crate) fn builtin_internal_lisp_face_equal_p(args: Vec<Value>) -> EvalResult
     let face1 = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
     let face2 = resolve_known_face_name_for_compare(&args[1], defaults_frame)?;
     for attr in LFACE_ATTRS {
-        let v1 = lisp_face_attribute_value_merged(&face1, attr);
-        let v2 = lisp_face_attribute_value_merged(&face2, attr);
+        let v1 = lisp_face_attribute_value(&face1, attr, defaults_frame);
+        let v2 = lisp_face_attribute_value(&face2, attr, defaults_frame);
         if v1 != v2 {
             return Ok(Value::NIL);
         }
@@ -3706,7 +3709,7 @@ pub(crate) fn builtin_internal_lisp_face_empty_p(args: Vec<Value>) -> EvalResult
     let defaults_frame = frame_defaults_flag(args.get(1))?;
     let face = resolve_known_face_name_for_compare(&args[0], defaults_frame)?;
     for attr in LFACE_ATTRS {
-        let v = lisp_face_attribute_value_merged(&face, attr);
+        let v = lisp_face_attribute_value(&face, attr, defaults_frame);
         if !v.is_symbol_named("unspecified") {
             return Ok(Value::NIL);
         }
