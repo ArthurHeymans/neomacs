@@ -7432,3 +7432,220 @@ fn ft_hyper_face_changing_faces_on_different_frames_deep() {
      'reset (condition-case nil (progn (set-face-attribute 'my-multi-frame-face frame :weight 'unspecified :foreground 'unspecified) 'ok) (error 'no))))))"##,
     );
 }
+
+#[test]
+fn ft_apex_face_text_property_position_zero_large_high_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert (make-string 500 ?A))
+    (put-text-property 1 100 'face 'bold)
+    (put-text-property 100 200 'face 'italic)
+    (put-text-property 200 300 'face 'underline)
+    (put-text-property 300 400 'face '(:foreground "red"))
+    (put-text-property 400 501 'face '(:background "yellow"))
+    (list
+     'face-at-start (get-text-property 1 'face)
+     'face-at-100 (get-text-property 100 'face)
+     'face-at-200 (get-text-property 200 'face)
+     'face-at-300 (get-text-property 300 'face)
+     'face-at-400 (get-text-property 400 'face)
+     'face-at-500 (get-text-property 500 'face)
+     'next-prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 100 200 300 400))
+     'interval-count (length (object-intervals (current-buffer)))
+     'previous-prop-changes (mapcar (lambda (pos) (previous-single-property-change pos 'face nil (point-min))) '(100 200 300 400 500)))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_property_boundary_at_line_breaks_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Line one with face property\n")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 28 'face 'italic)
+    (insert "Line two with different face\n")
+    (put-text-property 29 35 'face 'underline)
+    (put-text-property 35 52 'face '(:foreground "red"))
+    (insert "\nBlank line before this\n")
+    (insert "Last line with face property\n")
+    (put-text-property 54 64 'face '(:background "yellow"))
+    (put-text-property 64 89 'face '(:foreground "blue" :weight bold))
+    (list
+     'faces-across-lines (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (line-number-at-pos))) '(1 5 15 28 29 40 52 53 54 64 80 88))
+     'prop-cross-newline (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 5 28 29 52 54 64))
+     'line-end-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(28 52 53 88)))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_font_lock_mode_toggle_save_restore_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Face toggle save\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda () (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face)))))
+        (let ((v0 (funcall snap)))
+          ;; Toggle off
+          (font-lock-mode -1)
+          (let ((v1 (funcall snap)))
+            ;; Toggle on
+            (font-lock-mode 1)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              ;; Toggle off again
+              (font-lock-mode -1)
+              ;; Insert while off
+              (goto-char (point-max))
+              (insert "* DONE Inserted while off\nBody.\n\n")
+              ;; Toggle on and check
+              (font-lock-mode 1)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap))
+                    (v3-new (save-excursion (goto-char (point-min)) (search-forward "DONE") (get-text-property (match-beginning 0) 'face))))
+                (list v0 v1 v2 v3 v3-new)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_cache_clear_then_immediate_read_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-clear-cache-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-clear-cache-face nil :weight 'bold :slant 'italic :foreground "red") (error nil))
+  (list
+   'before-clear-weight (face-attribute 'my-clear-cache-face :weight nil 'default-on)
+   'before-clear-slant (face-attribute 'my-clear-cache-face :slant nil 'default-on)
+   'clear-cache (condition-case nil (clear-face-cache) (error 'no-clear))
+   'after-clear-weight (face-attribute 'my-clear-cache-face :weight nil 'default-on)
+   'after-clear-slant (face-attribute 'my-clear-cache-face :slant nil 'default-on)
+   'after-clear-fg (condition-case nil (face-attribute 'my-clear-cache-face :foreground nil 'default-on) (error 'no))
+   'after-clear-fg-frame (condition-case nil (face-attribute 'my-clear-cache-face :foreground (selected-frame) 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_with_double_property_removal_same_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Double property removal same region test buffer content text")
+    (add-text-properties 1 55 (list 'face 'bold 'prop-a 'val-a 'prop-b 'val-b 'prop-c 'val-c))
+    ;; First removal: remove face and prop-a
+    (remove-text-properties 10 40 '(face nil prop-a nil))
+    ;; Second removal: remove prop-b from overlapping but different region
+    (remove-text-properties 20 50 '(prop-b nil))
+    (list
+     'face-after (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 50 54))
+     'prop-a-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'prop-a)) '(1 5 10 30 45 54))
+     'prop-b-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'prop-b)) '(1 5 15 20 30 45 54))
+     'prop-c-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'prop-c)) '(1 10 20 30 40 50 54))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_indirect_buffer_face_with_different_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Indirect buffer with different face props test content")
+    (put-text-property 1 14 'face 'bold)
+    (put-text-property 14 26 'face 'italic)
+    (put-text-property 26 38 'face 'underline)
+    (put-text-property 38 52 'face '(:foreground "red"))
+    (let* ((clone-name (generate-new-buffer-name "*ft-apex-clone*"))
+           (clone (make-indirect-buffer (current-buffer) clone-name t)))
+      (unwind-protect
+          (list
+           'base-text-props (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51))
+           'clone-text-props (with-current-buffer clone (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51)))
+           ;; Modify in base
+           (progn
+             (put-text-property 1 14 'face '(:foreground "green" :weight bold))
+             (remove-text-properties 26 38 '(face nil))
+             (put-text-property 26 38 'face '(:background "yellow"))
+             (list 'after-base-edit
+                   (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51))
+                   'clone-after-base-edit (with-current-buffer clone (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51)))))
+           ;; Modify in clone
+           (progn
+             (with-current-buffer clone
+               (put-text-property 14 26 'face '(:slant italic :background "cyan"))
+               (put-text-property 38 52 'face '(:foreground "purple" :weight bold))
+               (list 'after-clone-edit
+                     (with-current-buffer clone (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51)))
+                     'base-after-clone-edit (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 14 20 26 32 38 45 51))))))
+        (when (get-buffer clone-name) (kill-buffer clone-name))))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_with_emoji_and_special_unicode_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "🌍🌎🌏 ♥ ♦ ♣ ♠ ★ ☆ ☀ ☁ ☂ ☃")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 6 'face 'italic)
+    (put-text-property 6 8 'face 'underline)
+    (put-text-property 8 20 'face '(:foreground "red"))
+    (put-text-property 20 26 'face '(:background "yellow" :weight bold))
+    (list
+     'emoji-faces (mapcar (lambda (pos) (goto-char pos) (list pos (char-after pos) (get-text-property pos 'face) (char-width (char-after pos)))) '(1 2 3 4 5 6 8 10 12 14 18 22 25))
+     'prop-changes (next-single-property-change 1 'face)
+     'prev-prop-change (previous-single-property-change 26 'face nil 1)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_with_font_lock_regexp_compilation_errors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'add-invalid-regexp
+   (condition-case err
+       (progn
+         (font-lock-add-keywords nil '(("\\<\\(unmatched[group\\>" 1 font-lock-warning-face t)))
+         'added-with-error)
+     (error (list 'caught-error (car err))))
+   'add-valid-after-invalid
+   (condition-case nil
+       (progn
+         (font-lock-add-keywords nil '(("\\<\\(VALID\\)\\>" 1 font-lock-function-name-face t)))
+         'valid-added-ok)
+     (error 'valid-add-failed))
+   'remove-keywords
+   (condition-case nil
+       (progn
+         (font-lock-remove-keywords nil '(("\\<\\(unmatched[group\\>" 1 font-lock-warning-face t)))
+         (font-lock-remove-keywords nil '(("\\<\\(VALID\\)\\>" 1 font-lock-function-name-face t)))
+         'removed-ok)
+     (error 'remove-failed)))))"##,
+    );
+}
