@@ -7649,3 +7649,211 @@ fn ft_apex_face_with_font_lock_regexp_compilation_errors_deep() {
      (error 'remove-failed)))))"##,
     );
 }
+
+#[test]
+fn ft_omega_face_text_property_search_with_limit_bounds_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face 'bold)
+    (put-text-property 21 25 'face 'italic)
+    (put-text-property 25 29 'face 'underline)
+    (put-text-property 29 33 'face '(:foreground "green"))
+    (put-text-property 33 37 'face 'bold)
+    (put-text-property 37 41 'face 'italic)
+    (list
+     'find-bold-in-range (text-property-any 5 25 'face 'bold)
+     'find-bold-in-full (text-property-any 1 41 'face 'bold)
+     'find-not-all-bold (text-property-not-all 1 41 'face 'bold)
+     'find-not-all-italic-start (text-property-not-all 1 41 'face 'italic)
+     'next-bold-after-10 (let ((pos (next-single-property-change 10 'face nil 41)))
+                            (if pos (list pos (get-text-property pos 'face)) 'none))
+     'prev-italic-before-30 (let ((pos (previous-single-property-change 30 'face)))
+                               (if pos (list pos (get-text-property pos 'face)) 'none))
+     'search-with-limit (text-property-any 10 20 'face 'underline)
+     'search-no-match (text-property-any 1 41 'face 'nonexistent)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_with_overlay_hidden_via_overlay_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with overlay properties hiding faces test now")
+    (put-text-property 1 50 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 15)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'before-string "[[")
+      (overlay-put ov1 'after-string "]]")
+      (overlay-put ov1 'display ""))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'face '(:foreground "red"))
+      (overlay-put ov2 'invisible t))
+    (list
+     'faces-overlay-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'invisible) (length (overlays-at pos)))) '(1 5 10 15 20 25 30 35 40 45 49))
+     'overlay-get-invisible (overlay-get ov2 'invisible)
+     'overlay-get-display (overlay-get ov1 'display)
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_font_lock_fontify_block_function_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-fontify-block-fbound (fboundp 'font-lock-fontify-block)
+   (condition-case nil
+       (with-temp-buffer
+         (emacs-lisp-mode)
+         (insert "(defun my-block-test ()\n  (let ((x 1))\n    (+ x 2)))\n")
+         (font-lock-fontify-buffer)
+         (list
+          'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+          'let-face (save-excursion (goto-char (point-min)) (search-forward "let") (get-text-property (match-beginning 0) 'face))
+          'x-face (save-excursion (goto-char (point-min)) (search-forward "x ") (get-text-property (match-beginning 0) 'face))))
+     (error 'fontify-buffer-failed))
+   (condition-case nil
+       (with-temp-buffer
+         (emacs-lisp-mode)
+         (insert "(defun test2 () (+ 1 2))\n")
+         (font-lock-fontify-block 1)
+         (list
+          'block-defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))))
+     (error 'fontify-block-failed)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_with_copy_face_via_face_all_attributes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (set-face-attribute 'bold nil :underline t :overline t :box t) (error nil))
+  (condition-case nil (copy-face 'bold 'my-copy-from-bold) (error nil))
+  (list
+   'bold-underline-after-set (face-attribute 'bold :underline nil 'default-on)
+   'copy-underline (condition-case nil (face-attribute 'my-copy-from-bold :underline nil 'default-on) (error 'no))
+   'copy-overline (condition-case nil (face-attribute 'my-copy-from-bold :overline nil 'default-on) (error 'no))
+   'copy-box (condition-case nil (face-attribute 'my-copy-from-bold :box nil 'default-on) (error 'no))
+   'copy-weight (face-attribute 'my-copy-from-bold :weight nil 'default-on)
+   ;; Reset bold
+   (progn (set-face-attribute 'bold nil :underline 'unspecified :overline 'unspecified :box 'unspecified) 'reset-ok)
+   'bold-after-reset (face-attribute 'bold :underline nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_property_find_with_predicate_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXXXYYYYYYYYYYYYZZZZZZZZZZZZ")
+    (put-text-property 1 13 'face 'bold)
+    (put-text-property 13 25 'face 'italic)
+    (put-text-property 25 37 'face 'underline)
+    (put-text-property 1 13 'value 10)
+    (put-text-property 13 25 'value 20)
+    (put-text-property 25 37 'value 30)
+    (put-text-property 1 13 'extra 'data)
+    (list
+     'find-value-gt-15 (let ((found nil))
+                          (while (and (not found) (< (point) (point-max)))
+                            (let ((val (get-text-property (point) 'value)))
+                              (when (and val (> val 15))
+                                (setq found (list (point) val (get-text-property (point) 'face))))
+                              (goto-char (next-single-property-change (point) 'value (point-max)))))
+                          found)
+     'find-face-bold (text-property-any 1 37 'face 'bold)
+     'find-extra-data (text-property-any 1 37 'extra 'data)
+     'find-non-existent (text-property-any 1 37 'nonexistent 'value)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_overlay_window_specific_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Window-specific overlay face test buffer content here now end")
+    (put-text-property 1 56 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 1 15)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'window (selected-window)))
+    (let ((ov2 (make-overlay 20 35)))
+      (overlay-put ov2 'face '(:foreground "red"))
+      (overlay-put ov2 'window nil))
+    (let ((ov3 (make-overlay 40 56)))
+      (overlay-put ov3 'face '(:weight bold))
+      (overlay-put ov3 'window (selected-window)))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 50 55))
+     'overlay-windows (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov) (overlay-get ov 'window) (overlay-get ov 'face)))
+                              (list ov1 ov2 ov3))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_color_distance_rgb_transformations_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'name-to-rgb-red (condition-case nil (color-name-to-rgb "red") (error 'no))
+   'rgb-to-hex-red (condition-case nil (apply #'color-rgb-to-hex (append (color-name-to-rgb "red") '(2))) (error 'no))
+   'name-to-rgb-green (condition-case nil (color-name-to-rgb "green") (error 'no))
+   'name-to-rgb-blue (condition-case nil (color-name-to-rgb "blue") (error 'no))
+   'rgb-to-hsl-red (condition-case nil (apply #'color-rgb-to-hsl (color-name-to-rgb "red")) (error 'no))
+   'hsl-to-rgb (condition-case nil (let ((hsl (apply #'color-rgb-to-hsl (color-name-to-rgb "red"))))
+                                      (apply #'color-hsl-to-rgb hsl))
+                                   (error 'no))
+   'color-gradient (condition-case nil (color-gradient '(1 0 0) '(0 0 1) 5) (error 'no))
+   'color-dark-p-red (condition-case nil (color-dark-p "red") (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_with_font_lock_fontify_after_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun test (x) (+ x 1))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (get-text-property (match-beginning 0) 'face))) '("defun" "test" "x" "1"))))
+      ;; Simulate after-change by modifying and refontifying
+      (goto-char (point-min))
+      (search-forward "test")
+      (replace-match "myTest")
+      (goto-char (point-min))
+      (search-forward "+")
+      (replace-match "-")
+      (font-lock-after-change-function (point-min) (point-max) 0)
+      (let ((v1 (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (get-text-property (match-beginning 0) 'face))) '("defun" "myTest" "x" "1"))))
+        (list v0 v1)))))"##,
+    );
+}
