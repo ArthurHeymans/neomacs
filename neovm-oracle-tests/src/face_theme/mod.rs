@@ -18012,3 +18012,164 @@ fn ft_particle_face_text_properties_all_at_point_min_max() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_quanta_face_text_property_manual_iteration_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 5 'face 'italic)
+    (put-text-property 5 7 'face 'underline)
+    (put-text-property 7 9 'face '(:foreground "red"))
+    (put-text-property 9 11 'face '(:background "yellow"))
+    (let ((result nil) (pos 1))
+      (while (< pos 11)
+        (let ((face (get-text-property pos 'face)))
+          (push (list pos face) result))
+        (setq pos (1+ pos)))
+      (nreverse result))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_font_lock_fontify_two_different_modes_compare() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'emacs-lisp-faces (with-temp-buffer (emacs-lisp-mode) (insert "(defun f (x) x)") (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 7 10 14)))
+   'text-mode-faces (with-temp-buffer (text-mode) (insert "Text mode faces test") (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15)))
+   'c-mode-faces (condition-case nil (with-temp-buffer (c-mode) (insert "int x = 42;") (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 4 7 10))) (error 'c-mode-error)))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_face_overlay_empty_make_and_fill() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'empty-start (overlay-start ov)
+       'empty-end (overlay-end ov)
+       'empty-face (overlay-get ov 'face)
+       'empty-priority (overlay-get ov 'priority)
+       'fill (progn (insert "ABCDEFGHIJ") (list 'start (overlay-start ov) 'end (overlay-end ov) 'face-at-1 (get-char-property 1 'face) 'face-at-5 (get-char-property 5 'face) 'face-at-10 (get-char-property 10 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_face_set_attribute_weight_symbol_table_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'font-weight-table (if (boundp 'font-weight-table) (length font-weight-table) 'no-table)
+   'weight-thin (if (member 'thin (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'weight-ultra-light (if (member 'ultra-light (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'weight-light (if (member 'light (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'weight-normal (if (member 'normal (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'weight-bold (if (member 'bold (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'weight-heavy (if (member 'heavy (or (and (boundp 'font-weight-table) font-weight-table) '())) 'available 'not)
+   'default-weight (face-attribute 'default :weight nil 'default-on)
+   'default-slant (face-attribute 'default :slant nil 'default-on)
+   'default-width (face-attribute 'default :width nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_face_overlay_same_region_multi_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov1 (make-overlay 1 16))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 50))
+    (let ((ov2 (make-overlay 1 16))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 30))
+    (let ((ov3 (make-overlay 1 16))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 10))
+    (list
+     'overlays-count (length (overlays-at 5))
+     'effective-face (get-char-property 5 'face)
+     'all-faces (mapcar (lambda (ov) (list (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 5) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_font_lock_fontify_no_keywords_at_all() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (setq-local font-lock-keywords nil)
+    (setq-local font-lock-keywords-only nil)
+    (insert "No keywords at all tested in fundamental mode buffer content text")
+    (font-lock-fontify-buffer)
+    (list
+     'fontified (get-text-property 1 'fontified)
+     'face (get-text-property 1 'face)
+     'font-lock-keywords font-lock-keywords
+     'font-lock-keywords-only (if (boundp 'font-lock-keywords-only) font-lock-keywords-only 'no-bound)
+     (progn (kill-local-variable 'font-lock-keywords) (kill-local-variable 'font-lock-keywords-only) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_face_property_read_at_exact_midpoint() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (list
+     'at-5-border (list (get-text-property 5 'face) (get-text-property 6 'face))
+     'at-10-border (list (get-text-property 10 'face) (get-text-property 11 'face))
+     'next-change-5 (next-single-property-change 5 'face nil 16)
+     'next-change-6 (next-single-property-change 6 'face nil 16)
+     'prev-change-6 (previous-single-property-change 6 'face nil 1)
+     'prev-change-11 (previous-single-property-change 11 'face nil 1)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_quanta_face_overlay_face_get_after_properties_clear() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "test")
+      (let ((v0 (list 'face (overlay-get ov 'face) 'priority (overlay-get ov 'priority) 'help (overlay-get ov 'help-echo) 'props-count (length (overlay-properties ov)))))
+        (overlay-put ov 'face nil)
+        (overlay-put ov 'priority nil)
+        (overlay-put ov 'help-echo nil)
+        (let ((v1 (list 'face-after-clear (overlay-get ov 'face) 'priority-after (overlay-get ov 'priority) 'help-after (overlay-get ov 'help-echo) 'props-after (length (overlay-properties ov)))))
+          (list v0 v1 (progn (delete-overlay ov) 'cleaned))))))))"##,
+    );
+}
