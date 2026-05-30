@@ -12596,3 +12596,162 @@ fn ft_xi_face_set_attribute_slant_weight_combo_deep() {
    'unspec-both (condition-case nil (progn (set-face-attribute 'my-slamt-weight-face nil :weight 'unspecified :slant 'unspecified) 'ok) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_omicron_face_with_text_property_add_remove_add_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Add remove add cycle face property test buffer content")
+    (put-text-property 1 50 'face 'bold)
+    (remove-text-properties 10 30 '(face nil))
+    (put-text-property 10 30 'face 'italic)
+    (remove-text-properties 20 40 '(face nil))
+    (put-text-property 20 40 'face 'underline)
+    (list
+     'faces-across (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 49))
+     'interval-count (length (object-intervals (current-buffer)))
+     'next-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 50)) '(1 10 20 30 40)))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_font_lock_add_keywords_with_override_behavior() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "OVERRIDE keyword test OVERRIDE behavior OVERRIDE face")
+    ;; Add with prepend
+    (font-lock-add-keywords nil '(("\\<\\(OVERRIDE\\)\\>" 1 '(:foreground "blue") prepend)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "OVERRIDE") (get-text-property (match-beginning 0) 'face))))
+      ;; Add again with overwrite
+      (font-lock-add-keywords nil '(("\\<\\(OVERRIDE\\)\\>" 1 '(:foreground "red" :weight bold) overwrite)))
+      (font-lock-fontify-buffer)
+      (list v0 (save-excursion (goto-char (point-min)) (search-forward "OVERRIDE") (get-text-property (match-beginning 0) 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_face_overlay_before_string_face_inheritance_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before string face inheritance overlay test content data text here")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "[BEFORE]" 'face '(:foreground "red" :inherit bold))))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'before-face (get-text-property 0 (overlay-get ov 'before-string))
+     'before-char-face (get-char-property 10 'face)
+     'overlay-start (overlay-start ov)
+     'overlay-end (overlay-end ov)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_face_set_attribute_with_nil_vs_unspecified_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-nil-face) (error nil))
+  (list
+   'set-weight-bold (condition-case nil (progn (set-face-attribute 'my-nil-face nil :weight 'bold) (face-attribute 'my-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-nil (condition-case nil (progn (set-face-attribute 'my-nil-face nil :weight nil) (face-attribute 'my-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-unspec (condition-case nil (progn (set-face-attribute 'my-nil-face nil :weight 'unspecified) (face-attribute 'my-nil-face :weight nil 'default-on)) (error 'no))
+   'set-fg-red (condition-case nil (progn (set-face-foreground 'my-nil-face "red" nil) (face-foreground 'my-nil-face nil 'default-on)) (error 'no))
+   'set-fg-nil (condition-case nil (progn (set-face-foreground 'my-nil-face nil nil) (face-foreground 'my-nil-face nil 'default-on)) (error 'no))
+   'set-fg-unspec (condition-case nil (progn (set-face-foreground 'my-nil-face 'unspecified nil) (face-foreground 'my-nil-face nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_face_text_properties_at_boundary_point() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXYYYYZZZZWWWW")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (list
+     'at-boundaries (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property (1+ pos) 'face))) '(1 4 5 8 9 12 13 16))
+     'prop-changes-all (mapcar (lambda (pos) (next-single-property-change pos 'face nil 17)) '(1 2 5 6 9 10 13 14))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_font_lock_unfontify_region_then_fontify_all() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun unfontify-test () 42)\n")
+    (font-lock-ensure (point-min) (point-max))
+    (list
+     'fontified-before (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20))
+     'unfontify-region (progn (font-lock-unfontify-region 5 15) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15 20)))
+     'fontify-all (progn (font-lock-fontify-region 1 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 5 10 15 20)))))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_face_overlays_at_overlapping_regions_face_stack() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlapping overlay regions face stack test content text data buffer")
+    (let ((ov1 (make-overlay 5 25))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 15 35))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 30))
+    (let ((ov4 (make-overlay 3 40))) (overlay-put ov4 'face '(:foreground "gray")) (overlay-put ov4 'priority 5))
+    (list
+     'face-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (mapcar (lambda (ov) (overlay-get ov 'face)) (sort (overlays-at pos) (lambda (a b) (> (overlay-get a 'priority) (overlay-get b 'priority))))))) '(1 5 8 12 18 22 28 32 38 42))
+     (progn (mapc #'delete-overlay (overlays-in 1 43)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_omicron_face_with_face_spec_match_display_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'face-spec-match-p-fbound (fboundp 'face-spec-match-p)
+   (condition-case nil
+       (face-spec-match-p 'default
+                           '(((class color) (min-colors 88)) (:foreground "black"))
+                           (selected-frame))
+     (error 'no-match))
+   (condition-case nil
+       (face-spec-choose '(((class color)) (:foreground "red")
+                           (t (:foreground "blue"))))
+     (error 'no-choose))
+   'display-type (display-graphic-p)
+   'display-colors (if (fboundp 'display-color-cells) (display-color-cells) 'no-cells)
+   'min-colors-88 (>= (if (fboundp 'display-color-cells) (display-color-cells) 0) 88))))"##,
+    );
+}
