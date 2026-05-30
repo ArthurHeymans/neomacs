@@ -2076,3 +2076,177 @@ fn ft_yotta_face_with_buffer_local_variable_affects_face_deep() {
                   (list v0 v1 v2 v3 v4)))))))))))"##,
     );
 }
+
+#[test]
+fn ft_zeta_face_lazy_font_lock_deferred_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'jit-lock)
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Lazy fontify\nBody lazy.\n\n")
+      (insert "** DONE More lazy\nBody more.\n\n")
+      (list
+       'before-fontify (mapcar (lambda (needle)
+                                 (save-excursion
+                                   (goto-char (point-min))
+                                   (if (search-forward needle nil t)
+                                       (list needle
+                                             (get-text-property (match-beginning 0) 'face)
+                                             (get-text-property (match-beginning 0) 'fontified)
+                                             (get-text-property (match-beginning 0) 'font-lock-face))
+                                       (list needle 'not-found nil nil))))
+                               '("TODO" "DONE" "Body lazy" "Body more"))
+       'after-fontify (progn
+                        (font-lock-fontify-buffer)
+                        (mapcar (lambda (needle)
+                                  (save-excursion
+                                    (goto-char (point-min))
+                                    (if (search-forward needle nil t)
+                                        (list needle (get-text-property (match-beginning 0) 'face))
+                                        (list needle 'not-found))))
+                                '("TODO" "DONE" "Body lazy" "Body more")))
+       (list 'jit-lock-mode (if (boundp 'jit-lock-mode) jit-lock-mode 'no-jit-lock))
+       (list 'font-lock-mode font-lock-mode)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_org_set_delete_property_faces_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Alpha\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle (get-text-property (match-beginning 0) 'face))
+                                    (list needle 'not-found))))
+                            '("TODO" ":PROPERTIES:" ":Effort:" ":END:")))))
+        (let ((v0 (funcall snap)))
+          (goto-char (point-min))
+          (search-forward "Alpha")
+          (beginning-of-line)
+          (org-set-property "Effort" "3h")
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            (org-set-property "Owner" "Alice")
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              (org-delete-property "Effort")
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                (list v0 v1 v2 v3)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_display_graphic_conditional_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Display-dependent face test")
+    (put-text-property 1 30 'face (list :foreground (if (display-graphic-p) "#FF0000" "#00FF00")
+                                         :weight (if (display-graphic-p) 'bold 'normal)))
+    (list
+     'display-graphic-p (display-graphic-p)
+     'face-value (get-text-property 1 'face)
+     (condition-case nil (face-attribute 'default :family nil t) (error 'no-frame-family))
+     (condition-case nil (face-attribute 'default :foreground) (error 'no-fg))
+     (condition-case nil (face-attribute 'default :background) (error 'no-bg))
+     (list 'display-planes (if (fboundp 'display-planes) (display-planes) 'no))
+     (list 'display-color-cells (if (fboundp 'display-color-cells) (display-color-cells) 'no))
+     (list 'display-grayscale-p (if (fboundp 'display-grayscale-p) (display-grayscale-p) 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_multi_buffer_faces_consistent_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (let ((content "* TODO Test\nBody.\n\n")
+        (results nil))
+    (dotimes (i 3)
+      (let ((buf (generate-new-buffer (format "*ft-multi-%d*" i))))
+        (with-current-buffer buf
+          (let ((org-fontify-whole-heading-line t)
+                (org-fontify-done-headline t))
+            (org-mode)
+            (insert content)
+            (font-lock-ensure (point-min) (point-max))))
+        (push (cons i (with-current-buffer buf
+                        (mapcar (lambda (needle)
+                                  (save-excursion
+                                    (goto-char (point-min))
+                                    (if (search-forward needle nil t)
+                                        (list needle (get-text-property (match-beginning 0) 'face))
+                                        (list needle 'not-found))))
+                                '("TODO" "Body"))))
+              results)
+        (kill-buffer buf)))
+    (nreverse results)))"##,
+    );
+}
+
+#[test]
+fn ft_zeta_face_link_appear_hide_show_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Appear [[https://example.com][click me]]\n")
+      (insert "Body with /italic/ and *bold*.\n\n")
+      (insert "** DONE More [[file:test.org][file here]]\n")
+      (insert "Body 2.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle
+                                          (get-text-property (match-beginning 0) 'face)
+                                          (get-text-property (match-beginning 0) 'mouse-face)
+                                          (get-text-property (match-beginning 0) 'font-lock-face))
+                                    (list needle 'not-found nil nil))))
+                            '("TODO" "DONE" "click me" "file here" "italic" "bold")))))
+        (let ((v0 (funcall snap)))
+          (org-fold-hide-all)
+          (let ((v1 (funcall snap)))
+            (org-fold-show-all)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              (org-fold-hide-drawer-all)
+              (let ((v3 (funcall snap)))
+                (org-fold-show-all)
+                (font-lock-ensure (point-min) (point-max))
+                (let ((v4 (funcall snap)))
+                  (list v0 v1 v2 v3 v4)))))))))))"##,
+    );
+}
