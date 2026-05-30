@@ -14228,3 +14228,171 @@ fn ft_psi_face_eieio_interaction_with_face_properties_deep() {
      'no-eieio))))"##,
     );
 }
+
+#[test]
+fn ft_omega3_face_text_property_any_predicate_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face ':extend t)
+    (put-text-property 13 17 'face '(:foreground "red"))
+    (put-text-property 17 21 'face '(:foreground "green"))
+    (put-text-property 21 25 'face 'underline)
+    (put-text-property 25 29 'face ':weight bold)
+    (put-text-property 29 33 'face '(:background "yellow"))
+    (put-text-property 33 37 'face '(:foreground "blue" :weight bold))
+    (put-text-property 37 41 'face '(:foreground "purple" :slant italic))
+    (list
+     'find-bold (text-property-any 1 41 'face 'bold)
+     'find-underline (text-property-any 1 41 'face 'underline)
+     'find-red (text-property-any 1 41 'face '(:foreground "red"))
+     'find-yellow (text-property-any 1 41 'face '(:background "yellow"))
+     'find-complex (text-property-any 1 41 'face '(:foreground "blue" :weight bold))
+     'find-extend (text-property-any 1 41 'face ':extend t)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_font_lock_fontify_region_repeatedly_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun repeat-fontify (x y) (+ x y))\n")
+    (let ((results nil))
+      (dotimes (i 3)
+        (font-lock-fontify-region 1 (point-max))
+        (push (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 7 15 22 30)) results))
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_face_overlay_properties_after_buffer_erase_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay properties after buffer erase face test content")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'before-erase (list 'ov-start (overlay-start ov) 'ov-end (overlay-end ov) 'ov-buffer (and ov (overlay-buffer ov) t))
+       'after-erase (progn (erase-buffer) (list 'ov-start (overlay-start ov) 'ov-end (overlay-end ov) 'ov-dead (not (overlay-buffer ov)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_face_text_property_next_single_change_multiple() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (dotimes (i 16)
+      (put-text-property (1+ (* i 2)) (+ (* i 2) 3) 'face (if (evenp i) 'bold 'italic)))
+    (list
+     'all-props (let ((pos 1) (result nil))
+                  (while pos
+                    (setq pos (next-single-property-change pos 'face nil 33))
+                    (when pos (push (list pos (get-text-property pos 'face)) result)))
+                  (nreverse result))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_face_set_attribute_with_distant_foreground_variants() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-dist-fg-v-face) (error nil))
+  (list
+   'set-dist-fg-gray (condition-case nil (progn (set-face-attribute 'my-dist-fg-v-face nil :distant-foreground "gray") (face-attribute 'my-dist-fg-v-face :distant-foreground nil 'default-on)) (error 'no))
+   'set-dist-fg-red (condition-case nil (progn (set-face-attribute 'my-dist-fg-v-face nil :distant-foreground "dark red") (face-attribute 'my-dist-fg-v-face :distant-foreground nil 'default-on)) (error 'no))
+   'set-dist-fg-nil (condition-case nil (progn (set-face-attribute 'my-dist-fg-v-face nil :distant-foreground nil) (face-attribute 'my-dist-fg-v-face :distant-foreground nil 'default-on)) (error 'no))
+   'set-dist-fg-unspec (condition-case nil (progn (set-face-attribute 'my-dist-fg-v-face nil :distant-foreground 'unspecified) (face-attribute 'my-dist-fg-v-face :distant-foreground nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_face_font_lock_fontify_block_in_narrowed_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* TODO Block in narrow\nBody.\n\n")
+      (insert "* DONE Outside narrow\nBody outside.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((full-face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+        (goto-char (point-min))
+        (search-forward "TODO Block in narrow")
+        (beginning-of-line)
+        (org-narrow-to-subtree)
+        (let ((narrowed-face (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))))
+          (widen)
+          (list full-face narrowed-face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_face_overlay_with_void_property_access_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Void property overlay access face test content text data here now end")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'face-get (overlay-get ov 'face)
+       'nonexistent-prop (overlay-get ov 'this-prop-does-not-exist-at-all)
+       'nil-prop-after-set (progn (overlay-put ov 'nonexistent nil) (overlay-get ov 'nonexistent))
+       'overlay-props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega3_text_property_previous_single_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (list
+     'prev-from-end (let ((pos 31) (result nil))
+                      (while pos
+                        (setq pos (previous-single-property-change pos 'face nil 1))
+                        (when pos (push (list pos (get-text-property pos 'face)) result)))
+                      (nreverse result))
+     'prev-near-start (previous-single-property-change 6 'face nil 1)
+     'prev-from-15 (previous-single-property-change 15 'face nil 1)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
