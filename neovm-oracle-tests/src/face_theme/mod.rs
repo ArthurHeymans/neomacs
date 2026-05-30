@@ -25943,3 +25943,93 @@ fn ft_push_face_overlay_face_dangling_after_buffer_kill() {
          'buffer-after (condition-case nil (overlay-buffer ov) (error 'none))))))))"##,
     );
 }
+
+#[test]
+fn ft_blast_face_overlay_face_prio_zero_and_neg_inf() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 0))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority -1))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face '(:foreground "blue")) (overlay-put ov3 'priority most-positive-fixnum))
+    (list
+     'winning (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_blast_font_lock_fontify_ignore_errors_form() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(ignore-errors (/ 1 0))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'ignore-errors-face (save-excursion (goto-char (point-min)) (search-forward "ignore-errors") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_blast_face_overlay_intervals_iter_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNO")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 9 'face 'italic)
+    (put-text-property 9 14 'face 'underline)
+    (put-text-property 14 16 'face 'bold-italic)
+    (let ((ints (object-intervals (current-buffer))))
+      (list
+       'count (length ints)
+       'starts (mapcar #'car ints)
+       'ends (mapcar #'cadr ints)
+       'plists (mapcar (lambda (i) (cddr i)) ints))))))"##,
+    );
+}
+
+#[test]
+fn ft_blast_face_text_property_face_after_fill_paragragraph() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA BBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 7 12 'face 'italic)
+    (list
+     'before-fill (list (get-text-property 3 'face) (get-text-property 9 'face))
+     'after-fill (condition-case nil
+                    (progn (fill-paragraph) (list (get-text-property 3 'face) (get-text-property 9 'face)))
+                    (error 'no-fill))))))"##,
+    );
+}
+
+#[test]
+fn ft_blast_font_lock_fontify_save_excursion_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(save-excursion\n  (goto-char (point-min))\n  (insert \"hello\"))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'save-excursion-face (save-excursion (goto-char (point-min)) (search-forward "save-excursion") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
