@@ -8063,3 +8063,219 @@ fn ft_maxedge_face_compare_via_attribute_extraction_deep() {
                         (condition-case nil (face-differs-from-default-p 'underline) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_zenith_face_with_invalid_face_name_error_handling_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'facep-nil (facep nil)
+   'facep-number (facep 42)
+   'facep-string (condition-case nil (facep "not-a-face-symbol") (error 'error))
+   'facep-list (facep '(bold italic))
+   'facep-consp (facep (cons 'bold '(italic)))
+   'face-attr-nil-face (condition-case err (face-attribute nil :weight) (error (list (car err) (cdr err))))
+   'set-face-attr-nil-face (condition-case err (set-face-attribute nil nil :weight 'bold) (error (car err)))
+   'face-font-nil-face (condition-case err (face-font nil nil) (error (car err)))
+   'face-foreground-nil-face (condition-case err (face-foreground nil nil) (error (car err)))
+   'make-face-valid (condition-case err (make-face 'really-new-face) (error (car err)))
+   'facep-after-make (facep 'really-new-face))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_overlay_before_after_display_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay before after display string face test area now final end")
+    (let ((ov (make-overlay 15 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "[[START]]" 'face '(:foreground "red" :weight bold)))
+      (overlay-put ov 'after-string (propertize "{{END}}" 'face '(:foreground "blue" :slant italic)))
+      (overlay-put ov 'display ""))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 15 20 30 40 50 57))
+     'overlay-before-face (get-text-property 1 (overlay-get ov 'before-string))
+     'overlay-after-face (get-text-property 1 (overlay-get ov 'after-string))
+     'overlay-before-props (text-properties-at 0 (overlay-get ov 'before-string))
+     'overlay-after-props (text-properties-at 0 (overlay-get ov 'after-string))
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_font_lock_set_defaults_then_refontify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (insert "Custom font-lock defaults test buffer content")
+    (list
+     'before-fontify (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))
+     'set-defaults (condition-case nil
+                      (progn
+                        (font-lock-set-defaults)
+                        (font-lock-fontify-buffer)
+                        'ok)
+                    (error 'no))
+     'after-fontify (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))
+     'unfontify (progn
+                  (font-lock-unfontify-buffer)
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30)))
+     'refontify (progn
+                  (font-lock-fontify-buffer)
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_text_property_change_hook_on_face_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-hook-count 0)
+  (defun my-face-change-hook (beg end old-len)
+    (setq my-hook-count (1+ my-hook-count)))
+  (with-temp-buffer
+    (insert "Face change hook test buffer content text here")
+    (put-text-property 1 46 'face 'bold)
+    (list
+     'initial-hook-count my-hook-count
+     'initial-face (get-text-property 1 'face)
+     ;; Modify face property
+     (progn
+       (put-text-property 10 25 'face 'italic)
+       my-hook-count)
+     ;; Modify non-face property
+     (progn
+       (put-text-property 25 40 'my-prop 'value)
+       my-hook-count)
+     ;; Remove face
+     (progn
+       (remove-text-properties 10 25 '(face nil))
+       my-hook-count)
+     'final-hook-count my-hook-count
+     'final-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 30 40 45))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_overlay_rear_advance_front_advance_combo() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov1 (make-overlay 6 16 nil t nil)))
+      (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 16 26 nil nil t)))
+      (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 26 36 t t nil)))
+      (overlay-put ov3 'face '(:background "yellow")))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 6 10 15 16 20 25 26 30 35 36)))))
+      (let ((v0 (funcall snap)))
+        ;; Insert at front-advance boundary
+        (goto-char 16) (insert "XX")
+        (let ((v1 (funcall snap)))
+          ;; Insert at rear-advance boundary
+          (goto-char 26) (insert "YY")
+          (let ((v2 (funcall snap)))
+            ;; Insert at both-advance boundary
+            (goto-char 36) (insert "ZZ")
+            (let ((v3 (funcall snap)))
+              (mapc #'delete-overlay (overlays-in 1 (point-max)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_font_lock_keywords_case_fold_search_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "CASE test Case Test case TEST CaSe TeSt")
+    (let ((font-lock-keywords-case-fold-search t))
+      (font-lock-add-keywords nil '(("\\<\\(CASE\\)\\>" 1 font-lock-warning-face t)))
+      (font-lock-fontify-buffer)
+      (list
+       'case-fold-t (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (get-text-property (match-beginning 0) 'face)))
+                            '("CASE" "Case" "case" "CaSe" "TEST" "TeSt" "test")))
+       'bounds-case-fold (if (boundp 'font-lock-keywords-case-fold-search)
+                              font-lock-keywords-case-fold-search
+                            'no-bound)
+       'found-all (save-excursion
+                    (goto-char (point-min))
+                    (let ((count 0))
+                      (while (re-search-forward "\\<[Cc][Aa][Ss][Ee]\\>" nil t)
+                        (setq count (1+ count)))
+                      count))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_with_propertize_create_then_modify_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((s (propertize "propertized-string"
+                       'face 'bold
+                       'my-key 'my-value
+                       'fontified t)))
+    (list
+     'propertized-face (get-text-property 0 'face s)
+     'propertized-key (get-text-property 0 'my-key s)
+     'propertized-fontified (get-text-property 0 'fontified s)
+     'string-length (length s)
+     ;; Modify via set-text-properties
+     (progn
+       (set-text-properties 0 (length s) (list 'face 'italic 'new-key 'new-val) s)
+       (list 'after-set-face (get-text-property 0 'face s)
+             'after-set-old-key (get-text-property 0 'my-key s)
+             'after-set-new-key (get-text-property 0 'new-key s)))
+     ;; Add face via add-face-text-property
+     (progn
+       (add-face-text-property 0 (length s) '(:underline t) nil s)
+       (list 'after-add-face (get-text-property 0 'face s)
+             'facep-result (facep (get-text-property 0 'face s)))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_with_last_nonzero_length_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (put-text-property 1 2 'face 'bold)
+    (list
+     'single-char-face (get-text-property 1 'face)
+     'single-char-fontified (get-text-property 1 'fontified)
+     'single-char-props (text-properties-at 1)
+     'single-char-interval-count (length (object-intervals (current-buffer)))
+     ;; Extend
+     (progn
+       (goto-char 2)
+       (insert "EXTENDED")
+       (list
+        'after-extend-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 5 8 10))
+        'after-extend-interval-count (length (object-intervals (current-buffer))))))))"##,
+    );
+}
