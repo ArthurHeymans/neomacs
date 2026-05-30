@@ -21169,3 +21169,144 @@ fn ft_void2_face_color_rgb_hex_name_roundtrip_deep() {
    'equal-blue (equal (color-name-to-rgb "blue") (color-name-to-rgb "#0000FF")))))"##,
     );
 }
+
+#[test]
+fn ft_spacetime_face_overlay_category_with_face_inherit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (let ((ov (make-overlay 1 26)))
+      (overlay-put ov 'category 'my-special-cat)
+      (overlay-put ov 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov 'priority 50)
+      (list
+       'category (overlay-get ov 'category)
+       'face (overlay-get ov 'face)
+       'priority (overlay-get ov 'priority)
+       'char-prop (get-char-property 10 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_font_lock_fontify_after_kill_local_variables() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun after-kill-locals-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (get-text-property 7 'face)))
+      (kill-local-variable 'font-lock-keywords)
+      (font-lock-fontify-buffer)
+      (list v0 (get-text-property 7 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_face_set_face_slant_all_values_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-slant-all-face) (error nil))
+  (list
+   'set-normal (condition-case nil (progn (set-face-attribute 'my-slant-all-face nil :slant 'normal) (face-attribute 'my-slant-all-face :slant nil 'default-on)) (error 'no))
+   'set-italic (condition-case nil (progn (set-face-attribute 'my-slant-all-face nil :slant 'italic) (face-attribute 'my-slant-all-face :slant nil 'default-on)) (error 'no))
+   'set-oblique (condition-case nil (progn (set-face-attribute 'my-slant-all-face nil :slant 'oblique) (face-attribute 'my-slant-all-face :slant nil 'default-on)) (error 'no))
+   'set-unspec (condition-case nil (progn (set-face-attribute 'my-slant-all-face nil :slant 'unspecified) (face-attribute 'my-slant-all-face :slant nil 'default-on)) (error 'no))
+   'default-slant (face-attribute 'default :slant nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_face_overlay_presence_after_buffer_erase_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'before-erase (list 'start (overlay-start ov) 'end (overlay-end ov) 'alive (and (overlay-buffer ov) t))
+       'after-erase (progn (erase-buffer) (list 'start (overlay-start ov) 'end (overlay-end ov) 'alive (and (overlay-buffer ov) t)))
+       'after-refill (progn (insert "REFILLED-CONTENT-TEXT") (list 'start (overlay-start ov) 'end (overlay-end ov) 'face-at-1 (get-char-property 1 'face) 'face-at-10 (get-char-property 10 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_face_text_property_insert_and_split_interval() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 6 8 10))
+     'split-at-3 (progn (goto-char 3) (insert "SPLIT") (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 8 10 12 15)))
+     'split-at-6 (progn (goto-char 6) (insert "HERE") (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 3 5 8 10 12 14 16 19)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_font_lock_fontify_multiple_modes_comparison() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'emacs-lisp-mode-fontified (with-temp-buffer (emacs-lisp-mode) (insert "(defun f (x) x)") (font-lock-fontify-buffer) (get-text-property 1 'fontified))
+   'text-mode-fontified (with-temp-buffer (text-mode) (insert "text mode test") (font-lock-fontify-buffer) (get-text-property 1 'fontified))
+   'fundamental-mode-fontified (with-temp-buffer (fundamental-mode) (font-lock-mode 1) (insert "fundamental test") (font-lock-fontify-buffer) (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_face_overlay_face_with_negative_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'prio-negative (progn (overlay-put ov 'priority -10) (list 'prio (overlay-get ov 'priority) 'face (get-char-property 5 'face)))
+       'prio-zero (progn (overlay-put ov 'priority 0) (list 'prio (overlay-get ov 'priority) 'face (get-char-property 5 'face)))
+       'prio-positive (progn (overlay-put ov 'priority 10) (list 'prio (overlay-get ov 'priority) 'face (get-char-property 5 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_spacetime_face_text_property_interval_ends_precise() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZ")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (list
+     'at-borders (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 6 10 11 15))
+     'next-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 16)) '(1 6 11))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
