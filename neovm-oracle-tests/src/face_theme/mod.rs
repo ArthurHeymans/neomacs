@@ -9498,3 +9498,184 @@ fn ft_eternal_face_property_list_manipulation_via_plist_put_deep() {
                      (list new (length new)))))))"##,
     );
 }
+
+#[test]
+fn ft_omega2_face_text_property_interval_count_after_many_edits() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWWVVVVV")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (let ((counts nil))
+      (push (length (object-intervals (current-buffer))) counts)
+      (goto-char 6) (insert "A") (push (length (object-intervals (current-buffer))) counts)
+      (goto-char 12) (insert "B") (push (length (object-intervals (current-buffer))) counts)
+      (delete-region 8 15) (push (length (object-intervals (current-buffer))) counts)
+      (goto-char 18) (insert "CDE") (push (length (object-intervals (current-buffer))) counts)
+      (delete-region 1 10) (push (length (object-intervals (current-buffer))) counts)
+      (list (nreverse counts) (mapcar (lambda (pos) (goto-char pos) (if (< pos (point-max)) (get-text-property pos 'face) 'eob)) '(1 3 6 10 15))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_overlay_with_overlay_put_multiple_face_adds_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with multiple face properties added incrementally test buffer here")
+    (let ((ov (make-overlay 1 60)))
+      (overlay-put ov 'face '(:foreground "blue"))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic :underline t))
+      (overlay-put ov 'face (list :foreground "blue" :weight 'bold :slant 'italic :underline t :background "yellow"))
+      (list
+       'final-face (overlay-get ov 'face)
+       'face-at-1 (get-char-property 1 'face)
+       'face-at-30 (get-char-property 30 'face)
+       'face-at-59 (get-char-property 59 'face)
+       'overlay-props-length (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_face_attribute_with_inherit_default_resolution() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inherit-resolve-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-inherit-resolve-face nil :inherit 'bold :slant 'italic) (error nil))
+  (list
+   'direct-slant (face-attribute 'my-inherit-resolve-face :slant nil 'default-on)
+   'inherited-weight (face-attribute 'my-inherit-resolve-face :weight nil 'default-on)
+   'direct-foreground (condition-case nil (face-attribute 'my-inherit-resolve-face :foreground nil 'default-on) (error 'no))
+   'inherited-slant-from-bold (face-attribute 'bold :slant nil 'default-on)
+   'inherited-weight-from-bold (face-attribute 'bold :weight nil 'default-on)
+   'face-equal-inherit (condition-case nil (face-equal 'my-inherit-resolve-face 'default) (error 'no))
+   'face-differs-inherit (face-differs-from-default-p 'my-inherit-resolve-face))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_font_lock_keywords_with_overwrite_mode_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "OVERWRITE keyword face test with font-lock")
+    (font-lock-add-keywords nil '(("\\<\\(OVERWRITE\\)\\>" 1 font-lock-warning-face overwrite)
+                                  ("\\<\\(keyword\\)\\>" 1 '(:foreground "red") t)
+                                  ("\\<\\(face\\)\\>" 1 '(:foreground "green") t)
+                                  ("\\<\\(font-lock\\)\\>" 1 '(:foreground "purple") t)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (needle)
+              (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified))))
+            '("OVERWRITE" "keyword" "face" "font-lock"))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_face_text_property_with_string_value_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "String value face property test buffer content here")
+    (put-text-property 1 7 'face "bold")
+    (put-text-property 7 14 'face "italic")
+    (put-text-property 14 22 'face "underline")
+    (put-text-property 22 31 'face (:foreground "red"))
+    (list
+     'string-face-value-1 (get-text-property 1 'face)
+     'string-face-value-2 (get-text-property 7 'face)
+     'string-face-value-3 (get-text-property 14 'face)
+     'proper-face-value (get-text-property 22 'face)
+     'facep-string1 (facep (get-text-property 1 'face))
+     'facep-string2 (facep (get-text-property 7 'face))
+     'facep-proper (facep (get-text-property 22 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_face_overlay_with_property_list_at_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with multi props at boundaries face test area content")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "overlay boundary test")
+      (overlay-put ov 'evaporate t)
+      (list
+       'at-start-1 (get-char-property 9 'face)
+       'at-start-2 (get-char-property 10 'face)
+       'inside (get-char-property 25 'face)
+       'at-end-1 (get-char-property 39 'face)
+       'at-end-2 (get-char-property 40 'face)
+       'overlay-start (overlay-start ov)
+       'overlay-end (overlay-end ov)
+       'overlay-props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_font_lock_keywords_multiple_groups_same_match() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "func(42, \"string\")")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(func\\)\\>" 1 font-lock-function-name-face)
+                              ("(\\|)" 0 font-lock-keyword-face)
+                              ("\\([0-9]+\\)" 1 '(:foreground "blue"))
+                              ("\"[^\"]*\"" 0 font-lock-string-face)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (needle)
+              (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face))))
+            '("func" "(" "42" "string")))))"##,
+    );
+}
+
+#[test]
+fn ft_omega2_face_set_unspecified_then_recheck_attrs_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-reset-attrs-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-reset-attrs-face nil :weight 'heavy :slant 'oblique :foreground "red" :underline t :overline t :box '(:line-width 2) :strike-through t :inverse-video t :height 150) (error nil))
+  (list
+   'before-weight (face-attribute 'my-reset-attrs-face :weight nil 'default-on)
+   'before-fg (face-attribute 'my-reset-attrs-face :foreground nil 'default-on)
+   'set-weight-unspecified (condition-case nil (progn (set-face-attribute 'my-reset-attrs-face nil :weight 'unspecified) 'ok) (error 'no))
+   'after-weight (face-attribute 'my-reset-attrs-face :weight nil 'default-on)
+   'set-all-unspecified (condition-case nil (progn (set-face-attribute 'my-reset-attrs-face nil :weight 'unspecified :slant 'unspecified :foreground 'unspecified :underline 'unspecified :overline 'unspecified :box 'unspecified :strike-through 'unspecified :inverse-video 'unspecified :height 'unspecified) 'ok) (error 'no))
+   'after-all (list (face-attribute 'my-reset-attrs-face :weight nil 'default-on)
+                     (condition-case nil (face-attribute 'my-reset-attrs-face :foreground nil 'default-on) (error 'no))
+                     (face-attribute 'my-reset-attrs-face :underline nil 'default-on))))))"##,
+    );
+}
