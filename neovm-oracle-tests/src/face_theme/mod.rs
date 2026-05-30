@@ -6800,3 +6800,219 @@ fn ft_edge_face_remove_all_properties_from_region_deep() {
                       (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'new-prop) (length (text-properties-at pos)))) '(1 15 30 40 49))))))"##,
     );
 }
+
+#[test]
+fn ft_extreme_edge_overlay_make_overlay_empty_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Empty overlay region test buffer content here now end")
+    (put-text-property 1 51 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 10 10)))
+      (overlay-put ov1 'face '(:background "yellow")))
+    (let ((ov2 (make-overlay 25 26)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+    (list
+     'empty-overlay (list 'start (overlay-start ov1) 'end (overlay-end ov1) 'face (overlay-get ov1 'face))
+     'single-char-overlay (list 'start (overlay-start ov2) 'end (overlay-end ov2) 'face (overlay-get ov2 'face))
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(5 10 15 25 30 40 50))
+     ;; Insert at empty overlay position
+     'after-insert (progn
+                     (goto-char 10)
+                     (insert "FILL")
+                     (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 12 15 25 30 50)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_face_conditional_face_spec_all_types_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'cus-face)
+  (list
+   'face-spec-choose-color
+   (condition-case nil
+       (face-spec-choose '(((class color) (min-colors 88) (background light)) (:foreground "black" :background "white")
+                           ((class color) (min-colors 88) (background dark)) (:foreground "white" :background "black")
+                           ((class color) (min-colors 8)) (:foreground "green" :background "black")
+                           (t (:foreground "black" :background "white"))))
+     (error 'no))
+   'face-spec-choose-mono
+   (condition-case nil
+       (face-spec-choose '(((class mono)) (:foreground "black" :background "white")
+                           ((class color)) (:foreground "blue" :background "yellow")
+                           (t (:foreground "green"))))
+     (error 'no))
+   'face-spec-choose-type
+   (condition-case nil
+       (face-spec-choose '(((type x)) (:weight bold)
+                           ((type w32)) (:weight extra-bold)
+                           ((type ns)) (:weight heavy)
+                           (t (:weight normal))))
+     (error 'no))
+   'display-type (display-graphic-p)
+   (if (fboundp 'window-system) (window-system) 'no-ws))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_overlays_at_point_position_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlays at point and in region test data here now")
+    (put-text-property 1 52 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 5 15))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 10 25))) (overlay-put ov2 'face '(:foreground "green")))
+    (let ((ov3 (make-overlay 20 35))) (overlay-put ov3 'face '(:background "blue")))
+    (let ((ov4 (make-overlay 30 45))) (overlay-put ov4 'face '(:foreground "orange" :weight bold)))
+    (list
+     'overlays-at (mapcar (lambda (pos) (goto-char pos) (list pos (length (overlays-at pos)))) '(1 5 10 12 15 20 22 25 30 35 40 45 50))
+     'overlays-in (mapcar (lambda (start end) (list start end (length (overlays-in start end)))) '((1 15) (10 25) (20 35) (30 45) (1 52)))
+     'next-overlay-change (mapcar (lambda (pos) (next-overlay-change pos)) '(1 5 10 15 20 25 30 35))
+     'previous-overlay-change (mapcar (lambda (pos) (previous-overlay-change pos)) '(5 15 25 35 45 52))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_face_buffer_substring_with_faces_roundtrip_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Buffer substring face roundtrip test content area")
+    (put-text-property 1 17 'face 'bold)
+    (put-text-property 17 24 'face 'italic)
+    (put-text-property 24 32 'face 'underline)
+    (put-text-property 32 44 'face '(:foreground "red"))
+    (put-text-property 44 49 'face '(:background "yellow" :weight bold))
+    (list
+     'source-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 20 24 28 32 40 44 47))
+     'substring-copy
+     (let ((sub (buffer-substring 1 32)))
+       (with-temp-buffer
+         (insert sub)
+         (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 20 24 28))))
+     'buffer-string-copy
+     (let ((all (buffer-string)))
+       (with-temp-buffer
+         (insert all)
+         (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 24 32 40 44))))
+     'no-properties-copy
+     (buffer-substring-no-properties 1 49)
+     'insert-buffer-substring
+     (with-temp-buffer
+       (insert-buffer-substring (current-buffer) 1 49)
+       (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 17 24 32 40 44))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_face_with_font_lock_multiple_modes_switch_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (insert "Mode switch font-lock test buffer content")
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))))
+      ;; Switch to text-mode
+      (text-mode)
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))))
+        ;; Switch to emacs-lisp-mode
+        (emacs-lisp-mode)
+        (font-lock-fontify-buffer)
+        (let ((v2 (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 10 20 30))))
+          (list v0 v1 v2))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_text_properties_after_set_text_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Set text properties comprehensive test region")
+    (put-text-property 1 10 'key-old 'val-old)
+    (put-text-property 1 10 'face 'bold)
+    (put-text-property 10 25 'face 'italic)
+    (put-text-property 25 44 'face 'underline)
+    (list
+     'before-set (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key-old))) '(1 5 10 15 25 35 42))
+     ;; Set text properties (replaces all)
+     'after-set (progn
+                  (set-text-properties 1 25 (list 'face '(:foreground "red" :weight bold) 'new-key 'new-val))
+                  (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key-old) (get-text-property pos 'new-key))) '(1 5 10 15 20 25 30 42)))
+     ;; Set again with different properties
+     'after-set-again (progn
+                        (set-text-properties 1 44 (list 'face '(:background "yellow") 'another-key 'another-val))
+                        (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'new-key) (get-text-property pos 'another-key))) '(1 10 20 30 40 42))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_face_inherit_through_multiple_levels_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  ;; Create face inheritance chain: base -> child -> grandchild -> greatgrandchild
+  (condition-case nil (copy-face 'default 'my-level1-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-level1-face nil :weight 'bold :foreground "blue") (error nil))
+  (condition-case nil (copy-face 'my-level1-face 'my-level2-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-level2-face nil :slant 'italic :inherit 'my-level1-face) (error nil))
+  (condition-case nil (copy-face 'my-level2-face 'my-level3-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-level3-face nil :underline t :inherit 'my-level2-face) (error nil))
+  (condition-case nil (copy-face 'my-level3-face 'my-level4-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-level4-face nil :box t :inherit 'my-level3-face) (error nil))
+  (list
+   'level1-fg (face-attribute 'my-level1-face :foreground nil 'default-on)
+   'level1-weight (face-attribute 'my-level1-face :weight nil 'default-on)
+   'level2-fg (face-attribute 'my-level2-face :foreground nil 'default-on)
+   'level2-weight (face-attribute 'my-level2-face :weight nil 'default-on)
+   'level2-slant (face-attribute 'my-level2-face :slant nil 'default-on)
+   'level3-fg (face-attribute 'my-level3-face :foreground nil 'default-on)
+   'level3-weight (face-attribute 'my-level3-face :weight nil 'default-on)
+   'level3-under (face-attribute 'my-level3-face :underline nil 'default-on)
+   'level4-fg (face-attribute 'my-level4-face :foreground nil 'default-on)
+   'level4-box (face-attribute 'my-level4-face :box nil 'default-on)
+   'level4-under (face-attribute 'my-level4-face :underline nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_edge_face_after_text_property_remove_specific_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Remove specific properties from textured region")
+    (add-text-properties 1 49 (list 'face 'bold 'key1 'val1 'key2 'val2 'key3 'val3 'key4 'val4 'fontified t))
+    (remove-text-properties 10 30 '(key1 nil key2 nil))
+    (remove-text-properties 20 40 '(face nil key3 nil))
+    (list
+     'face-after-removals (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 48))
+     'key1-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'key1)) '(1 5 10 15 25 40))
+     'key2-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'key2)) '(1 5 10 15 25 40))
+     'key3-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'key3)) '(1 5 10 15 25 40))
+     'key4-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'key4)) '(1 10 20 30 40))
+     'fontified-after (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40 48)))))"##,
+    );
+}
