@@ -10637,3 +10637,195 @@ fn ft_gamma_face_with_all_face_listed_and_sorted_deep() {
    'face-list-no-duplicates (= (length (face-list)) (length (delete-dups (copy-sequence (face-list))))))))"##,
     );
 }
+
+#[test]
+fn ft_delta_face_with_two_distinct_non_face_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Two distinct non-face properties on buffer content text here")
+    (put-text-property 1 25 'face 'bold)
+    (put-text-property 1 25 'property-a 'value-a)
+    (put-text-property 25 55 'face 'italic)
+    (put-text-property 25 55 'property-b 'value-b)
+    (put-text-property 25 55 'property-c 'value-c)
+    (list
+     'faces-and-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'property-a) (get-text-property pos 'property-b) (get-text-property pos 'property-c))) '(1 10 20 25 30 40 54))
+     'text-props-at-1 (length (text-properties-at 1))
+     'text-props-at-25 (length (text-properties-at 25))
+     'text-props-at-54 (length (text-properties-at 54))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_font_lock_keywords_only_flag_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'keywords-only-bound (boundp 'font-lock-keywords-only)
+   'keywords-only-value (if (boundp 'font-lock-keywords-only) font-lock-keywords-only 'no-bound)
+   (condition-case nil
+       (with-temp-buffer
+         (emacs-lisp-mode)
+         (let ((font-lock-keywords-only t))
+           (insert "(defun kw-only-test () t)\n")
+           (font-lock-fontify-buffer)
+           (list
+            'defun-face-keywords (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+            't-face-keywords (save-excursion (goto-char (point-min)) (search-forward " t") (get-text-property (match-beginning 0) 'face)))))
+     (error 'keywords-only-failed))
+   (condition-case nil
+       (with-temp-buffer
+         (emacs-lisp-mode)
+         (let ((font-lock-keywords-only nil))
+           (insert "(defun kw-all-test () t)\n")
+           (font-lock-fontify-buffer)
+           (list
+            'defun-face-all (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+            't-face-all (save-excursion (goto-char (point-min)) (search-forward " t") (get-text-property (match-beginning 0) 'face)))))
+     (error 'all-failed)))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_overlay_face_after_moving_region_partially_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25 30 35)))))
+        (let ((v0 (funcall snap)))
+          ;; Move partially (shrink from right)
+          (move-overlay ov 6 15) (let ((v1 (funcall snap)))
+          ;; Move partially (shrink from left)
+          (move-overlay ov 10 15) (let ((v2 (funcall snap)))
+          ;; Move partially (expand both)
+          (move-overlay ov 5 25) (let ((v3 (funcall snap)))
+          ;; Move completely to new region
+          (move-overlay ov 25 35) (let ((v4 (funcall snap)))
+          (delete-overlay ov)
+          (list v0 v1 v2 v3 v4))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_face_add_text_properties_with_same_key_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Add text properties same key multiple times test content here")
+    (add-text-properties 1 57 (list 'face 'bold 'key1 'first))
+    (add-text-properties 10 40 (list 'face 'italic 'key1 'second))
+    (add-text-properties 30 57 (list 'face 'underline 'key1 'third))
+    (list
+     'faces-across (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'key1))) '(1 5 10 20 30 40 50 56))
+     'text-props-counts (mapcar (lambda (pos) (goto-char pos) (length (text-properties-at pos))) '(1 10 20 30 40 50))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_face_set_face_background_with_various_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-bg-colors-face) (error nil))
+  (list
+   'set-bg-red (condition-case nil (progn (set-face-background 'my-bg-colors-face "red" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-green (condition-case nil (progn (set-face-background 'my-bg-colors-face "green" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-blue (condition-case nil (progn (set-face-background 'my-bg-colors-face "blue" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-yellow (condition-case nil (progn (set-face-background 'my-bg-colors-face "yellow" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-white (condition-case nil (progn (set-face-background 'my-bg-colors-face "white" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-black (condition-case nil (progn (set-face-background 'my-bg-colors-face "black" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-hex (condition-case nil (progn (set-face-background 'my-bg-colors-face "#FF00FF" nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no))
+   'set-bg-unspecified (condition-case nil (progn (set-face-background 'my-bg-colors-face 'unspecified nil) (face-background 'my-bg-colors-face nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_face_font_lock_fontify_block_function_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun block-test (a b)\n  \"Docstring for block test.\"\n  (+ a b))\n")
+    (list
+     'before-fontify (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30))
+     'fontify-block (condition-case nil
+                        (progn
+                          (font-lock-fontify-block 1)
+                          (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30 40)))
+                      (error 'no-block-fontify))
+     'fontify-buffer (progn
+                       (font-lock-fontify-buffer)
+                       (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 15 20 25 35 40))))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_face_property_change_at_multiple_boundaries_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 5 'face 'italic)
+    (put-text-property 5 7 'face 'underline)
+    (put-text-property 7 9 'face '(:foreground "red"))
+    (put-text-property 9 11 'face '(:background "yellow"))
+    (list
+     'faces-all (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 4 5 6 7 8 9 10))
+     'prop-changes (let ((pos 1) (changes nil))
+                     (while pos
+                       (setq pos (next-single-property-change pos 'face nil 11))
+                       (when pos (push (list pos (get-text-property pos 'face)) changes)))
+                     (nreverse changes))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_delta_face_overlay_with_category_and_face_together_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay with category and face together test content text here")
+    (let ((ov1 (make-overlay 1 20)))
+      (overlay-put ov1 'category 'cat-a)
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 10 30)))
+      (overlay-put ov2 'category 'cat-b)
+      (overlay-put ov2 'face '(:foreground "red" :weight bold))
+      (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 25 45)))
+      (overlay-put ov3 'category 'cat-c)
+      (overlay-put ov3 'face '(:underline t :slant italic))
+      (overlay-put ov3 'priority 15))
+    (list
+     'category-face (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (get-char-property pos 'category))) '(1 10 15 20 25 30 35 45 50 55))
+     'overlay-categories (list (overlay-get ov1 'category) (overlay-get ov2 'category) (overlay-get ov3 'category))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))"##,
+    );
+}
