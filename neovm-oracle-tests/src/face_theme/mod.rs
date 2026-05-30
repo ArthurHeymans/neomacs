@@ -11194,3 +11194,195 @@ fn ft_zeta3_face_put_all_text_properties_and_read_them_back_deep() {
                        (nreverse keys)))))"##,
     );
 }
+
+#[test]
+fn ft_eta_face_text_property_value_inheritance_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDDEEEEEEEEEE")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 1 11 'base-prop 'base)
+    (put-text-property 11 21 'face 'italic)
+    (put-text-property 11 21 'mid-prop 'mid)
+    (put-text-property 21 31 'face 'underline)
+    (put-text-property 21 31 'leaf-prop 'leaf)
+    (put-text-property 31 41 'face '(:foreground "red"))
+    (put-text-property 31 41 'end-prop 'end)
+    (put-text-property 41 51 'face '(:background "yellow"))
+    (list
+     'faces-props (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'base-prop) (get-text-property pos 'mid-prop) (get-text-property pos 'leaf-prop) (get-text-property pos 'end-prop))) '(1 5 11 15 21 25 31 35 41 45 50))
+     'interval-count (length (object-intervals (current-buffer)))
+     'prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 51)) '(1 11 21 31 41)))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_font_lock_prepend_append_overwrite_resolution_order() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "RESOLUTION order test: PREPEND vs APPEND vs OVERWRITE flags here end")
+    ;; Add with prepend first (lowest priority)
+    (font-lock-add-keywords nil '(("\\<\\(RESOLUTION\\)\\>" 1 '(:foreground "blue") prepend)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "RESOLUTION") (get-text-property (match-beginning 0) 'face))))
+      ;; Add with append (medium)
+      (font-lock-add-keywords nil '(("\\<\\(RESOLUTION\\)\\>" 1 '(:foreground "green") append)))
+      (font-lock-fontify-buffer)
+      (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "RESOLUTION") (get-text-property (match-beginning 0) 'face))))
+        ;; Add with overwrite (highest)
+        (font-lock-add-keywords nil '(("\\<\\(RESOLUTION\\)\\>" 1 '(:foreground "red" :weight bold) overwrite)))
+        (font-lock-fontify-buffer)
+        (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "RESOLUTION") (get-text-property (match-beginning 0) 'face))))
+          ;; Check other words
+          (let ((order-face (save-excursion (goto-char (point-min)) (search-forward "order") (get-text-property (match-beginning 0) 'face)))
+                (flags-face (save-excursion (goto-char (point-min)) (search-forward "flags") (get-text-property (match-beginning 0) 'face))))
+            (list v0 v1 v2 order-face flags-face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_face_overlay_string_with_face_and_display_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay string display properties face combined test text data")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "<<<" 'face '(:foreground "red")))
+      (overlay-put ov 'after-string (propertize ">>>" 'face '(:foreground "blue")))
+      (overlay-put ov 'display ""))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'before-face (get-text-property 0 (overlay-get ov 'before-string))
+     'after-face (get-text-property 0 (overlay-get ov 'after-string))
+     'char-prop-at-start (get-char-property 10 'face)
+     'char-prop-at-end (get-char-property 29 'face)
+     'char-prop-at-middle (get-char-property 20 'face)
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_face_set_attribute_inherit_multiple_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-multi-inherit-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-multi-inherit-face nil :inherit '(bold italic)) (error nil))
+  (list
+   'inherited-weight (face-attribute 'my-multi-inherit-face :weight nil 'default-on)
+   'inherited-slant (face-attribute 'my-multi-inherit-face :slant nil 'default-on)
+   'override-weight (condition-case nil (progn (set-face-attribute 'my-multi-inherit-face nil :weight 'ultra-light) (face-attribute 'my-multi-inherit-face :weight nil 'default-on)) (error 'no))
+   'override-slant (condition-case nil (progn (set-face-attribute 'my-multi-inherit-face nil :slant 'oblique) (face-attribute 'my-multi-inherit-face :slant nil 'default-on)) (error 'no))
+   'remove-inherit (condition-case nil (progn (set-face-attribute 'my-multi-inherit-face nil :inherit nil) 'cleared) (error 'no))
+   'weight-after-clear (face-attribute 'my-multi-inherit-face :weight nil 'default-on)
+   'slant-after-clear (face-attribute 'my-multi-inherit-face :slant nil 'default-on))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_face_text_property_next_single_change_with_object_arg() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (put-text-property 21 26 'face '(:background "yellow"))
+    (put-text-property 26 31 'face '(:foreground "blue"))
+    (put-text-property 31 36 'face '(:background "cyan"))
+    (list
+     'next-change-default (next-single-property-change 1 'face)
+     'next-change-object (next-single-property-change 1 'face nil (current-buffer))
+     'next-change-limit (next-single-property-change 1 'face nil 15)
+     'prev-change-default (previous-single-property-change 36 'face)
+     'prev-change-object (previous-single-property-change 36 'face nil (current-buffer))
+     'prev-change-limit (previous-single-property-change 36 'face nil (point-min)))
+     'text-prop-any-limit (text-property-any 1 20 'face 'italic)
+     'text-prop-not-all-limit (text-property-not-all 1 20 'face 'bold)))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_font_lock_flush_vs_refresh_defaults_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-flush-fbound (fboundp 'font-lock-flush)
+   'font-lock-refresh-defaults-fbound (fboundp 'font-lock-refresh-defaults)
+   (condition-case nil
+       (progn (font-lock-flush) 'flushed)
+     (error 'no-flush))
+   (condition-case nil
+       (progn (font-lock-refresh-defaults) 'refreshed)
+     (error 'no-refresh))
+   'font-lock-fontified-bound (boundp 'font-lock-fontified)
+   'font-lock-fontified-value (if (boundp 'font-lock-fontified) font-lock-fontified 'no-bound)
+   'font-lock-set-defaults-fbound (fboundp 'font-lock-set-defaults)
+   (condition-case nil
+       (with-temp-buffer (emacs-lisp-mode) (font-lock-set-defaults) 'set)
+     (error 'no-set)))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_face_overlay_category_inheritance_chain_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay category chain face test buffer content data text here end final")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'category 'cat-root) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'category 'cat-mid) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 15))
+    (let ((ov3 (make-overlay 20 40))) (overlay-put ov3 'category 'cat-leaf) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 20))
+    (let ((ov4 (make-overlay 35 60))) (overlay-put ov4 'category 'cat-last) (overlay-put ov4 'face '(:background "yellow")) (overlay-put ov4 'priority 5))
+    (list
+     'category-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (mapcar (lambda (ov) (overlay-get ov 'category)) (overlays-at pos)))) '(1 10 15 20 25 30 35 40 50 59))
+     'all-categories (mapcar (lambda (ov) (overlay-get ov 'category)) (list ov1 ov2 ov3 ov4))
+     (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_eta_face_color_dark_light_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'color)
+  (list
+   'color-dark-p-black (condition-case nil (color-dark-p "#000000") (error 'no))
+   'color-dark-p-white (condition-case nil (color-dark-p "#FFFFFF") (error 'no))
+   'color-dark-p-red (condition-case nil (color-dark-p "#FF0000") (error 'no))
+   'color-dark-p-yellow (condition-case nil (color-dark-p "#FFFF00") (error 'no))
+   'color-dark-p-blue (condition-case nil (color-dark-p "#0000FF") (error 'no))
+   'color-dark-p-gray (condition-case nil (color-dark-p "#808080") (error 'no))
+   'color-light-name-p-white (condition-case nil (color-light-name-p "white") (error 'no))
+   'color-light-name-p-black (condition-case nil (color-light-name-p "black") (error 'no))
+   'color-light-name-p-gray (condition-case nil (color-light-name-p "gray") (error 'no))
+   'color-light-name-p-snow (condition-case nil (color-light-name-p "snow") (error 'no))
+   'color-light-name-p-midnight (condition-case nil (color-light-name-p "midnight blue") (error 'no))
+   (condition-case nil (color-complement "#FF0000") (error 'no))
+   (condition-case nil (color-complement "#0000FF") (error 'no)))))"##,
+    );
+}
