@@ -15615,3 +15615,179 @@ fn ft_graviton_face_text_properties_after_concat_of_propertized() {
      's5-length (length s5))))"##,
     );
 }
+
+#[test]
+fn ft_boson_face_overlay_with_multiple_faces_and_priority_stacking() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Multiple overlays face priority stacking test content text data here done")
+    (let ((ov1 (make-overlay 5 20))) (overlay-put ov1 'face '(:background "red" :foreground "white")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 10 30))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 15 25))) (overlay-put ov3 'face '(:foreground "blue" :weight bold :slant italic)) (overlay-put ov3 'priority 30))
+    (let ((ov4 (make-overlay 20 40))) (overlay-put ov4 'face '(:underline t)) (overlay-put ov4 'priority 15))
+    (list
+     'all-stack (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (mapcar (lambda (ov) (overlay-get ov 'priority)) (overlays-at pos)))) '(1 5 10 18 22 28 35 42 55))
+     'max-priority-at-18 (let ((ovs (overlays-at 18))) (apply #'max (mapcar (lambda (ov) (or (overlay-get ov 'priority) 0)) ovs)))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_font_lock_fontify_with_rx_regexp_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (condition-case nil
+      (progn
+        (require 'rx)
+        (with-temp-buffer
+          (fundamental-mode)
+          (font-lock-mode 1)
+          (insert "RX-based matching: FOO and BAR and BAZ keywords here")
+          (font-lock-add-keywords nil (list (list (rx word-start (or "FOO" "BAR" "BAZ") word-end) 0 font-lock-warning-face t)))
+          (font-lock-fontify-buffer)
+          (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (list n (get-text-property (match-beginning 0) 'face)))) '("FOO" "BAR" "BAZ"))))
+    (error (list 'rx-error (fboundp 'rx) (fboundp 'font-lock-add-keywords))))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_face_inherit_chain_resolve_attributes_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inherit-A-face) (error nil))
+  (condition-case nil (copy-face 'my-inherit-A-face 'my-inherit-B-face) (error nil))
+  (condition-case nil (copy-face 'my-inherit-B-face 'my-inherit-C-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-inherit-A-face nil :weight 'bold :foreground "red") (error nil))
+  (condition-case nil (set-face-attribute 'my-inherit-B-face nil :slant 'italic :inherit 'my-inherit-A-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-inherit-C-face nil :underline t :inherit 'my-inherit-B-face) (error nil))
+  (condition-case nil (copy-face 'my-inherit-C-face 'my-inherit-D-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-inherit-D-face nil :box t :inherit 'my-inherit-C-face) (error nil))
+  (list
+   'A-weight (face-attribute 'my-inherit-A-face :weight nil 'default-on)
+   'B-weight (face-attribute 'my-inherit-B-face :weight nil 'default-on)
+   'B-slant (face-attribute 'my-inherit-B-face :slant nil 'default-on)
+   'C-weight (face-attribute 'my-inherit-C-face :weight nil 'default-on)
+   'C-under (condition-case nil (face-attribute 'my-inherit-C-face :underline nil 'default-on) (error 'no))
+   'D-weight (face-attribute 'my-inherit-D-face :weight nil 'default-on)
+   'D-box (condition-case nil (face-attribute 'my-inherit-D-face :box nil 'default-on) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_face_overlay_hidden_via_invisible_face_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Visible text INVISIBLE here visible again final end now done")
+    (put-text-property 1 14 'face 'bold)
+    (put-text-property 14 23 'face 'italic :invisible t)
+    (put-text-property 23 55 'face 'underline)
+    (let ((ov (make-overlay 25 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'invisible t))
+    (list
+     'with-invisible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-char-property pos 'face) (invisible-p pos))) '(1 5 14 18 23 25 30 40 45 54))
+     'remove-invisible-text (progn (remove-text-properties 14 23 '(invisible nil)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 14 18 23 30 40 54)))
+     'remove-invisible-ov (progn (overlay-put ov 'invisible nil) (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(25 30 40 45)))
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_font_lock_fontify_without_font_lock_mode_enabled() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    ;; Deliberately don't enable font-lock-mode
+    (insert "No font lock mode enabled buffer content text data here")
+    (list
+     'font-lock-mode-before font-lock-mode
+     'fontify-buffer-direct (condition-case nil (progn (font-lock-fontify-buffer) 'fontified) (error 'no-fontify))
+     'fontified-after (get-text-property 1 'fontified)
+     'face-after (get-text-property 1 'face)
+     'font-lock-mode-after font-lock-mode))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_face_set_and_get_text_properties_at_boundary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ")
+    (dotimes (i 10)
+      (put-text-property (1+ (* i 4)) (+ (* i 4) 5) 'face
+                         (if (evenp i) 'bold 'italic)))
+    (list
+     'all-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 4 5 8 9 12 13 16 17 20 21 24 25 28 29 32 33 36 37 40))
+     'prop-boundaries (mapcar (lambda (pos) (next-single-property-change pos 'face nil 41)) '(1 5 9 13 17 21 25 29 33 37))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_face_overlay_create_delete_create_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay create delete create cycle face test content text data buffer content")
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face) (length (overlays-at pos)))) '(1 10 20 30 40 50 60)))))
+      (let ((v0 (funcall snap)))
+        (let ((ov (make-overlay 15 35))) (overlay-put ov 'face '(:background "yellow")))
+        (let ((v1 (funcall snap)))
+          (mapc #'delete-overlay (overlays-at 25))
+          (let ((v2 (funcall snap)))
+            (let ((ov2 (make-overlay 20 40))) (overlay-put ov2 'face '(:foreground "red" :weight bold)))
+            (let ((v3 (funcall snap)))
+              (mapc #'delete-overlay (overlays-at 30))
+              (let ((v4 (funcall snap)))
+                (let ((ov3 (make-overlay 10 50))) (overlay-put ov3 'face '(:underline t :slant italic)))
+                (let ((v5 (funcall snap)))
+                  (mapc #'delete-overlay (overlays-in 1 60))
+                  (list v0 v1 v2 v3 v4 v5)))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_boson_face_default_face_attributes_all_checked() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'default-family (face-attribute 'default :family nil 'default-on)
+   'default-foundry (face-attribute 'default :foundry nil 'default-on)
+   'default-width (face-attribute 'default :width nil 'default-on)
+   'default-height (face-attribute 'default :height nil 'default-on)
+   'default-weight (face-attribute 'default :weight nil 'default-on)
+   'default-slant (face-attribute 'default :slant nil 'default-on)
+   'default-underline (condition-case nil (face-attribute 'default :underline nil 'default-on) (error 'no))
+   'default-overline (condition-case nil (face-attribute 'default :overline nil 'default-on) (error 'no))
+   'default-strike (condition-case nil (face-attribute 'default :strike-through nil 'default-on) (error 'no))
+   'default-box (condition-case nil (face-attribute 'default :box nil 'default-on) (error 'no))
+   'default-inverse (condition-case nil (face-attribute 'default :inverse-video nil 'default-on) (error 'no))
+   'default-fg (condition-case nil (face-foreground 'default nil 'default-on) (error 'no))
+   'default-bg (condition-case nil (face-background 'default nil 'default-on) (error 'no))
+   'default-font (condition-case nil (face-font 'default nil) (error 'no))
+   'default-extend (condition-case nil (face-attribute 'default :extend nil 'default-on) (error 'no))
+   'default-inherit (condition-case nil (face-attribute 'default :inherit nil 'default-on) (error 'no)))))"##,
+    );
+}
