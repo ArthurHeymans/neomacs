@@ -24555,3 +24555,132 @@ fn ft_chase_font_lock_fontify_inside_condition_case() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_seek_face_overlay_invisible_with_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'invisible t)
+      (list
+       'face (overlay-get ov 'face)
+       'invisible (overlay-get ov 'invisible)
+       'char-prop-face (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_font_lock_fontify_after_revert_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'revert-buffer-fbound (fboundp 'revert-buffer)
+   'font-lock-after-revert (condition-case nil
+                              (with-temp-buffer
+                                (emacs-lisp-mode)
+                                (insert "(setq x 42)\n")
+                                (font-lock-fontify-buffer)
+                                'working)
+                              (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_face_overlay_face_with_display_text() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'underline)
+      (overlay-put ov 'display "DISPLAYED-TEXT")
+      (list
+       'display-prop (overlay-get ov 'display)
+       'face-prop (overlay-get ov 'face)
+       'char-prop-face (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_face_text_property_add_face_property_with_add_face_text_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (add-face-text-property 6 11 'italic)
+    (list
+     'add-text-prop-fbound (fboundp 'add-face-text-property)
+     'face-pos3 (get-text-property 3 'face)
+     'face-pos8 (get-text-property 8 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_font_lock_fontify_font_lock_type_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defclass my-class ()\n  ((slot1 :initarg :slot1)))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defclass-face (save-excursion (goto-char (point-min)) (search-forward "defclass") (get-text-property (match-beginning 0) 'face))
+     'class-name-face (save-excursion (goto-char (point-min)) (search-forward "my-class") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_face_face_spec_set_with_custom_args() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-spec-face) (error nil))
+  (list
+   'spec-set-fbound (fboundp 'face-spec-set)
+   'spec-set (condition-case nil (face-spec-set 'my-spec-face '((t :foreground "yellow" :weight normal)) t) (error 'no))
+   'spec-get-fg (condition-case nil (face-attribute 'my-spec-face :foreground nil) (error 'no))
+   'spec-reset (condition-case nil (progn (face-spec-set 'my-spec-face nil nil) (face-attribute 'my-spec-face :foreground nil)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_seek_face_overlay_face_nested_three_deep_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red" :weight bold :slant italic :underline t :height 1.2 :background "yellow" :box t))
+      (list
+       'face (overlay-get ov 'face)
+       'keys (let ((pl (overlay-get ov 'face)) (ks nil) (i 0))
+               (while (< i (length pl))
+                 (push (nth i pl) ks)
+                 (setq i (+ i 2)))
+               (nreverse ks))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
