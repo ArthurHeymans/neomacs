@@ -9089,3 +9089,196 @@ fn ft_abyss_face_font_lock_mode_without_mode_hooks_deep() {
      (error 'no-after-fontify))))"##,
     );
 }
+
+#[test]
+fn ft_infinity_face_text_property_interval_split_then_insert_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXYYYYYYYYYYZZZZZZZZZZWWWWWWWWWW")
+    (put-text-property 1 11 'face 'bold :my-tag 'tag-x)
+    (put-text-property 11 21 'face 'italic :my-tag 'tag-y)
+    (put-text-property 21 31 'face 'underline :my-tag 'tag-z)
+    (put-text-property 31 41 'face '(:foreground "red") :my-tag 'tag-w)
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'my-tag))) '(1 6 11 16 21 26 31 36 40)))))
+      (let ((v0 (funcall snap)))
+        ;; Split interval 2 by inserting
+        (goto-char 16) (insert "INSERTED")
+        (let ((v1 (funcall snap)))
+          ;; Split interval 3 by deleting partial
+          (delete-region 28 35)
+          (let ((v2 (funcall snap)))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_overlay_end_start_boundary_exact_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWW")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:background "red")))
+    (let ((ov2 (make-overlay 6 11))) (overlay-put ov2 'face '(:background "green")))
+    (let ((ov3 (make-overlay 11 16))) (overlay-put ov3 'face '(:background "blue")))
+    (let ((ov4 (make-overlay 16 21))) (overlay-put ov4 'face '(:background "yellow")))
+    (list
+     'faces-at-5 (list (get-char-property 5 'face) (length (overlays-at 5)))
+     'faces-at-6 (list (get-char-property 6 'face) (length (overlays-at 6)))
+     'faces-at-11 (list (get-char-property 11 'face) (length (overlays-at 11)))
+     'faces-at-16 (list (get-char-property 16 'face) (length (overlays-at 16)))
+     'faces-at-20 (get-char-property 20 'face)
+     ;; Insert exactly at boundary
+     'after-insert-at-boundary (progn (goto-char 6) (insert "BB") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(5 6 7 8)))
+     (progn (mapc #'delete-overlay (overlays-in 1 (point-max))) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_text_property_with_alternating_values_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert (make-string 50 ?X))
+    (let ((colors '(:foreground "red" :foreground "green" :foreground "blue"
+                    :foreground "orange" :foreground "purple" :foreground "cyan")))
+      (let ((i 0) (pos 1))
+        (while (< pos 51)
+          (put-text-property pos (min (+ pos 8) 51) 'face (nth (mod i 6) colors))
+          (setq pos (+ pos 8))
+          (setq i (1+ i)))))
+    (list
+     'spot-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 9 17 25 33 41 49))
+     'interval-count (length (object-intervals (current-buffer)))
+     'prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 51)) '(1 9 17 25 33 41))
+     'all-different (apply #'not (mapcar (lambda (pos) (equal (get-text-property pos 'face) (get-text-property (+ pos 8) 'face))) '(1 9 17 25 33))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_set_face_underline_with_colors_and_styles_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-styles-face) (error nil))
+  (list
+   'red-wave (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:color "red" :style wave) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'blue-line (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:color "blue" :style line) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'green-double (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:color "green" :style double-line) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'orange-dots (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:color "orange" :style dots) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'purple-dash (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:color "purple" :style dash) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'no-color-wave (condition-case nil (progn (set-face-underline 'my-ul-styles-face '(:style wave) nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no))
+   'clear (condition-case nil (progn (set-face-underline 'my-ul-styles-face nil nil) (face-attribute 'my-ul-styles-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_font_lock_with_overlays_after_edit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t) (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Overlay font-lock edit test\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((ov (make-overlay 1 10)))
+        (overlay-put ov 'face '(:background "yellow")))
+      (let ((snap (lambda () (save-excursion (goto-char (point-min)) (search-forward "TODO") (list (get-text-property (match-beginning 0) 'face) (get-char-property (match-beginning 0) 'face))))))
+        (let ((v0 (funcall snap)))
+          ;; Edit text under overlay
+          (goto-char (point-min))
+          (search-forward "TODO")
+          (replace-match "DONE")
+          (font-lock-ensure (point-min) (point-max))
+          (let ((v1 (funcall snap)))
+            ;; Move overlay
+            (move-overlay ov 15 25)
+            (font-lock-ensure (point-min) (point-max))
+            (let ((v2 (funcall snap)))
+              ;; Delete overlay
+              (delete-overlay ov)
+              (let ((v3 (funcall snap)))
+                (list v0 v1 v2 v3)))))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_set_face_box_with_various_formats_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-box-formats-face) (error nil))
+  (list
+   'box-simple (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box t) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no))
+   'box-line-width (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box '(:line-width 3)) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no))
+   'box-color (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box '(:line-width 2 :color "red")) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no))
+   'box-style (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box '(:line-width 1 :color "blue" :style pressed-button)) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no))
+   'box-released (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box '(:style released-button)) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no))
+   'box-off (condition-case nil (progn (set-face-attribute 'my-box-formats-face nil :box nil) (face-attribute 'my-box-formats-face :box nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_text_property_character_by_character_access_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 10 'face 'italic)
+    (put-text-property 10 15 'face 'underline)
+    (put-text-property 15 20 'face '(:foreground "red"))
+    (put-text-property 20 27 'face '(:background "yellow"))
+    (list
+     'char-by-char (let ((result nil) (pos 1))
+                     (while (< pos 27)
+                       (push (list pos (char-after pos) (get-text-property pos 'face)) result)
+                       (setq pos (1+ pos)))
+                     (nreverse result))
+     'prop-changes-everywhere (let ((pos 1) (changes nil))
+                                (while pos
+                                  (setq pos (next-single-property-change pos 'face nil 27))
+                                  (when pos (push (list pos (get-text-property pos 'face)) changes)))
+                                (nreverse changes))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinity_face_font_lock_verbose_and_debug_flags_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-verbose-bound (boundp 'font-lock-verbose)
+   'font-lock-verbose-value (if (boundp 'font-lock-verbose) font-lock-verbose 'no-bound)
+   'font-lock-support-mode-bound (boundp 'font-lock-support-mode)
+   'font-lock-support-mode-value (if (boundp 'font-lock-support-mode) font-lock-support-mode 'no-bound)
+   'font-lock-maximum-decoration-bound (boundp 'font-lock-maximum-decoration)
+   'font-lock-maximum-decoration-value (if (boundp 'font-lock-maximum-decoration) font-lock-maximum-decoration 'no-bound)
+   'font-lock-keywords-case-fold-search-bound (boundp 'font-lock-keywords-case-fold-search)
+   'font-lock-defaults-function
+   (condition-case nil
+       (with-temp-buffer (emacs-lisp-mode) font-lock-defaults)
+     (error 'no-defaults))
+   'font-lock-set-defaults
+   (condition-case nil
+       (with-temp-buffer (emacs-lisp-mode) (font-lock-set-defaults) 'ok)
+     (error 'no)))))"##,
+    );
+}
