@@ -15433,3 +15433,185 @@ fn ft_neutrino_face_with_filtered_face_attribute_deep() {
    (condition-case nil (face-filters) (error 'no-face-filters))))"##,
     );
 }
+
+#[test]
+fn ft_graviton_face_font_lock_defaults_vs_actual_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (font-lock-mode 1)
+    (font-lock-set-defaults)
+    (insert "(defun defaults-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defaults (condition-case nil (font-lock-defaults) (error 'no))
+     'keywords (if (boundp 'font-lock-keywords) font-lock-keywords 'no)
+     'face-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'face-test (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face))
+     'face-42 (save-excursion (goto-char (point-min)) (search-forward "42") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_face_overlay_line_spacing_inherit_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay line spacing and face inherit test content text data here now end done final")
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow" :inherit bold))
+      (overlay-put ov 'line-spacing 8)
+      (overlay-put ov 'line-height 1.8)
+      (list
+       'face (overlay-get ov 'face)
+       'line-spacing (overlay-get ov 'line-spacing)
+       'line-height (overlay-get ov 'line-height)
+       'face-at-20 (get-char-property 20 'face)
+       'face-at-5 (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_face_set_text_properties_on_range_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Set text properties on range face test buffer content text data")
+    (put-text-property 1 20 'face 'bold)
+    (put-text-property 20 40 'face 'italic)
+    (put-text-property 40 55 'face 'underline)
+    (list
+     'initial-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 10 20 30 40 50 54))
+     ;; Override middle section entirely
+     'set-text-props-middle (progn (set-text-properties 15 45 (list 'face '(:foreground "red" :weight bold) 'new-prop 'value)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'new-prop))) '(1 10 15 25 35 45 50 54)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_font_lock_keywords_with_subgroup_0_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Subgroup 0 match test for font lock face buffer content")
+    (font-lock-add-keywords nil '(("\\<\\(Subgroup\\)\\>" 0 font-lock-warning-face t)))
+    (font-lock-fontify-buffer)
+    (list
+     'match-0-face (save-excursion (goto-char (point-min)) (search-forward "Subgroup") (get-text-property (match-beginning 0) 'face))
+     'other-word-face (save-excursion (goto-char (point-min)) (search-forward "match") (get-text-property (match-beginning 0) 'face)))
+    (font-lock-remove-keywords nil '(("\\<\\(Subgroup\\)\\>" 0 font-lock-warning-face t)))
+    'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_face_overlay_before_after_face_inherit_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before after face inherit overlay test content text data buffer here done")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow" :inherit italic))
+      (overlay-put ov 'before-string
+                   (propertize "[[BEFORE]]" 'face '(:foreground "red" :inherit bold)))
+      (overlay-put ov 'after-string
+                   (propertize "{{AFTER}}" 'face '(:foreground "blue" :inherit underline))))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'before-face (get-text-property 0 (overlay-get ov 'before-string))
+     'after-face (get-text-property 0 (overlay-get ov 'after-string))
+     'before-props (text-properties-at 0 (overlay-get ov 'before-string))
+     'after-props (text-properties-at 0 (overlay-get ov 'after-string))
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_face_overlay_with_face_change_and_move_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25 30)))))
+        (let ((v0 (funcall snap)))
+          (move-overlay ov 20 25)
+          (overlay-put ov 'face '(:foreground "red" :weight bold))
+          (overlay-put ov 'priority 100)
+          (let ((v1 (funcall snap)))
+            (move-overlay ov 6 15)
+            (overlay-put ov 'face '(:background "cyan" :slant italic))
+            (let ((v2 (funcall snap)))
+              (delete-overlay ov)
+              (list v0 v1 v2))))))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_font_lock_fontify_with_lazy_lock_no_jit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (condition-case nil
+      (progn
+        (setq jit-lock-mode nil)
+        (with-temp-buffer
+          (emacs-lisp-mode)
+          (insert "(defun no-jit-test () 42)\n")
+          (font-lock-fontify-buffer)
+          (list
+           'jit-lock-mode jit-lock-mode
+           'face-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+           'fontified (get-text-property 1 'fontified)
+           'font-lock-support-mode (if (boundp 'font-lock-support-mode) font-lock-support-mode 'no)))))
+    (error (list 'error 'no (fboundp 'jit-lock-mode) (fboundp 'emacs-lisp-mode))))))"##,
+    );
+}
+
+#[test]
+fn ft_graviton_face_text_properties_after_concat_of_propertized() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let* ((s1 (propertize "BOLD" 'face 'bold))
+         (s2 (propertize "ITALIC" 'face 'italic))
+         (s3 (concat s1 " " s2))
+         (s4 (propertize "RED" 'face '(:foreground "red")))
+         (s5 (concat s3 " - " s4)))
+    (list
+     's1-face (get-text-property 0 'face s1)
+     's1-props (text-properties-at 0 s1)
+     's2-face (get-text-property 0 'face s2)
+     's3-face-at-0 (get-text-property 0 'face s3)
+     's3-face-at-5 (get-text-property 5 'face s3)
+     's4-face (get-text-property 0 'face s4)
+     's5-face-at-0 (get-text-property 0 'face s5)
+     's5-face-at-8 (get-text-property 8 'face s5)
+     's5-face-at-12 (get-text-property 12 'face s5)
+     's5-length (length s5))))"##,
+    );
+}
