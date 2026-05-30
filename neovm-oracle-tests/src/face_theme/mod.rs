@@ -18990,3 +18990,161 @@ fn ft_hadron_face_overlay_face_with_evaporate_and_before_string() {
        (progn (delete-region 10 25) (list 'ov-gone (not (and (overlay-buffer ov))) 'face-at-10 (get-char-property 10 'face))))))))"##,
     );
 }
+
+#[test]
+fn ft_nucleon_face_font_lock_add_duplicate_and_remove_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "DUPLICATE keyword DUPLICATE test font lock face buffer content here")
+    (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "red") t)))
+    (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "blue") t)))
+    (font-lock-add-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "green" :weight bold) overwrite)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "DUPLICATE") (get-text-property (match-beginning 0) 'face))))
+      (font-lock-remove-keywords nil '(("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "red") t) ("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "blue") t) ("\\<\\(DUPLICATE\\)\\>" 1 '(:foreground "green" :weight bold) overwrite)))
+      (font-lock-fontify-buffer)
+      (list v0 (save-excursion (goto-char (point-min)) (search-forward "DUPLICATE") (get-text-property (match-beginning 0) 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_overlay_face_after_property_overwrite() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face '(:background "red"))
+      (overlay-put ov 'face '(:background "green"))
+      (overlay-put ov 'face '(:background "blue" :foreground "white"))
+      (overlay-put ov 'priority 10)
+      (overlay-put ov 'priority 50)
+      (list
+       'final-face (overlay-get ov 'face)
+       'final-priority (overlay-get ov 'priority)
+       'props-count (length (overlay-properties ov))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_text_property_previous_property_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (dotimes (i 16)
+      (put-text-property (1+ (* i 2)) (+ (* i 2) 3) 'face (if (evenp i) 'bold 'italic)))
+    (list
+     'prev-from-31 (previous-property-change 31)
+     'prev-single-from-31 (previous-single-property-change 31 'face)
+     'prev-from-15 (previous-property-change 15)
+     'prev-single-from-15 (previous-single-property-change 15 'face)
+     'prev-single-from-5 (previous-single-property-change 5 'face)
+     'prev-single-with-limit (previous-single-property-change 31 'face nil 10)
+     'prev-nil-prop (previous-single-property-change 31 'nonexistent-prop)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_font_lock_fontify_with_jit_lock_disabled() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (condition-case nil
+      (let ((jit-lock-mode nil))
+        (with-temp-buffer
+          (emacs-lisp-mode)
+          (insert "(defun jit-test () 42)\n")
+          (font-lock-fontify-buffer)
+          (list
+           'jit-lock-mode jit-lock-mode
+           'face-defun (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+           'fontified (get-text-property 1 'fontified))))
+    (error (list 'jit-error (fboundp 'jit-lock-mode) (fboundp 'font-lock-fontify-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_set_face_underline_then_check_color() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-color-face) (error nil))
+  (list
+   'set-ul-red (condition-case nil (progn (set-face-underline 'my-ul-color-face '(:color "red") nil) (condition-case nil (face-attribute 'my-ul-color-face :underline nil 'default-on) (error 'no2))) (error 'no1))
+   'set-ul-blue (condition-case nil (progn (set-face-underline 'my-ul-color-face '(:color "blue" :style wave) nil) (condition-case nil (face-attribute 'my-ul-color-face :underline nil 'default-on) (error 'no2))) (error 'no1))
+   'set-ul-green (condition-case nil (progn (set-face-underline 'my-ul-color-face '(:color "green" :style double-line) nil) (condition-case nil (face-attribute 'my-ul-color-face :underline nil 'default-on) (error 'no2))) (error 'no1))
+   'clear-ul (condition-case nil (progn (set-face-underline 'my-ul-color-face nil nil) (condition-case nil (face-attribute 'my-ul-color-face :underline nil 'default-on) (error 'no2))) (error 'no1)))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_overlay_priority_negative_vs_positive_vs_zero() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (let ((ov-neg (make-overlay 1 31))) (overlay-put ov-neg 'face '(:background "red")) (overlay-put ov-neg 'priority -10))
+    (let ((ov-zero (make-overlay 1 31))) (overlay-put ov-zero 'face '(:background "green")) (overlay-put ov-zero 'priority 0))
+    (let ((ov-pos (make-overlay 1 31))) (overlay-put ov-pos 'face '(:background "blue")) (overlay-put ov-pos 'priority 10))
+    (list
+     'effective-face (get-char-property 5 'face)
+     'sorted-priorities (mapcar (lambda (ov) (list (overlay-start ov) (overlay-get ov 'priority) (overlay-get ov 'face))) (sort (overlays-at 5) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0)))))
+     (progn (mapc #'delete-overlay (overlays-in 1 31)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_font_lock_fontify_buffer_full_vs_partial_eq() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (let ((content "(defun eq-test (a b) (+ a b))\n"))
+    (list
+     'full-fontify (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 7 15 20 26 31)))
+     'partial-fontify (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-region 1 15) (font-lock-fontify-region 15 (point-max)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'fontified))) '(1 7 15 20 26 31)))
+     'consistent (equal (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 26 31))) (with-temp-buffer (emacs-lisp-mode) (insert content) (font-lock-fontify-region 1 15) (font-lock-fontify-region 15 (point-max)) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 26 31))))))))"##,
+    );
+}
+
+#[test]
+fn ft_nucleon_face_text_property_find_with_complex_predicate() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQRRSSTTUUVVWWXXYYZZ")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 19 21 'face '(:foreground "red"))
+    (put-text-property 37 39 'face 'underline)
+    (put-text-property 49 51 'face '(:background "yellow" :weight bold))
+    (list
+     'find-bold (text-property-any 1 51 'face 'bold)
+     'find-red (text-property-any 1 51 'face '(:foreground "red"))
+     'find-underline (text-property-any 1 51 'face 'underline)
+     'find-complex (text-property-any 1 51 'face '(:background "yellow" :weight bold))
+     'not-all (text-property-not-all 1 51 'face 'bold)
+     'find-nil (text-property-any 1 51 'face nil)
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
