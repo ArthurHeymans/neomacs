@@ -1440,6 +1440,426 @@ fn ft_strict_face_with_special_text_properties_deep() {
        (mapcar (lambda (pos)
                  (goto-char pos)
                  (list pos (get-text-property pos 'face) (get-text-property pos 'invisible)))
-               '(15 20))))))"##,
+                '(15 20))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_property_interval_split_merge_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXXX")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 8 'face 'italic)
+    (put-text-property 8 13 'face 'underline)
+    (let ((snap (lambda ()
+                  (mapcar (lambda (pos)
+                            (goto-char pos)
+                            (list pos (get-text-property pos 'face)))
+                          '(1 3 5 7 9 12)))))
+      (let ((v0 (funcall snap)))
+        ;; Insert at boundary to split interval
+        (goto-char 4)
+        (insert "YY")
+        (let ((v1 (funcall snap)))
+          ;; Delete to merge intervals
+          (delete-region 8 10)
+          (let ((v2 (funcall snap)))
+            ;; Insert interior
+            (goto-char 6)
+            (insert "ZZZ")
+            (let ((v3 (funcall snap)))
+              (list v0 v1 v2 v3))))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_substring_and_copy_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 11 'face 'underline)
+    (list
+     ;; Substring with properties
+     (progn
+       (let ((sub (buffer-substring 1 6)))
+         (with-temp-buffer
+           (insert sub)
+           (list 'substring-props
+                 (mapcar (lambda (pos)
+                           (goto-char pos)
+                           (list pos (get-text-property pos 'face)))
+                         '(1 3 5))))))
+     ;; substring-no-properties
+     (list 'no-props (buffer-substring-no-properties 1 6))
+     ;; Buffer copy
+     (progn
+       (let ((copy (buffer-substring 1 11)))
+         (with-temp-buffer
+           (insert copy)
+           (mapcar (lambda (pos)
+                     (goto-char pos)
+                     (list pos (get-text-property pos 'face)))
+                   '(1 4 7)))))
+     ;; buffer-string
+     (list 'buffer-string (length (buffer-string))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_multibyte_text_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    ;; Unicode characters
+    (insert "αβγδεζηθικλμν")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 14 'face 'underline)
+    (list
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (char-after pos)
+                     (get-text-property pos 'face)
+                     (char-width (char-after pos))))
+             '(1 3 5 7 9 11 13))
+     ;; Property change positions
+     (list 'prop-changes
+           (next-single-property-change 1 'face)
+           (next-single-property-change 5 'face)
+           (previous-single-property-change 8 'face))
+     ;; After edit
+     (progn
+       (goto-char 5)
+       (insert "ΩΣ")
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-text-property pos 'face)))
+               '(1 3 5 7 9 11))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_font_lock_remove_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "This is IMPORTANT and CRITICAL with WARNING notes.")
+    ;; Add keywords
+    (let ((kwds1 '(("\\<\\(IMPORTANT\\)\\>" 1 font-lock-warning-face t)
+                   ("\\<\\(CRITICAL\\)\\>" 1 '(:foreground "red" :weight bold) t))))
+      (font-lock-add-keywords nil kwds1)
+      (font-lock-fontify-buffer)
+      (let ((v0 (mapcar (lambda (needle)
+                          (save-excursion
+                            (goto-char (point-min))
+                            (if (search-forward needle nil t)
+                                (list needle (get-text-property (match-beginning 0) 'face))
+                                (list needle 'not-found))))
+                        '("IMPORTANT" "CRITICAL" "WARNING"))))
+        ;; Remove IMPORTANT keyword
+        (font-lock-remove-keywords nil
+                                   '(("\\<\\(IMPORTANT\\)\\>" 1 font-lock-warning-face t)))
+        (font-lock-fontify-buffer)
+        (let ((v1 (mapcar (lambda (needle)
+                            (save-excursion
+                              (goto-char (point-min))
+                              (if (search-forward needle nil t)
+                                  (list needle (get-text-property (match-beginning 0) 'face))
+                                  (list needle 'not-found))))
+                          '("IMPORTANT" "CRITICAL" "WARNING"))))
+          ;; Add different keywords
+          (font-lock-add-keywords nil
+                                  '(("\\<\\(WARNING\\)\\>" 1 '(:foreground "orange" :slant italic) t)))
+          (font-lock-fontify-buffer)
+          (let ((v2 (mapcar (lambda (needle)
+                              (save-excursion
+                                (goto-char (point-min))
+                                (if (search-forward needle nil t)
+                                    (list needle (get-text-property (match-beginning 0) 'face))
+                                    (list needle 'not-found))))
+                            '("IMPORTANT" "CRITICAL" "WARNING"))))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_kill_yank_face_propagation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t))
+      (org-mode)
+      (insert "* TODO Source\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      ;; Kill the heading with properties
+      (goto-char (point-min))
+      (kill-region (point) (progn (forward-line 390) (point)))
+      ;; Yank into new buffer
+      (with-temp-buffer
+        (org-mode)
+        (yank)
+        (font-lock-ensure (point-min) (point-max))
+        (list 'yanked-faces
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (if (search-forward needle nil t)
+                              (list needle
+                                    (get-text-property (match-beginning 0) 'face)
+                                    (get-text-property (match-beginning 0) 'fontified))
+                              (list needle 'not-found nil))))
+                      '("TODO" "DONE" "Body")))
+        ;; Yank again
+        (yank)
+        (font-lock-ensure (point-min) (point-max))
+        (list 'double-yank
+              (mapcar (lambda (needle)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (if (search-forward needle nil t)
+                              (list needle (get-text-property (match-beginning 0) 'face))
+                              (list needle 'not-found))))
+                      '("TODO" "Body"))))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_org_headline_level_colors_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-faces)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* Level-1 heading\nBody 1.\n\n")
+      (insert "** Level-2 heading\nBody 2.\n\n")
+      (insert "*** Level-3 heading\nBody 3.\n\n")
+      (insert "**** Level-4 heading\nBody 4.\n\n")
+      (insert "***** Level-5 heading\nBody 5.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (list
+       ;; Level faces
+       (mapcar (lambda (needle)
+                 (save-excursion
+                   (goto-char (point-min))
+                   (if (search-forward needle nil t)
+                       (list needle
+                             (org-outline-level)
+                             (get-text-property (line-beginning-position) 'face)
+                             (face-attribute (get-text-property (line-beginning-position) 'face) :foreground nil 'default-on))
+                       (list needle 'not-found nil nil nil))))
+               '("Level-1" "Level-2" "Level-3" "Level-4" "Level-5"))
+       ;; org-level-N face existence check
+       (mapcar (lambda (level)
+                 (let ((face (intern (format "org-level-%d" level))))
+                   (list level face (condition-case nil (facep face) (error 'no-face)))))
+               '(1 2 3 4 5 6 7 8)))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_buffer_swap_text_property_transfer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (let ((buf1 (generate-new-buffer "*ft-buf1*"))
+        (buf2 (generate-new-buffer "*ft-buf2*")))
+    (unwind-protect
+        (progn
+          ;; Populate buf1 with org content
+          (with-current-buffer buf1
+            (org-mode)
+            (insert "* TODO Buf1-heading\nBody in buf1.\n\n")
+            (font-lock-ensure (point-min) (point-max)))
+          ;; Populate buf2 with faces
+          (with-current-buffer buf2
+            (insert "Buf2 content with faces")
+            (put-text-property 1 6 'face 'bold)
+            (put-text-property 6 14 'face 'italic)
+            (put-text-property 14 25 'face 'underline))
+          (let ((snap (lambda (buf)
+                        (with-current-buffer buf
+                          (mapcar (lambda (pos)
+                                    (goto-char pos)
+                                    (list pos (get-text-property pos 'face)))
+                                  '(1 5 10 15))))))
+            (let ((before-buf1 (funcall snap buf1))
+                  (before-buf2 (funcall snap buf2)))
+              ;; Buffer swap
+              (let ((buf3 buf1))
+                (setq buf1 buf2 buf2 buf3))
+              (let ((after-buf1 (funcall snap buf1))
+                    (after-buf2 (funcall snap buf2)))
+                (list before-buf1 before-buf2 after-buf1 after-buf2))))))
+      (kill-buffer buf1)
+      (kill-buffer buf2))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_org_table_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (org-mode)
+    (insert "| Name | Val1 | Val2 |\n")
+    (insert "|------+------+------|\n")
+    (insert "| A | 100 | 200 |\n")
+    (insert "| B | 300 | 400 |\n")
+    (font-lock-ensure (point-min) (point-max))
+    (mapcar
+     (lambda (needle)
+       (save-excursion
+         (goto-char (point-min))
+         (if (search-forward needle nil t)
+             (list needle
+                   (get-text-property (match-beginning 0) 'face)
+                   (get-text-property (match-beginning 0) 'font-lock-face))
+             (list needle 'not-found nil))))
+     '("Name" "|------" "| A |" "| B |"))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_face_add_face_text_property_multiple_calls_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (with-temp-buffer
+    (insert "Multi-face-text-property-test")
+    ;; Add faces one by one
+    (add-face-text-property 1 30 '(:foreground "blue"))
+    (add-face-text-property 1 15 '(:weight bold))
+    (add-face-text-property 10 25 '(:slant italic))
+    (add-face-text-property 20 30 '(:underline t))
+    (add-face-text-property 1 30 '(:height 1.2))
+    (list
+     (mapcar (lambda (pos)
+               (goto-char pos)
+               (list pos
+                     (get-text-property pos 'face)
+                     (get-text-property pos 'font-lock-face)))
+             '(1 5 10 12 15 18 20 22 25 28))
+     ;; Remove some faces
+     (progn
+       (remove-text-properties 1 15 '(face nil))
+       (add-face-text-property 1 15 '(:foreground "red" :background "yellow"))
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-text-property pos 'face)))
+               '(1 5 10 15 20 25)))
+     ;; Clear all face text properties
+     (progn
+       (remove-text-properties 1 30 '(face nil))
+       ;; Re-add single property
+       (add-face-text-property 1 30 '(:foreground "green" :weight bold :slant italic))
+       (mapcar (lambda (pos)
+                 (goto-char pos)
+                 (list pos (get-text-property pos 'face)))
+               '(1 10 20 25))))))"##,
+    );
+}
+
+#[test]
+fn ft_extreme_org_face_cycle_edit_show_hide_repeat_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'org)
+  (require 'org-fold)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t)
+          (org-fontify-done-headline t)
+          (org-fontify-todo-headline t)
+          (org-cycle-level-faces t))
+      (org-mode)
+      (insert "* TODO Root :root:\n")
+      (insert ":PROPERTIES:\n:Owner: Alice\n:CATEGORY: core\n:END:\n")
+      (insert "** DONE Leaf-A :fe:\nBody A.\n\n")
+      (insert "** TODO Leaf-B :be:\nBody B.\n\n")
+      (insert "** WAIT Leaf-C :ops:\nBody C.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (let ((snap (lambda ()
+                    (mapcar
+                     (lambda (needle)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (if (search-forward needle nil t)
+                             (list needle
+                                   (get-text-property (line-beginning-position) 'face)
+                                   (get-text-property (match-beginning 0) 'face)
+                                   (invisible-p (match-beginning 0))
+                                   (org-outline-level)
+                                   (org-get-tags nil t))
+                             (list needle 'not-found nil nil nil nil nil))))
+                     '("Root" "Leaf-A" "Leaf-B" "Leaf-C")))))
+        (let ((v0 (funcall snap)))
+          ;; Cycle Root: overview
+          (goto-char (point-min))
+          (search-forward "Root :root:")
+          (beginning-of-line)
+          (org-cycle nil)
+          (let ((v1 (funcall snap)))
+            ;; Edit: insert Leaf-D under hidden Root
+            (end-of-line)
+            (insert "\n** TODO Leaf-D :qa:\nBody D.\n")
+            (let ((v2 (funcall snap)))
+              ;; Cycle Root: children
+              (goto-char (point-min))
+              (search-forward "Root :root:")
+              (beginning-of-line)
+              (org-cycle nil)
+              (font-lock-ensure (point-min) (point-max))
+              (let ((v3 (funcall snap)))
+                ;; Hide all drawers
+                (goto-char (point-min))
+                (search-forward "PROPERTIES")
+                (beginning-of-line)
+                (org-fold-hide-drawer-all)
+                (let ((v4 (funcall snap)))
+                  ;; Show all
+                  (org-fold-show-all)
+                  (font-lock-ensure (point-min) (point-max))
+                  (let ((v5 (funcall snap)))
+                    ;; Global cycle
+                    (org-global-cycle nil)
+                    (let ((v6 (funcall snap)))
+                      (org-global-cycle nil)
+                      (font-lock-ensure (point-min) (point-max))
+                      (let ((v7 (funcall snap)))
+                        (list v0 v1 v2 v3 v4 v5 v6 v7)))))))))))))))"##,
     );
 }
