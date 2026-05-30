@@ -21464,3 +21464,167 @@ fn ft_infinite_face_text_property_null_values_handling() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_eternity_face_overlay_face_and_priority_together() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (list
+       'face (overlay-get ov 'face)
+       'priority (overlay-get ov 'priority)
+       'char-prop (get-char-property 5 'face)
+       'char-prop-outside nil
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_font_lock_fontify_complete_then_partial() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun complete-partial (x) (+ x 1))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (get-text-property 1 'fontified)))
+      (font-lock-unfontify-buffer)
+      (font-lock-fontify-region 1 15)
+      (list v0 (get-text-property 1 'fontified) (get-text-property 20 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_face_overlay_make_destroy_make_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (let ((snap (lambda () (get-char-property 10 'face))))
+      (let ((v0 (funcall snap)))
+        (let ((ov (make-overlay 6 20))) (overlay-put ov 'face '(:background "yellow")) (let ((v1 (funcall snap)))
+        (delete-overlay ov) (let ((v2 (funcall snap)))
+        (let ((ov2 (make-overlay 6 20))) (overlay-put ov2 'face '(:foreground "red" :weight bold)) (let ((v3 (funcall snap)))
+        (delete-overlay ov2) (let ((v4 (funcall snap)))
+        (list v0 v1 v2 v3 v4))))))))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_face_text_property_prop_change_interval_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAABBBCCCDDDEEEFFFGGGHHHIIIJJJ")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 10 'face 'underline)
+    (put-text-property 10 13 'face '(:foreground "red"))
+    (put-text-property 13 16 'face '(:background "yellow"))
+    (put-text-property 16 19 'face '(:foreground "blue"))
+    (put-text-property 19 22 'face '(:background "cyan"))
+    (put-text-property 22 25 'face '(:slant italic))
+    (put-text-property 25 28 'face '(:weight bold))
+    (put-text-property 28 31 'face '(:underline t))
+    (list
+     'all-prop-changes (let ((pos 1) (result nil))
+                         (while pos
+                           (setq pos (next-single-property-change pos 'face nil 31))
+                           (when pos (push (list pos (get-text-property pos 'face)) result)))
+                         (nreverse result))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_font_lock_fontify_then_fontify_again_same() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun fontify-twice (x) (+ x x))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 28 34))))
+      (font-lock-fontify-buffer)
+      (list v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 28 34)) (equal v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 28 34))))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_face_set_attribute_all_basic_attrs_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-all-basic-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-all-basic-face nil :weight 'bold :slant 'italic :underline t :overline t :strike-through t :box t :inverse-video t) (error nil))
+  (list
+   'weight (face-attribute 'my-all-basic-face :weight nil 'default-on)
+   'slant (face-attribute 'my-all-basic-face :slant nil 'default-on)
+   'underline (condition-case nil (face-attribute 'my-all-basic-face :underline nil 'default-on) (error 'no))
+   'overline (condition-case nil (face-attribute 'my-all-basic-face :overline nil 'default-on) (error 'no))
+   'strike (condition-case nil (face-attribute 'my-all-basic-face :strike-through nil 'default-on) (error 'no))
+   'box (condition-case nil (face-attribute 'my-all-basic-face :box nil 'default-on) (error 'no))
+   'inverse (condition-case nil (face-attribute 'my-all-basic-face :inverse-video nil 'default-on) (error 'no))
+   (condition-case nil (progn (set-face-attribute 'my-all-basic-face nil :weight 'unspecified :slant 'unspecified :underline 'unspecified :overline 'unspecified :strike-through 'unspecified :box 'unspecified :inverse-video 'unspecified) 'reset) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_face_overlay_priority_get_set_verify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov (make-overlay 1 21)))
+      (overlay-put ov 'priority 42)
+      (list
+       'get-prio (overlay-get ov 'priority)
+       'set-prio-10 (progn (overlay-put ov 'priority 10) (overlay-get ov 'priority))
+       'set-prio-nil (progn (overlay-put ov 'priority nil) (overlay-get ov 'priority))
+       'set-prio-100 (progn (overlay-put ov 'priority 100) (overlay-get ov 'priority))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_eternity_face_text_properties_all_at_interval_bounds() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZ")
+    (put-text-property 1 6 'face 'bold :x-prop 'x-val)
+    (put-text-property 6 11 'face 'italic :y-prop 'y-val)
+    (put-text-property 11 16 'face 'underline :z-prop 'z-val)
+    (list
+     'at-1 (text-properties-at 1)
+     'at-5 (text-properties-at 5)
+     'at-6 (text-properties-at 6)
+     'at-10 (text-properties-at 10)
+     'at-11 (text-properties-at 11)
+     'at-15 (text-properties-at 15)
+     'props-count-1 (length (text-properties-at 1))
+     'props-count-6 (length (text-properties-at 6))
+     'props-count-11 (length (text-properties-at 11)))))"##,
+    );
+}
