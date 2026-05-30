@@ -14576,3 +14576,159 @@ fn ft_cosmic3_face_set_face_box_multiple_styles_roundtrip() {
    'set-off (condition-case nil (progn (set-face-attribute 'my-box-roundtrip-face nil :box nil) (face-attribute 'my-box-roundtrip-face :box nil 'default-on)) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_deepspace_face_overlay_make_empty_then_fill_face_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'empty-start (overlay-start ov)
+       'empty-end (overlay-end ov)
+       'empty-face (overlay-get ov 'face)
+       ;; Fill with text
+       (progn (insert "Filled buffer with overlay face") (list 'after-fill-start (overlay-start ov) 'after-fill-end (overlay-end ov) 'face-at-1 (get-char-property 1 'face) 'face-at-10 (get-char-property 10 'face) 'face-at-30 (get-char-property 30 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_font_lock_fontify_syntactically_vs_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert ";; comment\n(defun syn-test () \"string\" 42)\n")
+    (list
+     'fontify-syn-only (progn
+                         (font-lock-fontify-syntactically (point-min) (point-max) nil)
+                         (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))) '("comment" "defun" "syn-test" "string" "42")))
+     'fontify-kw-only (progn
+                        (font-lock-fontify-keywords-region (point-min) (point-max) nil)
+                        (mapcar (lambda (needle) (save-excursion (goto-char (point-min)) (search-forward needle) (list needle (get-text-property (match-beginning 0) 'face) (get-text-property (match-beginning 0) 'fontified)))) '("comment" "defun" "syn-test" "string" "42")))))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_face_text_property_get_and_set_many_keys() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Get and set many text property keys face test buffer content text data")
+    (let ((keys '(k1 k2 k3 k4 k5 k6 k7 k8 k9 k10))
+          (vals '(v1 v2 v3 v4 v5 v6 v7 v8 v9 v10)))
+      (dotimes (i 10)
+        (put-text-property 1 55 (nth i keys) (nth i vals)))
+      (put-text-property 1 55 'face 'bold)
+      (list
+       'all-keys-set (mapcar (lambda (k) (list k (get-text-property 1 k))) keys)
+       'face-value (get-text-property 1 'face)
+       'props-count (length (text-properties-at 1))
+       'props-count-at-30 (length (text-properties-at 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_face_overlay_string_at_exact_overlap_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Exact overlap overlay string face test content text data here now")
+    (let ((ov1 (make-overlay 10 30)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'before-string (propertize "[B1]" 'face '(:foreground "red"))))
+    (let ((ov2 (make-overlay 10 30)))
+      (overlay-put ov2 'face '(:foreground "green"))
+      (overlay-put ov2 'after-string (propertize "[A2]" 'face '(:foreground "blue"))))
+    (list
+     'face-at-ov (get-char-property 20 'face)
+     'ov1-before-face (get-text-property 0 (overlay-get ov1 'before-string))
+     'ov2-after-face (get-text-property 0 (overlay-get ov2 'after-string))
+     'ov-count (length (overlays-at 20))
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_face_set_font_attribute_family_from_list_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-family-list-face) (error nil))
+  (list
+   'default-family (face-attribute 'default :family nil 'default-on)
+   'set-monospace (condition-case nil (progn (set-face-attribute 'my-family-list-face nil :family "Monospace") (face-attribute 'my-family-list-face :family nil 'default-on)) (error 'no))
+   'set-unspecified (condition-case nil (progn (set-face-attribute 'my-family-list-face nil :family 'unspecified) (face-attribute 'my-family-list-face :family nil 'default-on)) (error 'no))
+   (condition-case nil (font-family-list) (error 'no-family-list))
+   (if (boundp 'face-font-family-alternatives) (length face-font-family-alternatives) 'no-alternatives))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_font_lock_remove_keywords_that_dont_exist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'remove-nonexistent (condition-case err (progn (font-lock-remove-keywords nil '(("\\<\\(NONEXISTENT\\)\\>" 1 font-lock-warning-face t))) 'silent-ok) (error (list 'error (car err))))
+   'remove-from-empty (condition-case err (progn (font-lock-remove-keywords nil nil) 'silent-ok) (error (list 'error (car err))))
+   'add-valid-remove-valid-and-non (condition-case nil (progn (font-lock-add-keywords nil '(("\\<\\(VALID\\)\\>" 1 '(:foreground "red") t))) (font-lock-remove-keywords nil '(("\\<\\(VALID\\)\\>" 1 '(:foreground "red") t) ("\\<\\(NOPE\\)\\>" 1 font-lock-warning-face t))) 'mixed-ok) (error 'mixed-error)))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_face_overlay_before_after_display_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before after display property overlay face test content data text here")
+    (let ((ov (make-overlay 15 35)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'before-string (propertize "<<BEFORE>>" 'face '(:foreground "red" :weight bold)))
+      (overlay-put ov 'after-string (propertize "{{AFTER}}" 'face '(:foreground "blue" :slant italic)))
+      (overlay-put ov 'display "")
+      (overlay-put ov 'help-echo "This is an overlay"))
+    (list
+     'overlay-face (overlay-get ov 'face)
+     'before-face (get-text-property 0 (overlay-get ov 'before-string))
+     'after-face (get-text-property 0 (overlay-get ov 'after-string))
+     'has-display (eq (overlay-get ov 'display) "")
+     'has-help (equal (overlay-get ov 'help-echo) "This is an overlay")
+     'props-count (length (overlay-properties ov))
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_deepspace_face_rear_nonsticky_face_propagation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold :rear-nonsticky '(face))
+    (put-text-property 6 11 'face 'italic :rear-nonsticky nil)
+    (put-text-property 11 16 'face 'underline :rear-nonsticky t)
+    (list
+     'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'rear-nonsticky))) '(1 5 6 8 11 13 15))
+     'insert-at-rear-1 (progn (goto-char 6) (insert "X") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 6 7 8 12 14 16)))
+     'insert-at-rear-2 (progn (goto-char 11) (insert "Y") (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 5 6 7 8 12 13 15 17))))))"##,
+    );
+}
