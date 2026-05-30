@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::thread_comm::{InputEvent, RenderCommand, RenderComms};
+use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 #[cfg(unix)]
@@ -459,7 +459,7 @@ impl TtyInputReader {
                     crossbeam_channel::select! {
                         recv(comms.cmd_rx) -> msg => {
                             match msg {
-                                Ok(RenderCommand::Shutdown) | Err(_) => break,
+                                Ok(RenderCommand::Lifecycle(LifecycleCommand::Shutdown)) | Err(_) => break,
                                 Ok(_) => {}
                             }
                         }

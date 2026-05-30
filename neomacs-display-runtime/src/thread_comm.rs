@@ -203,15 +203,20 @@ impl From<FrameRef> for u64 {
     }
 }
 
-/// Command from Emacs to render thread
+/// Lifecycle commands for the render thread.
 #[derive(Debug)]
-pub enum RenderCommand {
+pub enum LifecycleCommand {
     /// Shutdown the render thread
     Shutdown,
     /// Suspend the active TTY frontend.
     SuspendTty,
     /// Resume the active TTY frontend.
     ResumeTty,
+}
+
+/// Window and chrome management commands.
+#[derive(Debug)]
+pub enum WindowCommand {
     /// Scroll blit pixels within pixel buffer
     ScrollBlit {
         x: i32,
@@ -224,6 +229,90 @@ pub enum RenderCommand {
         bg_g: f32,
         bg_b: f32,
     },
+    /// Change the mouse pointer cursor shape (arrow, hand, ibeam, etc.)
+    SetMouseCursor {
+        cursor_type: i32,
+    },
+    /// Warp (move) the mouse pointer to given pixel position
+    WarpMouse {
+        x: i32,
+        y: i32,
+    },
+    /// Set the window title
+    SetWindowTitle {
+        title: String,
+    },
+    /// Set the title for a specific GUI frame window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
+    SetFrameWindowTitle {
+        frame: FrameRef,
+        title: String,
+    },
+    /// Set fullscreen mode (0=none, 1=fullscreen, 4=maximized)
+    SetWindowFullscreen {
+        mode: u32,
+    },
+    /// Minimize/iconify the window
+    SetWindowMinimized {
+        minimized: bool,
+    },
+    /// Set window position
+    SetWindowPosition {
+        x: i32,
+        y: i32,
+    },
+    /// Request window inner size change
+    SetWindowSize {
+        width: u32,
+        height: u32,
+    },
+    /// Request resizing a specific GUI frame window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
+    ResizeWindow {
+        frame: FrameRef,
+        width: u32,
+        height: u32,
+        geometry_hints: GuiFrameGeometryHints,
+    },
+    /// Update geometry hints for a specific GUI frame window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
+    SetFrameGeometryHints {
+        frame: FrameRef,
+        geometry_hints: GuiFrameGeometryHints,
+    },
+    /// Set window decorations (title bar, borders)
+    SetWindowDecorated {
+        decorated: bool,
+    },
+    /// Create a new OS window for a top-level Emacs frame
+    CreateWindow {
+        frame: FrameRef,
+        width: u32,
+        height: u32,
+        title: String,
+        geometry_hints: GuiFrameGeometryHints,
+    },
+    /// Associate the already-created primary OS window with its real Emacs frame ID.
+    AdoptPrimaryFrame {
+        frame: FrameRef,
+    },
+    /// Destroy an OS window for a top-level Emacs frame
+    DestroyWindow {
+        frame: FrameRef,
+    },
+    /// Remove a child frame (sent when frame is deleted or unparented)
+    RemoveChildFrame {
+        frame_id: u64,
+    },
+    /// Request window attention (urgency hint / taskbar flash)
+    RequestAttention {
+        urgent: bool,
+    },
+}
+
+/// Asset and embedded-content commands.
+#[derive(Debug)]
+pub enum AssetCommand {
     /// Load image from file (async, ID pre-allocated)
     ImageLoadFile {
         id: u32,
@@ -368,82 +457,13 @@ pub enum RenderCommand {
     VideoDestroy {
         id: u32,
     },
-    /// Change the mouse pointer cursor shape (arrow, hand, ibeam, etc.)
-    SetMouseCursor {
-        cursor_type: i32,
-    },
-    /// Warp (move) the mouse pointer to given pixel position
-    WarpMouse {
-        x: i32,
-        y: i32,
-    },
-    /// Set the window title
-    SetWindowTitle {
-        title: String,
-    },
-    /// Set the title for a specific GUI frame window.
-    /// `frame.raw_id() == 0` also targets the adopted primary window.
-    SetFrameWindowTitle {
-        frame: FrameRef,
-        title: String,
-    },
-    /// Set fullscreen mode (0=none, 1=fullscreen, 4=maximized)
-    SetWindowFullscreen {
-        mode: u32,
-    },
-    /// Minimize/iconify the window
-    SetWindowMinimized {
-        minimized: bool,
-    },
-    /// Set window position
-    SetWindowPosition {
-        x: i32,
-        y: i32,
-    },
-    /// Request window inner size change
-    SetWindowSize {
-        width: u32,
-        height: u32,
-    },
-    /// Request resizing a specific GUI frame window.
-    /// `frame.raw_id() == 0` also targets the adopted primary window.
-    ResizeWindow {
-        frame: FrameRef,
-        width: u32,
-        height: u32,
-        geometry_hints: GuiFrameGeometryHints,
-    },
-    /// Update geometry hints for a specific GUI frame window.
-    /// `frame.raw_id() == 0` also targets the adopted primary window.
-    SetFrameGeometryHints {
-        frame: FrameRef,
-        geometry_hints: GuiFrameGeometryHints,
-    },
-    /// Set window decorations (title bar, borders)
-    SetWindowDecorated {
-        decorated: bool,
-    },
-    /// Configure cursor blinking
-    SetCursorBlink {
-        enabled: bool,
-        interval_ms: u32,
-    },
-    /// Configure cursor animation (smooth motion)
-    SetCursorAnimation {
-        enabled: bool,
-        speed: f32,
-    },
-    /// Configure all animations
-    SetAnimationConfig {
-        cursor_enabled: bool,
-        cursor_speed: f32,
-        cursor_style: crate::core::types::CursorAnimStyle,
-        cursor_duration_ms: u32,
-        transition_policy: TransitionPolicy,
-        trail_size: f32,
-    },
+}
+
+/// Terminal commands.
+#[cfg(feature = "neo-term")]
+#[derive(Debug)]
+pub enum TerminalCommand {
     /// Create a terminal
-    #[cfg(feature = "neo-term")]
     TerminalCreate {
         id: u32,
         cols: u16,
@@ -452,31 +472,32 @@ pub enum RenderCommand {
         shell: Option<String>,
     },
     /// Write input to a terminal
-    #[cfg(feature = "neo-term")]
     TerminalWrite {
         id: u32,
         data: Vec<u8>,
     },
     /// Resize a terminal
-    #[cfg(feature = "neo-term")]
     TerminalResize {
         id: u32,
         cols: u16,
         rows: u16,
     },
     /// Destroy a terminal
-    #[cfg(feature = "neo-term")]
     TerminalDestroy {
         id: u32,
     },
     /// Set floating terminal position and opacity
-    #[cfg(feature = "neo-term")]
     TerminalSetFloat {
         id: u32,
         x: f32,
         y: f32,
         opacity: f32,
     },
+}
+
+/// UI overlay commands.
+#[derive(Debug)]
+pub enum UiCommand {
     /// Show a popup menu at position (x, y)
     ShowPopupMenu {
         /// Emacs frame_id of the owning top-level frame
@@ -512,9 +533,66 @@ pub enum RenderCommand {
         /// Emacs frame_id of the flashing top-level frame
         frame: FrameRef,
     },
-    /// Request window attention (urgency hint / taskbar flash)
-    RequestAttention {
-        urgent: bool,
+    /// Set toolbar items (sent each frame when items change)
+    SetToolBar {
+        items: Vec<ToolBarItem>,
+        height: f32,
+        fg_r: f32,
+        fg_g: f32,
+        fg_b: f32,
+        bg_r: f32,
+        bg_g: f32,
+        bg_b: f32,
+    },
+    /// Configure toolbar appearance
+    SetToolBarConfig {
+        icon_size: u32,
+        padding: u32,
+    },
+    /// Set menu bar items (sent each frame when items change)
+    SetMenuBar {
+        items: Vec<MenuBarItem>,
+        height: f32,
+        fg_r: f32,
+        fg_g: f32,
+        fg_b: f32,
+        bg_r: f32,
+        bg_g: f32,
+        bg_b: f32,
+    },
+}
+
+/// Config and styling commands.
+#[derive(Debug)]
+pub enum ConfigCommand {
+    /// Configure cursor blinking
+    SetCursorBlink {
+        enabled: bool,
+        interval_ms: u32,
+    },
+    /// Configure cursor animation (smooth motion)
+    SetCursorAnimation {
+        enabled: bool,
+        speed: f32,
+    },
+    /// Configure all animations
+    SetAnimationConfig {
+        cursor_enabled: bool,
+        cursor_speed: f32,
+        cursor_style: crate::core::types::CursorAnimStyle,
+        cursor_duration_ms: u32,
+        transition_policy: TransitionPolicy,
+        trail_size: f32,
+    },
+    /// Configure smooth cursor size transition on text-scale-adjust
+    SetCursorSizeTransition {
+        enabled: bool,
+        /// Transition duration in milliseconds
+        duration_ms: u32,
+    },
+    /// Enable or disable font ligatures
+    SetLigaturesEnabled {
+        enabled: bool,
     },
     /// Update visual effect configuration.
     /// The closure modifies the shared EffectsConfig in-place.
@@ -548,36 +626,6 @@ pub enum RenderCommand {
         /// Colors as sRGB 0.0-1.0 tuples with opacity
         colors: Vec<(f32, f32, f32, f32)>,
     },
-    /// Configure smooth cursor size transition on text-scale-adjust
-    SetCursorSizeTransition {
-        enabled: bool,
-        /// Transition duration in milliseconds
-        duration_ms: u32,
-    },
-    /// Enable or disable font ligatures
-    SetLigaturesEnabled {
-        enabled: bool,
-    },
-    /// Remove a child frame (sent when frame is deleted or unparented)
-    RemoveChildFrame {
-        frame_id: u64,
-    },
-    /// Create a new OS window for a top-level Emacs frame
-    CreateWindow {
-        frame: FrameRef,
-        width: u32,
-        height: u32,
-        title: String,
-        geometry_hints: GuiFrameGeometryHints,
-    },
-    /// Associate the already-created primary OS window with its real Emacs frame ID.
-    AdoptPrimaryFrame {
-        frame: FrameRef,
-    },
-    /// Destroy an OS window for a top-level Emacs frame
-    DestroyWindow {
-        frame: FrameRef,
-    },
     /// Configure child frame visual style (drop shadow, rounded corners)
     SetChildFrameStyle {
         corner_radius: f32,
@@ -586,33 +634,18 @@ pub enum RenderCommand {
         shadow_offset: f32,
         shadow_opacity: f32,
     },
-    /// Set toolbar items (sent each frame when items change)
-    SetToolBar {
-        items: Vec<ToolBarItem>,
-        height: f32,
-        fg_r: f32,
-        fg_g: f32,
-        fg_b: f32,
-        bg_r: f32,
-        bg_g: f32,
-        bg_b: f32,
-    },
-    /// Configure toolbar appearance
-    SetToolBarConfig {
-        icon_size: u32,
-        padding: u32,
-    },
-    /// Set menu bar items (sent each frame when items change)
-    SetMenuBar {
-        items: Vec<MenuBarItem>,
-        height: f32,
-        fg_r: f32,
-        fg_g: f32,
-        fg_b: f32,
-        bg_r: f32,
-        bg_g: f32,
-        bg_b: f32,
-    },
+}
+
+/// Command from Emacs to render thread
+#[derive(Debug)]
+pub enum RenderCommand {
+    Lifecycle(LifecycleCommand),
+    Window(WindowCommand),
+    Asset(AssetCommand),
+    #[cfg(feature = "neo-term")]
+    Terminal(TerminalCommand),
+    Ui(UiCommand),
+    Config(ConfigCommand),
 }
 
 /// Wakeup pipe for signaling Emacs from render thread

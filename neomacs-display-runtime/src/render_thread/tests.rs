@@ -1,7 +1,7 @@
 use crate::thread_comm::FrameRef;
 use super::RenderApp;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
-use crate::thread_comm::{RenderCommand, ThreadComms, ToolBarItem};
+use crate::thread_comm::{ThreadComms, ToolBarItem, UiCommand, WindowCommand};
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
 use neovm_core::window::GuiFrameGeometryHints;
@@ -143,8 +143,7 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     let mut app = make_test_app();
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_window_command(RenderCommand::DestroyWindow { frame: FrameRef::Primary })
-        .expect("destroy primary window");
+    app.handle_window(WindowCommand::DestroyWindow { frame: FrameRef::Primary });
 
     assert!(app.frame_windows.primary_window().is_none());
     assert!(app.primary_render_state().is_none());
@@ -159,10 +158,9 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
     let mut app = make_test_app();
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_window_command(RenderCommand::DestroyWindow {
+    app.handle_window(WindowCommand::DestroyWindow {
         frame: FrameRef::Frame(0x1000),
-    })
-    .expect("destroy adopted primary window");
+    });
 
     assert!(app.frame_windows.primary_window().is_none());
     assert!(app.primary_render_state().is_none());
@@ -184,13 +182,12 @@ fn pre_bootstrap_primary_resize_updates_pending_size() {
         height_inc: 16,
     };
 
-    app.handle_window_command(RenderCommand::ResizeWindow {
+    app.handle_window(WindowCommand::ResizeWindow {
         frame: FrameRef::Primary,
         width: 1024,
         height: 768,
         geometry_hints,
-    })
-    .expect("pre-bootstrap primary resize");
+    });
 
     assert_eq!(app.primary_native_size(), (1024, 768));
     let primary = app.frame_windows.primary_window().unwrap();
@@ -204,11 +201,10 @@ fn pre_bootstrap_primary_resize_updates_pending_size() {
 fn pre_bootstrap_set_window_size_updates_native_fallback_size() {
     let mut app = make_test_app();
 
-    app.handle_window_command(RenderCommand::SetWindowSize {
+    app.handle_window(WindowCommand::SetWindowSize {
         width: 900,
         height: 700,
-    })
-    .expect("pre-bootstrap primary set size");
+    });
 
     assert_eq!(app.primary_native_size(), (900, 700));
 }
@@ -217,8 +213,7 @@ fn pre_bootstrap_set_window_size_updates_native_fallback_size() {
 fn pre_bootstrap_window_decorations_update_native_fallback_chrome() {
     let mut app = make_test_app();
 
-    app.handle_window_command(RenderCommand::SetWindowDecorated { decorated: false })
-        .expect("pre-bootstrap primary decorations");
+    app.handle_window(WindowCommand::SetWindowDecorated { decorated: false });
 
     assert!(!app.primary_chrome().decorations_enabled);
 }
@@ -236,10 +231,9 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_window_command(RenderCommand::AdoptPrimaryFrame {
+    app.handle_window(WindowCommand::AdoptPrimaryFrame {
         frame: FrameRef::Frame(0x1000),
-    })
-    .expect("adopt primary frame");
+    });
 
     assert_eq!(app.frame_windows.primary_frame_id(), Some(0x1000));
     assert_eq!(
@@ -262,7 +256,7 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_ui_command(RenderCommand::ShowPopupMenu {
+    app.handle_ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x1000),
         x: 10.0,
         y: 20.0,
@@ -277,8 +271,7 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
         title: None,
         fg: None,
         bg: None,
-    })
-    .expect("show popup on adopted primary");
+    });
 
     assert!(app.primary_popup_menu().is_some());
     assert!(app.primary_dirty());
@@ -297,7 +290,7 @@ fn primary_toolbar_command_marks_render_state_dirty() {
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_ui_command(RenderCommand::SetToolBar {
+    app.handle_ui(UiCommand::SetToolBar {
         items: vec![ToolBarItem {
             index: 7,
             icon_name: "open".to_string(),
@@ -314,8 +307,7 @@ fn primary_toolbar_command_marks_render_state_dirty() {
         bg_r: 0.0,
         bg_g: 0.0,
         bg_b: 0.0,
-    })
-    .expect("set primary toolbar");
+    });
 
     assert!(app.primary_tool_bar().is_some());
     assert!(app.primary_dirty());
@@ -334,7 +326,7 @@ fn primary_menubar_command_marks_render_state_dirty() {
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_ui_command(RenderCommand::SetMenuBar {
+    app.handle_ui(UiCommand::SetMenuBar {
         items: vec![MenuBarItem {
             index: 7,
             label: "File".to_string(),
@@ -347,8 +339,7 @@ fn primary_menubar_command_marks_render_state_dirty() {
         bg_r: 0.0,
         bg_g: 0.0,
         bg_b: 0.0,
-    })
-    .expect("set primary menu bar");
+    });
 
     assert!(app.primary_menu_bar().is_some());
     assert!(app.primary_dirty());
@@ -367,7 +358,7 @@ fn primary_tooltip_command_marks_render_state_dirty() {
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_ui_command(RenderCommand::ShowTooltip {
+    app.handle_ui(UiCommand::ShowTooltip {
         frame: FrameRef::Primary,
         x: 10.0,
         y: 20.0,
@@ -378,8 +369,7 @@ fn primary_tooltip_command_marks_render_state_dirty() {
         bg_r: 0.0,
         bg_g: 0.0,
         bg_b: 0.0,
-    })
-    .expect("show primary tooltip");
+    });
 
     assert!(
         app.primary_render_state()
@@ -404,8 +394,7 @@ fn hide_popup_menu_marks_primary_chrome_dirty_without_popup() {
     app.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = Some(3));
     app.set_primary_dirty(false);
 
-    app.handle_ui_command(RenderCommand::HidePopupMenu)
-        .expect("hide popup menu");
+    app.handle_ui(UiCommand::HidePopupMenu);
 
     assert_eq!(app.primary_chrome_interaction().menu_bar_active, None);
     assert!(app.primary_dirty());
@@ -424,7 +413,7 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_ui_command(RenderCommand::ShowPopupMenu {
+    app.handle_ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x2000),
         x: 10.0,
         y: 20.0,
@@ -439,8 +428,7 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
         title: None,
         fg: None,
         bg: None,
-    })
-    .expect("unknown secondary popup is handled as no-op");
+    });
 
     assert!(app.primary_popup_menu().is_none());
     assert!(!app.primary_dirty());
@@ -459,7 +447,7 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
         app.frame_windows.fps_enabled,
     ));
 
-    app.handle_ui_command(RenderCommand::ShowTooltip {
+    app.handle_ui(UiCommand::ShowTooltip {
         frame: FrameRef::Frame(0x2000),
         x: 10.0,
         y: 20.0,
@@ -470,8 +458,7 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
         bg_r: 0.0,
         bg_g: 0.0,
         bg_b: 0.0,
-    })
-    .expect("unknown secondary tooltip is handled as no-op");
+    });
 
     assert!(
         app.primary_render_state()
@@ -495,10 +482,9 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
     ));
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_ui_command(RenderCommand::VisualBell {
+    app.handle_ui(UiCommand::VisualBell {
         frame: FrameRef::Frame(0x1000),
-    })
-    .expect("visual bell on adopted primary");
+    });
 
     assert!(
         app.primary_render_state()

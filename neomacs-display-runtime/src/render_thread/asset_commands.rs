@@ -1,7 +1,7 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
-use crate::thread_comm::{InputEvent, RenderCommand};
+use crate::thread_comm::{AssetCommand, InputEvent};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeWebView;
@@ -16,9 +16,9 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn handle_asset_command(&mut self, cmd: RenderCommand) -> Result<(), RenderCommand> {
+    pub(super) fn handle_asset(&mut self, cmd: AssetCommand) {
         match cmd {
-            RenderCommand::ImageLoadFile {
+            AssetCommand::ImageLoadFile {
                 id,
                 path,
                 max_width,
@@ -53,9 +53,8 @@ impl RenderApp {
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", id);
                 }
-                Ok(())
             }
-            RenderCommand::ImageLoadData {
+            AssetCommand::ImageLoadData {
                 id,
                 data,
                 max_width,
@@ -95,9 +94,8 @@ impl RenderApp {
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image data {}", id);
                 }
-                Ok(())
             }
-            RenderCommand::ImageLoadArgb32 {
+            AssetCommand::ImageLoadArgb32 {
                 id,
                 data,
                 width,
@@ -121,9 +119,8 @@ impl RenderApp {
                         }
                     }
                 }
-                Ok(())
             }
-            RenderCommand::ImageLoadRgb24 {
+            AssetCommand::ImageLoadRgb24 {
                 id,
                 data,
                 width,
@@ -147,16 +144,14 @@ impl RenderApp {
                         }
                     }
                 }
-                Ok(())
             }
-            RenderCommand::ImageFree { id } => {
+            AssetCommand::ImageFree { id } => {
                 tracing::debug!("Freeing image {}", id);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.free_image(id);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitCreate { id, width, height } => {
+            AssetCommand::WebKitCreate { id, width, height } => {
                 tracing::info!("Creating WebKit view: id={}, {}x{}", id, width, height);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(ref backend) = self.wpe_backend {
@@ -176,9 +171,8 @@ impl RenderApp {
                 } else {
                     tracing::warn!("WPE backend not initialized, cannot create WebKit view");
                 }
-                Ok(())
             }
-            RenderCommand::WebKitLoadUri { id, url } => {
+            AssetCommand::WebKitLoadUri { id, url } => {
                 tracing::info!("Loading URL in WebKit view {}: {}", id, url);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
@@ -188,17 +182,15 @@ impl RenderApp {
                 } else {
                     tracing::warn!("WebKit view {} not found", id);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitResize { id, width, height } => {
+            AssetCommand::WebKitResize { id, width, height } => {
                 tracing::debug!("Resizing WebKit view {}: {}x{}", id, width, height);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     view.resize(width, height);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitDestroy { id } => {
+            AssetCommand::WebKitDestroy { id } => {
                 tracing::info!("Destroying WebKit view {}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
@@ -214,9 +206,8 @@ impl RenderApp {
                     }
                     self.frame_windows.mark_top_level_dirty();
                 }
-                Ok(())
             }
-            RenderCommand::WebKitClick { id, x, y, button } => {
+            AssetCommand::WebKitClick { id, x, y, button } => {
                 tracing::debug!(
                     "WebKit click view {} at ({}, {}), button {}",
                     id,
@@ -228,9 +219,8 @@ impl RenderApp {
                 if let Some(view) = self.webkit_views.get(&id) {
                     view.click(x, y, button);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitPointerEvent {
+            AssetCommand::WebKitPointerEvent {
                 id,
                 event_type,
                 x,
@@ -250,9 +240,8 @@ impl RenderApp {
                 if let Some(view) = self.webkit_views.get(&id) {
                     view.send_pointer_event(event_type, x, y, button, state, modifiers);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitScroll {
+            AssetCommand::WebKitScroll {
                 id,
                 x,
                 y,
@@ -271,9 +260,8 @@ impl RenderApp {
                 if let Some(view) = self.webkit_views.get(&id) {
                     view.scroll(x, y, delta_x, delta_y);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitKeyEvent {
+            AssetCommand::WebKitKeyEvent {
                 id,
                 keyval,
                 keycode,
@@ -290,41 +278,36 @@ impl RenderApp {
                 if let Some(view) = self.webkit_views.get(&id) {
                     view.send_keyboard_event(keyval, keycode, pressed, modifiers);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitGoBack { id } => {
+            AssetCommand::WebKitGoBack { id } => {
                 tracing::info!("WebKit go back view {}", id);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     let _ = view.go_back();
                 }
-                Ok(())
             }
-            RenderCommand::WebKitGoForward { id } => {
+            AssetCommand::WebKitGoForward { id } => {
                 tracing::info!("WebKit go forward view {}", id);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     let _ = view.go_forward();
                 }
-                Ok(())
             }
-            RenderCommand::WebKitReload { id } => {
+            AssetCommand::WebKitReload { id } => {
                 tracing::info!("WebKit reload view {}", id);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get_mut(&id) {
                     let _ = view.reload();
                 }
-                Ok(())
             }
-            RenderCommand::WebKitExecuteJavaScript { id, script } => {
+            AssetCommand::WebKitExecuteJavaScript { id, script } => {
                 tracing::debug!("WebKit execute JS view {}", id);
                 #[cfg(feature = "wpe-webkit")]
                 if let Some(view) = self.webkit_views.get(&id) {
                     let _ = view.execute_javascript(&script);
                 }
-                Ok(())
             }
-            RenderCommand::WebKitSetFloating {
+            AssetCommand::WebKitSetFloating {
                 frame,
                 id,
                 x,
@@ -369,9 +352,8 @@ impl RenderApp {
                         );
                     }
                 }
-                Ok(())
             }
-            RenderCommand::WebKitRemoveFloating { frame, id } => {
+            AssetCommand::WebKitRemoveFloating { frame, id } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
@@ -398,9 +380,8 @@ impl RenderApp {
                         );
                     }
                 }
-                Ok(())
             }
-            RenderCommand::VideoCreate {
+            AssetCommand::VideoCreate {
                 id,
                 path,
                 loop_count,
@@ -412,33 +393,28 @@ impl RenderApp {
                     renderer.load_video_file_with_id(id, &path, loop_count, autoplay);
                     tracing::info!("Video loaded with requested id {}", id);
                 }
-                Ok(())
             }
-            RenderCommand::VideoPlay { id } => {
+            AssetCommand::VideoPlay { id } => {
                 tracing::debug!("Playing video {}", id);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.video_play(id);
                 }
-                Ok(())
             }
-            RenderCommand::VideoPause { id } => {
+            AssetCommand::VideoPause { id } => {
                 tracing::debug!("Pausing video {}", id);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.video_pause(id);
                 }
-                Ok(())
             }
-            RenderCommand::VideoDestroy { id } => {
+            AssetCommand::VideoDestroy { id } => {
                 tracing::info!("Destroying video {}", id);
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.video_stop(id);
                 }
-                Ok(())
             }
-            other => Err(other),
         }
     }
 }

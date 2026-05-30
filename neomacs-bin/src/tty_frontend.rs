@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use neomacs_display_runtime::thread_comm::RenderCommand;
+use neomacs_display_runtime::thread_comm::{LifecycleCommand, RenderCommand};
 use neovm_core::emacs_core::{DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 
 // Re-export the cross-platform TTY input reader from display-runtime.
@@ -76,19 +76,19 @@ impl DisplayHost for TtyPopupDisplayHost {
 impl neovm_core::emacs_core::terminal::pure::TerminalHost for TtyTerminalHost {
     fn suspend_tty(&mut self) -> Result<(), String> {
         self.cmd_tx
-            .send(RenderCommand::SuspendTty)
+            .send(RenderCommand::Lifecycle(LifecycleCommand::SuspendTty))
             .map_err(|err| format!("failed to suspend tty frontend: {err}"))
     }
 
     fn resume_tty(&mut self) -> Result<(), String> {
         self.cmd_tx
-            .send(RenderCommand::ResumeTty)
+            .send(RenderCommand::Lifecycle(LifecycleCommand::ResumeTty))
             .map_err(|err| format!("failed to resume tty frontend: {err}"))
     }
 
     fn delete_terminal(&mut self) -> Result<(), String> {
         self.cmd_tx
-            .send(RenderCommand::Shutdown)
+            .send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown))
             .map_err(|err| format!("failed to delete tty terminal frontend: {err}"))
     }
 }

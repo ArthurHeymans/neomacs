@@ -1,17 +1,14 @@
 //! Window and chrome render commands.
 
 use super::RenderApp;
-use crate::thread_comm::RenderCommand;
+use crate::thread_comm::WindowCommand;
 use winit::dpi::PhysicalPosition;
 use winit::window::{CursorIcon, UserAttentionType};
 
 impl RenderApp {
-    pub(super) fn handle_window_command(
-        &mut self,
-        cmd: RenderCommand,
-    ) -> Result<(), RenderCommand> {
+    pub(super) fn handle_window(&mut self, cmd: WindowCommand) {
         match cmd {
-            RenderCommand::SetMouseCursor { cursor_type } => {
+            WindowCommand::SetMouseCursor { cursor_type } => {
                 if let Some(window) = self.primary_window() {
                     if cursor_type == 0 {
                         window.set_cursor_visible(false);
@@ -33,16 +30,14 @@ impl RenderApp {
                         window.set_cursor(icon);
                     }
                 }
-                Ok(())
             }
-            RenderCommand::WarpMouse { x, y } => {
+            WindowCommand::WarpMouse { x, y } => {
                 if let Some(window) = self.primary_window() {
                     let pos = PhysicalPosition::new(x as f64, y as f64);
                     let _ = window.set_cursor_position(pos);
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowTitle { title } => {
+            WindowCommand::SetWindowTitle { title } => {
                 self.primary_chrome_mut().title = title.clone();
                 if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.set_title(title);
@@ -50,9 +45,8 @@ impl RenderApp {
                         primary_state.render.mark_dirty();
                     }
                 }
-                Ok(())
             }
-            RenderCommand::SetFrameWindowTitle {
+            WindowCommand::SetFrameWindowTitle {
                 frame,
                 title,
             } => {
@@ -67,34 +61,29 @@ impl RenderApp {
                         emacs_frame_id
                     );
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowFullscreen { mode } => {
+            WindowCommand::SetWindowFullscreen { mode } => {
                 if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.set_fullscreen_mode(mode);
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowMinimized { minimized } => {
+            WindowCommand::SetWindowMinimized { minimized } => {
                 if let Some(window) = self.primary_window() {
                     window.set_minimized(minimized);
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowPosition { x, y } => {
+            WindowCommand::SetWindowPosition { x, y } => {
                 if let Some(window) = self.primary_window() {
                     window.set_outer_position(PhysicalPosition::new(x, y));
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowSize { width, height } => {
-                tracing::debug!("RenderCommand::SetWindowSize {}x{}", width, height);
+            WindowCommand::SetWindowSize { width, height } => {
+                tracing::debug!("WindowCommand::SetWindowSize {}x{}", width, height);
                 if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.request_inner_size(width, height);
                 }
-                Ok(())
             }
-            RenderCommand::ResizeWindow {
+            WindowCommand::ResizeWindow {
                 frame,
                 width,
                 height,
@@ -102,7 +91,7 @@ impl RenderApp {
             } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::debug!(
-                    "RenderCommand::ResizeWindow frame_id=0x{:x} {}x{}",
+                    "WindowCommand::ResizeWindow frame_id=0x{:x} {}x{}",
                     emacs_frame_id,
                     width,
                     height
@@ -116,15 +105,14 @@ impl RenderApp {
                         emacs_frame_id
                     );
                 }
-                Ok(())
             }
-            RenderCommand::SetFrameGeometryHints {
+            WindowCommand::SetFrameGeometryHints {
                 frame,
                 geometry_hints,
             } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::debug!(
-                    "RenderCommand::SetFrameGeometryHints frame_id=0x{:x} base={}x{} inc={}x{}",
+                    "WindowCommand::SetFrameGeometryHints frame_id=0x{:x} base={}x{} inc={}x{}",
                     emacs_frame_id,
                     geometry_hints.base_width,
                     geometry_hints.base_height,
@@ -139,14 +127,12 @@ impl RenderApp {
                         emacs_frame_id
                     );
                 }
-                Ok(())
             }
-            RenderCommand::SetWindowDecorated { decorated } => {
+            WindowCommand::SetWindowDecorated { decorated } => {
                 self.primary_chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.set_top_level_decorations(decorated);
-                Ok(())
             }
-            RenderCommand::RequestAttention { urgent } => {
+            WindowCommand::RequestAttention { urgent } => {
                 if let Some(window) = self.primary_window() {
                     let attention = if urgent {
                         Some(UserAttentionType::Critical)
@@ -155,9 +141,8 @@ impl RenderApp {
                     };
                     window.request_user_attention(attention);
                 }
-                Ok(())
             }
-            RenderCommand::CreateWindow {
+            WindowCommand::CreateWindow {
                 frame,
                 width,
                 height,
@@ -179,9 +164,8 @@ impl RenderApp {
                     title,
                     geometry_hints,
                 );
-                Ok(())
             }
-            RenderCommand::DestroyWindow { frame } => {
+            WindowCommand::DestroyWindow { frame } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
@@ -190,15 +174,21 @@ impl RenderApp {
                 } else {
                     self.frame_windows.request_destroy(emacs_frame_id);
                 }
-                Ok(())
             }
-            RenderCommand::AdoptPrimaryFrame { frame } => {
+            WindowCommand::AdoptPrimaryFrame { frame } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
-                Ok(())
             }
-            other => Err(other),
+            WindowCommand::RemoveChildFrame { frame_id } => {
+                tracing::info!("Removing child frame 0x{:x}", frame_id);
+                self.frame_windows
+                    .remove_child_frame_from_top_level_windows(frame_id);
+                self.remove_primary_child_frame(frame_id);
+            }
+            WindowCommand::ScrollBlit { .. } => {
+                // handled above in dispatch, here as exhaustive match
+            }
         }
     }
 }

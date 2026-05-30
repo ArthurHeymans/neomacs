@@ -1,16 +1,15 @@
 //! Terminal render commands.
 
 use super::RenderApp;
-use crate::thread_comm::RenderCommand;
 
+#[cfg(feature = "neo-term")]
+use crate::thread_comm::TerminalCommand;
+
+#[cfg(feature = "neo-term")]
 impl RenderApp {
-    pub(super) fn handle_terminal_command(
-        &mut self,
-        cmd: RenderCommand,
-    ) -> Result<(), RenderCommand> {
+    pub(super) fn handle_terminal(&mut self, cmd: TerminalCommand) {
         match cmd {
-            #[cfg(feature = "neo-term")]
-            RenderCommand::TerminalCreate {
+            TerminalCommand::TerminalCreate {
                 id,
                 cols,
                 rows,
@@ -46,43 +45,33 @@ impl RenderApp {
                         tracing::error!("Failed to create terminal {}: {}", id, e);
                     }
                 }
-                Ok(())
             }
-            #[cfg(feature = "neo-term")]
-            RenderCommand::TerminalWrite { id, data } => {
+            TerminalCommand::TerminalWrite { id, data } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
                     if let Err(e) = view.write(&data) {
                         tracing::warn!("Terminal {} write error: {}", id, e);
                     }
                 }
-                Ok(())
             }
-            #[cfg(feature = "neo-term")]
-            RenderCommand::TerminalResize { id, cols, rows } => {
+            TerminalCommand::TerminalResize { id, cols, rows } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
                     view.resize(cols, rows);
                 }
-                Ok(())
             }
-            #[cfg(feature = "neo-term")]
-            RenderCommand::TerminalDestroy { id } => {
+            TerminalCommand::TerminalDestroy { id } => {
                 if let Ok(mut shared) = self.shared_terminals.lock() {
                     shared.remove(&id);
                 }
                 self.terminal_manager.destroy(id);
                 tracing::info!("Terminal {} destroyed", id);
-                Ok(())
             }
-            #[cfg(feature = "neo-term")]
-            RenderCommand::TerminalSetFloat { id, x, y, opacity } => {
+            TerminalCommand::TerminalSetFloat { id, x, y, opacity } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
                     view.float_x = x;
                     view.float_y = y;
                     view.float_opacity = opacity;
                 }
-                Ok(())
             }
-            other => Err(other),
         }
     }
 }

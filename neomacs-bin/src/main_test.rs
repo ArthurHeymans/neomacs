@@ -15,7 +15,10 @@ use super::{
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
-use neomacs_display_runtime::thread_comm::{FrameRef, RenderCommand};
+use neomacs_display_runtime::thread_comm::{
+    AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, RenderCommand, UiCommand,
+    WindowCommand,
+};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
@@ -602,15 +605,15 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     assert_eq!(commands.len(), 3);
     assert!(
         commands.iter().any(
-            |cmd| matches!(cmd, RenderCommand::SetWindowTitle { title } if title == "Neomacs")
+            |cmd| matches!(cmd, RenderCommand::Window(WindowCommand::SetWindowTitle { title }) if title == "Neomacs")
         )
     );
     assert!(commands.iter().any(|cmd| matches!(
         cmd,
-        RenderCommand::SetFrameGeometryHints {
+        RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
             frame: FrameRef::Primary,
             geometry_hints,
-        } if *geometry_hints
+        }) if *geometry_hints
             == GuiFrameGeometryHints {
                 base_width: 24,
                 base_height: 16,
@@ -622,9 +625,9 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     )));
     assert!(commands.iter().any(|cmd| matches!(
         cmd,
-        RenderCommand::AdoptPrimaryFrame {
+        RenderCommand::Window(WindowCommand::AdoptPrimaryFrame {
             frame: FrameRef::Frame(0x100000001),
-        }
+        })
     )));
     assert!(host.primary_window_adopted);
     assert_eq!(host.primary_frame_id, Some(FrameId(0x100000001)));
@@ -662,13 +665,13 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
     assert_eq!(commands.len(), 2);
     assert!(matches!(
         commands[0],
-        RenderCommand::DestroyWindow {
+        RenderCommand::Window(WindowCommand::DestroyWindow {
             frame: FrameRef::Frame(0x100000002),
-        }
+        })
     ));
     assert!(matches!(
         commands[1],
-        RenderCommand::DestroyWindow { frame: FrameRef::Primary }
+        RenderCommand::Window(WindowCommand::DestroyWindow { frame: FrameRef::Primary })
     ));
     assert_eq!(host.primary_frame_id, None);
     let cached_titles = host.last_window_titles.lock().expect("title cache");
@@ -722,17 +725,17 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
     assert_eq!(commands.len(), 2);
     assert!(matches!(
         commands[0],
-        RenderCommand::ShowPopupMenu {
+        RenderCommand::Ui(UiCommand::ShowPopupMenu {
             frame: FrameRef::Primary,
             ..
-        }
+        })
     ));
     assert!(matches!(
         commands[1],
-        RenderCommand::ShowPopupMenu {
+        RenderCommand::Ui(UiCommand::ShowPopupMenu {
             frame: FrameRef::Frame(0x100000002),
             ..
-        }
+        })
     ));
 }
 
@@ -784,11 +787,11 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     assert!(!image.dimensions_known);
     assert!(matches!(
         cmd_rx.try_recv().expect("queued image load"),
-        RenderCommand::ImageLoadFile {
+        RenderCommand::Asset(AssetCommand::ImageLoadFile {
             max_width: 50,
             max_height: 50,
             ..
-        }
+        })
     ));
 
     let (lock, cvar) = &*image_dimensions;
@@ -842,12 +845,12 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::VideoCreate {
+        RenderCommand::Asset(AssetCommand::VideoCreate {
             id,
             path,
             loop_count,
             autoplay,
-        } if *id == first.video_id
+        }) if *id == first.video_id
             && path == "/tmp/demo.mp4"
             && *loop_count == -1
             && *autoplay
@@ -891,18 +894,18 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
     assert_eq!(commands.len(), 2);
     assert!(matches!(
         &commands[0],
-        RenderCommand::WebKitCreate {
+        RenderCommand::Asset(AssetCommand::WebKitCreate {
             id,
             width: 400,
             height: 300,
-        } if *id == first.webkit_id
+        }) if *id == first.webkit_id
     ));
     assert!(matches!(
         &commands[1],
-        RenderCommand::WebKitLoadUri {
+        RenderCommand::Asset(AssetCommand::WebKitLoadUri {
             id,
             url,
-        } if *id == first.webkit_id && url == "https://example.com"
+        }) if *id == first.webkit_id && url == "https://example.com"
     ));
 }
 
@@ -937,32 +940,32 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
     assert!(
         commands
             .iter()
-            .any(|cmd| matches!(cmd, RenderCommand::SetWindowTitle { .. })),
+            .any(|cmd| matches!(cmd, RenderCommand::Window(WindowCommand::SetWindowTitle { .. }))),
         "expected bootstrap adoption to set the primary window title, got {commands:?}"
     );
     assert!(
         commands.iter().any(|cmd| matches!(
             cmd,
-            RenderCommand::SetFrameGeometryHints {
+            RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
                 frame: FrameRef::Primary,
                 ..
-            }
+            })
         )),
         "expected bootstrap adoption to publish primary window geometry hints, got {commands:?}"
     );
     assert!(
         commands
             .iter()
-            .any(|cmd| matches!(cmd, RenderCommand::AdoptPrimaryFrame { .. })),
+            .any(|cmd| matches!(cmd, RenderCommand::Window(WindowCommand::AdoptPrimaryFrame { .. }))),
         "expected bootstrap adoption to publish the primary frame identity, got {commands:?}"
     );
     assert!(
         commands.iter().any(|cmd| matches!(
             cmd,
-            RenderCommand::ResizeWindow {
+            RenderCommand::Window(WindowCommand::ResizeWindow {
                 frame: FrameRef::Primary,
                 ..
-            }
+            })
         )),
         "expected bootstrap resize to target the adopted primary window, got {commands:?}"
     );
@@ -1018,12 +1021,12 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
     assert!(
         commands.iter().any(|cmd| matches!(
             cmd,
-            RenderCommand::ResizeWindow {
+            RenderCommand::Window(WindowCommand::ResizeWindow {
                 frame: FrameRef::Primary,
                 width: 1068,
                 height: 1386,
                 ..
-            }
+            })
         )),
         "expected primary resize command, got {commands:?}"
     );
@@ -1056,10 +1059,10 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
     assert_eq!(commands.len(), 1);
     assert!(matches!(
         &commands[0],
-        RenderCommand::SetCursorBlink {
+        RenderCommand::Config(ConfigCommand::SetCursorBlink {
             enabled: false,
             interval_ms: 250,
-        }
+        })
     ));
 }
 
@@ -1097,10 +1100,10 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
     assert!(
         commands.iter().any(|cmd| matches!(
             cmd,
-            RenderCommand::SetFrameWindowTitle {
+            RenderCommand::Window(WindowCommand::SetFrameWindowTitle {
                 frame: FrameRef::Primary,
                 title
-            } if title == "oracle-title"
+            }) if title == "oracle-title"
         )),
         "expected redisplay title sync to publish the formatted primary title, got {commands:?}"
     );
@@ -1118,7 +1121,7 @@ fn tty_terminal_host_delete_terminal_sends_shutdown() {
         .try_recv()
         .expect("shutdown command should be queued")
     {
-        RenderCommand::Shutdown => {}
+        RenderCommand::Lifecycle(LifecycleCommand::Shutdown) => {}
         other => panic!("expected Shutdown, got {other:?}"),
     }
 }

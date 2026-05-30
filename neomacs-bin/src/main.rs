@@ -30,7 +30,8 @@ use neomacs_display_runtime::render_thread::{
     build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
-    EmacsComms, FrameRef, InputEvent as DisplayInputEvent, RenderCommand, ThreadComms,
+    AssetCommand, ConfigCommand, EmacsComms, FrameRef, InputEvent as DisplayInputEvent,
+    LifecycleCommand, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
@@ -955,22 +956,22 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         );
         if !self.primary_window_adopted {
             self.send_render_command(
-                RenderCommand::SetWindowTitle {
+                RenderCommand::Window(WindowCommand::SetWindowTitle {
                     title: title_string.clone(),
-                },
+                }),
                 "failed to update primary window title",
             )?;
             self.send_render_command(
-                RenderCommand::SetFrameGeometryHints {
+                RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
                     frame: FrameRef::Primary,
                     geometry_hints: request.geometry_hints,
-                },
+                }),
                 "failed to update primary window geometry hints",
             )?;
             self.send_render_command(
-                RenderCommand::AdoptPrimaryFrame {
+                RenderCommand::Window(WindowCommand::AdoptPrimaryFrame {
                     frame: FrameRef::Frame(request.frame_id.0),
-                },
+                }),
                 "failed to adopt primary GUI frame",
             )?;
             // The opening GUI frame adopts the already-existing primary host
@@ -981,13 +982,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             self.primary_frame_id = Some(request.frame_id);
         } else {
             self.send_render_command(
-                RenderCommand::CreateWindow {
+                RenderCommand::Window(WindowCommand::CreateWindow {
                     frame: FrameRef::Frame(request.frame_id.0),
                     width: request.width,
                     height: request.height,
                     title: title_string,
                     geometry_hints: request.geometry_hints,
-                },
+                }),
                 "failed to create additional GUI window",
             )?;
         }
@@ -1007,9 +1008,9 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         frame_id: neovm_core::window::FrameId,
     ) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::RemoveChildFrame {
+            RenderCommand::Window(WindowCommand::RemoveChildFrame {
                 frame_id: frame_id.0,
-            },
+            }),
             "failed to remove GUI child frame",
         )
     }
@@ -1026,7 +1027,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .map_err(|err| format!("failed to forget GUI frame title: {err}"))?
             .remove(&frame_id);
         self.send_render_command(
-            RenderCommand::DestroyWindow { frame },
+            RenderCommand::Window(WindowCommand::DestroyWindow { frame }),
             "failed to destroy GUI frame window",
         )
     }
@@ -1050,7 +1051,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             })
             .collect();
         self.send_render_command(
-            RenderCommand::ShowPopupMenu {
+            RenderCommand::Ui(UiCommand::ShowPopupMenu {
                 frame,
                 x: menu.x,
                 y: menu.y,
@@ -1058,13 +1059,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 title: menu.title,
                 fg: None,
                 bg: None,
-            },
+            }),
             "failed to show popup menu",
         )
     }
 
     fn hide_popup_menu(&mut self) -> Result<(), String> {
-        self.send_render_command(RenderCommand::HidePopupMenu, "failed to hide popup menu")
+        self.send_render_command(RenderCommand::Ui(UiCommand::HidePopupMenu), "failed to hide popup menu")
     }
 
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
@@ -1081,12 +1082,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             request.height
         );
         self.send_render_command(
-            RenderCommand::ResizeWindow {
+            RenderCommand::Window(WindowCommand::ResizeWindow {
                 frame,
                 width: request.width,
                 height: request.height,
                 geometry_hints: request.geometry_hints,
-            },
+            }),
             "failed to resize GUI frame",
         )?;
         Ok(())
@@ -1104,10 +1105,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 FrameRef::Frame(frame_id.0)
             };
         self.send_render_command(
-            RenderCommand::SetFrameGeometryHints {
+            RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
                 frame,
                 geometry_hints,
-            },
+            }),
             "failed to update GUI frame geometry hints",
         )?;
         Ok(())
@@ -1138,10 +1139,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             FrameRef::Frame(frame_id.0)
         };
         self.send_render_command(
-            RenderCommand::SetFrameWindowTitle {
+            RenderCommand::Window(WindowCommand::SetFrameWindowTitle {
                 frame,
                 title: title_string,
-            },
+            }),
             "failed to update GUI frame title",
         )?;
         Ok(())
@@ -1160,17 +1161,17 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn set_cursor_blink(&mut self, enabled: bool, interval_ms: u32) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::SetCursorBlink {
+            RenderCommand::Config(ConfigCommand::SetCursorBlink {
                 enabled,
                 interval_ms,
-            },
+            }),
             "failed to set cursor blink",
         )
     }
 
     fn set_cursor_animation(&mut self, enabled: bool, speed: f32) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::SetCursorAnimation { enabled, speed },
+            RenderCommand::Config(ConfigCommand::SetCursorAnimation { enabled, speed }),
             "failed to set cursor animation",
         )
     }
@@ -1180,10 +1181,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             let enabled = cursor_effect_enabled(&args);
             let duration_ms = cursor_effect_u32(&args, 1, 150);
             return self.send_render_command(
-                RenderCommand::SetCursorSizeTransition {
+                RenderCommand::Config(ConfigCommand::SetCursorSizeTransition {
                     enabled,
                     duration_ms,
-                },
+                }),
                 "failed to set cursor size transition",
             );
         }
@@ -1193,7 +1194,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             args.into_iter().map(render_cursor_effect_arg).collect(),
         );
         self.send_render_command(
-            RenderCommand::SetCursorEffect(command),
+            RenderCommand::Config(ConfigCommand::SetCursorEffect(command)),
             "failed to set cursor effect",
         )
     }
@@ -1375,27 +1376,27 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         match &request.source {
             ImageResolveSource::File(path) => {
                 self.send_render_command(
-                    RenderCommand::ImageLoadFile {
+                    RenderCommand::Asset(AssetCommand::ImageLoadFile {
                         id: image_id,
                         path: path.as_utf8_str().unwrap_or_default().to_owned(),
                         max_width: request.max_width,
                         max_height: request.max_height,
                         fg_color: request.fg_color,
                         bg_color: request.bg_color,
-                    },
+                    }),
                     "failed to queue image load",
                 )?;
             }
             ImageResolveSource::Data(data) => {
                 self.send_render_command(
-                    RenderCommand::ImageLoadData {
+                    RenderCommand::Asset(AssetCommand::ImageLoadData {
                         id: image_id,
                         data: data.clone(),
                         max_width: request.max_width,
                         max_height: request.max_height,
                         fg_color: request.fg_color,
                         bg_color: request.bg_color,
-                    },
+                    }),
                     "failed to queue image data load",
                 )?;
             }
@@ -1439,12 +1440,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         };
         self.send_render_command(
-            RenderCommand::VideoCreate {
+            RenderCommand::Asset(AssetCommand::VideoCreate {
                 id: video_id,
                 path,
                 loop_count: request.loop_count,
                 autoplay: request.autoplay,
-            },
+            }),
             "failed to queue video create",
         )?;
 
@@ -1477,11 +1478,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
         let webkit_id = next_host_webkit_id();
         self.send_render_command(
-            RenderCommand::WebKitCreate {
+            RenderCommand::Asset(AssetCommand::WebKitCreate {
                 id: webkit_id,
                 width: request.width.max(1),
                 height: request.height.max(1),
-            },
+            }),
             "failed to queue WebKit create",
         )?;
 
@@ -1497,7 +1498,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         };
         self.send_render_command(
-            RenderCommand::WebKitLoadUri { id: webkit_id, url },
+            RenderCommand::Asset(AssetCommand::WebKitLoadUri { id: webkit_id, url }),
             "failed to queue WebKit load",
         )?;
 
@@ -1990,7 +1991,7 @@ fn spawn_gui_evaluator_worker(
             match outcome {
                 Ok(exit) => exit,
                 Err(payload) => {
-                    let _ = cmd_tx_for_panic.try_send(RenderCommand::Shutdown);
+                    let _ = cmd_tx_for_panic.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
                     render_waker_for_panic.wake();
                     std::panic::resume_unwind(payload);
                 }
@@ -2105,7 +2106,7 @@ fn run_gui_evaluator_worker(
     }
 
     tracing::info!("GUI evaluator shutting down render loop...");
-    let _ = emacs_comms.cmd_tx.try_send(RenderCommand::Shutdown);
+    let _ = emacs_comms.cmd_tx.try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
     render_waker.wake();
 
     if let Some(request) = evaluator.shutdown_request() {
@@ -2381,7 +2382,7 @@ pub fn run(mode: RuntimeMode) {
     tracing::info!("Shutting down...");
     let _ = emacs_comms
         .cmd_tx
-        .try_send(neomacs_display_runtime::thread_comm::RenderCommand::Shutdown);
+        .try_send(neomacs_display_runtime::thread_comm::RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
     frontend.join();
     if tty_init::should_enable_live_tty_io(&startup) {
         tty_init::tty_shutdown_terminal();

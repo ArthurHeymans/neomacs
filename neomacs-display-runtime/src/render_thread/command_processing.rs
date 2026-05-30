@@ -1,5 +1,5 @@
 use super::RenderApp;
-use crate::thread_comm::RenderCommand;
+use crate::thread_comm::{LifecycleCommand, RenderCommand, WindowCommand};
 
 impl RenderApp {
     /// Process pending commands from Emacs.
@@ -8,32 +8,26 @@ impl RenderApp {
 
         while let Ok(cmd) = self.comms.cmd_rx.try_recv() {
             match cmd {
-                RenderCommand::Shutdown => {
-                    tracing::info!("Render thread received shutdown command");
-                    should_exit = true;
-                    continue;
+                RenderCommand::Lifecycle(c) => match c {
+                    LifecycleCommand::Shutdown => {
+                        tracing::info!("Render thread received shutdown command");
+                        should_exit = true;
+                        continue;
+                    }
+                    _ => {}
+                },
+                RenderCommand::Window(c) => {
+                    if matches!(c, WindowCommand::ScrollBlit { .. }) {
+                        tracing::debug!("ScrollBlit ignored (full-frame rendering mode)");
+                        continue;
+                    }
+                    self.handle_window(c);
                 }
-                RenderCommand::ScrollBlit { .. } => {
-                    tracing::debug!("ScrollBlit ignored (full-frame rendering mode)");
-                    continue;
-                }
-                _ => {}
-            }
-
-            let cmd = match self.handle_asset_command(cmd) {
-                Ok(()) => continue,
-                Err(cmd) => cmd,
-            };
-            let cmd = match self.handle_window_command(cmd) {
-                Ok(()) => continue,
-                Err(cmd) => cmd,
-            };
-            let cmd = match self.handle_terminal_command(cmd) {
-                Ok(()) => continue,
-                Err(cmd) => cmd,
-            };
-            if self.handle_ui_command(cmd).is_ok() {
-                continue;
+                RenderCommand::Asset(c) => self.handle_asset(c),
+                #[cfg(feature = "neo-term")]
+                RenderCommand::Terminal(c) => self.handle_terminal(c),
+                RenderCommand::Ui(c) => self.handle_ui(c),
+                RenderCommand::Config(c) => self.handle_config(c),
             }
         }
 

@@ -114,7 +114,7 @@ fn run_gui(demo: &str) {
     use neomacs_display_runtime::render_thread::{
         RenderThread, SharedImageDimensions, SharedMonitorInfo,
     };
-    use neomacs_display_runtime::thread_comm::{InputEvent, RenderCommand, ThreadComms};
+    use neomacs_display_runtime::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, ThreadComms};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -204,7 +204,7 @@ fn run_gui(demo: &str) {
         while let Ok(event) = emacs_comms.input_rx.try_recv() {
             if let InputEvent::Key { keysym, .. } = event {
                 if keysym == b'q' as u32 || keysym == 0xff1b {
-                    let _ = emacs_comms.cmd_tx.send(RenderCommand::Shutdown);
+                    let _ = emacs_comms.cmd_tx.send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
                     render_thread.join();
                     return;
                 }
