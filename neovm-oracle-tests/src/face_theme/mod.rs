@@ -19781,3 +19781,157 @@ fn ft_omega_final_face_remapping_alist_length_check() {
    'final-empty (null (face-remapping-alist)))))"##,
     );
 }
+
+#[test]
+fn ft_cosmic_final_face_overlay_without_face_prop_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (put-text-property 1 26 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 6 20)))
+      (overlay-put ov 'priority 100)
+      (list
+       'no-face-overlay (overlay-get ov 'face)
+       'priority (overlay-get ov 'priority)
+       'char-prop-at-10 (get-char-property 10 'face)
+       'char-prop-at-3 (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_font_lock_keywords_keep_flag_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "KEEP-FLAG keyword test font lock face buffer text content here end now done")
+    (font-lock-add-keywords nil '(("\\<\\(KEEP-FLAG\\)\\>" 1 '(:foreground "red" :weight bold) keep)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "KEEP-FLAG") (get-text-property (match-beginning 0) 'face))))
+      (font-lock-remove-keywords nil '(("\\<\\(KEEP-FLAG\\)\\>" 1 '(:foreground "red" :weight bold) keep)))
+      (font-lock-fontify-buffer)
+      (list v0 (save-excursion (goto-char (point-min)) (search-forward "KEEP-FLAG") (get-text-property (match-beginning 0) 'face)))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_set_font_attribute_family_foundry_registry() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-family-info-face) (error nil))
+  (list
+   'default-family (face-attribute 'default :family nil 'default-on)
+   'default-foundry (face-attribute 'default :foundry nil 'default-on)
+   'default-registry (face-attribute 'default :registry nil 'default-on)
+   'set-family (condition-case nil (progn (set-face-attribute 'my-family-info-face nil :family "Monospace") (face-attribute 'my-family-info-face :family nil 'default-on)) (error 'no))
+   'set-foundry (condition-case nil (progn (set-face-attribute 'my-family-info-face nil :foundry "adobe") (face-attribute 'my-family-info-face :foundry nil 'default-on)) (error 'no))
+   'set-registry (condition-case nil (progn (set-face-attribute 'my-family-info-face nil :registry "iso8859-1") (face-attribute 'my-family-info-face :registry nil 'default-on)) (error 'no))
+   'reset-all (condition-case nil (progn (set-face-attribute 'my-family-info-face nil :family 'unspecified :foundry 'unspecified :registry 'unspecified) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_overlay_insert_in_front_hooks_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEE")
+    (let ((ov (make-overlay 6 15)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'insert-in-front-hooks (list 'ignore))
+      (list
+       'before (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 6 10 15 20 25))
+       'insert-in-front (progn (goto-char 6) (insert "F") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 6 7 10 15 20 25)))
+       'insert-another (progn (goto-char 10) (insert "X") (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 6 7 10 11 15 21 27)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_property_text_property_any_intervals() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPP")
+    (dotimes (i 16)
+      (put-text-property (1+ (* i 2)) (+ (* i 2) 3) 'face (if (evenp i) 'bold 'italic)))
+    (let ((intervals (object-intervals (current-buffer))))
+      (list
+       'interval-count (length intervals)
+       'first-face (get-text-property (overlay-start (car intervals)) 'face)
+       'second-face (get-text-property (overlay-start (cadr intervals)) 'face)
+       'last-face (get-text-property (overlay-start (car (last intervals))) 'face))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_font_lock_unfontify_then_refontify_consistency() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun unfontify-refontify-consistent-test () 42)\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 25 40 45))))
+      (font-lock-unfontify-buffer)
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 25 40 45))))
+        (list (equal v0 v1) v0 v1))))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_set_face_overline_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-over-line-face) (error nil))
+  (list
+   'default-overline (condition-case nil (face-attribute 'default :overline nil 'default-on) (error 'no))
+   'set-overline-t (condition-case nil (progn (set-face-attribute 'my-over-line-face nil :overline t) (face-attribute 'my-over-line-face :overline nil 'default-on)) (error 'no))
+   'set-overline-color (condition-case nil (progn (set-face-attribute 'my-over-line-face nil :overline '(:color "red")) (face-attribute 'my-over-line-face :overline nil 'default-on)) (error 'no))
+   'set-overline-color-style (condition-case nil (progn (set-face-attribute 'my-over-line-face nil :overline '(:color "blue" :style wave)) (face-attribute 'my-over-line-face :overline nil 'default-on)) (error 'no))
+   'set-overline-off (condition-case nil (progn (set-face-attribute 'my-over-line-face nil :overline nil) (face-attribute 'my-over-line-face :overline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_cosmic_final_face_text_property_next_single_change_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXYYYYYZZZZZWWWWW")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (list
+     'next-1 (next-single-ic-property-change 1 'face nil 21)
+     'next-6 (next-single-property-change 6 'face nil 21)
+     'next-11 (next-single-property-change 11 'face nil 21)
+     'next-16 (next-single-property-change 16 'face nil 21)
+     'next-20 (next-single-property-change 20 'face nil 21)
+     'last-at-16 (get-text-property 16 'face)
+     'last-at-20 (get-text-property 20 'face))))))"##,
+    );
+}
