@@ -293,11 +293,11 @@ fn thread_comms_split_channels_work() {
     // Emacs sends command, render receives
     emacs
         .cmd_tx
-        .send(RenderCommand::VisualBell { emacs_frame_id: 7 })
+        .send(RenderCommand::VisualBell { frame: FrameRef::Frame(7) })
         .unwrap();
     let cmd = render.cmd_rx.try_recv().unwrap();
     match cmd {
-        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 7),
+        RenderCommand::VisualBell { frame } => assert_eq!(frame.raw_id(), 7),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
 
@@ -903,19 +903,19 @@ fn render_command_resize_window() {
         height_inc: 58,
     };
     let cmd = RenderCommand::ResizeWindow {
-        emacs_frame_id: 99,
+        frame: FrameRef::Frame(99),
         width: 1024,
         height: 768,
         geometry_hints,
     };
     match cmd {
         RenderCommand::ResizeWindow {
-            emacs_frame_id,
+            frame,
             width,
             height,
             geometry_hints: actual_hints,
         } => {
-            assert_eq!(emacs_frame_id, 99);
+            assert_eq!(frame.raw_id(), 99);
             assert_eq!(width, 1024);
             assert_eq!(height, 768);
             assert_eq!(actual_hints, geometry_hints);
@@ -935,15 +935,15 @@ fn render_command_set_frame_geometry_hints() {
         height_inc: 58,
     };
     let cmd = RenderCommand::SetFrameGeometryHints {
-        emacs_frame_id: 0,
+        frame: FrameRef::Primary,
         geometry_hints,
     };
     match cmd {
         RenderCommand::SetFrameGeometryHints {
-            emacs_frame_id,
+            frame,
             geometry_hints: actual_hints,
         } => {
-            assert_eq!(emacs_frame_id, 0);
+            assert_eq!(frame.raw_id(), 0);
             assert_eq!(actual_hints, geometry_hints);
         }
         other => panic!("Expected SetFrameGeometryHints, got {:?}", other),
@@ -1066,7 +1066,7 @@ fn render_command_show_popup_menu() {
     ];
 
     let cmd = RenderCommand::ShowPopupMenu {
-        emacs_frame_id: 0x1000,
+        frame: FrameRef::Frame(0x1000),
         x: 100.0,
         y: 200.0,
         items: items.clone(),
@@ -1076,7 +1076,7 @@ fn render_command_show_popup_menu() {
     };
     match cmd {
         RenderCommand::ShowPopupMenu {
-            emacs_frame_id,
+            frame,
             x,
             y,
             items: menu_items,
@@ -1084,7 +1084,7 @@ fn render_command_show_popup_menu() {
             fg,
             bg,
         } => {
-            assert_eq!(emacs_frame_id, 0x1000);
+            assert_eq!(frame.raw_id(), 0x1000);
             assert_eq!(x, 100.0);
             assert_eq!(y, 200.0);
             assert_eq!(menu_items.len(), 3);
@@ -1113,7 +1113,7 @@ fn render_command_hide_popup_menu() {
 #[test]
 fn render_command_show_tooltip() {
     let cmd = RenderCommand::ShowTooltip {
-        emacs_frame_id: 0x2000,
+        frame: FrameRef::Frame(0x2000),
         x: 300.0,
         y: 400.0,
         text: "This is a tooltip".to_string(),
@@ -1126,7 +1126,7 @@ fn render_command_show_tooltip() {
     };
     match cmd {
         RenderCommand::ShowTooltip {
-            emacs_frame_id,
+            frame,
             x,
             y,
             text,
@@ -1137,7 +1137,7 @@ fn render_command_show_tooltip() {
             bg_g,
             bg_b,
         } => {
-            assert_eq!(emacs_frame_id, 0x2000);
+            assert_eq!(frame.raw_id(), 0x2000);
             assert_eq!(x, 300.0);
             assert_eq!(y, 400.0);
             assert_eq!(text, "This is a tooltip");
@@ -1159,9 +1159,9 @@ fn render_command_hide_tooltip() {
 
 #[test]
 fn render_command_visual_bell() {
-    let cmd = RenderCommand::VisualBell { emacs_frame_id: 99 };
+    let cmd = RenderCommand::VisualBell { frame: FrameRef::Frame(99) };
     match cmd {
-        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 99),
+        RenderCommand::VisualBell { frame } => assert_eq!(frame.raw_id(), 99),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
 }
@@ -1308,7 +1308,7 @@ fn render_command_create_window() {
         height_inc: 58,
     };
     let cmd = RenderCommand::CreateWindow {
-        emacs_frame_id: 99,
+        frame: FrameRef::Frame(99),
         width: 1024,
         height: 768,
         title: "New Frame".to_string(),
@@ -1316,13 +1316,13 @@ fn render_command_create_window() {
     };
     match cmd {
         RenderCommand::CreateWindow {
-            emacs_frame_id,
+            frame,
             width,
             height,
             title,
             geometry_hints: actual_hints,
         } => {
-            assert_eq!(emacs_frame_id, 99);
+            assert_eq!(frame.raw_id(), 99);
             assert_eq!(width, 1024);
             assert_eq!(height, 768);
             assert_eq!(title, "New Frame");
@@ -1334,9 +1334,9 @@ fn render_command_create_window() {
 
 #[test]
 fn render_command_destroy_window() {
-    let cmd = RenderCommand::DestroyWindow { emacs_frame_id: 99 };
+    let cmd = RenderCommand::DestroyWindow { frame: FrameRef::Frame(99) };
     match cmd {
-        RenderCommand::DestroyWindow { emacs_frame_id } => assert_eq!(emacs_frame_id, 99),
+        RenderCommand::DestroyWindow { frame } => assert_eq!(frame.raw_id(), 99),
         other => panic!("Expected DestroyWindow, got {:?}", other),
     }
 }
@@ -1497,7 +1497,7 @@ fn render_command_webkit_execute_javascript() {
 #[test]
 fn render_command_webkit_set_floating() {
     let cmd = RenderCommand::WebKitSetFloating {
-        emacs_frame_id: 42,
+        frame: FrameRef::Frame(42),
         id: 1,
         x: 10.0,
         y: 20.0,
@@ -1506,14 +1506,14 @@ fn render_command_webkit_set_floating() {
     };
     match cmd {
         RenderCommand::WebKitSetFloating {
-            emacs_frame_id,
+            frame,
             id,
             x,
             y,
             width,
             height,
         } => {
-            assert_eq!(emacs_frame_id, 42);
+            assert_eq!(frame.raw_id(), 42);
             assert_eq!(id, 1);
             assert_eq!(x, 10.0);
             assert_eq!(y, 20.0);
@@ -1527,12 +1527,12 @@ fn render_command_webkit_set_floating() {
 #[test]
 fn render_command_webkit_remove_floating() {
     let cmd = RenderCommand::WebKitRemoveFloating {
-        emacs_frame_id: 42,
+        frame: FrameRef::Frame(42),
         id: 7,
     };
     match cmd {
-        RenderCommand::WebKitRemoveFloating { emacs_frame_id, id } => {
-            assert_eq!(emacs_frame_id, 42);
+        RenderCommand::WebKitRemoveFloating { frame, id } => {
+            assert_eq!(frame.raw_id(), 42);
             assert_eq!(id, 7);
         }
         other => panic!("Expected WebKitRemoveFloating, got {:?}", other),
@@ -1799,7 +1799,7 @@ fn channel_sends_multiple_commands_in_order() {
     comms.cmd_tx.send(RenderCommand::Shutdown).unwrap();
     comms
         .cmd_tx
-        .send(RenderCommand::VisualBell { emacs_frame_id: 0 })
+        .send(RenderCommand::VisualBell { frame: FrameRef::Primary })
         .unwrap();
     comms.cmd_tx.send(RenderCommand::HideTooltip).unwrap();
 
@@ -1808,7 +1808,7 @@ fn channel_sends_multiple_commands_in_order() {
         other => panic!("Expected Shutdown, got {:?}", other),
     }
     match comms.cmd_rx.try_recv().unwrap() {
-        RenderCommand::VisualBell { emacs_frame_id } => assert_eq!(emacs_frame_id, 0),
+        RenderCommand::VisualBell { frame } => assert_eq!(frame.raw_id(), 0),
         other => panic!("Expected VisualBell, got {:?}", other),
     }
     match comms.cmd_rx.try_recv().unwrap() {

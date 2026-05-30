@@ -175,6 +175,34 @@ impl std::fmt::Debug for EffectUpdater {
     }
 }
 
+/// Frame reference in commands flowing from Emacs to the render thread.
+///
+/// Replaces raw `u64` `emacs_frame_id` — no sentinel values.
+/// Matches GNU Emacs convention: 0 is never a valid frame ID
+/// (`frame_next_id = 1` in GNU Emacs `frame.c:343`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FrameRef {
+    /// Route to the primary frame (resolved at render-time).
+    Primary,
+    /// Route to a specific frame by its Emacs-assigned ID.
+    Frame(u64),
+}
+
+impl FrameRef {
+    pub fn raw_id(&self) -> u64 {
+        match self {
+            Self::Primary => 0,
+            Self::Frame(id) => *id,
+        }
+    }
+}
+
+impl From<FrameRef> for u64 {
+    fn from(f: FrameRef) -> u64 {
+        f.raw_id()
+    }
+}
+
 /// Command from Emacs to render thread
 #[derive(Debug)]
 pub enum RenderCommand {
@@ -311,7 +339,7 @@ pub enum RenderCommand {
     },
     /// Set floating WebKit overlay position and size
     WebKitSetFloating {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         id: u32,
         x: f32,
         y: f32,
@@ -320,7 +348,7 @@ pub enum RenderCommand {
     },
     /// Remove floating WebKit overlay
     WebKitRemoveFloating {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         id: u32,
     },
     /// Create video player
@@ -354,9 +382,9 @@ pub enum RenderCommand {
         title: String,
     },
     /// Set the title for a specific GUI frame window.
-    /// `emacs_frame_id == 0` also targets the adopted primary window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
     SetFrameWindowTitle {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         title: String,
     },
     /// Set fullscreen mode (0=none, 1=fullscreen, 4=maximized)
@@ -378,17 +406,17 @@ pub enum RenderCommand {
         height: u32,
     },
     /// Request resizing a specific GUI frame window.
-    /// `emacs_frame_id == 0` also targets the adopted primary window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
     ResizeWindow {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         width: u32,
         height: u32,
         geometry_hints: GuiFrameGeometryHints,
     },
     /// Update geometry hints for a specific GUI frame window.
-    /// `emacs_frame_id == 0` also targets the adopted primary window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
     SetFrameGeometryHints {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         geometry_hints: GuiFrameGeometryHints,
     },
     /// Set window decorations (title bar, borders)
@@ -452,7 +480,7 @@ pub enum RenderCommand {
     /// Show a popup menu at position (x, y)
     ShowPopupMenu {
         /// Emacs frame_id of the owning top-level frame
-        emacs_frame_id: u64,
+        frame: FrameRef,
         x: f32,
         y: f32,
         items: Vec<PopupMenuItem>,
@@ -466,7 +494,7 @@ pub enum RenderCommand {
     /// Show a tooltip at position (x, y)
     ShowTooltip {
         /// Emacs frame_id of the owning top-level frame
-        emacs_frame_id: u64,
+        frame: FrameRef,
         x: f32,
         y: f32,
         text: String,
@@ -482,7 +510,7 @@ pub enum RenderCommand {
     /// Trigger visual bell flash
     VisualBell {
         /// Emacs frame_id of the flashing top-level frame
-        emacs_frame_id: u64,
+        frame: FrameRef,
     },
     /// Request window attention (urgency hint / taskbar flash)
     RequestAttention {
@@ -536,7 +564,7 @@ pub enum RenderCommand {
     },
     /// Create a new OS window for a top-level Emacs frame
     CreateWindow {
-        emacs_frame_id: u64,
+        frame: FrameRef,
         width: u32,
         height: u32,
         title: String,
@@ -544,11 +572,11 @@ pub enum RenderCommand {
     },
     /// Associate the already-created primary OS window with its real Emacs frame ID.
     AdoptPrimaryFrame {
-        emacs_frame_id: u64,
+        frame: FrameRef,
     },
     /// Destroy an OS window for a top-level Emacs frame
     DestroyWindow {
-        emacs_frame_id: u64,
+        frame: FrameRef,
     },
     /// Configure child frame visual style (drop shadow, rounded corners)
     SetChildFrameStyle {

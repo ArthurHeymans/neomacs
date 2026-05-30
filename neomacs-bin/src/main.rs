@@ -30,7 +30,7 @@ use neomacs_display_runtime::render_thread::{
     build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
-    EmacsComms, InputEvent as DisplayInputEvent, RenderCommand, ThreadComms,
+    EmacsComms, FrameRef, InputEvent as DisplayInputEvent, RenderCommand, ThreadComms,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
@@ -962,14 +962,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             )?;
             self.send_render_command(
                 RenderCommand::SetFrameGeometryHints {
-                    emacs_frame_id: 0,
+                    frame: FrameRef::Primary,
                     geometry_hints: request.geometry_hints,
                 },
                 "failed to update primary window geometry hints",
             )?;
             self.send_render_command(
                 RenderCommand::AdoptPrimaryFrame {
-                    emacs_frame_id: request.frame_id.0,
+                    frame: FrameRef::Frame(request.frame_id.0),
                 },
                 "failed to adopt primary GUI frame",
             )?;
@@ -982,7 +982,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         } else {
             self.send_render_command(
                 RenderCommand::CreateWindow {
-                    emacs_frame_id: request.frame_id.0,
+                    frame: FrameRef::Frame(request.frame_id.0),
                     width: request.width,
                     height: request.height,
                     title: title_string,
@@ -1015,27 +1015,27 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn destroy_gui_frame(&mut self, frame_id: neovm_core::window::FrameId) -> Result<(), String> {
-        let emacs_frame_id = if self.primary_frame_id == Some(frame_id) {
+        let frame = if self.primary_frame_id == Some(frame_id) {
             self.primary_frame_id = None;
-            0
+            FrameRef::Primary
         } else {
-            frame_id.0
+            FrameRef::Frame(frame_id.0)
         };
         self.last_window_titles
             .lock()
             .map_err(|err| format!("failed to forget GUI frame title: {err}"))?
             .remove(&frame_id);
         self.send_render_command(
-            RenderCommand::DestroyWindow { emacs_frame_id },
+            RenderCommand::DestroyWindow { frame },
             "failed to destroy GUI frame window",
         )
     }
 
     fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
-        let emacs_frame_id = if self.primary_frame_id == Some(menu.frame_id) {
-            0
+        let frame = if self.primary_frame_id == Some(menu.frame_id) {
+            FrameRef::Primary
         } else {
-            menu.frame_id.0
+            FrameRef::Frame(menu.frame_id.0)
         };
         let items = menu
             .entries
@@ -1051,7 +1051,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .collect();
         self.send_render_command(
             RenderCommand::ShowPopupMenu {
-                emacs_frame_id,
+                frame,
                 x: menu.x,
                 y: menu.y,
                 items,
@@ -1068,21 +1068,21 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
-        let emacs_frame_id = if self.primary_frame_id == Some(request.frame_id) {
-            0
+        let frame = if self.primary_frame_id == Some(request.frame_id) {
+            FrameRef::Primary
         } else {
-            request.frame_id.0
+            FrameRef::Frame(request.frame_id.0)
         };
         tracing::debug!(
             "PrimaryWindowDisplayHost::resize_gui_frame fid=0x{:x} route=0x{:x} size={}x{}",
             request.frame_id.0,
-            emacs_frame_id,
+            frame.raw_id(),
             request.width,
             request.height
         );
         self.send_render_command(
             RenderCommand::ResizeWindow {
-                emacs_frame_id,
+                frame,
                 width: request.width,
                 height: request.height,
                 geometry_hints: request.geometry_hints,
@@ -1097,15 +1097,15 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         frame_id: neovm_core::window::FrameId,
         geometry_hints: neovm_core::window::GuiFrameGeometryHints,
     ) -> Result<(), String> {
-        let emacs_frame_id =
+        let frame =
             if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
-                0
+                FrameRef::Primary
             } else {
-                frame_id.0
+                FrameRef::Frame(frame_id.0)
             };
         self.send_render_command(
             RenderCommand::SetFrameGeometryHints {
-                emacs_frame_id,
+                frame,
                 geometry_hints,
             },
             "failed to update GUI frame geometry hints",
@@ -1132,14 +1132,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         drop(cached_titles);
 
         let title_string = title.as_utf8_str().unwrap_or("Neomacs").to_owned();
-        let emacs_frame_id = if self.primary_frame_id == Some(frame_id) {
-            0
+        let frame = if self.primary_frame_id == Some(frame_id) {
+            FrameRef::Primary
         } else {
-            frame_id.0
+            FrameRef::Frame(frame_id.0)
         };
         self.send_render_command(
             RenderCommand::SetFrameWindowTitle {
-                emacs_frame_id,
+                frame,
                 title: title_string,
             },
             "failed to update GUI frame title",

@@ -53,9 +53,10 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetFrameWindowTitle {
-                emacs_frame_id,
+                frame,
                 title,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.set_title(title);
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
@@ -94,11 +95,12 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::ResizeWindow {
-                emacs_frame_id,
+                frame,
                 width,
                 height,
                 geometry_hints,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::debug!(
                     "RenderCommand::ResizeWindow frame_id=0x{:x} {}x{}",
                     emacs_frame_id,
@@ -117,9 +119,10 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::SetFrameGeometryHints {
-                emacs_frame_id,
+                frame,
                 geometry_hints,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::debug!(
                     "RenderCommand::SetFrameGeometryHints frame_id=0x{:x} base={}x{} inc={}x{}",
                     emacs_frame_id,
@@ -155,12 +158,13 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::CreateWindow {
-                emacs_frame_id,
+                frame,
                 width,
                 height,
                 title,
                 geometry_hints,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!(
                     "CreateWindow request: frame_id=0x{:x} {}x{} \"{}\"",
                     emacs_frame_id,
@@ -177,7 +181,8 @@ impl RenderApp {
                 );
                 Ok(())
             }
-            RenderCommand::DestroyWindow { emacs_frame_id } => {
+            RenderCommand::DestroyWindow { frame } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.frame_windows.take_primary_window();
@@ -187,7 +192,8 @@ impl RenderApp {
                 }
                 Ok(())
             }
-            RenderCommand::AdoptPrimaryFrame { emacs_frame_id } => {
+            RenderCommand::AdoptPrimaryFrame { frame } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
                 Ok(())

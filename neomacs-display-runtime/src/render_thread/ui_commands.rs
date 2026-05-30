@@ -145,7 +145,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::ShowPopupMenu {
-                emacs_frame_id,
+                frame,
                 x,
                 y,
                 items,
@@ -153,6 +153,7 @@ impl RenderApp {
                 fg,
                 bg,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!(
                     "ShowPopupMenu frame=0x{:x} at ({}, {}) with {} items",
                     emacs_frame_id,
@@ -192,7 +193,7 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::ShowTooltip {
-                emacs_frame_id,
+                frame,
                 x,
                 y,
                 text,
@@ -203,6 +204,7 @@ impl RenderApp {
                 bg_g,
                 bg_b,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::debug!("ShowTooltip frame=0x{:x} at ({}, {})", emacs_frame_id, x, y);
                 let (fs, lh, cw, screen_w, screen_h) = self
                     .frame_windows
@@ -257,7 +259,8 @@ impl RenderApp {
                 self.frame_windows.hide_top_level_tooltips();
                 Ok(())
             }
-            RenderCommand::VisualBell { emacs_frame_id } => {
+            RenderCommand::VisualBell { frame } => {
+                let emacs_frame_id = frame.raw_id();
                 let now = std::time::Instant::now();
                 let cursor_error_pulse_enabled = self.effects.cursor_error_pulse.enabled;
                 let edge_snap_enabled = self.effects.edge_snap.enabled;

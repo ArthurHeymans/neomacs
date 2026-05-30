@@ -15,7 +15,7 @@ use super::{
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
-use neomacs_display_runtime::thread_comm::RenderCommand;
+use neomacs_display_runtime::thread_comm::{FrameRef, RenderCommand};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
@@ -608,7 +608,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     assert!(commands.iter().any(|cmd| matches!(
         cmd,
         RenderCommand::SetFrameGeometryHints {
-            emacs_frame_id: 0,
+            frame: FrameRef::Primary,
             geometry_hints,
         } if *geometry_hints
             == GuiFrameGeometryHints {
@@ -623,7 +623,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     assert!(commands.iter().any(|cmd| matches!(
         cmd,
         RenderCommand::AdoptPrimaryFrame {
-            emacs_frame_id: 0x100000001,
+            frame: FrameRef::Frame(0x100000001),
         }
     )));
     assert!(host.primary_window_adopted);
@@ -663,12 +663,12 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
     assert!(matches!(
         commands[0],
         RenderCommand::DestroyWindow {
-            emacs_frame_id: 0x100000002,
+            frame: FrameRef::Frame(0x100000002),
         }
     ));
     assert!(matches!(
         commands[1],
-        RenderCommand::DestroyWindow { emacs_frame_id: 0 }
+        RenderCommand::DestroyWindow { frame: FrameRef::Primary }
     ));
     assert_eq!(host.primary_frame_id, None);
     let cached_titles = host.last_window_titles.lock().expect("title cache");
@@ -723,14 +723,14 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
     assert!(matches!(
         commands[0],
         RenderCommand::ShowPopupMenu {
-            emacs_frame_id: 0,
+            frame: FrameRef::Primary,
             ..
         }
     ));
     assert!(matches!(
         commands[1],
         RenderCommand::ShowPopupMenu {
-            emacs_frame_id: 0x100000002,
+            frame: FrameRef::Frame(0x100000002),
             ..
         }
     ));
@@ -944,7 +944,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         commands.iter().any(|cmd| matches!(
             cmd,
             RenderCommand::SetFrameGeometryHints {
-                emacs_frame_id: 0,
+                frame: FrameRef::Primary,
                 ..
             }
         )),
@@ -960,7 +960,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         commands.iter().any(|cmd| matches!(
             cmd,
             RenderCommand::ResizeWindow {
-                emacs_frame_id: 0,
+                frame: FrameRef::Primary,
                 ..
             }
         )),
@@ -1019,7 +1019,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         commands.iter().any(|cmd| matches!(
             cmd,
             RenderCommand::ResizeWindow {
-                emacs_frame_id: 0,
+                frame: FrameRef::Primary,
                 width: 1068,
                 height: 1386,
                 ..
@@ -1098,7 +1098,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         commands.iter().any(|cmd| matches!(
             cmd,
             RenderCommand::SetFrameWindowTitle {
-                emacs_frame_id: 0,
+                frame: FrameRef::Primary,
                 title
             } if title == "oracle-title"
         )),

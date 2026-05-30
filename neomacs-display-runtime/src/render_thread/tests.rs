@@ -1,3 +1,4 @@
+use crate::thread_comm::FrameRef;
 use super::RenderApp;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::thread_comm::{RenderCommand, ThreadComms, ToolBarItem};
@@ -142,7 +143,7 @@ fn destroy_primary_window_command_prevents_lifecycle_recreate() {
     let mut app = make_test_app();
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
-    app.handle_window_command(RenderCommand::DestroyWindow { emacs_frame_id: 0 })
+    app.handle_window_command(RenderCommand::DestroyWindow { frame: FrameRef::Primary })
         .expect("destroy primary window");
 
     assert!(app.frame_windows.primary_window().is_none());
@@ -159,7 +160,7 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
     app.handle_window_command(RenderCommand::DestroyWindow {
-        emacs_frame_id: 0x1000,
+        frame: FrameRef::Frame(0x1000),
     })
     .expect("destroy adopted primary window");
 
@@ -184,7 +185,7 @@ fn pre_bootstrap_primary_resize_updates_pending_size() {
     };
 
     app.handle_window_command(RenderCommand::ResizeWindow {
-        emacs_frame_id: 0,
+        frame: FrameRef::Primary,
         width: 1024,
         height: 768,
         geometry_hints,
@@ -236,7 +237,7 @@ fn adopt_primary_window_command_updates_existing_primary_render_state_identity()
     ));
 
     app.handle_window_command(RenderCommand::AdoptPrimaryFrame {
-        emacs_frame_id: 0x1000,
+        frame: FrameRef::Frame(0x1000),
     })
     .expect("adopt primary frame");
 
@@ -262,7 +263,7 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
     app.handle_ui_command(RenderCommand::ShowPopupMenu {
-        emacs_frame_id: 0x1000,
+        frame: FrameRef::Frame(0x1000),
         x: 10.0,
         y: 20.0,
         items: vec![PopupMenuItem {
@@ -367,7 +368,7 @@ fn primary_tooltip_command_marks_render_state_dirty() {
     ));
 
     app.handle_ui_command(RenderCommand::ShowTooltip {
-        emacs_frame_id: 0,
+        frame: FrameRef::Primary,
         x: 10.0,
         y: 20.0,
         text: "tip".to_string(),
@@ -424,7 +425,7 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
     ));
 
     app.handle_ui_command(RenderCommand::ShowPopupMenu {
-        emacs_frame_id: 0x2000,
+        frame: FrameRef::Frame(0x2000),
         x: 10.0,
         y: 20.0,
         items: vec![PopupMenuItem {
@@ -459,7 +460,7 @@ fn tooltip_for_unknown_secondary_does_not_fall_back_to_primary() {
     ));
 
     app.handle_ui_command(RenderCommand::ShowTooltip {
-        emacs_frame_id: 0x2000,
+        frame: FrameRef::Frame(0x2000),
         x: 10.0,
         y: 20.0,
         text: "secondary".to_string(),
@@ -495,7 +496,7 @@ fn adopted_primary_frame_id_targets_primary_visual_bell() {
     app.frame_windows.adopt_primary_frame_id(0x1000);
 
     app.handle_ui_command(RenderCommand::VisualBell {
-        emacs_frame_id: 0x1000,
+        frame: FrameRef::Frame(0x1000),
     })
     .expect("visual bell on adopted primary");
 

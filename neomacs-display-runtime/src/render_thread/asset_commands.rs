@@ -325,13 +325,14 @@ impl RenderApp {
                 Ok(())
             }
             RenderCommand::WebKitSetFloating {
-                emacs_frame_id,
+                frame,
                 id,
                 x,
                 y,
                 width,
                 height,
             } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!(
                     "WebKit set floating: id={} at ({},{}) {}x{}",
                     id,
@@ -370,7 +371,8 @@ impl RenderApp {
                 }
                 Ok(())
             }
-            RenderCommand::WebKitRemoveFloating { emacs_frame_id, id } => {
+            RenderCommand::WebKitRemoveFloating { frame, id } => {
+                let emacs_frame_id = frame.raw_id();
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
