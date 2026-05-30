@@ -13083,3 +13083,164 @@ fn ft_rho_face_text_property_line_number_line_begin_deep() {
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
+
+#[test]
+fn ft_sigma_face_with_text_property_read_after_insert_modify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 6 8 10))))
+      (goto-char 5) (insert "INSERTED")
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 3 6 10 14 17 20))))
+        (list v0 v1 (length (object-intervals (current-buffer))))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_font_lock_add_remove_add_same_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "CYCLE keyword test for font lock add remove cycle here end")
+    (font-lock-add-keywords nil '(("\\<\\(CYCLE\\)\\>" 1 font-lock-warning-face t)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (save-excursion (goto-char (point-min)) (search-forward "CYCLE") (get-text-property (match-beginning 0) 'face))))
+      (font-lock-remove-keywords nil '(("\\<\\(CYCLE\\)\\>" 1 font-lock-warning-face t)))
+      (font-lock-fontify-buffer)
+      (let ((v1 (save-excursion (goto-char (point-min)) (search-forward "CYCLE") (get-text-property (match-beginning 0) 'face))))
+        (font-lock-add-keywords nil '(("\\<\\(CYCLE\\)\\>" 1 '(:foreground "red" :weight bold) t)))
+        (font-lock-fontify-buffer)
+        (let ((v2 (save-excursion (goto-char (point-min)) (search-forward "CYCLE") (get-text-property (match-beginning 0) 'face))))
+          (list v0 v1 v2))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_overlay_priority_interleave_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Priority interleave overlay face test content text data here now final end")
+    (let ((ov1 (make-overlay 1 20))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 15 35))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 30))
+    (let ((ov3 (make-overlay 30 55))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 20))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 17 22 30 40 50 60)))))
+      (let ((v0 (funcall snap)))
+        (overlay-put ov1 'priority 50)
+        (let ((v1 (funcall snap)))
+          (overlay-put ov2 'priority 5) (overlay-put ov3 'priority 100)
+          (let ((v2 (funcall snap)))
+            (mapc #'delete-overlay (overlays-in 1 60))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_text_property_interval_with_many_splits() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+    (put-text-property 1 53 'face 'bold)
+    (list
+     'one-interval (length (object-intervals (current-buffer)))
+     'split-1 (progn (goto-char 10) (insert "Y") (length (object-intervals (current-buffer))))
+     'split-2 (progn (goto-char 20) (insert "Z") (length (object-intervals (current-buffer))))
+     'split-3 (progn (goto-char 30) (insert "W") (length (object-intervals (current-buffer))))
+     'delete-merge (progn (delete-region 15 25) (length (object-intervals (current-buffer))))
+     'spot-faces (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 10 15 25 30 40 53))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_font_lock_fontify_region_unfontify_recheck() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun recheck-test (x) (+ x 1))\n")
+    (font-lock-fontify-region 1 (point-max))
+    (let ((v0 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 28))))
+      (font-lock-unfontify-region 1 (point-max))
+      (let ((v1 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 28))))
+        (font-lock-fontify-region 1 (point-max))
+        (let ((v2 (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 28))))
+          (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_with_face_and_invisible_toggle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Visible text HIDDEN here visible again")
+    (put-text-property 1 13 'face 'bold)
+    (put-text-property 13 23 'face 'italic :invisible t)
+    (put-text-property 23 37 'face 'underline)
+    (list
+     'faces-invisible (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (invisible-p pos))) '(1 5 13 18 23 28 36))
+     'remove-invisible (progn (remove-text-properties 13 23 '(invisible nil)) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 13 18 23 28 36)))
+     're-add-invisible (progn (put-text-property 13 23 'invisible t) (put-text-property 13 23 'face '(:foreground "red")) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 5 13 18 23 28 36))))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_overlay_make_buffer_copy_different_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay buffer copy different props face test content data here end now")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'priority 50)
+      (overlay-put ov 'help-echo "test"))
+    (let ((ov2 (make-overlay 35 55)))
+      (overlay-put ov2 'face '(:foreground "red" :weight bold))
+      (overlay-put ov2 'priority 25))
+    (list
+     'faces-with-overlays (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 20 30 35 40 45 55 60))
+     'ov1-props (length (overlay-properties ov))
+     'ov2-props (length (overlay-properties ov2))
+     (progn (mapc #'delete-overlay (overlays-in 1 60)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_sigma_face_set_attribute_with_relative_height_values() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-rel-height-face) (error nil))
+  (list
+   'default-height (face-attribute 'default :height nil 'default-on)
+   'set-height-1.0 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 1.0) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-height-0.5 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 0.5) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-height-2.0 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 2.0) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-height-int-120 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 120) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'set-height-int-200 (condition-case nil (progn (set-face-attribute 'my-rel-height-face nil :height 200) (face-attribute 'my-rel-height-face :height nil 'default-on)) (error 'no))
+   'face-attrib-relative-p (if (fboundp 'face-attribute-relative-p) (face-attribute-relative-p :height) 'no-func)))))"##,
+    );
+}
