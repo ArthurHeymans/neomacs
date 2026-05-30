@@ -6103,3 +6103,146 @@ fn ft_max_face_with_number_conversion_faces() {
                             'no-bound))))"##,
     );
 }
+
+#[test]
+fn ft_ultra_face_buffer_invisibility_spec_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Visible text HIDDEN text visible")
+    (put-text-property 1 14 'face 'bold)
+    (put-text-property 14 20 'face 'italic)
+    (put-text-property 20 28 'face 'underline)
+    (add-to-invisibility-spec '(my-spec . t))
+    (put-text-property 14 20 'invisible 'my-spec)
+    (list
+     'invisible-region (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (get-text-property pos 'invisible) (invisible-p pos))) '(1 10 14 17 20 25))
+     'buffer-invisibility-spec buffer-invisibility-spec
+     'remove-invisible (progn
+                         (remove-from-invisibility-spec '(my-spec . t))
+                         (put-text-property 14 20 'invisible nil)
+                         (list 'after-remove (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face) (invisible-p pos))) '(1 10 14 17 20 25))))))))"##,
+    );
+}
+
+#[test]
+fn ft_ultra_face_with_overlay_arrow_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay arrow face test buffer text")
+    (put-text-property 1 36 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 10 20)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'arrow-position 15)
+      (overlay-put ov 'arrow-string "=>"))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(5 10 15 20 25 35))
+     'arrow-pos (overlay-get ov 'arrow-position)
+     'arrow-string (overlay-get ov 'arrow-string)
+     (progn (delete-overlay ov) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_ultra_face_overlay_priority_sort_stable_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay priority sort stable test text zone here now")
+    (let ((ov1 (make-overlay 1 15)))
+      (overlay-put ov1 'face '(:background "red"))
+      (overlay-put ov1 'priority 50))
+    (let ((ov2 (make-overlay 5 25)))
+      (overlay-put ov2 'face '(:foreground "green"))
+      (overlay-put ov2 'priority 50))
+    (let ((ov3 (make-overlay 20 40)))
+      (overlay-put ov3 'face '(:foreground "blue"))
+      (overlay-put ov3 'priority 100))
+    (let ((ov4 (make-overlay 30 52)))
+      (overlay-put ov4 'face '(:background "yellow"))
+      (overlay-put ov4 'priority 25))
+    (list
+     'same-priority-sort (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35 40 45 50))
+     'overlays-by-priority (sort (overlays-in 1 52) (lambda (a b) (> (or (overlay-get a 'priority) 0) (or (overlay-get b 'priority) 0))))
+     'overlay-count (length (overlays-in 1 52))
+     (progn (mapc #'delete-overlay (overlays-in 1 52)) 'cleaned))))"##,
+    );
+}
+
+#[test]
+fn ft_ultra_face_intervals_with_many_property_changes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (dotimes (i 20) (insert (make-string 3 (+ ?A i))))
+    (let ((colors '(:foreground "red" :foreground "green" :foreground "blue"
+                    :foreground "orange" :foreground "purple")))
+      (let ((i 0))
+        (while (< i 60)
+          (put-text-property (1+ i) (min (+ i 4) 61) 'face (nth (mod (/ i 3) 5) colors))
+          (setq i (+ i 3)))))
+    (list
+     'face-at-positions (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 4 7 10 15 20 30 40 50 59))
+     'interval-count (length (object-intervals (current-buffer)))
+     'next-prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face)) '(1 5 10 20 30 50))))))"##,
+    );
+}
+
+#[test]
+fn ft_ultra_face_font_lock_fontified_property_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Fontified property tracking test")
+    (list
+     'before-fontify (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30))
+     'after-fontify (progn
+                      (font-lock-fontify-buffer)
+                      (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30)))
+     'after-unfontify (progn
+                        (font-lock-unfontify-buffer)
+                        (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified))) '(1 10 20 30)))
+     'font-lock-fontified-bound (boundp 'font-lock-fontified)
+     (if (boundp 'font-lock-fontified) font-lock-fontified 'no-bound)
+     (if (boundp 'font-lock-fontify-region-function)
+         'has-region-func
+       'no-region-func)
+     (if (boundp 'font-lock-unfontify-region-function)
+         'has-unfontify-func
+       'no-unfontify-func)))))"##,
+    );
+}
+
+#[test]
+fn ft_ultra_face_set_face_attribute_with_face_spec_plist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-spec-face) (error nil))
+  (list
+   'set-with-plist (condition-case nil (progn (set-face-attribute 'my-spec-face nil :foreground "red" :weight 'bold :inherit 'italic) 'ok) (error 'no))
+   'get-fg (condition-case nil (face-attribute 'my-spec-face :foreground nil 'default-on) (error 'no))
+   'get-weight (condition-case nil (face-attribute 'my-spec-face :weight nil 'default-on) (error 'no))
+   'get-inherit (condition-case nil (face-attribute 'my-spec-face :inherit nil 'default-on) (error 'no))
+   'set-more (condition-case nil (progn (set-face-attribute 'my-spec-face nil :height 140 :slant 'italic :underline '(:color "red")) 'ok) (error 'no))
+   'get-height (condition-case nil (face-attribute 'my-spec-face :height nil 'default-on) (error 'no))
+   'get-slant (condition-case nil (face-attribute 'my-spec-face :slant nil 'default-on) (error 'no))
+   'get-underline (condition-case nil (face-attribute 'my-spec-face :underline nil 'default-on) (error 'no))
+   'reset (condition-case nil (progn (set-face-attribute 'my-spec-face nil :foreground 'unspecified :weight 'unspecified :inherit 'unspecified :height 'unspecified :slant 'unspecified :underline 'unspecified) 'ok) (error 'no)))))"##,
+    );
+}
