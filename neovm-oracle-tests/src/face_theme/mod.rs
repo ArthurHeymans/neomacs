@@ -14903,3 +14903,163 @@ fn ft_hyperspace_face_overlay_string_length_and_face_attrs() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_voidspace_face_overlay_property_prio_change_check_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov1 (make-overlay 1 15))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 10 25))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 30))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 15 20 25 30 35)))))
+      (let ((v0 (funcall snap)))
+        (overlay-put ov1 'priority 50)
+        (let ((v1 (funcall snap)))
+          (overlay-put ov2 'priority 5)
+          (let ((v2 (funcall snap)))
+            (mapc #'delete-overlay (overlays-in 1 35))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_font_lock_enable_fontify_buffer_immediate() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (require 'org)
+  (with-temp-buffer
+    (let ((org-fontify-whole-heading-line t))
+      (org-mode)
+      (insert "* TODO Immediate fontify\nBody.\n\n")
+      (font-lock-ensure (point-min) (point-max))
+      (list
+       'face-at-heading (save-excursion (goto-char (point-min)) (search-forward "TODO") (get-text-property (match-beginning 0) 'face))
+       'fontified-at-1 (get-text-property 1 'fontified)
+       'face-at-body (save-excursion (goto-char (point-min)) (search-forward "Body") (get-text-property (match-beginning 0) 'face)))
+      ))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_face_text_properties_after_add_face_increment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Add face incrementally test buffer content text data here now end")
+    (list
+     'none (get-text-property 1 'face)
+     'add-bold (progn (put-text-property 1 20 'face 'bold) (get-text-property 1 'face))
+     'add-italic-override (progn (put-text-property 1 30 'face 'italic) (get-text-property 15 'face))
+     'add-underline-end (progn (put-text-property 40 58 'face 'underline) (get-text-property 50 'face))
+     'add-red-mid (progn (put-text-property 25 40 'face '(:foreground "red")) (get-text-property 30 'face))
+     'all-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 15 25 30 40 50 57)))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_face_set_face_stipple_attribute_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'stipple-default (condition-case nil (face-attribute 'default :stipple nil 'default-on) (error 'no))
+   'stipple-bold (condition-case nil (face-attribute 'bold :stipple nil 'default-on) (error 'no))
+   'stipple-italic (condition-case nil (face-attribute 'italic :stipple nil 'default-on) (error 'no))
+   (if (fboundp 'set-face-stipple)
+       (condition-case nil (set-face-stipple 'default "gray" nil) (error 'no-set-stipple))
+     'no-set-stipple-func)
+   (if (fboundp 'face-stipple)
+       (condition-case nil (face-stipple 'default nil 'default-on) (error 'no-face-stipple))
+     'no-face-stipple-func))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_face_overlay_move_to_start_of_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay move to start of buffer face test content text data here")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (list
+       'initial (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 20 30 40 54))
+       'move-to-start (progn (move-overlay ov 1 15) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 15 20 30 40 54)))
+       'move-to-end (progn (move-overlay ov 40 54) (mapcar (lambda (pos) (goto-char pos) (get-char-property pos 'face)) '(1 5 10 20 30 40 45 53 54)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_font_lock_fontify_keywords_with_highlight_override() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "HIGHLIGHT keyword test with font lock keyword highlight override check")
+    (font-lock-add-keywords nil
+                            '(("\\<\\(HIGHLIGHT\\)\\>" 0 font-lock-warning-face t)
+                              ("\\<\\(keyword\\)\\>" 0 '(:foreground "red" :weight bold) t)
+                              ("\\<\\(override\\)\\>" 0 '(:foreground "blue" :slant italic) t)))
+    (font-lock-fontify-buffer)
+    (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (list n (get-text-property (match-beginning 0) 'face)))) '("HIGHLIGHT" "keyword" "override"))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_face_overlay_before_string_empty_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Before string empty overlay face test content text data here end")
+    (let ((ov1 (make-overlay 10 30)))
+      (overlay-put ov1 'face '(:background "yellow"))
+      (overlay-put ov1 'before-string ""))
+    (let ((ov2 (make-overlay 35 50)))
+      (overlay-put ov2 'face '(:background "cyan"))
+      (overlay-put ov2 'after-string ""))
+    (list
+     'ov1-before-str (overlay-get ov1 'before-string)
+     'ov2-after-str (overlay-get ov2 'after-string)
+     'face-at-ov1 (get-char-property 20 'face)
+     'face-at-ov2 (get-char-property 40 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_voidspace_face_text_property_single_property_interval() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Single property interval face test buffer content text data now end final")
+    (put-text-property 1 63 'face '(:foreground "blue"))
+    (list
+     'interval-count (length (object-intervals (current-buffer)))
+     'face-at-1 (get-text-property 1 'face)
+     'face-at-30 (get-text-property 30 'face)
+     'face-at-62 (get-text-property 62 'face)
+     'next-prop-change (next-single-property-change 1 'face nil 63)
+     'prev-prop-change (previous-single-property-change 63 'face nil 1)
+     'multiple-reads-same (equal (get-text-property 1 'face) (get-text-property 30 'face) (get-text-property 60 'face)))))"##,
+    );
+}
