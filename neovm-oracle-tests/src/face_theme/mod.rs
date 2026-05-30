@@ -10829,3 +10829,179 @@ fn ft_delta_face_overlay_with_category_and_face_together_deep() {
      (progn (mapc #'delete-overlay (overlays-in 1 55)) 'cleaned))))"##,
     );
 }
+
+#[test]
+fn ft_epsilon_face_text_property_any_with_complex_predicates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 11 21 'face '(:foreground "red"))
+    (put-text-property 21 31 'face 'underline)
+    (put-text-property 31 36 'face '(:background "yellow"))
+    (list
+     'find-bold (text-property-any 1 36 'face 'bold)
+     'find-red (text-property-any 1 36 'face '(:foreground "red"))
+     'find-underline (text-property-any 1 36 'face 'underline)
+     'find-complex (text-property-any 1 36 'face '(:background "yellow"))
+     'find-none (text-property-any 1 36 'face 'italic)
+     'not-all-bold (text-property-not-all 1 36 'face 'bold)
+     'single-prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 36)) '(1 11 21 31))
+     'prev-prop-changes (mapcar (lambda (pos) (previous-single-property-change pos 'face nil 1)) '(11 21 31 36)))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_font_lock_fontify_with_buffer_local_var_set_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (setq-local font-lock-verbose t)
+    (insert "(defun verbose-test (x) (+ x 1))\n")
+    (font-lock-ensure (point-min) (point-max))
+    (list
+     'font-lock-verbose-local font-lock-verbose
+     'defun-face (save-excursion (goto-char (point-min)) (search-forward "defun") (get-text-property (match-beginning 0) 'face))
+     'verbose-test-face (save-excursion (goto-char (point-min)) (search-forward "verbose-test") (get-text-property (match-beginning 0) 'face))
+     'x-face (save-excursion (goto-char (point-min)) (search-forward " x") (get-text-property (match-beginning 0) 'face))
+     'fontified-after (get-text-property 1 'fontified))
+    (kill-local-variable 'font-lock-verbose))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_overlay_modification_property_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (defvar my-ov-mod-list nil)
+  (defun my-ov-collector (ov after beg end &optional len)
+    (push (list 'modified after beg end len) my-ov-mod-list))
+  (with-temp-buffer
+    (insert "Overlay modification property change face test buffer text")
+    (put-text-property 1 56 'face '(:foreground "blue"))
+    (let ((ov (make-overlay 10 40)))
+      (overlay-put ov 'face '(:background "yellow"))
+      (overlay-put ov 'modification-hooks (list 'my-ov-collector)))
+    (list
+     'initial-mod-list (length my-ov-mod-list)
+     'face-before-mod (get-char-property 20 'face)
+     (progn (goto-char 25) (insert "INSERTED") (list 'after-insert-count (length my-ov-mod-list) 'face-after (get-char-property 25 'face)))
+     (progn (delete-region 15 35) (list 'after-delete-count (length my-ov-mod-list) 'face-after-delete (get-char-property 15 'face)))
+     'final-mod-list-len (length my-ov-mod-list)
+     (progn (delete-overlay ov) (setq my-ov-mod-list nil) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_set_attribute_foreground_unspecified_vs_nil_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-unspec-nil-face) (error nil))
+  (list
+   'initial-fg (condition-case nil (face-foreground 'my-unspec-nil-face nil 'default-on) (error 'no))
+   'set-fg-red (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face "red" nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no))
+   'set-fg-unspecified (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face 'unspecified nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no))
+   'set-fg-nil (condition-case nil (progn (set-face-foreground 'my-unspec-nil-face nil nil) (face-foreground 'my-unspec-nil-face nil 'default-on)) (error 'no))
+   'set-weight-bold (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight 'bold) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-unspecified (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight 'unspecified) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'set-weight-nil (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :weight nil) (face-attribute 'my-unspec-nil-face :weight nil 'default-on)) (error 'no))
+   'final-reset (condition-case nil (progn (set-face-attribute 'my-unspec-nil-face nil :foreground 'unspecified :weight 'unspecified) 'reset-done) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_font_lock_remove_all_keywords_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "Remove ALL keywords from font-lock test buffer content text")
+    (font-lock-add-keywords nil '(("\\<\\(Remove\\)\\>" 1 font-lock-warning-face t) ("\\<\\(ALL\\)\\>" 1 '(:foreground "red") t) ("\\<\\(keywords\\)\\>" 1 '(:foreground "blue") t) ("\\<\\(buffer\\)\\>" 1 '(:foreground "green") t)))
+    (font-lock-fontify-buffer)
+    (let ((v0 (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("Remove" "ALL" "keywords" "buffer"))))
+      ;; Remove ALL keywords
+      (font-lock-remove-keywords nil '(("\\<\\(Remove\\)\\>" 1 font-lock-warning-face t) ("\\<\\(ALL\\)\\>" 1 '(:foreground "red") t) ("\\<\\(keywords\\)\\>" 1 '(:foreground "blue") t) ("\\<\\(buffer\\)\\>" 1 '(:foreground "green") t)))
+      (font-lock-fontify-buffer)
+      (let ((v1 (mapcar (lambda (n) (save-excursion (goto-char (point-min)) (search-forward n) (get-text-property (match-beginning 0) 'face))) '("Remove" "ALL" "keywords" "buffer"))))
+        (list v0 v1)))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_overlay_priority_change_and_face_recalculation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Overlay priority recalculation face test buffer content text area")
+    (let ((ov1 (make-overlay 1 30))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 10))
+    (let ((ov2 (make-overlay 15 45))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 20))
+    (let ((ov3 (make-overlay 30 55))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 30))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 10 15 20 30 40 50 55)))))
+      (let ((v0 (funcall snap)))
+        ;; Flip priorities
+        (overlay-put ov1 'priority 100) (overlay-put ov2 'priority 50) (overlay-put ov3 'priority 1)
+        (let ((v1 (funcall snap)))
+          ;; Change faces
+          (overlay-put ov1 'face '(:foreground "purple" :weight bold))
+          (overlay-put ov2 'face '(:underline t :slant italic))
+          (let ((v2 (funcall snap)))
+            (mapc #'delete-overlay (overlays-in 1 55))
+            (list v0 v1 v2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_with_string_width_calculation_and_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "String width with face properties αβγδεζηθ")
+    (put-text-property 1 32 'face 'bold)
+    (list
+     'string-width-bold (string-width (buffer-substring 1 32))
+     'string-width-no-props (string-width (buffer-substring-no-properties 1 32))
+     'string-bytes (string-bytes (buffer-string))
+     'length (length (buffer-string))
+     'face-at-1 (get-text-property 1 'face)
+     'char-widths (mapcar (lambda (pos) (goto-char pos) (char-width (char-after pos))) '(1 2 3 30 31 32))
+     'multibyte-p (multibyte-string-p (buffer-string))))))"##,
+    );
+}
+
+#[test]
+fn ft_epsilon_face_font_lock_inhibit_font_lock_flag() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'font-lock-mode-fbound (fboundp 'font-lock-mode)
+   'inhibit-font-lock-bound (boundp 'inhibit-font-lock)
+   'inhibit-font-lock-value (if (boundp 'inhibit-font-lock) inhibit-font-lock 'no-bound)
+   'font-lock-after-change-function (if (boundp 'font-lock-after-change-function) (fboundp 'font-lock-after-change-function) 'no-bound)
+   'font-lock-fontify-region-function (if (boundp 'font-lock-fontify-region-function) (fboundp 'font-lock-fontify-region-function) 'no-bound)
+   'font-lock-unfontify-region-function (if (boundp 'font-lock-unfontify-region-function) (fboundp 'font-lock-unfontify-region-function) 'no-bound)
+   'font-lock-fontify-buffer-function (if (boundp 'font-lock-fontify-buffer-function) (fboundp 'font-lock-fontify-buffer-function) 'no-bound)
+   'font-lock-unfontify-buffer-function (if (boundp 'font-lock-unfontify-buffer-function) (fboundp 'font-lock-unfontify-buffer-function) 'no-bound))))"##,
+    );
+}
