@@ -22537,3 +22537,186 @@ fn ft_limit_face_face_set_stipple_deep() {
    'stipple-all-attributes (condition-case nil (face-all-attributes 'my-stipple-face nil) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_more_edge_face_overlay_four_layers_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (let ((ov1 (make-overlay 1 11))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 1 11))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 2))
+    (let ((ov3 (make-overlay 1 11))) (overlay-put ov3 'face '(:foreground "blue")) (overlay-put ov3 'priority 3))
+    (let ((ov4 (make-overlay 1 11))) (overlay-put ov4 'face '(:foreground "yellow")) (overlay-put ov4 'priority 4))
+    (list
+     'layers (get-char-property 5 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 11)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_font_lock_fontify_region_multiple_times() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun multi-fontify (a) (+ a 1))\n")
+    (font-lock-fontify-buffer)
+    (let ((v0 (get-text-property 7 'face)))
+      (font-lock-fontify-buffer)
+      (list
+       'first (get-text-property 7 'face)
+       'equal-to-v0 (equal v0 (get-text-property 7 'face))
+       'fontified (get-text-property 1 'fontified)
+       'double-fontify-no-change (progn (font-lock-fontify-buffer) (get-text-property 7 'face))
+       'fontified-stable (get-text-property 1 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_text_property_add_face_to_face_merge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 3 16 'face 'italic)
+    (list
+     'merged-region-pos5 (get-text-property 5 'face)
+     'bold-only-pos2 (get-text-property 2 'face)
+     'italic-only-pos15 (get-text-property 15 'face)
+     'interval-count (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_overlay_face_with_before_after_strings_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'before-string "»")
+      (overlay-put ov 'after-string "«")
+      (overlay-put ov 'face 'bold)
+      (list
+       'face-at-pos3 (get-char-property 3 'face)
+       'face-at-before (get-char-property 1 'face)
+       'before-str (overlay-get ov 'before-string)
+       'after-str (overlay-get ov 'after-string)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_set_face_inverse_video_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-inverse-face) (error nil))
+  (list
+   'default (condition-case nil (face-attribute 'default :inverse-video nil 'default-on) (error 'no))
+   'set (condition-case nil (progn (set-face-attribute 'my-inverse-face nil :inverse-video t) (face-attribute 'my-inverse-face :inverse-video nil 'default-on)) (error 'no))
+   'set-back (condition-case nil (progn (set-face-attribute 'my-inverse-face nil :inverse-video nil) (face-attribute 'my-inverse-face :inverse-video nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_font_lock_fontify_with_extend_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setq my-var 42)\n\n(setq other-var 99)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'var1-face (save-excursion (goto-char (point-min)) (search-forward "my-var") (get-text-property (match-beginning 0) 'fontified))
+     'blank-line-face (save-excursion (goto-char (point-min)) (search-forward "\n\n") (get-text-property (match-beginning 0) 'face))
+     'second-var-face (save-excursion (goto-char (point-min)) (search-forward "other-var") (get-text-property (match-beginning 0) 'face))
+     'fontified-t (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_overlay_priority_change_and_revert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 1 21))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 5))
+    (let ((ov2 (make-overlay 1 21))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 10))
+    (list
+     'initial (get-char-property 5 'face)
+     'raise-ov1 (progn (overlay-put ov1 'priority 15) (get-char-property 5 'face))
+     'revert (progn (overlay-put ov1 'priority 5) (get-char-property 5 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_text_property_next_property_from_mid_interval() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAABBBCCC")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 10 'face 'underline)
+    (list
+     'next-bold-to-italic (next-single-property-change 2 'face)
+     'next-italic-to-underline (next-single-property-change 5 'face)
+     'next-to-nil (next-single-property-change 8 'face)
+     'prev-nil-to-bold (previous-single-property-change 10 'face)
+     'prev-underline-to-italic (previous-single-property-change 8 'face)
+     'prev-italic-to-bold (previous-single-property-change 5 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_face_set_family_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-family-face) (error nil))
+  (list
+   'default-family (condition-case nil (face-attribute 'default :family nil 'default-on) (error 'no))
+   'set-mono (condition-case nil (progn (set-face-attribute 'my-family-face nil :family "Monospace") (face-attribute 'my-family-face :family nil 'default-on)) (error 'no))
+   'set-spec (condition-case nil (progn (set-face-attribute 'my-family-face nil :family "Courier New") (face-attribute 'my-family-face :family nil 'default-on)) (error 'no))
+   'all-attrs (condition-case nil (face-all-attributes 'my-family-face) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_more_edge_face_overlay_face_plist_vs_symbol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'set-bold (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'set-plist (progn (overlay-put ov 'face '(:weight bold :foreground "red")) (overlay-get ov 'face))
+       'set-back-symbol (progn (overlay-put ov 'face 'italic) (overlay-get ov 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
