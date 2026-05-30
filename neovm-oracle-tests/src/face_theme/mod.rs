@@ -27351,3 +27351,75 @@ fn ft_hammer_face_text_property_face_overlay_prop_priority_check() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_strike_face_overlay_face_multiple_reads_in_loop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'ten-reads (let ((results nil)) (dotimes (i 10) (push (overlay-get ov 'face) results)) (nreverse results))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_strike_font_lock_fontify_defcustom_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defcustom my-var t\n  \"Documentation\"\n  :type 'boolean\n  :group 'my-group)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defcustom-face (save-excursion (goto-char (point-min)) (search-forward "defcustom") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_strike_face_overlay_zero_to_one_char_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "A")
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 1)
+      (insert "X")
+      (list
+       'expanded-start (overlay-start ov)
+       'expanded-end (overlay-end ov)
+       'face-pos1 (get-char-property 1 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_strike_face_text_property_next_prop_after_removal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 11 16 'face 'italic)
+    (remove-text-properties 1 6 '(face nil))
+    (list
+     'after-remove-pos1 (get-text-property 1 'face)
+     'next-face-from-pos1 (next-single-property-change 1 'face)
+     'face-at-pos12 (get-text-property 12 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
