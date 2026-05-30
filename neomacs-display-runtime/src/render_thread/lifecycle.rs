@@ -1,4 +1,5 @@
 use super::RenderApp;
+use super::frame_windows::FrameLifecycle;
 use super::state::{
     RenderGpuContext, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
@@ -93,16 +94,13 @@ impl RenderApp {
             );
             self.resumed_seen = true;
         }
-        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| ws.native.is_none());
+        let needs_native = self.frame_windows.primary_window().is_some_and(|ws| !ws.lifecycle.is_active());
         if needs_native {
             let (width, height, title, decorations_enabled) = {
                 let primary = self.frame_windows.primary_window().unwrap();
-                (
-                    primary.pending_width,
-                    primary.pending_height,
-                    primary.pending_chrome.title.clone(),
-                    primary.pending_chrome.decorations_enabled,
-                )
+                let (w, h) = primary.lifecycle.native_size();
+                let chrome = primary.lifecycle.chrome();
+                (w, h, chrome.title.clone(), chrome.decorations_enabled)
             };
             let attrs = Window::default_attributes()
                 .with_title(&title)
@@ -124,7 +122,12 @@ impl RenderApp {
                     let effective_scale = effective_window_scale_factor(raw_scale_factor);
                     {
                         let primary = self.frame_windows.primary_window_mut().unwrap();
-                        primary.pending_scale_factor = effective_scale;
+                        match &mut primary.lifecycle {
+                            FrameLifecycle::Pending { scale_factor, .. } => {
+                                *scale_factor = effective_scale;
+                            }
+                            _ => {}
+                        }
                     }
                     tracing::info!(
                         "Display scale factor: raw={} effective={}",
@@ -135,8 +138,13 @@ impl RenderApp {
                     let phys = window.inner_size();
                     {
                         let primary = self.frame_windows.primary_window_mut().unwrap();
-                        primary.pending_width = phys.width;
-                        primary.pending_height = phys.height;
+                        match &mut primary.lifecycle {
+                            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+                                *pw = phys.width;
+                                *ph = phys.height;
+                            }
+                            _ => {}
+                        }
                     }
                     tracing::info!(
                         "Render thread: window created (physical {}x{})",
@@ -146,7 +154,7 @@ impl RenderApp {
 
                     self.init_wgpu(event_loop, window.clone());
 
-                    if let Some(geometry_hints) = self.frame_windows.primary_window().unwrap().pending_geometry_hints {
+                    if let Some(geometry_hints) = self.frame_windows.primary_window().unwrap().lifecycle.geometry_hints() {
                         apply_window_geometry_hints(&window, geometry_hints);
                     }
 

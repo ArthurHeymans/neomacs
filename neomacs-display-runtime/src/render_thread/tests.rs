@@ -193,7 +193,7 @@ fn pre_bootstrap_primary_resize_updates_pending_size() {
     assert_eq!(app.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()), (1024, 768));
     let primary = app.frame_windows.primary_window().unwrap();
     assert_eq!(
-        primary.pending_geometry_hints,
+        primary.lifecycle.geometry_hints(),
         Some(geometry_hints)
     );
 }

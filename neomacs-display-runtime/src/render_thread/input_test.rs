@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
-use crate::render_thread::frame_windows::GuiFrameRenderState;
+use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
 use crate::thread_comm::{MenuBarItem, ToolBarItem};
 use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
@@ -34,7 +34,9 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
     );
     {
         let primary = app.frame_windows.primary_window_mut().unwrap();
-        primary.pending_scale_factor = scale_factor;
+        if let FrameLifecycle::Pending { scale_factor: sf, .. } = &mut primary.lifecycle {
+            *sf = scale_factor;
+        }
     }
     app
 }

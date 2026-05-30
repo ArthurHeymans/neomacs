@@ -159,19 +159,40 @@ impl ChromeState {
 
 /// Per-window state for a top-level GUI frame.
 ///
-/// `native` is `None` until the winit window is created (at `resumed`),
-/// allowing the render state to exist and accumulate overlay data eagerly.
+/// The frame window lifecycle is modeled as an explicit state machine.
+/// Before `resumed`, operations queue into [`FrameLifecycle::Pending`].
+/// After the winit window is created, they apply directly through
+/// [`FrameLifecycle::Active`].
 pub(crate) struct GuiFrameWindowState {
-    pub native: Option<GuiFrameNativeWindowState>,
+    pub(super) lifecycle: FrameLifecycle,
     pub render: GuiFrameRenderState,
-    pub pending_width: u32,
-    pub pending_height: u32,
-    pub pending_scale_factor: f64,
-    pub pending_mouse_hidden_for_typing: bool,
-    pub pending_ime_enabled: bool,
-    pub(super) pending_last_ime_cursor_area: Option<ImeCursorArea>,
-    pub(super) pending_chrome: WindowChrome,
-    pub pending_geometry_hints: Option<GuiFrameGeometryHints>,
+}
+
+/// Window lifecycle state machine.
+///
+/// Mirrors GNU Emacs's frame lifecycle: created, mapped (active),
+/// unmapped / destroyed.  Operations are deferred until the native
+/// window exists, eliminating ad-hoc `if native.is_some()` checks
+/// scattered across ~30 methods.
+pub(super) enum FrameLifecycle {
+    /// Window before `resumed` — all operations queue here.
+    Pending {
+        width: u32,
+        height: u32,
+        scale_factor: f64,
+        mouse_hidden_for_typing: bool,
+        ime_enabled: bool,
+        last_ime_cursor_area: Option<ImeCursorArea>,
+        chrome: WindowChrome,
+        geometry_hints: Option<GuiFrameGeometryHints>,
+    },
+    /// Window with a live winit native window and wgpu surface.
+    Active {
+        native: GuiFrameNativeWindowState,
+        mouse_hidden_for_typing: bool,
+        ime_enabled: bool,
+        last_ime_cursor_area: Option<ImeCursorArea>,
+    },
 }
 
 impl GuiFrameRenderState {
@@ -695,55 +716,173 @@ impl GuiFrameRenderState {
     }
 }
 
+impl FrameLifecycle {
+    pub fn native(&self) -> Option<&GuiFrameNativeWindowState> {
+        match self {
+            Self::Active { native, .. } => Some(native),
+            _ => None,
+        }
+    }
+
+    pub fn native_mut(&mut self) -> Option<&mut GuiFrameNativeWindowState> {
+        match self {
+            Self::Active { native, .. } => Some(native),
+            _ => None,
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+
+    pub fn window(&self) -> Option<&Arc<Window>> {
+        self.native().map(|n| &n.window)
+    }
+
+    pub fn native_size(&self) -> (u32, u32) {
+        match self {
+            Self::Active { native, .. } => (native.width, native.height),
+            Self::Pending { width, height, .. } => (*width, *height),
+        }
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        match self {
+            Self::Active { native, .. } => native.scale_factor,
+            Self::Pending { scale_factor, .. } => *scale_factor,
+        }
+    }
+
+    pub fn native_scale_factor(&self) -> f64 {
+        self.native().map_or(1.0, |n| n.scale_factor)
+    }
+
+    pub fn chrome(&self) -> &WindowChrome {
+        match self {
+            Self::Active { native, .. } => &native.chrome,
+            Self::Pending { chrome, .. } => chrome,
+        }
+    }
+
+    pub fn chrome_mut(&mut self) -> &mut WindowChrome {
+        match self {
+            Self::Active { native, .. } => &mut native.chrome,
+            Self::Pending { chrome, .. } => chrome,
+        }
+    }
+
+    pub fn ime_enabled(&self) -> bool {
+        match self {
+            Self::Active { ime_enabled, .. } => *ime_enabled,
+            Self::Pending { ime_enabled, .. } => *ime_enabled,
+        }
+    }
+
+    pub fn set_ime_enabled(&mut self, enabled: bool) {
+        match self {
+            Self::Active { ime_enabled: ie, .. } => *ie = enabled,
+            Self::Pending { ime_enabled: ie, .. } => *ie = enabled,
+        }
+    }
+
+    pub fn mouse_hidden_for_typing(&self) -> bool {
+        match self {
+            Self::Active { mouse_hidden_for_typing: m, .. } => *m,
+            Self::Pending { mouse_hidden_for_typing: m, .. } => *m,
+        }
+    }
+
+    pub fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
+        match self {
+            Self::Active { mouse_hidden_for_typing: m, .. } => *m = hidden,
+            Self::Pending { mouse_hidden_for_typing: m, .. } => *m = hidden,
+        }
+    }
+
+    pub fn last_ime_cursor_area(&self) -> Option<ImeCursorArea> {
+        match self {
+            Self::Active { last_ime_cursor_area, .. } => *last_ime_cursor_area,
+            Self::Pending { last_ime_cursor_area, .. } => *last_ime_cursor_area,
+        }
+    }
+
+    pub fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
+        match self {
+            Self::Active { last_ime_cursor_area: l, .. } => *l = area,
+            Self::Pending { last_ime_cursor_area: l, .. } => *l = area,
+        }
+    }
+
+    pub fn geometry_hints(&self) -> Option<GuiFrameGeometryHints> {
+        match self {
+            Self::Pending { geometry_hints, .. } => *geometry_hints,
+            _ => None,
+        }
+    }
+
+    pub fn request_redraw(&self) {
+        if let Self::Active { native, .. } = self {
+            native.window.request_redraw();
+        }
+    }
+}
+
 impl GuiFrameWindowState {
-    /// Resize this window's surface.
     pub fn handle_resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         if width == 0 || height == 0 {
             return;
         }
-        if let Some(native) = &mut self.native {
-            native.width = width;
-            native.height = height;
-            native.surface_config.width = width;
-            native.surface_config.height = height;
-            native.surface.configure(device, &native.surface_config);
-            clear_frame_transition_textures(&mut self.render.compositor.transitions);
-            self.render.compositor.dirty = true;
-        } else {
-            self.pending_width = width;
-            self.pending_height = height;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                native.width = width;
+                native.height = height;
+                native.surface_config.width = width;
+                native.surface_config.height = height;
+                native.surface.configure(device, &native.surface_config);
+                clear_frame_transition_textures(&mut self.render.compositor.transitions);
+                self.render.compositor.dirty = true;
+            }
+            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+                *pw = width;
+                *ph = height;
+            }
         }
     }
 
     pub fn set_scale_factor(&mut self, scale_factor: f64) {
         let effective_scale = effective_window_scale_factor(scale_factor);
-        if let Some(native) = &mut self.native {
-            native.scale_factor = effective_scale;
-            if let Some(atlas) = self.render.compositor.glyph_atlas.as_mut() {
-                atlas.set_scale_factor(effective_scale as f32);
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                native.scale_factor = effective_scale;
+                if let Some(atlas) = self.render.compositor.glyph_atlas.as_mut() {
+                    atlas.set_scale_factor(effective_scale as f32);
+                }
+                self.render.compositor.dirty = true;
             }
-            self.render.compositor.dirty = true;
-        } else {
-            self.pending_scale_factor = effective_scale;
+            FrameLifecycle::Pending { scale_factor: sf, .. } => {
+                *sf = effective_scale;
+            }
         }
     }
 
     pub(super) fn set_title(&mut self, title: String) {
-        if let Some(native) = &mut self.native {
-            native.chrome.title = title.clone();
-            native.window.set_title(&title);
-            if !native.chrome.decorations_enabled {
-                self.render.compositor.dirty = true;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                native.chrome.title = title.clone();
+                native.window.set_title(&title);
+                if !native.chrome.decorations_enabled {
+                    self.render.compositor.dirty = true;
+                }
             }
-        } else {
-            self.pending_chrome.title = title;
+            FrameLifecycle::Pending { chrome, .. } => {
+                chrome.title = title;
+            }
         }
     }
 
     pub(super) fn set_fullscreen_mode(&mut self, mode: u32) {
-        let native = match self.native.as_mut() {
-            Some(n) => n,
-            None => return,
+        let FrameLifecycle::Active { native, .. } = &mut self.lifecycle else {
+            return;
         };
         match mode {
             3 => {
@@ -764,68 +903,81 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn request_inner_size(&mut self, width: u32, height: u32) {
-        if let Some(native) = self.native.as_ref() {
-            let size = window_size_from_emacs_pixels(width, height);
-            let _ = native.window.request_inner_size(size);
-        } else {
-            self.pending_width = width;
-            self.pending_height = height;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                let size = window_size_from_emacs_pixels(width, height);
+                let _ = native.window.request_inner_size(size);
+            }
+            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+                *pw = width;
+                *ph = height;
+            }
         }
     }
 
     pub(super) fn apply_geometry_hints(&mut self, geometry_hints: GuiFrameGeometryHints) {
-        if let Some(native) = self.native.as_ref() {
-            apply_window_geometry_hints(&native.window, geometry_hints);
-        } else {
-            self.pending_geometry_hints = Some(geometry_hints);
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                apply_window_geometry_hints(&native.window, geometry_hints);
+            }
+            FrameLifecycle::Pending { geometry_hints: gh, .. } => {
+                *gh = Some(geometry_hints);
+            }
         }
     }
 
     pub(super) fn set_decorations(&mut self, decorated: bool) {
-        if let Some(native) = self.native.as_mut() {
-            native.chrome.decorations_enabled = decorated;
-            native.window.set_decorations(decorated);
-            self.render.compositor.dirty = true;
-        } else {
-            self.pending_chrome.decorations_enabled = decorated;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                native.chrome.decorations_enabled = decorated;
+                native.window.set_decorations(decorated);
+                self.render.compositor.dirty = true;
+            }
+            FrameLifecycle::Pending { chrome, .. } => {
+                chrome.decorations_enabled = decorated;
+            }
         }
     }
 
     pub(super) fn set_mouse_hidden_for_typing(&mut self, hidden: bool) {
-        if let Some(native) = self.native.as_mut() {
-            if native.mouse_hidden_for_typing != hidden {
+        if let FrameLifecycle::Active { native, mouse_hidden_for_typing, .. } = &mut self.lifecycle {
+            if *mouse_hidden_for_typing != hidden {
                 native.window.set_cursor_visible(!hidden);
-                native.mouse_hidden_for_typing = hidden;
             }
-        } else {
-            self.pending_mouse_hidden_for_typing = hidden;
         }
+        self.lifecycle.set_mouse_hidden_for_typing(hidden);
     }
 
     pub(super) fn reset_ime_cursor_area(&mut self) {
-        if let Some(native) = self.native.as_mut() {
-            native.last_ime_cursor_area = None;
-            native.window.set_ime_cursor_area(
-                PhysicalPosition::new(0.0, 0.0),
-                PhysicalSize::new(1.0, 1.0),
-            );
-        } else {
-            self.pending_last_ime_cursor_area = None;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, last_ime_cursor_area, .. } => {
+                *last_ime_cursor_area = None;
+                native.window.set_ime_cursor_area(
+                    PhysicalPosition::new(0.0, 0.0),
+                    PhysicalSize::new(1.0, 1.0),
+                );
+            }
+            FrameLifecycle::Pending { last_ime_cursor_area, .. } => {
+                *last_ime_cursor_area = None;
+            }
         }
     }
 
     pub(super) fn update_ime_cursor_area(&mut self, area: ImeCursorArea) {
-        if let Some(native) = self.native.as_mut() {
-            if native.last_ime_cursor_area == Some(area) {
-                return;
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, last_ime_cursor_area, .. } => {
+                if *last_ime_cursor_area == Some(area) {
+                    return;
+                }
+                native.window.set_ime_cursor_area(
+                    PhysicalPosition::new(area.x as f64, area.y as f64),
+                    PhysicalSize::new(area.width as f64, area.height as f64),
+                );
+                *last_ime_cursor_area = Some(area);
             }
-            native.window.set_ime_cursor_area(
-                PhysicalPosition::new(area.x as f64, area.y as f64),
-                PhysicalSize::new(area.width as f64, area.height as f64),
-            );
-            native.last_ime_cursor_area = Some(area);
-        } else {
-            self.pending_last_ime_cursor_area = Some(area);
+            FrameLifecycle::Pending { last_ime_cursor_area, .. } => {
+                *last_ime_cursor_area = Some(area);
+            }
         }
     }
 
@@ -850,9 +1002,8 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn drag_resize_for_current_edge(&self) -> bool {
-        let native = match self.native.as_ref() {
-            Some(n) => n,
-            None => return false,
+        let FrameLifecycle::Active { native, .. } = &self.lifecycle else {
+            return false;
         };
         let Some(dir) = native.chrome.resize_edge else {
             return false;
@@ -862,9 +1013,8 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn handle_titlebar_action(&mut self, action: u32) -> bool {
-        let native = match self.native.as_mut() {
-            Some(n) => n,
-            None => return false,
+        let FrameLifecycle::Active { native, .. } = &mut self.lifecycle else {
+            return false;
         };
         match action {
             1 => {
@@ -894,90 +1044,82 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn drag_window(&self) {
-        if let Some(native) = self.native.as_ref() {
+        if let Some(native) = self.lifecycle.native() {
             let _ = native.window.drag_window();
         }
     }
 
     pub fn native_size(&self) -> (u32, u32) {
-        self.native.as_ref().map_or(
-            (self.pending_width, self.pending_height),
-            |n| (n.width, n.height),
-        )
+        self.lifecycle.native_size()
     }
 
     pub fn scale_factor(&self) -> f64 {
-        self.native.as_ref().map_or(self.pending_scale_factor, |n| n.scale_factor)
+        self.lifecycle.scale_factor()
     }
 
     pub(super) fn chrome(&self) -> &WindowChrome {
-        self.native.as_ref().map_or(&self.pending_chrome, |n| &n.chrome)
+        self.lifecycle.chrome()
     }
 
     pub(super) fn chrome_mut(&mut self) -> &mut WindowChrome {
-        if self.native.is_some() {
-            &mut self.native.as_mut().unwrap().chrome
-        } else {
-            &mut self.pending_chrome
-        }
+        self.lifecycle.chrome_mut()
     }
 
     pub fn ime_enabled(&self) -> bool {
-        self.native.as_ref().map_or(self.pending_ime_enabled, |n| n.ime_enabled)
+        self.lifecycle.ime_enabled()
     }
 
     pub fn set_ime_enabled(&mut self, enabled: bool) {
-        if let Some(native) = self.native.as_mut() {
-            native.ime_enabled = enabled;
-        } else {
-            self.pending_ime_enabled = enabled;
-        }
+        self.lifecycle.set_ime_enabled(enabled);
     }
 
     pub fn mouse_hidden_for_typing(&self) -> bool {
-        self.native.as_ref().map_or(self.pending_mouse_hidden_for_typing, |n| n.mouse_hidden_for_typing)
+        self.lifecycle.mouse_hidden_for_typing()
     }
 
     pub fn set_mouse_hidden_for_typing_pending(&mut self, hidden: bool) {
-        self.pending_mouse_hidden_for_typing = hidden;
+        self.lifecycle.set_mouse_hidden_for_typing(hidden);
     }
 
     pub fn request_redraw(&self) {
-        if let Some(native) = self.native.as_ref() {
-            native.window.request_redraw();
-        }
+        self.lifecycle.request_redraw();
     }
 
     pub fn window(&self) -> Option<&Arc<Window>> {
-        self.native.as_ref().map(|n| &n.window)
+        self.lifecycle.window()
     }
 
     pub(super) fn last_ime_cursor_area(&self) -> Option<ImeCursorArea> {
-        self.native.as_ref().and_then(|n| n.last_ime_cursor_area).or(self.pending_last_ime_cursor_area)
+        self.lifecycle.last_ime_cursor_area()
     }
 
     pub(super) fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
-        if let Some(native) = self.native.as_mut() {
-            native.last_ime_cursor_area = area;
-        } else {
-            self.pending_last_ime_cursor_area = area;
-        }
+        self.lifecycle.set_last_ime_cursor_area(area);
     }
 
     pub fn geometry_hints(&self) -> Option<GuiFrameGeometryHints> {
-        self.pending_geometry_hints
+        self.lifecycle.geometry_hints()
     }
 
     pub fn set_geometry_hints(&mut self, hints: GuiFrameGeometryHints) {
-        if let Some(native) = self.native.as_ref() {
-            apply_window_geometry_hints(&native.window, hints);
+        match &mut self.lifecycle {
+            FrameLifecycle::Active { native, .. } => {
+                apply_window_geometry_hints(&native.window, hints);
+            }
+            FrameLifecycle::Pending { geometry_hints, .. } => {
+                *geometry_hints = Some(hints);
+            }
         }
-        self.pending_geometry_hints = Some(hints);
     }
 
     pub fn set_pending_size(&mut self, width: u32, height: u32) {
-        self.pending_width = width;
-        self.pending_height = height;
+        match &mut self.lifecycle {
+            FrameLifecycle::Pending { width: pw, height: ph, .. } => {
+                *pw = width;
+                *ph = height;
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1109,7 +1251,7 @@ impl GuiFrameWindowManager {
     }
 
     pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
-        if let Some(native) = window_state.native.as_ref() {
+        if let Some(native) = window_state.lifecycle.native() {
             self.primary_winit_id = Some(native.window.id());
         }
         let key = self.primary_frame_key();
@@ -1127,7 +1269,12 @@ impl GuiFrameWindowManager {
         if let Some(window_state) = self.windows.get_mut(&key) {
             let winit_id = native.window.id();
             self.primary_winit_id = Some(winit_id);
-            window_state.native = Some(native);
+            window_state.lifecycle = FrameLifecycle::Active {
+                native,
+                mouse_hidden_for_typing: window_state.lifecycle.mouse_hidden_for_typing(),
+                ime_enabled: window_state.lifecycle.ime_enabled(),
+                last_ime_cursor_area: window_state.lifecycle.last_ime_cursor_area(),
+            };
             self.sync_primary_mapping();
         }
     }
@@ -1279,32 +1426,29 @@ impl GuiFrameWindowManager {
                     self.windows.insert(
                         FrameKey::Adopted(req.emacs_frame_id),
                         GuiFrameWindowState {
-                            native: Some(GuiFrameNativeWindowState {
-                                window,
-                                surface,
-                                surface_config: config,
-                                width: phys.width,
-                                height: phys.height,
-                                scale_factor,
+                            lifecycle: FrameLifecycle::Active {
+                                native: GuiFrameNativeWindowState {
+                                    window,
+                                    surface,
+                                    surface_config: config,
+                                    width: phys.width,
+                                    height: phys.height,
+                                    scale_factor,
+                                    mouse_hidden_for_typing: false,
+                                    ime_enabled: false,
+                                    last_ime_cursor_area: None,
+                                    chrome: chrome.clone(),
+                                },
                                 mouse_hidden_for_typing: false,
                                 ime_enabled: false,
                                 last_ime_cursor_area: None,
-                                chrome: chrome.clone(),
-                            }),
+                            },
                             render: GuiFrameRenderState::new(
                                 req.emacs_frame_id,
                                 device,
                                 scale_factor,
                                 self.fps_enabled,
                             ),
-                            pending_width: phys.width,
-                            pending_height: phys.height,
-                            pending_scale_factor: scale_factor,
-                            pending_mouse_hidden_for_typing: false,
-                            pending_ime_enabled: false,
-                            pending_last_ime_cursor_area: None,
-                            pending_chrome: chrome,
-                            pending_geometry_hints: None,
                         },
                     );
                 }
@@ -1324,7 +1468,7 @@ impl GuiFrameWindowManager {
         let pending = std::mem::take(&mut self.pending_destroys);
         for frame_id in pending {
             if let Some(state) = self.windows.remove(&FrameKey::Adopted(frame_id)) {
-                if let Some(native) = state.native {
+                if let Some(native) = state.lifecycle.native() {
                     self.winit_to_emacs.remove(&native.window.id());
                 }
                 tracing::info!("Destroyed window for frame {}", frame_id);
@@ -1450,7 +1594,7 @@ impl GuiFrameWindowManager {
         let primary_winit_id = self.primary_winit_id;
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            let is_primary = window_state.native.as_ref().is_some_and(|n| primary_winit_id == Some(n.window.id()));
+            let is_primary = window_state.lifecycle.native().is_some_and(|n| primary_winit_id == Some(n.window.id()));
             dirty |= window_state.render.tick_cursor_blink(
                 now,
                 cursor_wake_enabled && is_primary,

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
-use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
+use super::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState};
 use super::state::{ChildFrameStyle, FpsCounter, GuiChromeInteractionState, ToolbarResources, TypingSpeedState, WindowChrome};
 use super::transitions::{
     detect_frame_transitions, ensure_frame_offscreen_textures, render_frame_transitions,
@@ -380,10 +380,10 @@ impl RenderApp {
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
     )> {
-        let GuiFrameWindowState { native, render, .. } = window_state;
-        let native = match native {
-            Some(n) => n,
-            None => return None,
+        let render = &mut window_state.render;
+        let native = match &mut window_state.lifecycle {
+            FrameLifecycle::Active { native, .. } => native,
+            _ => return None,
         };
         Self::update_fps_counter(&mut render.overlays.fps);
         let Some(frame_for_decision) = render.current_frame_clone() else {

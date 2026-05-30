@@ -19,7 +19,7 @@ use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
 use super::frame_windows::{
-    GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
+    FrameLifecycle, GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,
 };
 
 #[cfg(feature = "wpe-webkit")]
@@ -372,19 +372,20 @@ impl RenderApp {
 
         let mut frame_windows = GuiFrameWindowManager::new();
         frame_windows.set_primary_pending(GuiFrameWindowState {
-            native: None,
-            render: GuiFrameRenderState::new_without_device(0, false),
-            pending_width: width,
-            pending_height: height,
-            pending_scale_factor: 1.0,
-            pending_mouse_hidden_for_typing: false,
-            pending_ime_enabled: false,
-            pending_last_ime_cursor_area: None,
-            pending_chrome: WindowChrome {
-                title,
-                ..WindowChrome::default()
+            lifecycle: FrameLifecycle::Pending {
+                width,
+                height,
+                scale_factor: 1.0,
+                mouse_hidden_for_typing: false,
+                ime_enabled: false,
+                last_ime_cursor_area: None,
+                chrome: WindowChrome {
+                    title,
+                    ..WindowChrome::default()
+                },
+                geometry_hints: None,
             },
-            pending_geometry_hints: None,
+            render: GuiFrameRenderState::new_without_device(0, false),
         });
 
         Self {

@@ -1,7 +1,7 @@
 use super::{
     RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
 };
-use crate::render_thread::frame_windows::GuiFrameNativeWindowState;
+use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
 use neomacs_renderer_wgpu::WgpuRenderer;
@@ -109,15 +109,28 @@ impl RenderApp {
 
         {
             let primary = self.frame_windows.primary_window_mut().unwrap();
-            primary.pending_width = phys.width;
-            primary.pending_height = phys.height;
-            primary.pending_scale_factor = effective_scale;
+            match &mut primary.lifecycle {
+                FrameLifecycle::Pending { width: pw, height: ph, scale_factor: sf, .. } => {
+                    *pw = phys.width;
+                    *ph = phys.height;
+                    *sf = effective_scale;
+                }
+                _ => {}
+            }
         }
 
-        let (pending_width, pending_height, pending_scale_factor) = {
-            let primary = self.frame_windows.primary_window().unwrap();
-            (primary.pending_width, primary.pending_height, primary.pending_scale_factor)
-        };
+        let (pending_width, pending_height) = self
+            .frame_windows
+            .primary_window()
+            .unwrap()
+            .lifecycle
+            .native_size();
+        let pending_scale_factor = self
+            .frame_windows
+            .primary_window()
+            .unwrap()
+            .lifecycle
+            .scale_factor();
 
         let config = wgpu::SurfaceConfiguration {
             usage: surface_usage,
@@ -167,7 +180,7 @@ impl RenderApp {
             last_ime_cursor_area: None,
             chrome: {
                 let primary = self.frame_windows.primary_window().unwrap();
-                primary.pending_chrome.clone()
+                primary.lifecycle.chrome().clone()
             },
         });
 
