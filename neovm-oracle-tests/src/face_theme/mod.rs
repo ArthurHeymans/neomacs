@@ -24396,3 +24396,162 @@ fn ft_hunt_font_lock_fontify_set_buffer_faces() {
        'fontified (get-text-property 1 'fontified))))))"##,
     );
 }
+
+#[test]
+fn ft_chase_face_overlay_property_mod_hook_invocation_context() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'modification-hooks '(my-hook-function))
+      (list
+       'face (overlay-get ov 'face)
+       'mod-hooks (overlay-get ov 'modification-hooks)
+       'insert-hooks (overlay-get ov 'insert-in-front-hooks)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_font_lock_fontify_multiline_string_escape() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "\"multi\\\nline string test\"\n")
+    (font-lock-fontify-buffer)
+    (list
+     'string-face (get-text-property 1 'face)
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_face_overlay_face_compose_region_auto_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (list
+     'compose-region-fbound (fboundp 'compose-region)
+     'decompose-region-fbound (fboundp 'decompose-region)
+     'compose-with-face (condition-case nil
+                           (progn
+                             (put-text-property 1 6 'face 'bold)
+                             (compose-region 1 6)
+                             (list 'face (get-text-property 3 'face) 'composition (get-text-property 3 'composition)))
+                           (error 'no-compose)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_face_set_face_overline_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-overline-face) (error nil))
+  (list
+   'default (condition-case nil (face-attribute 'default :overline nil 'default-on) (error 'no))
+   'set-over-t (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline t) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'set-over-color (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline '(:color "orange" :style wave)) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no))
+   'set-over-off (condition-case nil (progn (set-face-attribute 'my-overline-face nil :overline nil) (face-attribute 'my-overline-face :overline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_face_text_property_face_nil_removal_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face nil)
+    (list
+     'bold-region (get-text-property 3 'face)
+     'nil-region (get-text-property 8 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_font_lock_fontify_backquote_comma_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "`(list ,x ,@y ,#'fn)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'backquote-face (save-excursion (goto-char (point-min)) (search-forward "`") (get-text-property (match-beginning 0) 'face))
+     'comma-face (save-excursion (goto-char (point-min)) (search-forward ",") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_face_overlay_face_read_write_many_times() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (dotimes (i 10)
+        (overlay-put ov 'face (if (evenp i) 'bold 'italic)))
+      (list
+       'final-face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_face_face_read_only_insert_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (condition-case err
+        (progn
+          (put-text-property 1 6 'read-only t)
+          (erase-buffer)
+          (list 'no-error 'unexpected))
+      (error (list 'error-detected (get-text-property 1 'face) (get-text-property 1 'read-only)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase_font_lock_fontify_inside_condition_case() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(condition-case err\n    (/ 1 0)\n  (arith-error (message \"divide by zero\")))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'condition-case-face (save-excursion (goto-char (point-min)) (search-forward "condition-case") (get-text-property (match-beginning 0) 'face))
+     'err-face (save-excursion (goto-char (point-min)) (search-forward "err") (get-text-property (1- (match-beginning 0)) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
