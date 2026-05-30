@@ -25317,3 +25317,116 @@ fn ft_grind_face_face_font_available_families_deep() {
    'available-fonts (condition-case nil (if (fboundp 'x-list-fonts) (x-list-fonts "*") 'none) (error 'no)))))"##,
     );
 }
+
+#[test]
+fn ft_mine_face_overlay_face_with_sticky_text_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'rear-nonsticky t)
+    (put-text-property 1 2 'front-sticky t)
+    (list
+     'face-pos1 (get-text-property 1 'face)
+     'rear-nonsticky (get-text-property 1 'rear-nonsticky)
+     'front-sticky (get-text-property 1 'front-sticky)
+     'face-pos3 (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_mine_font_lock_fontify_defconst_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defconst my-constant \"value\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defconst-face (save-excursion (goto-char (point-min)) (search-forward "defconst") (get-text-property (match-beginning 0) 'face))
+     'const-name-face (save-excursion (goto-char (point-min)) (search-forward "my-constant") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_mine_face_overlay_face_whole_buffer_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA\nBBBBB\nCCCCC\nDDDDD\n")
+    (let ((ov (make-overlay (point-min) (point-max))))
+      (overlay-put ov 'face 'bold)
+      (list
+       'pos1 (get-char-property 1 'face)
+       'pos6 (get-char-property 6 'face)
+       'pos-mid (get-char-property 10 'face)
+       'pos-last (get-char-property (1- (point-max)) 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_mine_face_text_property_fontified_along_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 3 'fontified t)
+    (put-text-property 4 6 'fontified nil)
+    (list
+     'pos1 (list (get-text-property 1 'face) (get-text-property 1 'fontified))
+     'pos3 (list (get-text-property 3 'face) (get-text-property 3 'fontified))
+     'pos5 (list (get-text-property 5 'face) (get-text-property 5 'fontified))
+     'pos6 (list (get-text-property 6 'face) (get-text-property 6 'fontified))))))"##,
+    );
+}
+
+#[test]
+fn ft_mine_font_lock_fontify_cl_defstruct_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(cl-defstruct person name age)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'struct-face (save-excursion (goto-char (point-min)) (search-forward "cl-defstruct") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_mine_face_overlay_face_string_property_empty() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'before-string "")
+      (overlay-put ov 'after-string "")
+      (list
+       'face (overlay-get ov 'face)
+       'before (overlay-get ov 'before-string)
+       'after (overlay-get ov 'after-string)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
