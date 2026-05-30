@@ -9,7 +9,7 @@ use crate::backend::wpe::WpeWebView;
 impl RenderApp {
     #[cfg(feature = "wpe-webkit")]
     fn remove_primary_floating_webkit(&mut self, id: u32) -> bool {
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
             primary_frame.remove_floating_webkit(id)
         } else {
             false
@@ -195,7 +195,7 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     self.webkit_views.remove(&id);
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                    if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                     }
                     self.frame_windows
@@ -333,7 +333,7 @@ impl RenderApp {
                         width,
                         height,
                     };
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                    if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                     }
                     self.frame_windows
@@ -342,7 +342,7 @@ impl RenderApp {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                         window_state.render.push_floating_webkit(overlay);
                     } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                        if let Some(primary_frame) = self.primary_render_state_mut() {
+                        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                             primary_frame.push_floating_webkit(overlay);
                         }
                     } else {
@@ -358,7 +358,7 @@ impl RenderApp {
                 tracing::info!("WebKit remove floating: id={}", id);
                 #[cfg(feature = "wpe-webkit")]
                 {
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                    if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                         primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
                     }
                     self.frame_windows

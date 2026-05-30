@@ -356,7 +356,7 @@ impl RenderApp {
         // Get frame font metrics for terminal cell sizing.
         // These come from FRAME_COLUMN_WIDTH / FRAME_LINE_HEIGHT / FRAME_FONT->pixel_size.
         let (cell_w, cell_h, font_size, frame_w, frame_h) =
-            if let Some(frame) = self.primary_current_frame() {
+            if let Some(frame) = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()) {
                 (
                     frame.char_width,
                     frame.char_height,
@@ -365,7 +365,7 @@ impl RenderApp {
                     frame.height,
                 )
             } else {
-                let (frame_w, frame_h) = self.primary_logical_size();
+                let (frame_w, frame_h) = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| { let (w,h) = ws.native_size(); let s = ws.scale_factor() as f32; (w as f32 / s, h as f32 / s) });
                 (8.0, 16.0, 14.0, frame_w, frame_h)
             };
         let ascent = cell_h * 0.8;
@@ -425,7 +425,7 @@ impl RenderApp {
                 );
             });
 
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
             Self::expand_terminal_glyphs_for_render_state(primary_frame, &terminal_contents);
         }
 
@@ -475,7 +475,7 @@ impl RenderApp {
             }
         }
 
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
             primary_frame.extend_current_frame_glyphs(win_glyphs);
         }
 
@@ -526,7 +526,7 @@ impl RenderApp {
             }
         }
 
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
             primary_frame.extend_current_frame_glyphs(float_glyphs);
         }
     }

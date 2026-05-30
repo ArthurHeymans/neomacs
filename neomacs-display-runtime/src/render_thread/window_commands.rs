@@ -9,7 +9,7 @@ impl RenderApp {
     pub(super) fn handle_window(&mut self, cmd: WindowCommand) {
         match cmd {
             WindowCommand::SetMouseCursor { cursor_type } => {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     if cursor_type == 0 {
                         window.set_cursor_visible(false);
                     } else {
@@ -32,13 +32,13 @@ impl RenderApp {
                 }
             }
             WindowCommand::WarpMouse { x, y } => {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     let pos = PhysicalPosition::new(x as f64, y as f64);
                     let _ = window.set_cursor_position(pos);
                 }
             }
             WindowCommand::SetWindowTitle { title } => {
-                self.primary_chrome_mut().title = title.clone();
+                self.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().title = title.clone();
                 if let Some(primary_state) = self.frame_windows.primary_window_mut() {
                     primary_state.set_title(title);
                     if !primary_state.chrome().decorations_enabled {
@@ -54,7 +54,7 @@ impl RenderApp {
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.set_title(title);
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.primary_chrome_mut().title = title;
+                    self.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().title = title;
                 } else {
                     tracing::warn!(
                         "SetFrameWindowTitle requested for unknown frame_id=0x{:x}",
@@ -68,12 +68,12 @@ impl RenderApp {
                 }
             }
             WindowCommand::SetWindowMinimized { minimized } => {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     window.set_minimized(minimized);
                 }
             }
             WindowCommand::SetWindowPosition { x, y } => {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     window.set_outer_position(PhysicalPosition::new(x, y));
                 }
             }
@@ -129,11 +129,11 @@ impl RenderApp {
                 }
             }
             WindowCommand::SetWindowDecorated { decorated } => {
-                self.primary_chrome_mut().decorations_enabled = decorated;
+                self.frame_windows.primary_window_mut().expect("primary window state").chrome_mut().decorations_enabled = decorated;
                 self.frame_windows.set_top_level_decorations(decorated);
             }
             WindowCommand::RequestAttention { urgent } => {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     let attention = if urgent {
                         Some(UserAttentionType::Critical)
                     } else {
@@ -184,7 +184,7 @@ impl RenderApp {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
-                self.remove_primary_child_frame(frame_id);
+                { let target_was_child = self.frame_windows.primary_window().map_or(&self.cursor_defaults, |ws| &ws.render.cursor).target_cloned().is_some_and(|target| target.frame_id == frame_id); if let Some(ws) = self.frame_windows.primary_window_mut() { let changed = ws.render.remove_child_frame(frame_id); if target_was_child { if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.reset_ime_cursor_area() } } changed } else { false } };
             }
             WindowCommand::ScrollBlit { .. } => {
                 // handled above in dispatch, here as exhaustive match

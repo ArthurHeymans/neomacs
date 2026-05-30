@@ -179,12 +179,12 @@ impl RenderApp {
         }
 
         let pending_tool_items = self
-            .primary_render_state()
+            .frame_windows.primary_window().map(|ws| &ws.render)
             .as_ref()
             .and_then(|frame| frame.chrome.tool_bar.as_ref())
             .map(|tool_bar| tool_bar.items.clone());
         let pending_compact_tool_items = self
-            .primary_render_state()
+            .frame_windows.primary_window().map(|ws| &ws.render)
             .as_ref()
             .and_then(|frame| frame.chrome.compact_bar.as_ref())
             .map(|compact_bar| compact_bar.tool_items.clone());
@@ -248,7 +248,7 @@ impl RenderApp {
             }
         }
 
-        self.mark_primary_dirty();
+        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.compositor.dirty = true };
 
         tracing::debug!("Surface resized to {}x{}", width, height);
     }

@@ -86,10 +86,10 @@ impl RenderApp {
         if !self.resumed_seen {
             tracing::info!(
                 "Render thread resumed: primary_window_exists={} size={}x{} title={:?}",
-                self.primary_window().is_some(),
-                self.primary_native_size().0,
-                self.primary_native_size().1,
-                self.primary_chrome().title
+                self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
+                self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()).0,
+                self.frame_windows.primary_window().map_or((0, 0), |ws| ws.native_size()).1,
+                self.frame_windows.primary_window().expect("primary window state").chrome().title
             );
             self.resumed_seen = true;
         }
@@ -165,7 +165,7 @@ impl RenderApp {
         if !self.about_to_wait_seen {
             tracing::info!(
                 "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
-                self.primary_window().is_some(),
+                self.frame_windows.primary_window().and_then(|ws| ws.window()).is_some(),
                 self.frame_windows.count()
             );
             self.about_to_wait_seen = true;
@@ -250,7 +250,7 @@ impl RenderApp {
                 self.frame_windows.request_redraw_for_top_level_windows();
             }
             if has_active_content {
-                if let Some(window) = self.primary_window() {
+                if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                     window.request_redraw();
                 }
             }

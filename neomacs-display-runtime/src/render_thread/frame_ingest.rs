@@ -461,28 +461,28 @@ impl RenderApp {
             }
 
             if parent_id != 0 && self.frame_windows.is_primary_frame_id(parent_id) {
-                self.update_primary_child_frame(frame);
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.update_child_frame(frame) };
             } else if parent_id == 0 && self.frame_windows.is_primary_frame_id(frame_id) {
                 if gui_menu_bar.is_none() {
-                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_menu_bar());
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.clear_menu_bar()) } else { false };
                 }
                 if let Some(tool_bar) = gui_tool_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(tool_bar.height);
                     self.ensure_toolbar_icon_textures(&tool_bar.items);
                 } else if gui_tool_bar.is_none() {
-                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_toolbar());
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.clear_toolbar()) } else { false };
                 }
                 if let Some(compact_bar) = gui_compact_bar.as_ref() {
                     self.sync_toolbar_visual_config_from_height(compact_bar.height);
                     self.ensure_toolbar_icon_textures(&compact_bar.tool_items);
                 } else if gui_compact_bar.is_none() {
-                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_compact_bar());
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.clear_compact_bar()) } else { false };
                 }
-                if self.primary_tab_bar().is_none() {
-                    self.with_primary_chrome_interaction_mut(|chrome| chrome.clear_tab_bar());
+                if self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).and_then(|frame| frame.tab_bar.as_ref()).is_none() {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.clear_tab_bar()) } else { false };
                 }
                 let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-                if let Some(primary_frame) = self.primary_render_state_mut() {
+                if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                     Self::ingest_top_level_render_frame(
                         primary_frame,
                         frame,
@@ -496,15 +496,15 @@ impl RenderApp {
         }
 
         let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-        if let Some(primary_frame) = self.primary_render_state_mut() {
+        if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
             let cursor_sync = Self::sync_render_cursor(primary_frame, cursor_config);
             primary_frame
                 .sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
             if let Some(cursor_sync) = cursor_sync {
                 self.update_ime_cursor_area_if_needed(&cursor_sync.target);
             } else {
-                self.reset_primary_ime_cursor_area();
-                self.clear_primary_ime_preedit();
+                if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.reset_ime_cursor_area() };
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.clear_ime_preedit() };
             }
         }
     }

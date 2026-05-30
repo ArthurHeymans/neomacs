@@ -37,7 +37,7 @@ impl RenderApp {
     pub(super) fn ime_cursor_area_for_target(&self, target: &CursorTarget) -> ImeCursorArea {
         // If cursor is in a child frame, offset by the child's absolute position.
         let (ime_off_x, ime_off_y) = if target.frame_id != 0 {
-            self.primary_child_frames()
+            self.frame_windows.primary_window().expect("primary child frames").render.compositor.child_frames
                 .frames
                 .get(&target.frame_id)
                 .map(|e| (e.abs_x as f64, e.abs_y as f64))
@@ -45,7 +45,7 @@ impl RenderApp {
         } else {
             (0.0, 0.0)
         };
-        let scale_factor = self.primary_scale_factor();
+        let scale_factor = self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor());
 
         ImeCursorArea {
             x: ((target.x as f64 + ime_off_x) * scale_factor).round() as i32,
@@ -57,7 +57,7 @@ impl RenderApp {
 
     /// Update IME cursor area only when IME is active and the rectangle changed.
     pub(super) fn update_ime_cursor_area_if_needed(&mut self, target: &CursorTarget) {
-        if !self.primary_ime_enabled() && !self.primary_ime_preedit_active() {
+        if !self.frame_windows.primary_window().map_or(false, |ws| ws.ime_enabled()) && !self.frame_windows.primary_window().is_some_and(|ws| ws.render.overlays.ime_preedit_active) {
             return;
         }
         let area = self.ime_cursor_area_for_target(target);

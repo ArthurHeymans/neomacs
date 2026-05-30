@@ -87,7 +87,7 @@ impl RenderApp {
                     .get(emacs_frame_id)
                     .map(|window_state| window_state.render.font_metrics())
                     .or_else(|| {
-                        self.primary_render_state()
+                        self.frame_windows.primary_window().map(|ws| &ws.render)
                             .map(|primary_frame| primary_frame.font_metrics())
                             .filter(|_| self.frame_windows.is_primary_frame_id(emacs_frame_id))
                     })
@@ -98,7 +98,7 @@ impl RenderApp {
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.set_popup_menu(Some(menu));
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.set_primary_popup_menu(Some(menu));
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(Some(menu)) };
                 } else {
                     tracing::warn!(
                         "ShowPopupMenu requested for unknown frame_id=0x{:x}",
@@ -109,7 +109,7 @@ impl RenderApp {
             UiCommand::HidePopupMenu => {
                 tracing::info!("HidePopupMenu");
                 self.frame_windows.hide_top_level_popup_menus();
-                self.with_primary_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None);
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| chrome.menu_bar_active = None) } else { false };
             }
             UiCommand::ShowTooltip {
                 frame,
@@ -139,14 +139,14 @@ impl RenderApp {
                             return None;
                         }
                         let (fs, lh, cw) = self
-                            .primary_render_state()
+                            .frame_windows.primary_window().map(|ws| &ws.render)
                             .map(|primary_frame| primary_frame.font_metrics())
                             .unwrap_or((13.0, 17.0, 13.0 * 0.6));
-                        let (screen_w, screen_h) = self.primary_logical_size();
+                        let (screen_w, screen_h) = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| { let (w,h) = ws.native_size(); let s = ws.scale_factor() as f32; (w as f32 / s, h as f32 / s) });
                         Some((fs, lh, cw, screen_w, screen_h))
                     })
                     .unwrap_or_else(|| {
-                        let (screen_w, screen_h) = self.primary_logical_size();
+                        let (screen_w, screen_h) = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| { let (w,h) = ws.native_size(); let s = ws.scale_factor() as f32; (w as f32 / s, h as f32 / s) });
                         (13.0, 17.0, 13.0 * 0.6, screen_w, screen_h)
                     });
                 let tooltip = TooltipState::new(
@@ -164,7 +164,7 @@ impl RenderApp {
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
                     window_state.render.set_tooltip(Some(tooltip));
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.set_primary_tooltip(Some(tooltip));
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_tooltip(Some(tooltip)) };
                 } else {
                     tracing::warn!(
                         "ShowTooltip requested for unknown frame_id=0x{:x}",
@@ -190,7 +190,7 @@ impl RenderApp {
                         now,
                     );
                 } else if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
-                    self.set_primary_visual_bell_start(Some(now));
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_visual_bell_start(Some(now)) };
                 } else {
                     tracing::warn!(
                         "VisualBell requested for unknown frame_id=0x{:x}",
@@ -216,7 +216,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                self.set_primary_tool_bar(Some(tool_bar));
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_tool_bar(Some(tool_bar)) };
             }
             UiCommand::SetToolBarConfig { icon_size, padding } => {
                 self.set_toolbar_visual_config(icon_size, padding);
@@ -249,7 +249,7 @@ impl RenderApp {
                     fg: (fg_r, fg_g, fg_b),
                     bg: (bg_r, bg_g, bg_b),
                 };
-                self.set_primary_menu_bar(Some(menu_bar));
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_menu_bar(Some(menu_bar)) };
             }
         }
     }
@@ -270,11 +270,11 @@ impl RenderApp {
                     std::time::Duration::from_millis(interval_ms as u64);
                 if !enabled {
                     self.cursor_defaults.blink_on = true;
-                    if let Some(primary_frame) = self.primary_render_state_mut() {
+                    if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                         primary_frame.force_cursor_blink_on();
                     }
                 }
-                self.sync_top_level_cursor_config_from_defaults_without_dirty();
+                self.frame_windows.sync_top_level_cursor_config(&self.cursor_defaults, false);
                 if !enabled {
                     self.frame_windows.force_top_level_cursor_blink_on();
                 }
@@ -286,7 +286,7 @@ impl RenderApp {
                 if !enabled {
                     self.cursor_defaults.animating = false;
                 }
-                self.sync_top_level_cursor_config_from_defaults();
+                self.frame_windows.sync_top_level_cursor_config(&self.cursor_defaults, true);
             }
             ConfigCommand::SetAnimationConfig {
                 cursor_enabled,
@@ -322,7 +322,7 @@ impl RenderApp {
                 if !cursor_enabled {
                     self.cursor_defaults.animating = false;
                 }
-                self.sync_top_level_cursor_config_from_defaults();
+                self.frame_windows.sync_top_level_cursor_config(&self.cursor_defaults, true);
                 self.frame_windows
                     .sync_top_level_transition_policy(self.transition_policy);
                 if !self.transition_policy.crossfade_enabled {
@@ -341,7 +341,7 @@ impl RenderApp {
                 if !enabled {
                     self.cursor_defaults.size_animating = false;
                 }
-                self.sync_top_level_cursor_config_from_defaults();
+                self.frame_windows.sync_top_level_cursor_config(&self.cursor_defaults, true);
                 self.frame_windows.mark_top_level_dirty();
             }
             ConfigCommand::SetLigaturesEnabled { enabled } => {

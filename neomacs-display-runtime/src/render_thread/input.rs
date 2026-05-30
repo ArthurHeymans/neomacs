@@ -200,7 +200,7 @@ impl RenderApp {
     /// Hit-test toolbar items. Returns the index of the item under (x, y), or None.
     /// The y coordinate is local to the toolbar row.
     pub(super) fn toolbar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let tool_bar = self.primary_tool_bar()?;
+        let tool_bar = self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.tool_bar.as_ref())?;
         toolbar_hit_test_items(
             &tool_bar.items,
             tool_bar.height,
@@ -213,46 +213,46 @@ impl RenderApp {
 
     pub(super) fn toolbar_y_origin(&self) -> f32 {
         if let Some(tab_bar) = self
-            .primary_tab_bar()
+            .frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).and_then(|frame| frame.tab_bar.as_ref())
             .filter(|tab_bar| tab_bar.height > 0.0)
         {
             tab_bar.y + tab_bar.height
         } else {
-            self.primary_menu_bar()
+            self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.menu_bar.as_ref())
                 .map_or(0.0, |menu_bar| menu_bar.height)
                 + self
-                    .primary_compact_bar()
+                    .frame_windows.primary_window().and_then(|ws| ws.render.chrome.compact_bar.as_ref())
                     .map_or(0.0, |compact_bar| compact_bar.height)
         }
     }
 
     pub(super) fn menu_bar_height(&self) -> f32 {
-        self.primary_menu_bar()
+        self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.menu_bar.as_ref())
             .map_or(0.0, |menu_bar| menu_bar.height)
     }
 
     pub(super) fn tool_bar_height(&self) -> f32 {
-        self.primary_tool_bar()
+        self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.tool_bar.as_ref())
             .map_or(0.0, |tool_bar| tool_bar.height)
     }
 
     pub(super) fn compact_bar_height(&self) -> f32 {
-        self.primary_compact_bar()
+        self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.compact_bar.as_ref())
             .map_or(0.0, |compact_bar| compact_bar.height)
     }
 
     pub(super) fn tab_bar_y(&self) -> f32 {
-        self.primary_tab_bar().map_or(0.0, |tab_bar| tab_bar.y)
+        self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).and_then(|frame| frame.tab_bar.as_ref()).map_or(0.0, |tab_bar| tab_bar.y)
     }
 
     pub(super) fn tab_bar_height(&self) -> f32 {
-        self.primary_tab_bar().map_or(0.0, |tab_bar| tab_bar.height)
+        self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).and_then(|frame| frame.tab_bar.as_ref()).map_or(0.0, |tab_bar| tab_bar.height)
     }
 
     pub(super) fn compact_bar_menu_width(&self) -> f32 {
-        let char_width = self.primary_char_width();
+        let char_width = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.glyph_atlas.as_ref()).map_or(8.0, |atlas| atlas.default_char_width());
         let items = self
-            .primary_compact_bar()
+            .frame_windows.primary_window().and_then(|ws| ws.render.chrome.compact_bar.as_ref())
             .map_or([].as_slice(), |compact_bar| {
                 compact_bar.menu_items.as_slice()
             });
@@ -260,8 +260,8 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let compact_bar = self.primary_compact_bar()?;
-        let char_width = self.primary_char_width();
+        let compact_bar = self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.compact_bar.as_ref())?;
+        let char_width = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.glyph_atlas.as_ref()).map_or(8.0, |atlas| atlas.default_char_width());
         menu_bar_hit_test_items(
             &compact_bar.menu_items,
             compact_bar.height,
@@ -272,7 +272,7 @@ impl RenderApp {
     }
 
     pub(super) fn compact_bar_tool_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let compact_bar = self.primary_compact_bar()?;
+        let compact_bar = self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.compact_bar.as_ref())?;
         let x = x - self.compact_bar_menu_width();
         if x < 0.0 {
             return None;
@@ -289,18 +289,18 @@ impl RenderApp {
 
     /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        let tab_bar = self.primary_tab_bar()?;
+        let tab_bar = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref()).and_then(|frame| frame.tab_bar.as_ref())?;
         if y < tab_bar.y || y >= tab_bar.y + tab_bar.height {
             return None;
         }
-        let char_width = self.primary_char_width();
+        let char_width = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.glyph_atlas.as_ref()).map_or(8.0, |atlas| atlas.default_char_width());
         tab_bar_hit_test_items(&tab_bar.items, tab_bar.height, char_width, x, y - tab_bar.y)
     }
 
     /// Hit-test menu bar items. Returns the index of the item under (x, y), or None.
     pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<u32> {
-        let menu_bar = self.primary_menu_bar()?;
-        let char_width = self.primary_char_width();
+        let menu_bar = self.frame_windows.primary_window().and_then(|ws| ws.render.chrome.menu_bar.as_ref())?;
+        let char_width = self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.glyph_atlas.as_ref()).map_or(8.0, |atlas| atlas.default_char_width());
         menu_bar_hit_test_items(&menu_bar.items, menu_bar.height, char_width, x, _y)
     }
 
@@ -344,9 +344,9 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<winit::window::ResizeDirection> {
-        let (logical_width, logical_height) = self.primary_logical_size();
+        let (logical_width, logical_height) = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| { let (w,h) = ws.native_size(); let s = ws.scale_factor() as f32; (w as f32 / s, h as f32 / s) });
         Self::detect_resize_edge_for_chrome(
-            self.primary_chrome(),
+            self.frame_windows.primary_window().expect("primary window state").chrome(),
             logical_width,
             logical_height,
             x,
@@ -392,8 +392,8 @@ impl RenderApp {
     /// Check if a point is in the primary custom title bar area.
     /// Returns: 0 = not in title bar, 1 = drag area, 2 = close, 3 = maximize, 4 = minimize
     pub(super) fn titlebar_hit_test(&self, x: f32, y: f32) -> u32 {
-        let (logical_width, _) = self.primary_logical_size();
-        Self::titlebar_hit_test_for_chrome(self.primary_chrome(), logical_width, x, y)
+        let (logical_width, _) = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| { let (w,h) = ws.native_size(); let s = ws.scale_factor() as f32; (w as f32 / s, h as f32 / s) });
+        Self::titlebar_hit_test_for_chrome(self.frame_windows.primary_window().expect("primary window state").chrome(), logical_width, x, y)
     }
 
     pub(super) fn frame_window_titlebar_hit_test(

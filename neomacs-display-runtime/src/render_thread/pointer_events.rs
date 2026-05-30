@@ -2,6 +2,7 @@
 
 use super::RenderApp;
 use super::frame_windows::GuiFrameWindowState;
+use super::state::GuiChromeInteractionState;
 use super::input::{
     compact_bar_menu_width, menu_bar_hit_test_items, tab_bar_hit_test_items, toolbar_hit_test_items,
 };
@@ -230,10 +231,10 @@ impl RenderApp {
         if let Some(primary_state) = self.frame_windows.primary_window() {
             Self::glyphs_for_frame_window_pointer_target(primary_state, target_fid)
         } else if self.frame_windows.is_primary_frame_id(target_fid) {
-            self.primary_current_frame()
+            self.frame_windows.primary_window().and_then(|ws| ws.render.compositor.current_frame.as_ref())
                 .map(|frame| frame.glyphs.as_slice())
         } else {
-            self.primary_child_frames()
+            self.frame_windows.primary_window().expect("primary child frames").render.compositor.child_frames
                 .frames
                 .get(&target_fid)
                 .map(|entry| entry.frame.glyphs.as_slice())
@@ -246,12 +247,12 @@ impl RenderApp {
         }
         let primary_frame_id = self.frame_windows.primary_event_frame_id();
         #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.primary_render_state() {
+        if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render) {
             if Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some() {
                 return (x, y, primary_frame_id);
             }
         }
-        if let Some((fid, local_x, local_y)) = self.primary_child_frames().hit_test(x, y) {
+        if let Some((fid, local_x, local_y)) = self.frame_windows.primary_window().expect("primary child frames").render.compositor.child_frames.hit_test(x, y) {
             (local_x, local_y, fid)
         } else {
             (x, y, primary_frame_id)
@@ -268,7 +269,7 @@ impl RenderApp {
 
         #[cfg(feature = "wpe-webkit")]
         if self.frame_windows.is_primary_frame_id(target_fid) {
-            if let Some(primary_frame) = self.primary_render_state() {
+            if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render) {
                 if let Some((id, rx, ry)) =
                     Self::floating_webkit_hit_test(&primary_frame.floating_webkits, ev_x, ev_y)
                 {
@@ -732,26 +733,26 @@ impl RenderApp {
             tracing::debug!(
                 "MouseInput: {:?} at ({:.1}, {:.1}), menu_bar_h={}, popup={}",
                 button,
-                self.primary_mouse_pos().0,
-                self.primary_mouse_pos().1,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                 menu_bar_height,
-                self.primary_popup_menu().is_some()
+                self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_some()
             );
         }
 
-        if self.primary_popup_menu().is_some() {
+        if self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_some() {
             if state == ElementState::Pressed && button == MouseButton::Left {
-                if compact_bar_height > 0.0 && self.primary_mouse_pos().1 < compact_bar_height {
+                if compact_bar_height > 0.0 && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < compact_bar_height {
                     if let Some(idx) = self.compact_bar_menu_hit_test(
-                        self.primary_mouse_pos().0,
-                        self.primary_mouse_pos().1,
+                        self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                        self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                     ) {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.set_primary_popup_menu(None);
-                        self.with_primary_chrome_interaction_mut(|chrome| {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                             chrome.compact_bar_menu_active = Some(idx);
-                        });
+                        }) } else { false };
                         self.comms.send_input(InputEvent::MenuBarClick {
                             index: idx as i32,
                             emacs_frame_id: primary_event_frame_id,
@@ -759,21 +760,21 @@ impl RenderApp {
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.set_primary_popup_menu(None);
-                        self.with_primary_chrome_interaction_mut(|chrome| {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                             chrome.compact_bar_menu_active = None;
-                        });
+                        }) } else { false };
                     }
-                } else if menu_bar_height > 0.0 && self.primary_mouse_pos().1 < menu_bar_height {
+                } else if menu_bar_height > 0.0 && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < menu_bar_height {
                     if let Some(idx) = self
-                        .menu_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                        .menu_bar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
                     {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.set_primary_popup_menu(None);
-                        self.with_primary_chrome_interaction_mut(|chrome| {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                             chrome.menu_bar_active = Some(idx);
-                        });
+                        }) } else { false };
                         self.comms.send_input(InputEvent::MenuBarClick {
                             index: idx as i32,
                             emacs_frame_id: primary_event_frame_id,
@@ -781,28 +782,28 @@ impl RenderApp {
                     } else {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: -1 });
-                        self.set_primary_popup_menu(None);
-                        self.with_primary_chrome_interaction_mut(|chrome| {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                             chrome.menu_bar_active = None;
-                        });
+                        }) } else { false };
                     }
                 } else if tab_bar_height > 0.0
-                    && self.primary_mouse_pos().1 >= tab_bar_y
-                    && self.primary_mouse_pos().1 < tab_bar_y + tab_bar_height
+                    && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 >= tab_bar_y
+                    && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < tab_bar_y + tab_bar_height
                 {
                     let idx = self
-                        .tab_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
+                        .tab_bar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1);
                     self.comms
                         .send_input(InputEvent::MenuSelection { index: -1 });
-                    self.set_primary_popup_menu(None);
-                    self.with_primary_chrome_interaction_mut(|chrome| {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                         chrome.menu_bar_active = None;
                         chrome.compact_bar_menu_active = None;
                         chrome.tab_bar_press_captured = true;
                         if let Some(idx) = idx {
                             chrome.tab_bar_pressed = Some(idx);
                         }
-                    });
+                    }) } else { false };
                     if let Some(idx) = idx {
                         self.comms.send_input(InputEvent::TabBarClick {
                             index: idx as i32,
@@ -810,24 +811,24 @@ impl RenderApp {
                         });
                     }
                 } else if tool_bar_height > 0.0
-                    && self.primary_mouse_pos().1 < self.toolbar_y_origin() + tool_bar_height
-                    && self.primary_mouse_pos().1 >= self.toolbar_y_origin()
+                    && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < self.toolbar_y_origin() + tool_bar_height
+                    && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 >= self.toolbar_y_origin()
                 {
                     let idx = self.toolbar_hit_test(
-                        self.primary_mouse_pos().0,
-                        self.primary_mouse_pos().1 - self.toolbar_y_origin(),
+                        self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                        self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 - self.toolbar_y_origin(),
                     );
                     self.comms
                         .send_input(InputEvent::MenuSelection { index: -1 });
-                    self.set_primary_popup_menu(None);
-                    self.with_primary_chrome_interaction_mut(|chrome| {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                         chrome.menu_bar_active = None;
                         chrome.compact_bar_menu_active = None;
                         chrome.toolbar_press_captured = true;
                         if let Some(idx) = idx {
                             chrome.toolbar_pressed = Some(idx);
                         }
-                    });
+                    }) } else { false };
                     if let Some(idx) = idx {
                         self.comms.send_input(InputEvent::ToolBarClick {
                             index: idx as i32,
@@ -835,27 +836,27 @@ impl RenderApp {
                         });
                     }
                 } else {
-                    let idx = self.primary_popup_menu().map_or(-1, |menu| {
-                        menu.hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                    let idx = self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).map_or(-1, |menu| {
+                        menu.hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
                     });
                     if idx >= 0 {
                         self.comms
                             .send_input(InputEvent::MenuSelection { index: idx });
-                        self.set_primary_popup_menu(None);
-                        self.with_primary_chrome_interaction_mut(|chrome| {
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                             chrome.menu_bar_active = None;
                             chrome.compact_bar_menu_active = None;
-                        });
+                        }) } else { false };
                     } else {
                         let (depth, local_idx) =
-                            self.primary_popup_menu().map_or((-1, -1), |menu| {
+                            self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).map_or((-1, -1), |menu| {
                                 menu.hit_test_all(
-                                    self.primary_mouse_pos().0,
-                                    self.primary_mouse_pos().1,
+                                    self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                                    self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                                 )
                             });
                         if depth >= 0 && local_idx >= 0 {
-                            let is_submenu = self.primary_popup_menu().is_some_and(|menu| {
+                            let is_submenu = self.frame_windows.primary_window().and_then(|ws| ws.render.overlays.popup_menu.as_ref()).is_some_and(|menu| {
                                 let panel = if depth == 0 {
                                     &menu.root_panel
                                 } else {
@@ -865,42 +866,42 @@ impl RenderApp {
                                 menu.all_items[global_idx].submenu
                             });
                             if is_submenu {
-                                self.mark_primary_dirty();
+                                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.compositor.dirty = true };
                             } else {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
-                                self.set_primary_popup_menu(None);
-                                self.with_primary_chrome_interaction_mut(|chrome| {
+                                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                                     chrome.menu_bar_active = None;
                                     chrome.compact_bar_menu_active = None;
-                                });
+                                }) } else { false };
                             }
                         } else {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
-                            self.set_primary_popup_menu(None);
-                            self.with_primary_chrome_interaction_mut(|chrome| {
+                            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                                 chrome.menu_bar_active = None;
                                 chrome.compact_bar_menu_active = None;
-                            });
+                            }) } else { false };
                         }
                     }
                 }
             } else if state == ElementState::Pressed {
                 self.comms
                     .send_input(InputEvent::MenuSelection { index: -1 });
-                self.set_primary_popup_menu(None);
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_popup_menu(None) };
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.menu_bar_active = None;
                     chrome.compact_bar_menu_active = None;
-                });
+                }) } else { false };
             }
             return;
         }
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.primary_chrome().resize_edge.is_some()
+            && self.frame_windows.primary_window().expect("primary").chrome().resize_edge.is_some()
         {
             if let Some(primary_state) = self.frame_windows.primary_window() {
                 primary_state.drag_resize_for_current_edge();
@@ -910,9 +911,9 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && self.titlebar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1) > 0
+            && self.titlebar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1) > 0
         {
-            match self.titlebar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1) {
+            match self.titlebar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1) {
                 2 => {
                     self.comms.send_input(InputEvent::WindowClose {
                         emacs_frame_id: primary_event_frame_id,
@@ -929,7 +930,7 @@ impl RenderApp {
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
-            && !self.primary_chrome().decorations_enabled
+            && !self.frame_windows.primary_window().expect("primary").chrome().decorations_enabled
             && (self.modifiers & NEOMACS_SUPER_MASK) != 0
         {
             if let Some(primary_state) = self.frame_windows.primary_window() {
@@ -941,19 +942,19 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && compact_bar_height > 0.0
-            && self.primary_mouse_pos().1 < compact_bar_height
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < compact_bar_height
         {
             if let Some(idx) = self
-                .compact_bar_menu_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                .compact_bar_menu_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
             {
-                if self.primary_chrome_interaction().compact_bar_menu_active == Some(idx) {
-                    self.with_primary_chrome_interaction_mut(|chrome| {
+                if self.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).compact_bar_menu_active == Some(idx) {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                         chrome.compact_bar_menu_active = None;
-                    });
+                    }) } else { false };
                 } else {
-                    self.with_primary_chrome_interaction_mut(|chrome| {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                         chrome.compact_bar_menu_active = Some(idx);
-                    });
+                    }) } else { false };
                     self.comms.send_input(InputEvent::MenuBarClick {
                         index: idx as i32,
                         emacs_frame_id: primary_event_frame_id,
@@ -962,11 +963,11 @@ impl RenderApp {
                 return;
             }
             if let Some(idx) = self
-                .compact_bar_tool_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                .compact_bar_tool_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
             {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.compact_bar_tool_pressed = Some(idx);
-                });
+                }) } else { false };
                 self.comms.send_input(InputEvent::ToolBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
@@ -978,20 +979,20 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && menu_bar_height > 0.0
-            && self.primary_mouse_pos().1 < menu_bar_height
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < menu_bar_height
         {
             tracing::debug!(
                 "Menu bar click at ({:.1}, {:.1}), menu_bar_height={}",
-                self.primary_mouse_pos().0,
-                self.primary_mouse_pos().1,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                 menu_bar_height
             );
             if let Some(idx) =
-                self.menu_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                self.menu_bar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
             {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.menu_bar_active = Some(idx);
-                });
+                }) } else { false };
                 self.comms.send_input(InputEvent::MenuBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
@@ -1004,62 +1005,62 @@ impl RenderApp {
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && tab_bar_height > 0.0
-            && self.primary_mouse_pos().1 >= tab_bar_y
-            && self.primary_mouse_pos().1 < tab_bar_y + tab_bar_height
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 >= tab_bar_y
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < tab_bar_y + tab_bar_height
         {
             if let Some(idx) =
-                self.tab_bar_hit_test(self.primary_mouse_pos().0, self.primary_mouse_pos().1)
+                self.tab_bar_hit_test(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1)
             {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_pressed = Some(idx);
                     chrome.tab_bar_press_captured = true;
-                });
+                }) } else { false };
                 self.comms.send_input(InputEvent::TabBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_press_captured = true;
-                });
+                }) } else { false };
             }
             return;
         }
 
         if state == ElementState::Released
             && button == MouseButton::Left
-            && (self.primary_chrome_interaction().tab_bar_pressed.is_some()
-                || self.primary_chrome_interaction().tab_bar_press_captured)
+            && (self.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).tab_bar_pressed.is_some()
+                || self.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).tab_bar_press_captured)
         {
-            self.with_primary_chrome_interaction_mut(|chrome| {
+            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                 chrome.tab_bar_pressed = None;
                 chrome.tab_bar_press_captured = false;
-            });
+            }) } else { false };
             return;
         }
 
         if state == ElementState::Pressed
             && button == MouseButton::Left
             && tool_bar_height > 0.0
-            && self.primary_mouse_pos().1 < self.toolbar_y_origin() + tool_bar_height
-            && self.primary_mouse_pos().1 >= self.toolbar_y_origin()
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 < self.toolbar_y_origin() + tool_bar_height
+            && self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 >= self.toolbar_y_origin()
         {
             if let Some(idx) = self.toolbar_hit_test(
-                self.primary_mouse_pos().0,
-                self.primary_mouse_pos().1 - self.toolbar_y_origin(),
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1 - self.toolbar_y_origin(),
             ) {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_pressed = Some(idx);
                     chrome.toolbar_press_captured = true;
-                });
+                }) } else { false };
                 self.comms.send_input(InputEvent::ToolBarClick {
                     index: idx as i32,
                     emacs_frame_id: primary_event_frame_id,
                 });
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_press_captured = true;
-                });
+                }) } else { false };
             }
             return;
         }
@@ -1067,33 +1068,33 @@ impl RenderApp {
         if state == ElementState::Released
             && button == MouseButton::Left
             && self
-                .primary_chrome_interaction()
+                .frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction)
                 .compact_bar_tool_pressed
                 .is_some()
         {
-            self.with_primary_chrome_interaction_mut(|chrome| {
+            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                 chrome.compact_bar_tool_pressed = None;
-            });
+            }) } else { false };
             return;
         }
 
         if state == ElementState::Released
             && button == MouseButton::Left
-            && (self.primary_chrome_interaction().toolbar_pressed.is_some()
-                || self.primary_chrome_interaction().toolbar_press_captured)
+            && (self.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).toolbar_pressed.is_some()
+                || self.frame_windows.primary_window().map_or(GuiChromeInteractionState::default(), |ws| ws.render.chrome.interaction).toolbar_press_captured)
         {
-            self.with_primary_chrome_interaction_mut(|chrome| {
+            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                 chrome.toolbar_pressed = None;
                 chrome.toolbar_press_captured = false;
-            });
+            }) } else { false };
             return;
         }
 
         if state == ElementState::Pressed && button == MouseButton::Left {
             tracing::trace!(
                 "Left click at ({:.1}, {:.1}) NOT in menu bar (h={}) or toolbar (h={})",
-                self.primary_mouse_pos().0,
-                self.primary_mouse_pos().1,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                 menu_bar_height,
                 tool_bar_height
             );
@@ -1109,9 +1110,9 @@ impl RenderApp {
         };
 
         let (ev_x, ev_y, target_fid) =
-            self.pointer_target_at(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
+            self.pointer_target_at(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1);
         if target_fid != 0 {
-            if let Some(entry) = self.primary_child_frames().frames.get(&target_fid) {
+            if let Some(entry) = self.frame_windows.primary_window().expect("primary child frames").render.compositor.child_frames.frames.get(&target_fid) {
                 tracing::trace!(
                     "Child frame hit: fid={} abs=({:.1},{:.1}) size=({:.1}x{:.1}) mouse=({:.1},{:.1}) local=({:.1},{:.1})",
                     target_fid,
@@ -1119,8 +1120,8 @@ impl RenderApp {
                     entry.abs_y,
                     entry.frame.width,
                     entry.frame.height,
-                    self.primary_mouse_pos().0,
-                    self.primary_mouse_pos().1,
+                    self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0,
+                    self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1,
                     ev_x,
                     ev_y
                 );
@@ -1162,17 +1163,17 @@ impl RenderApp {
             webkit_rel_y: wk_ry,
         });
         if state == ElementState::Pressed {
-            self.with_primary_chrome_interaction_mut(|chrome| {
+            if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                 chrome.tab_bar_press_captured = false;
                 chrome.toolbar_press_captured = false;
-            });
+            }) } else { false };
         }
 
         if state == ElementState::Pressed && self.effects.click_halo.enabled {
             let now = std::time::Instant::now();
-            let mouse_pos = self.primary_mouse_pos();
+            let mouse_pos = self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos);
             let duration_ms = self.effects.click_halo.duration_ms;
-            if let Some(primary_frame) = self.primary_render_state_mut() {
+            if let Some(primary_frame) = self.frame_windows.primary_window_mut().map(|ws| &mut ws.render) {
                 primary_frame.trigger_click_halo(mouse_pos.0, mouse_pos.1, now, duration_ms);
             }
         }
@@ -1372,17 +1373,17 @@ impl RenderApp {
             return;
         }
 
-        let lx = (position.x / self.primary_scale_factor()) as f32;
-        let ly = (position.y / self.primary_scale_factor()) as f32;
-        self.set_primary_mouse_pos((lx, ly));
+        let lx = (position.x / self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor())) as f32;
+        let ly = (position.y / self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor())) as f32;
+        if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.set_mouse_pos((lx, ly)) };
         let primary_event_frame_id = self.frame_windows.primary_event_frame_id();
 
-        self.clear_primary_mouse_hidden_for_typing();
+        if let Some(window_state) = self.frame_windows.primary_window_mut() { window_state.set_mouse_hidden_for_typing(false) };
 
         let edge = self.detect_resize_edge(lx, ly);
-        if edge != self.primary_chrome().resize_edge {
-            self.primary_chrome_mut().resize_edge = edge;
-            if let Some(window) = self.primary_window() {
+        if edge != self.frame_windows.primary_window().expect("primary").chrome().resize_edge {
+            self.frame_windows.primary_window_mut().expect("primary").chrome_mut().resize_edge = edge;
+            if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                 use winit::window::CursorIcon;
                 let icon = match edge {
                     Some(dir) => CursorIcon::from(dir),
@@ -1392,13 +1393,13 @@ impl RenderApp {
             }
         }
 
-        if !self.primary_chrome().decorations_enabled {
+        if !self.frame_windows.primary_window().expect("primary").chrome().decorations_enabled {
             let new_hover = self.titlebar_hit_test(lx, ly);
-            if new_hover != self.primary_chrome().titlebar_hover {
-                self.primary_chrome_mut().titlebar_hover = new_hover;
-                self.mark_primary_dirty();
-                if self.primary_chrome().resize_edge.is_none() {
-                    if let Some(window) = self.primary_window() {
+            if new_hover != self.frame_windows.primary_window().expect("primary").chrome().titlebar_hover {
+                self.frame_windows.primary_window_mut().expect("primary").chrome_mut().titlebar_hover = new_hover;
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.compositor.dirty = true };
+                if self.frame_windows.primary_window().expect("primary").chrome().resize_edge.is_none() {
+                    if let Some(window) = self.frame_windows.primary_window().and_then(|ws| ws.window()) {
                         use winit::window::CursorIcon;
                         let icon = match new_hover {
                             2 | 3 | 4 => CursorIcon::Pointer,
@@ -1414,7 +1415,7 @@ impl RenderApp {
             let mut send_menu_bar_click = None;
             if ly < self.menu_bar_height() {
                 let new_hover = self.menu_bar_hit_test(lx, ly);
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.menu_bar_hovered = new_hover;
                     if let (Some(active), Some(hov)) = (chrome.menu_bar_active, new_hover)
                         && hov != active
@@ -1422,11 +1423,11 @@ impl RenderApp {
                         chrome.menu_bar_active = Some(hov);
                         send_menu_bar_click = Some(hov);
                     }
-                });
+                }) } else { false };
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.menu_bar_hovered = None;
-                });
+                }) } else { false };
             }
             if let Some(index) = send_menu_bar_click {
                 self.comms.send_input(InputEvent::MenuBarClick {
@@ -1445,7 +1446,7 @@ impl RenderApp {
                 } else {
                     None
                 };
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.compact_bar_menu_hovered = new_menu_hover;
                     chrome.compact_bar_tool_hovered = new_tool_hover;
                     if let (Some(active), Some(hov)) =
@@ -1455,12 +1456,12 @@ impl RenderApp {
                         chrome.compact_bar_menu_active = Some(hov);
                         send_menu_bar_click = Some(hov);
                     }
-                });
+                }) } else { false };
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.compact_bar_menu_hovered = None;
                     chrome.compact_bar_tool_hovered = None;
-                });
+                }) } else { false };
             }
             if let Some(index) = send_menu_bar_click {
                 self.comms.send_input(InputEvent::MenuBarClick {
@@ -1473,13 +1474,13 @@ impl RenderApp {
         if self.tab_bar_height() > 0.0 {
             if ly >= self.tab_bar_y() && ly < self.tab_bar_y() + self.tab_bar_height() {
                 let new_hover = self.tab_bar_hit_test(lx, ly);
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_hovered = new_hover;
-                });
+                }) } else { false };
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.tab_bar_hovered = None;
-                });
+                }) } else { false };
             }
         }
 
@@ -1487,17 +1488,17 @@ impl RenderApp {
             let toolbar_y = self.toolbar_y_origin();
             if ly < toolbar_y + self.tool_bar_height() && ly >= toolbar_y {
                 let new_hover = self.toolbar_hit_test(lx, ly - toolbar_y);
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_hovered = new_hover;
-                });
+                }) } else { false };
             } else {
-                self.with_primary_chrome_interaction_mut(|chrome| {
+                if let Some(ws) = self.frame_windows.primary_window_mut() { ws.render.with_chrome_interaction_mut(|chrome| {
                     chrome.toolbar_hovered = None;
-                });
+                }) } else { false };
             }
         }
 
-        let handled_primary_popup = self.update_primary_popup_hover(lx, ly);
+        let handled_primary_popup = self.frame_windows.primary_window_mut().is_some_and(|ws| { let had_popup = ws.render.overlays.popup_menu.is_some(); ws.render.update_popup_hover(lx, ly); had_popup });
         if handled_primary_popup {
             return;
         }
@@ -1552,14 +1553,14 @@ impl RenderApp {
         let (dx, dy, pixel_precise) = match delta {
             MouseScrollDelta::LineDelta(x, y) => (x, y, false),
             MouseScrollDelta::PixelDelta(pos) => (
-                (pos.x / self.primary_scale_factor()) as f32,
-                (pos.y / self.primary_scale_factor()) as f32,
+                (pos.x / self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor())) as f32,
+                (pos.y / self.frame_windows.primary_window().map_or(1.0, |ws| ws.scale_factor())) as f32,
                 true,
             ),
         };
 
         let (ev_x, ev_y, target_fid) =
-            self.pointer_target_at(self.primary_mouse_pos().0, self.primary_mouse_pos().1);
+            self.pointer_target_at(self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).0, self.frame_windows.primary_window().map_or((0.0, 0.0), |ws| ws.render.mouse_pos).1);
         let (wk_id, wk_rx, wk_ry) = self.webkit_target_at(target_fid, ev_x, ev_y);
 
         self.comms.send_input(InputEvent::MouseScroll {
