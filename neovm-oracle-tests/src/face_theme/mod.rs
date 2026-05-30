@@ -26829,3 +26829,69 @@ fn ft_ignite_font_lock_fontify_pcase_deep() {
      'fontified (get-text-property 1 'fontified)))))"##,
     );
 }
+
+#[test]
+fn ft_quake_face_overlay_property_face_get_no_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'no-face-set (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_quake_font_lock_fontify_cl_defun_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(cl-defun my-fn (x &key (a 1) (b 2))\n  (+ x a b))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'cl-defun-face (save-excursion (goto-char (point-min)) (search-forward "cl-defun") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_quake_face_overlay_buffer_invisibility_spec_edge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (list
+     'buffer-invisibility-spec-fbound (fboundp 'buffer-invisibility-spec)
+     'invis-spec (condition-case nil (buffer-invisibility-spec) (error 'no))
+     'add-invis (condition-case nil (progn (add-to-invisibility-spec 'my-invis) (buffer-invisibility-spec)) (error 'no))
+     'remove-invis (condition-case nil (progn (remove-from-invisibility-spec 'my-invis) 'ok) (error 'no))))))"##,
+    );
+}
+
+#[test]
+fn ft_quake_face_text_property_fill_gap_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA BBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 7 12 'face 'italic)
+    (goto-char 6)
+    (insert "X")
+    (list
+     'face-at-gap (get-text-property 6 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
