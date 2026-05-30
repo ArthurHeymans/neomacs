@@ -17343,3 +17343,166 @@ fn ft_colour_face_set_all_attrs_to_unspec_deep() {
    'width-after (face-attribute 'my-full-unspec-face :width nil 'default-on))))))"##,
     );
 }
+
+#[test]
+fn ft_photon_face_font_lock_multi_line_string_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(format \"hello\nworld\n%s\" name)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'format-face (save-excursion (goto-char (point-min)) (search-forward "format") (get-text-property (match-beginning 0) 'face))
+     'hello-face (save-excursion (goto-char (point-min)) (search-forward "hello") (get-text-property (match-beginning 0) 'face))
+     'world-face (save-excursion (goto-char (point-min)) (search-forward "world") (get-text-property (match-beginning 0) 'face))
+     'name-face (save-excursion (goto-char (point-min)) (search-forward "name") (get-text-property (match-beginning 0) 'face))
+     'fontified-all (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 18 25 30 34))))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_overlay_priority_interleave_complex_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGGHHHHHIIIIIJJJJJ")
+    (let ((ov1 (make-overlay 6 15))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 20))
+    (let ((ov2 (make-overlay 10 25))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 40))
+    (let ((ov3 (make-overlay 20 35))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 30))
+    (let ((ov4 (make-overlay 30 45))) (overlay-put ov4 'face '(:foreground "orange" :weight bold)) (overlay-put ov4 'priority 10))
+    (let ((snap (lambda () (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 8 12 18 22 28 32 38 45 50)))))
+      (let ((v0 (funcall snap)))
+        ;; Rearrange priorities
+        (overlay-put ov1 'priority 50) (overlay-put ov3 'priority 60) (overlay-put ov2 'priority 1)
+        (let ((v1 (funcall snap)))
+          (mapc #'delete-overlay (overlays-in 1 50))
+          (list v0 v1)))))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_text_property_fontified_flag_cleanup() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Fontified flag cleanup face property test buffer content text data")
+    (put-text-property 1 54 'face 'bold)
+    (put-text-property 1 54 'fontified t)
+    (list
+     'fontified-before (get-text-property 1 'fontified)
+     'face-before (get-text-property 1 'face)
+     'remove-fontified (progn (remove-text-properties 1 54 '(fontified nil)) (get-text-property 1 'fontified))
+     'face-after-remove (get-text-property 1 'face)
+     're-add-fontified (progn (put-text-property 1 54 'fontified t) (get-text-property 1 'fontified))
+     'face-after-re-add (get-text-property 1 'face)
+     'props-count-at-1 (length (text-properties-at 1))
+     'props-count-at-30 (length (text-properties-at 30))))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_overlay_line_spacing_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "Line spacing overlay face test content text data buffer here now done final")
+    (let ((ov (make-overlay 10 30)))
+      (overlay-put ov 'face '(:background "yellow" :foreground "black"))
+      (overlay-put ov 'line-spacing 15)
+      (overlay-put ov 'line-height 2.0)
+      (list
+       'face (overlay-get ov 'face)
+       'line-spacing (overlay-get ov 'line-spacing)
+       'line-height (overlay-get ov 'line-height)
+       'face-at-20 (get-char-property 20 'face)
+       'face-at-5 (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_font_lock_keywords_overwrite_vs_keep_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (fundamental-mode)
+    (font-lock-mode 1)
+    (insert "OVERWRITE keep KEEP test font lock face buffer content")
+    (font-lock-add-keywords nil '(("\\<\\(OVERWRITE\\)\\>" 1 font-lock-warning-face overwrite) ("\\<\\(KEEP\\)\\>" 1 '(:foreground "red" :weight bold) keep)))
+    (font-lock-fontify-buffer)
+    (list
+     'overwrite-face (save-excursion (goto-char (point-min)) (search-forward "OVERWRITE") (get-text-property (match-beginning 0) 'face))
+     'keep-face (save-excursion (goto-char (point-min)) (search-forward "KEEP") (get-text-property (match-beginning 0) 'face))
+     'non-keyword (save-excursion (goto-char (point-min)) (search-forward "test") (get-text-property (match-beginning 0) 'face)))
+    (font-lock-remove-keywords nil '(("\\<\\(OVERWRITE\\)\\>" 1 font-lock-warning-face overwrite) ("\\<\\(KEEP\\)\\>" 1 '(:foreground "red" :weight bold) keep)))
+    'cleaned-keywords)))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_set_face_font_attribute_with_large_spec() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-large-spec-face) (error nil))
+  (list
+   'set-font-spec (condition-case nil (progn (set-face-font 'my-large-spec-face (font-spec :family "Monospace" :size 14 :weight 'bold :slant 'italic :width 'normal) nil) 'ok) (error 'no))
+   'get-font (condition-case nil (face-font 'my-large-spec-face nil) (error 'no))
+   'set-font-string (condition-case nil (progn (set-face-font 'my-large-spec-face "Monospace-Bold-Italic-14" nil) 'ok) (error 'no))
+   'get-font-2 (condition-case nil (face-font 'my-large-spec-face nil) (error 'no))
+   'reset-font (condition-case nil (progn (set-face-font 'my-large-spec-face 'unspecified nil) 'ok) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_text_property_get_set_and_clear_at_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (put-text-property 1 2 'face 'bold)
+    (list
+     'single-char-face (get-text-property 1 'face)
+     'single-char-fontified (get-text-property 1 'fontified)
+     'text-props (text-properties-at 1)
+     (progn (goto-char 2) (insert "EXTENDED-TEXT") (list 'face-1 (get-text-property 1 'face) 'face-2 (get-text-property 2 'face) 'face-5 (get-text-property 5 'face) 'face-14 (get-text-property 14 'face)))
+     'interval-count (length (object-intervals (current-buffer))))))"##,
+    );
+}
+
+#[test]
+fn ft_photon_face_default_properties_of_font_lock_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'font-lock-warning-face-underline (condition-case nil (face-attribute 'font-lock-warning-face :underline nil 'default-on) (error 'no))
+   'font-lock-keyword-face-weight (face-attribute 'font-lock-keyword-face :weight nil 'default-on)
+   'font-lock-function-name-face-weight (face-attribute 'font-lock-function-name-face :weight nil 'default-on)
+   'font-lock-variable-name-face-slant (face-attribute 'font-lock-variable-name-face :slant nil 'default-on)
+   'font-lock-type-face-weight (face-attribute 'font-lock-type-face :weight nil 'default-on)
+   'font-lock-constant-face-weight (face-attribute 'font-lock-constant-face :weight nil 'default-on)
+   'font-lock-string-face-slant (condition-case nil (face-attribute 'font-lock-string-face :slant nil 'default-on) (error 'no))
+   'font-lock-comment-face-slant (condition-case nil (face-attribute 'font-lock-comment-face :slant nil 'default-on) (error 'no))
+   'font-lock-doc-face-slant (condition-case nil (face-attribute 'font-lock-doc-face :slant nil 'default-on) (error 'no))
+   'font-lock-builtin-face-weight (condition-case nil (face-attribute 'font-lock-builtin-face :weight nil 'default-on) (error 'no))
+   'font-lock-preprocessor-face-weight (condition-case nil (face-attribute 'font-lock-preprocessor-face :weight nil 'default-on) (error 'no)))))"##,
+    );
+}
