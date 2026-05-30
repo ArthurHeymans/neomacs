@@ -1,7 +1,7 @@
 //! Pointer, wheel, and hover handling for winit window events.
 
 use super::RenderApp;
-use super::frame_windows::GuiFrameWindowState;
+use super::frame_windows::{ChromePress, GuiFrameWindowState};
 use super::state::GuiChromeInteractionState;
 use super::input::{
     compact_bar_menu_width, menu_bar_hit_test_items, tab_bar_hit_test_items, toolbar_hit_test_items,
@@ -381,7 +381,7 @@ impl RenderApp {
                                 self.comms
                                     .send_input(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
-                                window_state.render.chrome.interaction.menu_bar_active = Some(idx);
+                                window_state.render.chrome.press_with_popup(& ChromePress::MenuBar(idx));
                                 event = Some(InputEvent::MenuBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -389,7 +389,7 @@ impl RenderApp {
                             } else {
                                 event = Some(InputEvent::MenuSelection { index: -1 });
                                 window_state.render.set_popup_menu(None);
-                                window_state.render.chrome.interaction.menu_bar_active = None;
+                                window_state.render.chrome.dismiss_menus();
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
@@ -404,7 +404,7 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.set_popup_menu(None);
-                            window_state.render.chrome.interaction.menu_bar_active = None;
+                            window_state.render.chrome.dismiss_menus();
                             window_state
                                 .render
                                 .chrome.interaction
@@ -416,7 +416,7 @@ impl RenderApp {
                             if let Some(idx) =
                                 Self::frame_window_tab_bar_hit_test(window_state, x, y)
                             {
-                                window_state.render.chrome.interaction.tab_bar_pressed = Some(idx);
+                                window_state.render.chrome.press_with_popup(& ChromePress::TabBar(idx));
                                 event = Some(InputEvent::TabBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -432,7 +432,7 @@ impl RenderApp {
                             self.comms
                                 .send_input(InputEvent::MenuSelection { index: -1 });
                             window_state.render.set_popup_menu(None);
-                            window_state.render.chrome.interaction.menu_bar_active = None;
+                            window_state.render.chrome.dismiss_menus();
                             window_state
                                 .render
                                 .chrome.interaction
@@ -448,7 +448,7 @@ impl RenderApp {
                                 self.toolbar.padding,
                                 self.toolbar.icon_size,
                             ) {
-                                window_state.render.chrome.interaction.toolbar_pressed = Some(idx);
+                                window_state.render.chrome.press_with_popup(& ChromePress::ToolBar(idx));
                                 event = Some(InputEvent::ToolBarClick {
                                     index: idx as i32,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
@@ -569,7 +569,7 @@ impl RenderApp {
                     {
                         if let Some(idx) = Self::frame_window_menu_bar_hit_test(window_state, x, y)
                         {
-                            window_state.render.chrome.interaction.menu_bar_active = Some(idx);
+                            window_state.render.chrome.press_with_popup(& ChromePress::MenuBar(idx));
                             event = Some(InputEvent::MenuBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
@@ -591,7 +591,7 @@ impl RenderApp {
                             .chrome.interaction
                             .tab_bar_press_captured = true;
                         if let Some(idx) = Self::frame_window_tab_bar_hit_test(window_state, x, y) {
-                            window_state.render.chrome.interaction.tab_bar_pressed = Some(idx);
+                            window_state.render.chrome.press_with_popup(& ChromePress::TabBar(idx));
                             event = Some(InputEvent::TabBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
@@ -615,7 +615,7 @@ impl RenderApp {
                             self.toolbar.padding,
                             self.toolbar.icon_size,
                         ) {
-                            window_state.render.chrome.interaction.toolbar_pressed = Some(idx);
+                            window_state.render.chrome.press_with_popup(& ChromePress::ToolBar(idx));
                             event = Some(InputEvent::ToolBarClick {
                                 index: idx as i32,
                                 emacs_frame_id: window_state.render.emacs_frame_id,

@@ -155,6 +155,79 @@ impl ChromeState {
         self.interaction.menu_bar_active = None;
         self.interaction.compact_bar_menu_active = None;
     }
+
+    /// Release all pressed state and return what was active.
+    /// Returns the pressed item if any, clearing interaction state.
+    pub fn release_pressed(&mut self) -> Option<ChromePress> {
+        if let Some(idx) = self.interaction.menu_bar_active.take() {
+            return Some(ChromePress::MenuBar(idx));
+        }
+        if let Some(idx) = self.interaction.compact_bar_menu_active.take() {
+            return Some(ChromePress::CompactMenu(idx));
+        }
+        if let Some(idx) = self.interaction.compact_bar_tool_pressed.take() {
+            return Some(ChromePress::CompactTool(idx));
+        }
+        if let Some(idx) = self.interaction.toolbar_pressed.take() {
+            self.interaction.toolbar_press_captured = false;
+            return Some(ChromePress::ToolBar(idx));
+        }
+        if let Some(idx) = self.interaction.tab_bar_pressed.take() {
+            self.interaction.tab_bar_press_captured = false;
+            return Some(ChromePress::TabBar(idx));
+        }
+        None
+    }
+
+    /// Apply a mouse press on a chrome hit during a popup interaction.
+    /// Dismisses popup-related state and records the interaction.
+    pub fn press_with_popup(&mut self, press: &ChromePress) {
+        self.interaction.menu_bar_active = None;
+        self.interaction.compact_bar_menu_active = None;
+        match press {
+            ChromePress::MenuBar(idx) => self.interaction.menu_bar_active = Some(*idx),
+            ChromePress::CompactMenu(idx) => self.interaction.compact_bar_menu_active = Some(*idx),
+            ChromePress::CompactTool(idx) => self.interaction.compact_bar_tool_pressed = Some(*idx),
+            ChromePress::ToolBar(idx) => self.interaction.toolbar_pressed = Some(*idx),
+            ChromePress::TabBar(idx) => {
+                self.interaction.tab_bar_press_captured = true;
+                self.interaction.tab_bar_pressed = Some(*idx);
+            }
+        }
+    }
+
+    /// Update hover state for all chrome bars. Returns true if dirty.
+    pub fn update_hover(
+        &mut self,
+        menu_bar_hover: Option<u32>,
+        tab_bar_hover: Option<u32>,
+        toolbar_hover: Option<u32>,
+    ) -> bool {
+        let mut dirty = false;
+        if self.interaction.menu_bar_hovered != menu_bar_hover {
+            self.interaction.menu_bar_hovered = menu_bar_hover;
+            dirty = true;
+        }
+        if self.interaction.tab_bar_hovered != tab_bar_hover {
+            self.interaction.tab_bar_hovered = tab_bar_hover;
+            dirty = true;
+        }
+        if self.interaction.toolbar_hovered != toolbar_hover {
+            self.interaction.toolbar_hovered = toolbar_hover;
+            dirty = true;
+        }
+        dirty
+    }
+}
+
+/// Result of a chrome interaction press.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ChromePress {
+    MenuBar(u32),
+    CompactMenu(u32),
+    CompactTool(u32),
+    ToolBar(u32),
+    TabBar(u32),
 }
 
 /// Per-window state for a top-level GUI frame.
