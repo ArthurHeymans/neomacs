@@ -17181,3 +17181,165 @@ fn ft_pulse_face_overlay_properties_count_after_multiple_adds() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_colour_face_set_face_underline_style_only_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-ul-style-face) (error nil))
+  (list
+   'set-wave (condition-case nil (progn (set-face-underline 'my-ul-style-face '(:style wave) nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no))
+   'set-line (condition-case nil (progn (set-face-underline 'my-ul-style-face '(:style line) nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no))
+   'set-double (condition-case nil (progn (set-face-underline 'my-ul-style-face '(:style double-line) nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no))
+   'set-dots (condition-case nil (progn (set-face-underline 'my-ul-style-face '(:style dots) nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no))
+   'set-dash (condition-case nil (progn (set-face-underline 'my-ul-style-face '(:style dash) nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no))
+   'set-off (condition-case nil (progn (set-face-underline 'my-ul-style-face nil nil) (face-attribute 'my-ul-style-face :underline nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_font_lock_fontify_unfontify_toggle_repeat_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun toggle-repeat (x) (* x x))\n")
+    (let ((results nil))
+      (dotimes (i 4)
+        (if (evenp i)
+            (font-lock-fontify-buffer)
+          (font-lock-unfontify-buffer))
+        (push (list i (get-text-property 1 'fontified) (get-text-property 7 'face)) results))
+      (nreverse results)))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_face_text_property_boundary_zero_width_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (put-text-property 9 13 'face 'underline)
+    (put-text-property 13 27 'face '(:foreground "red"))
+    (list
+     'at-boundary-5 (list (get-text-property 4 'face) (get-text-property 5 'face))
+     'at-boundary-9 (list (get-text-property 8 'face) (get-text-property 9 'face))
+     'at-boundary-13 (list (get-text-property 12 'face) (get-text-property 13 'face))
+     'next-prop-changes (mapcar (lambda (pos) (next-single-property-change pos 'face nil 27)) '(1 5 9 13))
+     'prev-prop-changes (mapcar (lambda (pos) (previous-single-property-change pos 'face nil 1)) '(5 9 13 27))
+     'text-prop-any-check (text-property-any 1 27 'face 'bold)
+     'not-all-check (text-property-not-all 1 27 'face 'bold)))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_face_overlay_window_specific_properties_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFFGGGGG")
+    (let ((ov-nil (make-overlay 1 15))) (overlay-put ov-nil 'face '(:background "red")) (overlay-put ov-nil 'window nil))
+    (let ((ov-cur (make-overlay 10 25))) (overlay-put ov-cur 'face '(:background "green")) (overlay-put ov-cur 'window (selected-window)))
+    (let ((ov-nil2 (make-overlay 20 35))) (overlay-put ov-nil2 'face '(:background "blue")) (overlay-put ov-nil2 'window nil))
+    (list
+     'faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-char-property pos 'face))) '(1 5 10 15 20 25 30 35))
+     'windows (mapcar (lambda (ov) (list (overlay-start ov) (overlay-get ov 'window))) (list ov-nil ov-cur ov-nil2))
+     (progn (mapc #'delete-overlay (overlays-in 1 35)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_font_lock_fontify_block_vs_buffer_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun block-buffer-test (x) (+ x 1))\n")
+    (list
+     'fontify-block (condition-case nil (progn (font-lock-fontify-block 1) (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'fontified) (get-text-property pos 'face))) '(1 10 20 30))) (error 'no-block-fontify))
+     'unfontify (progn (font-lock-unfontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'fontified)) '(1 10 20 30)))
+     'fontify-buffer (progn (font-lock-fontify-buffer) (mapcar (lambda (pos) (goto-char pos) (get-text-property pos 'face)) '(1 7 15 20 25 30)))))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_face_property_change_at_midpoint_interval() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXXXXXXXYYYYYYYYYYZZZZZZZZZZ")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 11 21 'face 'italic)
+    (put-text-property 21 31 'face 'underline)
+    ;; Change face at midpoint of italic region
+    (put-text-property 15 18 'face '(:foreground "red"))
+    ;; Change face at start of underline region
+    (put-text-property 21 25 'face '(:background "yellow"))
+    (list
+     'faces-across (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 5 10 11 14 15 16 18 20 21 24 25 26 30))
+     'interval-count (length (object-intervals (current-buffer)))
+     'find-bold (text-property-any 1 31 'face 'bold)
+     'find-italic (text-property-any 1 31 'face 'italic)
+     'find-red (text-property-any 1 31 'face '(:foreground "red")))
+     'find-yellow (text-property-any 1 31 'face '(:background "yellow"))))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_face_overlay_face_vs_text_prop_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDDEEEEEFFFFF")
+    (put-text-property 1 31 'face '(:foreground "blue"))
+    (let ((ov1 (make-overlay 5 15))) (overlay-put ov1 'face '(:background "yellow")) (overlay-put ov1 'priority 100))
+    (let ((ov2 (make-overlay 15 25))) (overlay-put ov2 'face '(:foreground "red" :weight bold)) (overlay-put ov2 'priority 200))
+    (list
+     'text-prop-only (get-text-property 10 'face)
+     'overlay-priority-100 (get-char-property 10 'face)
+     'overlay-priority-200 (get-char-property 20 'face)
+     'text-prop-at-20 (get-text-property 20 'face)
+     'char-prop-at-20 (get-char-property 20 'face)
+     'char-prop-and-overlay-at-20 (get-char-property-and-overlay 20 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 31)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_colour_face_set_all_attrs_to_unspec_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-full-unspec-face) (error nil))
+  (condition-case nil (set-face-attribute 'my-full-unspec-face nil :weight 'bold :slant 'italic :foreground "red" :background "yellow" :underline t :overline t :strike-through t :box t :inverse-video t :height 150 :width 'condensed :extend t) (error nil))
+  (list
+   'weight-before (face-attribute 'my-full-unspec-face :weight nil 'default-on)
+   'fg-before (condition-case nil (face-foreground 'my-full-unspec-face nil 'default-on) (error 'no))
+   'unset-all (condition-case nil (progn (set-face-attribute 'my-full-unspec-face nil :weight 'unspecified :slant 'unspecified :foreground 'unspecified :background 'unspecified :underline 'unspecified :overline 'unspecified :strike-through 'unspecified :box 'unspecified :inverse-video 'unspecified :height 'unspecified :width 'unspecified :extend 'unspecified) 'unset-done) (error 'no))
+   'weight-after (face-attribute 'my-full-unspec-face :weight nil 'default-on)
+   'fg-after (condition-case nil (face-foreground 'my-full-unspec-face nil 'default-on) (error 'no))
+   'bg-after (condition-case nil (face-background 'my-full-unspec-face nil 'default-on) (error 'no))
+   'height-after (face-attribute 'my-full-unspec-face :height nil 'default-on)
+   'width-after (face-attribute 'my-full-unspec-face :width nil 'default-on))))))"##,
+    );
+}
