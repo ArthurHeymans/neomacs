@@ -32071,3 +32071,71 @@ fn ft_spark_text_property_reset_all_props_deep() {
      'after-remove-all (progn (set-text-properties 1 6 nil) (list (get-text-property 3 'face) (get-text-property 3 'fontified)))))))"##,
     );
 }
+
+#[test]
+fn ft_flash_face_overlay_face_multi_move_overlay_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'pos1 (list (overlay-start ov) (overlay-end ov) (get-char-property 3 'face))
+       'pos2 (progn (move-overlay ov 6 11) (list (overlay-start ov) (overlay-end ov) (get-char-property 8 'face)))
+       'pos3 (progn (move-overlay ov 11 16) (list (overlay-start ov) (overlay-end ov) (get-char-property 13 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_flash_font_lock_conf_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (conf-mode) (error (fundamental-mode)))
+    (insert "# This is a comment\nkey = value\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_flash_face_overlay_face_read_after_overlay_end() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 4)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'inside (get-char-property 2 'face)
+       'at-boundary (get-char-property 3 'face)
+       'outside (get-char-property 4 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_flash_text_property_interval_element_type_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'interval-type (let ((i (car (object-intervals (current-buffer)))))
+                      (list (type-of (car i)) (type-of (cadr i))))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
