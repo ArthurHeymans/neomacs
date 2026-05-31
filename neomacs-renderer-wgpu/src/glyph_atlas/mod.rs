@@ -3,7 +3,10 @@
 //! Caches rasterized glyphs as individual wgpu textures with bind groups.
 
 pub mod allocator;
+pub mod pages;
 pub mod types;
+
+pub use types::{AnyAtlasEntry, GlyphAtlasHandle, GlyphMaterialKind, SubpixelRequest};
 
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -116,29 +119,22 @@ pub struct RasterizeResult {
 
 /// A cached glyph with its wgpu texture and bind group
 pub struct CachedGlyph {
-    /// Texture containing this glyph
     pub texture: wgpu::Texture,
-    /// Texture view for sampling
     pub view: wgpu::TextureView,
-    /// Bind group for this glyph's texture
     pub bind_group: wgpu::BindGroup,
-    /// Width in pixels
     pub width: u32,
-    /// Height in pixels
     pub height: u32,
-    /// Bearing X (offset from origin)
     pub bearing_x: f32,
-    /// Bearing Y (offset from baseline)
     pub bearing_y: f32,
-    /// True if this is a color glyph (RGBA texture, e.g. color emoji).
-    /// Color glyphs should be rendered with the image pipeline (direct RGBA),
-    /// not the glyph pipeline (alpha-mask tinted with foreground color).
     pub is_color: bool,
-    /// True if this is a subpixel LCD mask texture.
     pub is_subpixel: bool,
-    /// Horizontal advance width (physical pixels)
     pub advance_width: f32,
-    /// Frame generation when this glyph was last accessed
+    last_accessed: u64,
+}
+
+struct CachedAtlasGlyph {
+    entry: AnyAtlasEntry,
+    advance_width: f32,
     last_accessed: u64,
 }
 
@@ -185,39 +181,31 @@ fn normalize_subpixel_mask(
     mask.to_vec()
 }
 
+use allocator::Allocation;
+use pages::{GlyphAtlasPages, PageAllocResult};
+use types::*;
+
 /// Wgpu-based glyph atlas for text rendering
 pub struct WgpuGlyphAtlas {
-    /// Cached glyphs: (charcode, face_id) -> CachedGlyph
     cache: HashMap<CachedGlyphKey, CachedGlyph>,
-    /// Cached composed glyphs (multi-codepoint grapheme clusters)
     composed_cache: HashMap<CachedComposedGlyphKey, CachedGlyph>,
-    /// Font system for text rendering
+    atlas_cache: HashMap<CachedGlyphKey, CachedAtlasGlyph>,
+    atlas_composed_cache: HashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
+    atlas_pages: GlyphAtlasPages,
+    atlas_config: GlyphAtlasConfig,
     font_system: FontSystem,
-    /// Swash scale context for direct glyph rasterization.
     scale_context: ScaleContext,
-    /// Bind group layout for glyph textures
     bind_group_layout: wgpu::BindGroupLayout,
-    /// Sampler for glyph textures
     sampler: wgpu::Sampler,
-    /// Default font size in pixels
     default_font_size: f32,
-    /// Default line height in pixels
     default_line_height: f32,
-    /// Display scale factor for HiDPI rasterization
     scale_factor: f32,
-    /// Maximum cache size
     max_size: usize,
-    /// Interned font family names (avoids Box::leak memory growth)
     interned_families: HashSet<&'static str>,
-    /// Frame generation counter (incremented each frame)
     generation: u64,
-    /// Cached default font char width (logical pixels), populated on first face_id=0 rasterization
     cached_char_width: Option<f32>,
-    /// Cached default font ascent (logical pixels), populated on first face_id=0 rasterization
     cached_font_ascent: Option<f32>,
-    /// Cache for pre-loading font files and resolving fontdb family names
     font_file_cache: FontFileCache,
-    /// Host LCD/subpixel order from fontconfig.
     subpixel_order: FontconfigSubpixelOrder,
     pub(crate) cache_hits_this_frame: usize,
     pub(crate) cache_misses_this_frame: usize,
@@ -260,9 +248,15 @@ impl WgpuGlyphAtlas {
             ..Default::default()
         });
 
+        let atlas_config = GlyphAtlasConfig::default_for_device(device);
+
         Self {
             cache: HashMap::new(),
             composed_cache: HashMap::new(),
+            atlas_cache: HashMap::new(),
+            atlas_composed_cache: HashMap::new(),
+            atlas_pages: GlyphAtlasPages::new(atlas_config),
+            atlas_config,
             font_system: FontSystem::new(),
             scale_context: ScaleContext::new(),
             bind_group_layout,
@@ -1194,6 +1188,9 @@ impl WgpuGlyphAtlas {
     pub fn clear(&mut self) {
         self.cache.clear();
         self.composed_cache.clear();
+        self.atlas_cache.clear();
+        self.atlas_composed_cache.clear();
+        self.atlas_pages.clear();
         self.cached_char_width = None;
         self.cached_font_ascent = None;
     }
@@ -1205,6 +1202,9 @@ impl WgpuGlyphAtlas {
             self.scale_factor = scale_factor;
             self.cache.clear();
             self.composed_cache.clear();
+            self.atlas_cache.clear();
+            self.atlas_composed_cache.clear();
+            self.atlas_pages.clear();
             tracing::info!(
                 "Glyph atlas: scale factor -> {}, cache cleared",
                 scale_factor
@@ -1267,12 +1267,13 @@ impl WgpuGlyphAtlas {
         self.generation = self.generation.wrapping_add(1);
         self.cache_hits_this_frame = 0;
         self.cache_misses_this_frame = 0;
-        // Evict stale composed glyphs (they're less likely to be reused).
-        // Threshold raised from 256 to 1024 to accommodate ligature runs
-        // which generate more composed cache entries per frame.
         if self.composed_cache.len() > 1024 {
             let cutoff = self.generation.saturating_sub(60);
             self.composed_cache.retain(|_, v| v.last_accessed >= cutoff);
+        }
+        if self.atlas_composed_cache.len() > 1024 {
+            let cutoff = self.generation.saturating_sub(60);
+            self.atlas_composed_cache.retain(|_, v| v.last_accessed >= cutoff);
         }
     }
 
@@ -1286,6 +1287,294 @@ impl WgpuGlyphAtlas {
         } else {
             GlyphRenderMode::Alpha
         }
+    }
+
+    fn render_mode_from_request(&self, request: SubpixelRequest) -> GlyphRenderMode {
+        match request {
+            SubpixelRequest::Enabled if self.subpixel_enabled() => GlyphRenderMode::Subpixel,
+            _ => GlyphRenderMode::Alpha,
+        }
+    }
+
+    fn material_from_raster_result(result: &RasterizeResult) -> GlyphMaterialKind {
+        if result.is_color {
+            GlyphMaterialKind::ColorRgba
+        } else if result.is_subpixel {
+            GlyphMaterialKind::SubpixelMask
+        } else {
+            GlyphMaterialKind::AlphaMask
+        }
+    }
+
+    fn upload_to_atlas_page(
+        queue: &wgpu::Queue,
+        texture: &wgpu::Texture,
+        content_rect: AtlasContentRect,
+        pixel_data: &[u8],
+        glyph_w: u32,
+        glyph_h: u32,
+        bytes_per_pixel: u32,
+    ) {
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: content_rect.x(),
+                    y: content_rect.y(),
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixel_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(glyph_w * bytes_per_pixel),
+                rows_per_image: Some(glyph_h),
+            },
+            wgpu::Extent3d {
+                width: glyph_w,
+                height: glyph_h,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    fn rasterize_result_to_atlas_entry(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        result: &RasterizeResult,
+    ) -> Option<AnyAtlasEntry> {
+        let material = Self::material_from_raster_result(result);
+        let size = PixelSize::new(result.width, result.height)?;
+        let page_size = self.atlas_config.page_size;
+        let metrics = GlyphMetrics {
+            bearing_x: result.bearing_x,
+            bearing_y: result.bearing_y,
+            advance_width: result.advance_width,
+        };
+
+        match material {
+            GlyphMaterialKind::AlphaMask => {
+                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_alpha(
+                    size,
+                    device,
+                    &self.bind_group_layout,
+                    &self.sampler,
+                )?;
+                let page = self.atlas_pages.alpha_page(page_id)?;
+                Self::upload_to_atlas_page(
+                    queue,
+                    &page.texture,
+                    allocation.content_rect,
+                    &result.pixel_data,
+                    result.width,
+                    result.height,
+                    AlphaMask::BYTES_PER_PIXEL,
+                );
+                let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
+                Some(AnyAtlasEntry::Alpha(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+            }
+            GlyphMaterialKind::SubpixelMask => {
+                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_subpixel(
+                    size,
+                    device,
+                    &self.bind_group_layout,
+                    &self.sampler,
+                )?;
+                let page = self.atlas_pages.subpixel_page(page_id)?;
+                Self::upload_to_atlas_page(
+                    queue,
+                    &page.texture,
+                    allocation.content_rect,
+                    &result.pixel_data,
+                    result.width,
+                    result.height,
+                    SubpixelMask::BYTES_PER_PIXEL,
+                );
+                let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
+                Some(AnyAtlasEntry::Subpixel(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+            }
+            GlyphMaterialKind::ColorRgba => {
+                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_color(
+                    size,
+                    device,
+                    &self.bind_group_layout,
+                    &self.sampler,
+                )?;
+                let page = self.atlas_pages.color_page(page_id)?;
+                Self::upload_to_atlas_page(
+                    queue,
+                    &page.texture,
+                    allocation.content_rect,
+                    &result.pixel_data,
+                    result.width,
+                    result.height,
+                    ColorRgba::BYTES_PER_PIXEL,
+                );
+                let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
+                Some(AnyAtlasEntry::Color(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+            }
+        }
+    }
+
+    pub fn get_or_create_atlas(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        key: &GlyphKey,
+        face: Option<&Face>,
+        subpixel: SubpixelRequest,
+    ) -> Option<GlyphAtlasHandle> {
+        let cache_key = CachedGlyphKey {
+            glyph: key.clone(),
+            mode: self.render_mode_from_request(subpixel),
+        };
+
+        if let Some(cached) = self.atlas_cache.get_mut(&cache_key) {
+            cached.last_accessed = self.generation;
+            self.cache_hits_this_frame += 1;
+            return Some(GlyphAtlasHandle {
+                entry: cached.entry,
+                advance_width: cached.advance_width,
+            });
+        }
+
+        let c = char::from_u32(key.charcode)?;
+        if c.is_whitespace() {
+            return None;
+        }
+
+        let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
+        let result = self.rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel);
+        let result = match result {
+            Some(r) => r,
+            None => {
+                tracing::debug!(
+                    "glyph_atlas: atlas failed to rasterize '{}' (U+{:04X})",
+                    c,
+                    key.charcode
+                );
+                return None;
+            }
+        };
+
+        if result.width == 0 || result.height == 0 {
+            return None;
+        }
+
+        if self.cached_char_width.is_none()
+            && key_uses_default_font_metrics(key, self.default_font_size)
+        {
+            self.cached_char_width = Some(result.advance_width / self.scale_factor);
+            self.cached_font_ascent = Some(result.bearing_y / self.scale_factor);
+        }
+
+        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
+
+        let handle = GlyphAtlasHandle {
+            entry,
+            advance_width: result.advance_width,
+        };
+
+        self.atlas_cache.insert(
+            cache_key,
+            CachedAtlasGlyph {
+                entry,
+                advance_width: result.advance_width,
+                last_accessed: self.generation,
+            },
+        );
+        self.cache_misses_this_frame += 1;
+
+        Some(handle)
+    }
+
+    pub fn get_or_create_composed_atlas(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text: &str,
+        face_id: u32,
+        font_size_bits: u32,
+        face: Option<&Face>,
+        x_bin: SubpixelBin,
+        y_bin: SubpixelBin,
+        subpixel: SubpixelRequest,
+    ) -> Option<GlyphAtlasHandle> {
+        let key = ComposedGlyphKey {
+            text: text.into(),
+            face_id,
+            font_size_bits,
+            font_identity: glyph_font_identity(face),
+            x_bin,
+            y_bin,
+        };
+        let cache_key = CachedComposedGlyphKey {
+            glyph: key,
+            mode: self.render_mode_from_request(subpixel),
+        };
+
+        if let Some(cached) = self.atlas_composed_cache.get_mut(&cache_key) {
+            cached.last_accessed = self.generation;
+            self.cache_hits_this_frame += 1;
+            return Some(GlyphAtlasHandle {
+                entry: cached.entry,
+                advance_width: cached.advance_width,
+            });
+        }
+
+        let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
+        let result = self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel);
+        let result = match result {
+            Some(r) => r,
+            None => {
+                tracing::debug!("glyph_atlas: atlas failed to rasterize composed '{}'", text);
+                return None;
+            }
+        };
+
+        if result.width == 0 || result.height == 0 {
+            return None;
+        }
+
+        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
+
+        let handle = GlyphAtlasHandle {
+            entry,
+            advance_width: result.advance_width,
+        };
+
+        self.atlas_composed_cache.insert(
+            cache_key,
+            CachedAtlasGlyph {
+                entry,
+                advance_width: result.advance_width,
+                last_accessed: self.generation,
+            },
+        );
+        self.cache_misses_this_frame += 1;
+
+        Some(handle)
+    }
+
+    pub fn atlas_bind_group(&self, entry: AnyAtlasEntry) -> &wgpu::BindGroup {
+        match entry {
+            AnyAtlasEntry::Alpha(e) => {
+                &self.atlas_pages.alpha_page(e.page()).unwrap().bind_group
+            }
+            AnyAtlasEntry::Subpixel(e) => {
+                &self.atlas_pages.subpixel_page(e.page()).unwrap().bind_group
+            }
+            AnyAtlasEntry::Color(e) => {
+                &self.atlas_pages.color_page(e.page()).unwrap().bind_group
+            }
+        }
+    }
+
+    pub fn atlas_page_counts(&self) -> (usize, usize, usize) {
+        self.atlas_pages.page_counts()
     }
 }
 

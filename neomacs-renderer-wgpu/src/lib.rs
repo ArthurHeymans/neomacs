@@ -27,7 +27,10 @@ pub mod vulkan_dmabuf;
 #[cfg(target_os = "linux")]
 pub use external_buffer::DmaBufBuffer;
 pub use external_buffer::{BufferFormat, ExternalBuffer, PlatformBuffer, SharedMemoryBuffer};
-pub use glyph_atlas::{CachedGlyph, ComposedGlyphKey, GlyphKey, RasterizeResult, WgpuGlyphAtlas};
+pub use glyph_atlas::{
+    CachedGlyph, ComposedGlyphKey, GlyphAtlasHandle, GlyphKey, RasterizeResult, WgpuGlyphAtlas,
+    allocator, pages, types,
+};
 pub use image_cache::{CachedImage, ImageCache, ImageDimensions, ImageState};
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
 pub use renderer::{RendererFrameEffects, WgpuRenderer};
