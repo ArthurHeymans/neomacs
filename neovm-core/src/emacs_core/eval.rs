@@ -9290,7 +9290,7 @@ impl Context {
 
     fn sf_condition_case_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
         let nargs = self.value_list_len_or_error(tail)?;
-        if nargs < 3 {
+        if nargs < 2 {
             return Err(signal(
                 "wrong-number-of-arguments",
                 vec![Value::symbol(call_name), Value::fixnum(nargs as i64)],

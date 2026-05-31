@@ -869,6 +869,16 @@ fn condition_case_leaves_shared_condition_stack_balanced() {
 }
 
 #[test]
+fn condition_case_without_handlers_returns_body_value() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let result = ev.eval_str("(condition-case nil (progn 42))");
+    assert_eq!(format_eval_result(&result), "OK 42");
+    assert_eq!(ev.condition_stack_depth_for_test(), 0);
+    assert!(ev.top_level_eval_state_is_clean());
+}
+
+#[test]
 fn condition_case_value_path_catches_default_toplevel_value_signal() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
