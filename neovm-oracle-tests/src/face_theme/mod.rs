@@ -27963,3 +27963,80 @@ fn ft_crest_face_text_property_properties_on_string_deep() {
      'get-fontified (get-text-property 0 'fontified str)))))"##,
     );
 }
+
+#[test]
+fn ft_crown_face_overlay_face_check_all_overlay_bounds_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 3))) (overlay-put ov1 'face 'bold))
+    (let ((ov2 (make-overlay 2 4))) (overlay-put ov2 'face 'italic))
+    (let ((ov3 (make-overlay 3 6))) (overlay-put ov3 'face 'underline))
+    (list
+     'pos1 (get-char-property 1 'face)
+     'pos2 (get-char-property 2 'face)
+     'pos3 (get-char-property 3 'face)
+     'pos4 (get-char-property 4 'face)
+     'pos5 (get-char-property 5 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_crown_font_lock_fontify_defface_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defface my-face\n  '((t :foreground \"blue\")))\n  \"My custom face\"\n  :group 'faces)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'defface-face (save-excursion (goto-char (point-min)) (search-forward "defface") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_crown_face_overlay_face_after_buffer_switch() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((buf1 (current-buffer))
+        (buf2 (generate-new-buffer "crown-switch")))
+    (with-current-buffer buf2
+      (insert "BBBBB")
+      (let ((ov (make-overlay 1 6)))
+        (overlay-put ov 'face 'bold)
+        (list
+         'buf2-face (overlay-get ov 'face)
+         (progn (delete-overlay ov) 'deleted))))
+    (kill-buffer buf2))))"##,
+    );
+}
+
+#[test]
+fn ft_crown_face_text_property_fontified_scan_pattern() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGH")
+    (put-text-property 1 3 'fontified t)
+    (put-text-property 4 9 'fontified nil)
+    (list
+     'scan (let ((pos 1) (res nil))
+             (while (<= pos 8)
+               (push (list pos (get-text-property pos 'fontified)) res)
+               (setq pos (1+ pos)))
+             (nreverse res))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
