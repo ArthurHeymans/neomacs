@@ -53,7 +53,7 @@ impl GlyphMaterial for ColorRgba {
     const BYTES_PER_PIXEL: u32 = 4;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GlyphMaterialKind {
     AlphaMask,
     SubpixelMask,

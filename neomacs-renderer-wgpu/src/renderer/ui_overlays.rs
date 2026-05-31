@@ -1,6 +1,9 @@
 //! UI overlay rendering methods for WgpuRenderer.
 
-use super::super::glyph_atlas::{GlyphKey, WgpuGlyphAtlas, glyph_font_identity};
+use super::super::glyph_atlas::{
+    AnyAtlasEntry, GlyphAtlasHandle, GlyphMaterialKind, GlyphKey, SubpixelRequest,
+    WgpuGlyphAtlas, glyph_font_identity,
+};
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, Uniforms};
 use super::TitleFadeEntry;
 use super::WgpuRenderer;
@@ -215,7 +218,7 @@ impl WgpuRenderer {
             }
 
             // === Pass 2: Text glyphs ===
-            let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+            let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
 
             // Title (root panel only)
             if panel_idx == 0 {
@@ -230,13 +233,20 @@ impl WgpuRenderer {
                             x_bin: SubpixelBin::Zero,
                             y_bin: SubpixelBin::Zero,
                         };
-                        glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                        overlay_glyphs.push((
-                            key,
-                            tx + (ci as f32) * char_width,
-                            my + padding,
-                            title_color,
-                        ));
+                        if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                            &self.device,
+                            &self.queue,
+                            &key,
+                            None,
+                            SubpixelRequest::Disabled,
+                        ) {
+                            overlay_glyphs.push((
+                                handle,
+                                tx + (ci as f32) * char_width,
+                                my + padding,
+                                title_color,
+                            ));
+                        }
                     }
                 }
             }
@@ -264,8 +274,15 @@ impl WgpuRenderer {
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
-                    glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                    overlay_glyphs.push((key, label_x + (ci as f32) * char_width, iy + 2.0, color));
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, iy + 2.0, color));
+                    }
                 }
 
                 if !item.shortcut.is_empty() {
@@ -280,13 +297,20 @@ impl WgpuRenderer {
                             x_bin: SubpixelBin::Zero,
                             y_bin: SubpixelBin::Zero,
                         };
-                        glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                        overlay_glyphs.push((
-                            key,
-                            shortcut_x + (ci as f32) * char_width,
-                            iy + 2.0,
-                            shortcut_color,
-                        ));
+                        if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                            &self.device,
+                            &self.queue,
+                            &key,
+                            None,
+                            SubpixelRequest::Disabled,
+                        ) {
+                            overlay_glyphs.push((
+                                handle,
+                                shortcut_x + (ci as f32) * char_width,
+                                iy + 2.0,
+                                shortcut_color,
+                            ));
+                        }
                     }
                 }
 
@@ -300,8 +324,15 @@ impl WgpuRenderer {
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
-                    glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                    overlay_glyphs.push((key, arrow_x, iy + 2.0, text_color));
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        overlay_glyphs.push((handle, arrow_x, iy + 2.0, text_color));
+                    }
                 }
             }
 
@@ -317,7 +348,7 @@ impl WgpuRenderer {
     fn render_overlay_glyphs(
         &self,
         view: &wgpu::TextureView,
-        glyphs: &mut Vec<(GlyphKey, f32, f32, [f32; 4])>,
+        glyphs: &mut Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])>,
         glyph_atlas: &WgpuGlyphAtlas,
     ) {
         use wgpu::util::DeviceExt;
@@ -326,71 +357,59 @@ impl WgpuRenderer {
             return;
         }
 
-        // Sort by key for batching consecutive same-texture draws
-        glyphs.sort_by(|a, b| {
-            a.0.face_id
-                .cmp(&b.0.face_id)
-                .then(a.0.font_size_bits.cmp(&b.0.font_size_bits))
-                .then(a.0.charcode.cmp(&b.0.charcode))
-        });
-
-        // Build vertex buffer for all glyphs at once
         let mut vertices: Vec<GlyphVertex> = Vec::with_capacity(glyphs.len() * 6);
-        let mut valid: Vec<bool> = Vec::with_capacity(glyphs.len());
+        let mut page_ids: Vec<(GlyphMaterialKind, u32)> = Vec::with_capacity(glyphs.len());
 
         let sf = self.scale_factor;
-        // Font ascent in logical pixels — used to convert caller's "top of text line"
-        // y coordinate to proper glyph position. bearing_y from the atlas is the
-        // per-glyph distance from baseline to glyph top (in physical pixels).
-        // Formula: glyph_y = y + ascent - bearing_y/sf
-        // For tall glyphs (A,F): bearing_y/sf ≈ ascent → glyph_y ≈ y (glyph fills from top)
-        // For short glyphs (.,-): bearing_y/sf < ascent → glyph_y > y (pushed down to baseline)
         let font_ascent = glyph_atlas.default_font_ascent();
-        for (key, x, y, color) in glyphs.iter() {
-            if let Some(cached) = glyph_atlas.get(key, false) {
-                // Divide atlas metrics by scale_factor to get logical positions
-                // (atlas rasterizes at physical resolution for HiDPI)
-                let glyph_x = *x + cached.bearing_x / sf;
-                let glyph_y = *y + font_ascent - cached.bearing_y / sf;
-                let glyph_w = cached.width as f32 / sf;
-                let glyph_h = cached.height as f32 / sf;
 
-                vertices.extend_from_slice(&[
-                    GlyphVertex {
-                        position: [glyph_x, glyph_y],
-                        tex_coords: [0.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [glyph_x + glyph_w, glyph_y],
-                        tex_coords: [1.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                        tex_coords: [1.0, 1.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [glyph_x, glyph_y],
-                        tex_coords: [0.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                        tex_coords: [1.0, 1.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [glyph_x, glyph_y + glyph_h],
-                        tex_coords: [0.0, 1.0],
-                        color: *color,
-                    },
-                ]);
-                valid.push(true);
-            } else {
-                valid.push(false);
-            }
+        for (handle, x, y, color) in glyphs.iter() {
+            let entry = handle.entry;
+            let metrics = entry.metrics();
+            let uv = entry.uv();
+            let content_rect = entry.rect();
+            let tex_u_min = uv.min()[0];
+            let tex_u_max = uv.max()[0];
+            let tex_v_min = uv.min()[1];
+            let tex_v_max = uv.max()[1];
+            let glyph_x = *x + metrics.bearing_x / sf;
+            let glyph_y = *y + font_ascent - metrics.bearing_y / sf;
+            let glyph_w = content_rect.width() as f32 / sf;
+            let glyph_h = content_rect.height() as f32 / sf;
+
+            vertices.extend_from_slice(&[
+                GlyphVertex {
+                    position: [glyph_x, glyph_y],
+                    tex_coords: [tex_u_min, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [glyph_x + glyph_w, glyph_y],
+                    tex_coords: [tex_u_max, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [glyph_x + glyph_w, glyph_y + glyph_h],
+                    tex_coords: [tex_u_max, tex_v_max],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [glyph_x, glyph_y],
+                    tex_coords: [tex_u_min, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [glyph_x + glyph_w, glyph_y + glyph_h],
+                    tex_coords: [tex_u_max, tex_v_max],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [glyph_x, glyph_y + glyph_h],
+                    tex_coords: [tex_u_min, tex_v_max],
+                    color: *color,
+                },
+            ]);
+            page_ids.push(entry.page_id_value());
         }
 
         if vertices.is_empty() {
@@ -431,33 +450,27 @@ impl WgpuRenderer {
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
 
-            // Batch draw calls: consecutive same-key glyphs share one bind_group
             let mut vert_idx = 0u32;
             let mut i = 0;
             while i < glyphs.len() {
-                if !valid[i] {
-                    i += 1;
-                    continue;
+                let (handle, _, _, _) = &glyphs[i];
+                let entry = handle.entry;
+                let page_id = entry.page_id_value();
+                let bg = glyph_atlas.atlas_bind_group(entry);
+                if matches!(entry, AnyAtlasEntry::Color(_)) {
+                    pass.set_pipeline(&self.opaque_image_pipeline);
+                } else {
+                    pass.set_pipeline(&self.glyph_pipeline);
                 }
-                let (ref key, _, _, _) = glyphs[i];
-                if let Some(cached) = glyph_atlas.get(key, false) {
-                    if cached.is_color {
-                        pass.set_pipeline(&self.opaque_image_pipeline);
-                    } else {
-                        pass.set_pipeline(&self.glyph_pipeline);
-                    }
-                    pass.set_bind_group(1, &cached.bind_group, &[]);
-                    let batch_start = vert_idx;
+                pass.set_bind_group(1, bg, &[]);
+                let batch_start = vert_idx;
+                vert_idx += 6;
+                i += 1;
+                while i < glyphs.len() && page_ids[i] == page_id {
                     vert_idx += 6;
                     i += 1;
-                    while i < glyphs.len() && valid[i] && glyphs[i].0 == *key {
-                        vert_idx += 6;
-                        i += 1;
-                    }
-                    pass.draw(batch_start..vert_idx, 0..1);
-                } else {
-                    i += 1;
                 }
+                pass.draw(batch_start..vert_idx, 0..1);
             }
         }
         self.queue.submit(Some(encoder.finish()));
@@ -483,7 +496,7 @@ impl WgpuRenderer {
         let font_size_bits = 0.0_f32.to_bits();
         let alpha = self.effects.window_watermark.opacity.clamp(0.0, 1.0);
 
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4], f32)> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4], f32)> = Vec::new();
 
         for info in &frame_glyphs.window_infos {
             if info.is_minibuffer {
@@ -537,8 +550,15 @@ impl WgpuRenderer {
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
-                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                overlay_glyphs.push((key, start_x + ci as f32 * char_width, start_y, color, scale));
+                if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                    &self.device,
+                    &self.queue,
+                    &key,
+                    None,
+                    SubpixelRequest::Disabled,
+                ) {
+                    overlay_glyphs.push((handle, start_x + ci as f32 * char_width, start_y, color, scale));
+                }
             }
         }
 
@@ -546,61 +566,64 @@ impl WgpuRenderer {
             return;
         }
 
-        // Sort by key for batching
+        // Sort by page_id for batching
         overlay_glyphs.sort_by(|a, b| {
-            a.0.face_id
-                .cmp(&b.0.face_id)
-                .then(a.0.font_size_bits.cmp(&b.0.font_size_bits))
-                .then(a.0.charcode.cmp(&b.0.charcode))
+            let pa = a.0.entry.page_id_value();
+            let pb = b.0.entry.page_id_value();
+            pa.cmp(&pb)
         });
 
         let sf = self.scale_factor;
         let mut vertices: Vec<GlyphVertex> = Vec::with_capacity(overlay_glyphs.len() * 6);
-        let mut valid: Vec<bool> = Vec::with_capacity(overlay_glyphs.len());
+        let mut page_ids: Vec<(GlyphMaterialKind, u32)> = Vec::with_capacity(overlay_glyphs.len());
 
-        for (key, x, y, color, s) in overlay_glyphs.iter() {
-            if let Some(cached) = glyph_atlas.get(key, false) {
-                let gw = cached.width as f32 / sf * s;
-                let gh = cached.height as f32 / sf * s;
-                let gx = *x + cached.bearing_x / sf * s;
-                let gy = *y + (char_height * 0.7) - cached.bearing_y / sf * s;
+        for (handle, x, y, color, s) in overlay_glyphs.iter() {
+            let entry = handle.entry;
+            let metrics = entry.metrics();
+            let uv = entry.uv();
+            let content_rect = entry.rect();
+            let tex_u_min = uv.min()[0];
+            let tex_u_max = uv.max()[0];
+            let tex_v_min = uv.min()[1];
+            let tex_v_max = uv.max()[1];
+            let gw = content_rect.width() as f32 / sf * s;
+            let gh = content_rect.height() as f32 / sf * s;
+            let gx = *x + metrics.bearing_x / sf * s;
+            let gy = *y + (char_height * 0.7) - metrics.bearing_y / sf * s;
 
-                vertices.extend_from_slice(&[
-                    GlyphVertex {
-                        position: [gx, gy],
-                        tex_coords: [0.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [gx + gw, gy],
-                        tex_coords: [1.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [gx + gw, gy + gh],
-                        tex_coords: [1.0, 1.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [gx, gy],
-                        tex_coords: [0.0, 0.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [gx + gw, gy + gh],
-                        tex_coords: [1.0, 1.0],
-                        color: *color,
-                    },
-                    GlyphVertex {
-                        position: [gx, gy + gh],
-                        tex_coords: [0.0, 1.0],
-                        color: *color,
-                    },
-                ]);
-                valid.push(true);
-            } else {
-                valid.push(false);
-            }
+            vertices.extend_from_slice(&[
+                GlyphVertex {
+                    position: [gx, gy],
+                    tex_coords: [tex_u_min, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [gx + gw, gy],
+                    tex_coords: [tex_u_max, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [gx + gw, gy + gh],
+                    tex_coords: [tex_u_max, tex_v_max],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [gx, gy],
+                    tex_coords: [tex_u_min, tex_v_min],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [gx + gw, gy + gh],
+                    tex_coords: [tex_u_max, tex_v_max],
+                    color: *color,
+                },
+                GlyphVertex {
+                    position: [gx, gy + gh],
+                    tex_coords: [tex_u_min, tex_v_max],
+                    color: *color,
+                },
+            ]);
+            page_ids.push(entry.page_id_value());
         }
 
         if vertices.is_empty() {
@@ -637,36 +660,31 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.image_pipeline);
+            pass.set_pipeline(&self.glyph_pipeline);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
 
             let mut vert_idx = 0u32;
             let mut i = 0;
             while i < overlay_glyphs.len() {
-                if !valid[i] {
-                    i += 1;
-                    continue;
+                let (handle, _, _, _, _) = &overlay_glyphs[i];
+                let entry = handle.entry;
+                let page_id = entry.page_id_value();
+                let bg = glyph_atlas.atlas_bind_group(entry);
+                if matches!(entry, AnyAtlasEntry::Color(_)) {
+                    pass.set_pipeline(&self.opaque_image_pipeline);
+                } else {
+                    pass.set_pipeline(&self.glyph_pipeline);
                 }
-                let (ref key, _, _, _, _) = overlay_glyphs[i];
-                if let Some(cached) = glyph_atlas.get(key, false) {
-                    if cached.is_color {
-                        pass.set_pipeline(&self.opaque_image_pipeline);
-                    } else {
-                        pass.set_pipeline(&self.image_pipeline);
-                    }
-                    pass.set_bind_group(1, &cached.bind_group, &[]);
-                    let batch_start = vert_idx;
+                pass.set_bind_group(1, bg, &[]);
+                let batch_start = vert_idx;
+                vert_idx += 6;
+                i += 1;
+                while i < overlay_glyphs.len() && page_ids[i] == page_id {
                     vert_idx += 6;
                     i += 1;
-                    while i < overlay_glyphs.len() && valid[i] && overlay_glyphs[i].0 == *key {
-                        vert_idx += 6;
-                        i += 1;
-                    }
-                    pass.draw(batch_start..vert_idx, 0..1);
-                } else {
-                    i += 1;
                 }
+                pass.draw(batch_start..vert_idx, 0..1);
             }
         }
         self.queue.submit(Some(encoder.finish()));
@@ -782,7 +800,7 @@ impl WgpuRenderer {
         let line_height = glyph_atlas.default_line_height();
         let char_width = glyph_atlas.default_char_width();
         let font_size_bits = 0.0_f32.to_bits();
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
 
         for (line_idx, line) in tooltip.lines.iter().enumerate() {
             let ly = ty + padding + line_idx as f32 * line_height;
@@ -795,8 +813,15 @@ impl WgpuRenderer {
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
-                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                overlay_glyphs.push((key, tx + padding + (ci as f32) * char_width, ly, text_color));
+                if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                    &self.device,
+                    &self.queue,
+                    &key,
+                    None,
+                    SubpixelRequest::Disabled,
+                ) {
+                    overlay_glyphs.push((handle, tx + padding + (ci as f32) * char_width, ly, text_color));
+                }
             }
         }
 
@@ -986,7 +1011,7 @@ impl WgpuRenderer {
         let font_size = glyph_atlas.default_font_size();
         let char_width = glyph_atlas.default_char_width();
         let font_size_bits = 0.0_f32.to_bits();
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
 
         // Center title text
         let title_pixel_width = title.chars().count() as f32 * char_width;
@@ -1002,8 +1027,15 @@ impl WgpuRenderer {
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
-            glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-            overlay_glyphs.push((key, title_x + ci as f32 * char_width, title_y, text_color));
+            if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                &self.device,
+                &self.queue,
+                &key,
+                None,
+                SubpixelRequest::Disabled,
+            ) {
+                overlay_glyphs.push((handle, title_x + ci as f32 * char_width, title_y, text_color));
+            }
         }
 
         // Button icons: minimize (─), maximize (□), close (×)
@@ -1034,8 +1066,15 @@ impl WgpuRenderer {
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
-        glyph_atlas.get_or_create(&self.device, &self.queue, &min_key, None, false);
-        overlay_glyphs.push((min_key, min_icon_x, btn_center_y, min_color));
+        if let Some(handle) = glyph_atlas.get_or_create_atlas(
+            &self.device,
+            &self.queue,
+            &min_key,
+            None,
+            SubpixelRequest::Disabled,
+        ) {
+            overlay_glyphs.push((handle, min_icon_x, btn_center_y, min_color));
+        }
 
         // Maximize: □ (U+25A1)
         let max_icon_x = max_x + (btn_w - char_width) / 2.0;
@@ -1047,8 +1086,15 @@ impl WgpuRenderer {
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
-        glyph_atlas.get_or_create(&self.device, &self.queue, &max_key, None, false);
-        overlay_glyphs.push((max_key, max_icon_x, btn_center_y, max_color));
+        if let Some(handle) = glyph_atlas.get_or_create_atlas(
+            &self.device,
+            &self.queue,
+            &max_key,
+            None,
+            SubpixelRequest::Disabled,
+        ) {
+            overlay_glyphs.push((handle, max_icon_x, btn_center_y, max_color));
+        }
 
         // Close: × (U+00D7)
         let close_icon_x = close_x + (btn_w - char_width) / 2.0;
@@ -1060,8 +1106,15 @@ impl WgpuRenderer {
             x_bin: SubpixelBin::Zero,
             y_bin: SubpixelBin::Zero,
         };
-        glyph_atlas.get_or_create(&self.device, &self.queue, &close_key, None, false);
-        overlay_glyphs.push((close_key, close_icon_x, btn_center_y, close_color));
+        if let Some(handle) = glyph_atlas.get_or_create_atlas(
+            &self.device,
+            &self.queue,
+            &close_key,
+            None,
+            SubpixelRequest::Disabled,
+        ) {
+            overlay_glyphs.push((handle, close_icon_x, btn_center_y, close_color));
+        }
 
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
     }
@@ -1298,7 +1351,7 @@ impl WgpuRenderer {
             let c = Color::new(1.0, 1.0, 1.0, 1.0).srgb_to_linear();
             [c.r, c.g, c.b, c.a]
         };
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         for (ci, ch) in preedit_text.chars().enumerate() {
             let key = GlyphKey {
                 charcode: ch as u32,
@@ -1308,8 +1361,15 @@ impl WgpuRenderer {
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
-            glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-            overlay_glyphs.push((key, px + 2.0 + (ci as f32) * char_width, py, text_color));
+            if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                &self.device,
+                &self.queue,
+                &key,
+                None,
+                SubpixelRequest::Disabled,
+            ) {
+                overlay_glyphs.push((handle, px + 2.0 + (ci as f32) * char_width, py, text_color));
+            }
         }
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
     }
@@ -1484,7 +1544,7 @@ impl WgpuRenderer {
         }
 
         let mut all_rect_vertices: Vec<RectVertex> = Vec::new();
-        let mut all_text_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut all_text_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         let font_size_bits = 0.0_f32.to_bits();
         let text_color_base = [0.85_f32, 0.85, 0.85, 1.0];
         let sep_color_base = [0.5_f32, 0.5, 0.5, 1.0];
@@ -1554,18 +1614,25 @@ impl WgpuRenderer {
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
-                    glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                    let base = if is_dim {
-                        sep_color_base
-                    } else {
-                        text_color_base
-                    };
-                    all_text_glyphs.push((
-                        key,
-                        cx,
-                        text_y,
-                        [base[0], base[1], base[2], base[3] * old_alpha],
-                    ));
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        let base = if is_dim {
+                            sep_color_base
+                        } else {
+                            text_color_base
+                        };
+                        all_text_glyphs.push((
+                            handle,
+                            cx,
+                            text_y,
+                            [base[0], base[1], base[2], base[3] * old_alpha],
+                        ));
+                    }
                 }
 
                 // New text fading in
@@ -1582,18 +1649,25 @@ impl WgpuRenderer {
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
-                    glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                    let base = if is_dim {
-                        sep_color_base
-                    } else {
-                        text_color_base
-                    };
-                    all_text_glyphs.push((
-                        key,
-                        cx,
-                        text_y,
-                        [base[0], base[1], base[2], base[3] * new_alpha],
-                    ));
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        let base = if is_dim {
+                            sep_color_base
+                        } else {
+                            text_color_base
+                        };
+                        all_text_glyphs.push((
+                            handle,
+                            cx,
+                            text_y,
+                            [base[0], base[1], base[2], base[3] * new_alpha],
+                        ));
+                    }
                 }
             } else {
                 // Normal rendering (no active fade)
@@ -1640,17 +1714,24 @@ impl WgpuRenderer {
                         x_bin: SubpixelBin::Zero,
                         y_bin: SubpixelBin::Zero,
                     };
-                    glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                    all_text_glyphs.push((
-                        key,
-                        cx,
-                        text_y,
-                        if is_dim {
-                            sep_color_base
-                        } else {
-                            text_color_base
-                        },
-                    ));
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        all_text_glyphs.push((
+                            handle,
+                            cx,
+                            text_y,
+                            if is_dim {
+                                sep_color_base
+                            } else {
+                                text_color_base
+                            },
+                        ));
+                    }
                 }
             }
         }
@@ -1750,7 +1831,7 @@ impl WgpuRenderer {
         };
 
         let font_size_bits = 0.0_f32.to_bits();
-        let mut text_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut text_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         let text_y = bar_y + padding_y;
         for (ci, ch) in label.chars().enumerate() {
             let cx = bar_x + padding_x + ci as f32 * char_width;
@@ -1762,8 +1843,15 @@ impl WgpuRenderer {
                 x_bin: SubpixelBin::Zero,
                 y_bin: SubpixelBin::Zero,
             };
-            glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-            text_glyphs.push((key, cx, text_y, text_color));
+            if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                &self.device,
+                &self.queue,
+                &key,
+                None,
+                SubpixelRequest::Disabled,
+            ) {
+                text_glyphs.push((handle, cx, text_y, text_color));
+            }
         }
 
         // Draw background
@@ -1895,7 +1983,7 @@ impl WgpuRenderer {
         // Text glyphs (green for good visibility)
         let text_color = [0.0_f32, 1.0, 0.0, 1.0]; // green in linear
         let font_size_bits = 0.0_f32.to_bits();
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         for (li, line) in lines.iter().enumerate() {
             let y = badge_y + padding + li as f32 * (line_height + line_spacing);
             for (ci, ch) in line.chars().enumerate() {
@@ -1907,13 +1995,20 @@ impl WgpuRenderer {
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
-                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                overlay_glyphs.push((
-                    key,
-                    badge_x + padding + ci as f32 * char_width,
-                    y,
-                    text_color,
-                ));
+                if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                    &self.device,
+                    &self.queue,
+                    &key,
+                    None,
+                    SubpixelRequest::Disabled,
+                ) {
+                    overlay_glyphs.push((
+                        handle,
+                        badge_x + padding + ci as f32 * char_width,
+                        y,
+                        text_color,
+                    ));
+                }
             }
         }
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
@@ -2120,7 +2215,7 @@ impl WgpuRenderer {
             [c.r, c.g, c.b, c.a]
         };
 
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         let text_y = (menu_bar_height - font_size) / 2.0;
 
         let mut item_x = padding_x;
@@ -2135,8 +2230,15 @@ impl WgpuRenderer {
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
-                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                overlay_glyphs.push((key, label_x + (ci as f32) * char_width, text_y, text_color));
+                if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                    &self.device,
+                    &self.queue,
+                    &key,
+                    None,
+                    SubpixelRequest::Disabled,
+                ) {
+                    overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, text_y, text_color));
+                }
             }
             let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
             item_x += label_width;
@@ -2328,7 +2430,7 @@ impl WgpuRenderer {
             [c.r, c.g, c.b, c.a]
         };
         let text_y = (compact_bar_height - font_size) / 2.0;
-        let mut overlay_glyphs: Vec<(GlyphKey, f32, f32, [f32; 4])> = Vec::new();
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
         let mut menu_x = padding_x;
         for item in menu_items {
             let label_x = menu_x + padding_x;
@@ -2341,8 +2443,15 @@ impl WgpuRenderer {
                     x_bin: SubpixelBin::Zero,
                     y_bin: SubpixelBin::Zero,
                 };
-                glyph_atlas.get_or_create(&self.device, &self.queue, &key, None, false);
-                overlay_glyphs.push((key, label_x + (ci as f32) * char_width, text_y, text_color));
+                if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                    &self.device,
+                    &self.queue,
+                    &key,
+                    None,
+                    SubpixelRequest::Disabled,
+                ) {
+                    overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, text_y, text_color));
+                }
             }
             menu_x += item.label.len() as f32 * char_width + padding_x * 2.0;
         }
