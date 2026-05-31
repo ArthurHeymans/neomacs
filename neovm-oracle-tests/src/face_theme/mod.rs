@@ -30123,3 +30123,79 @@ fn ft_flow_face_text_property_text_before_and_after_face_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_stream_face_overlay_face_nested_priority_3layer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((L1 (make-overlay 1 16))) (overlay-put L1 'face '(:background "L1")) (overlay-put L1 'priority 1))
+    (let ((L2 (make-overlay 4 13))) (overlay-put L2 'face '(:background "L2")) (overlay-put L2 'priority 2))
+    (let ((L3 (make-overlay 7 10))) (overlay-put L3 'face '(:background "L3")) (overlay-put L3 'priority 3))
+    (list
+     'L1-only (get-char-property 2 'face)
+     'L2-region (get-char-property 5 'face)
+     'L3-region (get-char-property 8 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 16)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_stream_font_lock_fontify_maphash_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(maphash (lambda (k v) (message \"%s => %s\" k v)) table)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'maphash-face (save-excursion (goto-char (point-min)) (search-forward "maphash") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_stream_face_overlay_face_verify_after_front_advance() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'front-advance t)
+      (goto-char 1)
+      (insert "X")
+      (list
+       'start-after (overlay-start ov)
+       'end-after (overlay-end ov)
+       'face-at-pos (get-char-property 1 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_stream_face_text_property_text_property_search_forward_backward() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 11 16 'face 'italic)
+    (list
+     'next-bold-from-1 (next-single-property-change 1 'face)
+     'next-italic-from-bold-end (next-single-property-change 6 'face)
+     'prev-bold-from-italic-start (previous-single-property-change 11 'face)
+     'prev-nothing-from-italic-end (previous-single-property-change 16 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
