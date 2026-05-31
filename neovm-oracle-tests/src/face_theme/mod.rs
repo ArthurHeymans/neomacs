@@ -32139,3 +32139,73 @@ fn ft_flash_text_property_interval_element_type_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_burst_face_overlay_face_change_then_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'face '(:foreground "red"))
+      (list
+       'final (overlay-get ov 'face)
+       'char (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_burst_font_lock_scheme_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (scheme-mode) (error (fundamental-mode)))
+    (insert "(define (square x) (* x x))\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_burst_face_overlay_line_prefix_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA\nBBBBB")
+    (let ((ov (make-overlay 1 12)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'line-prefix "  ")
+      (list
+       'line-pref (overlay-get ov 'line-prefix)
+       'face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_burst_text_property_face_interval_starts_and_ends() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 11 'face 'italic)
+    (let ((ints (object-intervals (current-buffer))))
+      (list
+       'count (length ints)
+       'details (mapcar (lambda (i) (list (car i) (cadr i) (plist-get (cddr i) 'face))) ints)))))))"##,
+    );
+}
