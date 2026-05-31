@@ -729,6 +729,31 @@ fn string_match_open_interval_quantifier_matches_gnu_semantics() {
 }
 
 #[test]
+fn string_match_large_open_interval_failure_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold(
+        "[[:alnum:]]\\{,1000\\}::",
+        "vector<int> v;\n",
+        0,
+        false,
+        &mut md,
+    );
+    assert_eq!(result, Ok(None));
+    assert!(md.is_none());
+}
+
+#[test]
+fn string_match_interval_question_suffix_uses_gnu_postfix_semantics() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold("a\\{2,4\\}?a", "aaaa", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    let md = md.expect("match data");
+    assert_eq!(md.groups[0], Some((0, 4)));
+}
+
+#[test]
 fn string_match_interval_repeats_only_trailing_literal_like_gnu() {
     crate::test_utils::init_test_tracing();
 

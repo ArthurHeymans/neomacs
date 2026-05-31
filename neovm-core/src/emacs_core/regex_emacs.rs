@@ -1027,12 +1027,6 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         let interval_start = p;
                         let (min_count, max_count) = parse_interval(pattern_bytes, &mut p)?;
 
-                        // Check for non-greedy suffix ?
-                        let lazy = p < plen && pattern_bytes[p] == b'?';
-                        if lazy {
-                            p += 1;
-                        }
-
                         let Some(mut last) = laststart else {
                             // GNU regex-emacs.c:2427 `unfetch_interval`: a
                             // syntactically valid interval without a preceding
@@ -1051,8 +1045,8 @@ pub(crate) fn regex_compile_lisp_with_translation(
                             last = split_trailing_exactn_atom_if_needed(&mut buf, last);
                         }
 
-                        compile_interval(min_count, max_count, lazy, last, &mut buf)?;
-                        laststart = None;
+                        compile_interval(min_count, max_count, last, &mut buf)?;
+                        laststart = Some(last);
                         laststart_is_group = false;
                         pending_exact = None;
                     }
@@ -2180,107 +2174,171 @@ fn parse_interval(
 }
 
 /// Compile an interval \{n,m\} into bytecode.
+fn checked_i16_offset(offset: isize) -> Result<i16, RegexCompileError> {
+    i16::try_from(offset).map_err(|_| RegexCompileError {
+        message: "Regular expression too big".to_string(),
+    })
+}
+
+fn checked_i16_counter(value: usize) -> Result<i16, RegexCompileError> {
+    i16::try_from(value).map_err(|_| RegexCompileError {
+        message: "Regular expression too big".to_string(),
+    })
+}
+
+fn store_jump_at(
+    buffer: &mut Vec<u8>,
+    op_pos: usize,
+    op: RegexOp,
+    target: usize,
+) -> Result<(), RegexCompileError> {
+    buffer[op_pos] = op as u8;
+    let offset = checked_i16_offset(target as isize - (op_pos + 3) as isize)?;
+    store_number(buffer, op_pos + 1, offset);
+    Ok(())
+}
+
+fn store_jump2_at(
+    buffer: &mut Vec<u8>,
+    op_pos: usize,
+    op: RegexOp,
+    target: usize,
+    count: usize,
+) -> Result<(), RegexCompileError> {
+    store_jump_at(buffer, op_pos, op, target)?;
+    store_number(buffer, op_pos + 3, checked_i16_counter(count)?);
+    Ok(())
+}
+
+fn insert_jump(
+    buffer: &mut Vec<u8>,
+    at: usize,
+    op: RegexOp,
+    target: usize,
+) -> Result<(), RegexCompileError> {
+    buffer.splice(at..at, [op as u8, 0, 0]);
+    store_jump_at(buffer, at, op, target)
+}
+
+fn insert_jump2(
+    buffer: &mut Vec<u8>,
+    at: usize,
+    op: RegexOp,
+    target: usize,
+    count: usize,
+) -> Result<(), RegexCompileError> {
+    buffer.splice(at..at, [op as u8, 0, 0, 0, 0]);
+    store_jump2_at(buffer, at, op, target, count)
+}
+
+fn insert_set_number_at(
+    buffer: &mut Vec<u8>,
+    at: usize,
+    target_counter_offset: usize,
+    value: usize,
+) -> Result<(), RegexCompileError> {
+    buffer.splice(at..at, [RegexOp::SetNumberAt as u8, 0, 0, 0, 0]);
+    let offset = checked_i16_offset(target_counter_offset as isize)?;
+    store_number(buffer, at + 1, offset);
+    store_number(buffer, at + 3, checked_i16_counter(value)?);
+    Ok(())
+}
+
+/// Compile an interval \{n,m\} into GNU's counted interval bytecode.
+///
+/// This mirrors `src/regex-emacs.c`'s interval layout:
+///
+/// ```text
+/// set_number_at <jump_n count> <upper>
+/// set_number_at <succeed_n count> <lower>
+/// succeed_n     <after jump_n>   <lower>
+/// <body>
+/// jump_n        <succeed_n>      <upper - 1>
+/// ```
+///
+/// GNU uses `on_failure_jump_loop` instead of `succeed_n` for a zero
+/// lower bound and omits the upper-bound `jump_n` when no finite upper
+/// bound exists.  Keeping this counted shape matters for large intervals
+/// such as CC Mode's `[[:alnum:]]\\{,1000\\}`: expanding the body into
+/// hundreds of optional copies creates backtracking behavior GNU avoids.
 fn compile_interval(
     min: usize,
     max: Option<usize>,
-    lazy: bool,
     laststart: usize,
     buf: &mut CompiledPattern,
 ) -> Result<(), RegexCompileError> {
-    // Simple implementation: repeat the expression min times literally,
-    // then add optional repetitions up to max.
-    // This is a simplified version — GNU uses succeed_n/jump_n opcodes.
-
-    let expr_bytes: Vec<u8> = buf.buffer[laststart..].to_vec();
-
-    // Remove the original expression (we'll re-emit it)
-    buf.buffer.truncate(laststart);
-
-    // Emit min mandatory copies
-    for _ in 0..min {
-        buf.buffer.extend_from_slice(&expr_bytes);
+    if let Some(max_val) = max {
+        if max_val == 0 {
+            buf.buffer.truncate(laststart);
+            return Ok(());
+        }
+        if min == 1 && max_val == 1 {
+            return Ok(());
+        }
     }
 
-    // Emit optional copies (up to max - min)
+    let old_end = buf.buffer.len();
+    let upper_extra_bytes = match max {
+        None => 3,
+        Some(max_val) if max_val > 1 => 5,
+        Some(_) => 0,
+    };
+    let mut emitted_end = old_end;
+    let mut startoffset = 0usize;
+
+    if min == 0 {
+        insert_jump(
+            &mut buf.buffer,
+            laststart,
+            RegexOp::OnFailureJumpLoop,
+            old_end + 3 + upper_extra_bytes,
+        )?;
+        emitted_end += 3;
+    } else {
+        insert_jump2(
+            &mut buf.buffer,
+            laststart,
+            RegexOp::SucceedN,
+            old_end + 5 + upper_extra_bytes,
+            min,
+        )?;
+        emitted_end += 5;
+        insert_set_number_at(&mut buf.buffer, laststart, 5, min)?;
+        emitted_end += 5;
+        startoffset += 5;
+    }
+
     match max {
-        Some(max_val) if max_val > min => {
-            if lazy {
-                // Non-greedy: use OnFailureKeepStringJump to prefer
-                // skipping the optional copy (matching fewer).
-                for _ in 0..(max_val - min) {
-                    buf.buffer.push(RegexOp::OnFailureKeepStringJump as u8);
-                    let jpos = buf.buffer.len();
-                    buf.buffer.push(0);
-                    buf.buffer.push(0);
-                    buf.buffer.extend_from_slice(&expr_bytes);
-                    let target = (buf.buffer.len() - jpos - 2) as i16;
-                    store_number(&mut buf.buffer, jpos, target);
-                }
-            } else {
-                // Greedy: use OnFailureJump to prefer matching the copy.
-                for _ in 0..(max_val - min) {
-                    buf.buffer.push(RegexOp::OnFailureJump as u8);
-                    let jpos = buf.buffer.len();
-                    buf.buffer.push(0);
-                    buf.buffer.push(0);
-                    buf.buffer.extend_from_slice(&expr_bytes);
-                    let target = (buf.buffer.len() - jpos - 2) as i16;
-                    store_number(&mut buf.buffer, jpos, target);
-                }
-            }
-        }
         None => {
-            if lazy {
-                // Non-greedy unbounded: OFKSJ + OFJ loop
-                // Layout:
-                //   [loop_start] OFKSJ  offset(2)  <expr>  OFJ  offset(2)
-                //   OFKSJ skip target → past OFJ (done)
-                //   OFJ fail target → back to OFKSJ (try another iteration)
-                let loop_start = buf.buffer.len();
-                buf.buffer.push(RegexOp::OnFailureKeepStringJump as u8);
-                let jpos = buf.buffer.len();
-                buf.buffer.push(0);
-                buf.buffer.push(0);
-
-                buf.buffer.extend_from_slice(&expr_bytes);
-
-                buf.buffer.push(RegexOp::OnFailureJump as u8);
-                let jpos2 = buf.buffer.len();
-                buf.buffer.push(0);
-                buf.buffer.push(0);
-
-                // OFKSJ skip target: from (jpos+2) → past OFJ = (jpos2+2)
-                let skip_target = (jpos2 + 2 - jpos - 2) as i16;
-                store_number(&mut buf.buffer, jpos, skip_target);
-
-                // OFJ target: from (jpos2+2) → loop_start
-                let ofj_target = loop_start as i16 - (jpos2 as i16 + 2);
-                store_number(&mut buf.buffer, jpos2, ofj_target);
-            } else {
-                // Greedy unbounded: OFJL + Jump loop
-                let loop_start = buf.buffer.len();
-                buf.buffer.push(RegexOp::OnFailureJumpLoop as u8);
-                let jpos = buf.buffer.len();
-                buf.buffer.push(0);
-                buf.buffer.push(0);
-
-                buf.buffer.extend_from_slice(&expr_bytes);
-
-                buf.buffer.push(RegexOp::Jump as u8);
-                let jpos2 = buf.buffer.len();
-                buf.buffer.push(0);
-                buf.buffer.push(0);
-
-                // OFJL fail: from (jpos+2) → past Jump = (jpos2+2)
-                let fail_target = (jpos2 + 2 - jpos - 2) as i16;
-                store_number(&mut buf.buffer, jpos, fail_target);
-
-                // Jump target: from (jpos2+2) → loop_start
-                let jump_target = loop_start as i16 - (jpos2 as i16 + 2);
-                store_number(&mut buf.buffer, jpos2, jump_target);
-            }
+            let op_pos = emitted_end;
+            buf.buffer.extend_from_slice(&[RegexOp::Jump as u8, 0, 0]);
+            store_jump_at(
+                &mut buf.buffer,
+                op_pos,
+                RegexOp::Jump,
+                laststart + startoffset,
+            )?;
         }
-        _ => {} // max == min, already handled
+        Some(max_val) if max_val > 1 => {
+            let op_pos = emitted_end;
+            buf.buffer
+                .extend_from_slice(&[RegexOp::JumpN as u8, 0, 0, 0, 0]);
+            store_jump2_at(
+                &mut buf.buffer,
+                op_pos,
+                RegexOp::JumpN,
+                laststart + startoffset,
+                max_val - 1,
+            )?;
+            emitted_end += 5;
+            insert_set_number_at(
+                &mut buf.buffer,
+                laststart,
+                emitted_end - laststart,
+                max_val - 1,
+            )?;
+        }
+        Some(_) => {}
     }
 
     Ok(())
