@@ -28474,3 +28474,72 @@ fn ft_ultimate_face_text_property_classify_faces_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_infinite_face_overlay_face_put_nil_after_non_nil() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'face nil)
+      (list
+       'face-after-nil (overlay-get ov 'face)
+       'char-after-nil (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_font_lock_fontify_with_special_form() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(special-form-p 'if)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'special-form-face (save-excursion (goto-char (point-min)) (search-forward "special-form-p") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_overlay_face_compare_two_equal_priorities() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov-a (make-overlay 1 6))) (overlay-put ov-a 'face '(:foreground "A")) (overlay-put ov-a 'priority 0))
+    (let ((ov-b (make-overlay 1 6))) (overlay-put ov-b 'face '(:foreground "B")) (overlay-put ov-b 'priority 0))
+    (list
+     'equal (equal (overlay-get ov-a 'priority) (overlay-get ov-b 'priority))
+     'winning (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_infinite_face_text_property_get_property_with_buffer_limit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "QQQQQ")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'prop-in-range (text-property-any 1 6 'face 'bold)
+     'prop-not-found (text-property-any 1 6 'face 'italic)
+     'not-all (condition-case nil (text-property-not-all 1 6 'face 'bold nil) (error 'no))
+     'not-all-with-object (condition-case nil (text-property-not-all 1 6 'face 'italic nil) (error 'no))))))"##,
+    );
+}
