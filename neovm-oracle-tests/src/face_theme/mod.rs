@@ -29124,3 +29124,71 @@ fn ft_forever_face_text_property_face_save_restore_buffer() {
      'original-still-has (get-text-property 3 'face)))))"##,
     );
 }
+
+#[test]
+fn ft_endless_face_overlay_face_priority_identical_three_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 1))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face '(:foreground "blue")) (overlay-put ov3 'priority 1))
+    (list
+     'three-at-same-prio (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_endless_font_lock_fontify_with_load_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(load \"my-file\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'load-face (save-excursion (goto-char (point-min)) (search-forward "load") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_endless_face_overlay_face_with_just_height() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:height 2.0))
+      (list
+       'face (overlay-get ov 'face)
+       'height-val (plist-get (overlay-get ov 'face) :height)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_endless_face_text_property_face_with_relation_to_window() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'window-start-fbound (fboundp 'window-start)
+     'window-end-fbound (fboundp 'window-end)
+     'face-at-point (get-text-property (point) 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
