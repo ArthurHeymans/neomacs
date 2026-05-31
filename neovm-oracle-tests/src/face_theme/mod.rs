@@ -28118,3 +28118,77 @@ fn ft_prime_face_text_property_interval_object_sanity() {
                     (mapcar (lambda (i) (list (car i) (cadr i) (get-text-property (car i) 'face))) ints)))))))"##,
     );
 }
+
+#[test]
+fn ft_omega_face_overlay_face_at_invisible_text_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'invisible t)
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 6 11)))
+      (overlay-put ov 'face 'italic))
+    (list
+     'invis-region (get-text-property 3 'invisible)
+     'face-invis (get-text-property 3 'face)
+     'face-visible (get-char-property 8 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_font_lock_fontify_gv_define_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(gv-define-setter my-accessor (val place)\n  `(setf (car ,place) ,val))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'gv-define-face (save-excursion (goto-char (point-min)) (search-forward "gv-define-setter") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_overlay_face_move_entire_overlay_to_end() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA\nBBBBB")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (move-overlay ov 7 12)
+      (list
+       'new-start (overlay-start ov)
+       'new-end (overlay-end ov)
+       'face-at-new (get-char-property 8 'face)
+       'face-at-old (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_omega_face_text_property_composition_region_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (condition-case nil (compose-region 1 6) (error nil))
+    (list
+     'composition-prop (get-text-property 3 'composition)
+     'face (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
