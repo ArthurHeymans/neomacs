@@ -29625,3 +29625,72 @@ fn ft_momentum_face_text_property_get_all_properties_on_buffer() {
        'face-value (cadr (memq 'face props)))))))"##,
     );
 }
+
+#[test]
+fn ft_drive_face_overlay_face_priority_100_vs_200() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov100 (make-overlay 1 6))) (overlay-put ov100 'face '(:foreground "lower")) (overlay-put ov100 'priority 100))
+    (let ((ov200 (make-overlay 1 6))) (overlay-put ov200 'face '(:foreground "higher")) (overlay-put ov200 'priority 200))
+    (list
+     'higher-wins (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_drive_font_lock_fontify_assoc_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(assoc 'key '((a . 1)))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'assoc-face (save-excursion (goto-char (point-min)) (search-forward "assoc") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_drive_face_overlay_face_put_symbol_then_plist_then_symbol() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'symbol (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'plist (progn (overlay-put ov 'face '(:foreground "red")) (overlay-get ov 'face))
+       'symbol-again (progn (overlay-put ov 'face 'italic) (overlay-get ov 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_drive_face_text_property_find_all_property_any_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBBCCCC")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 9 13 'face 'bold)
+    (list
+     'first-bold (text-property-any 1 13 'face 'bold)
+     'second-bold (text-property-any 5 13 'face 'bold)
+     'no-third (text-property-any 9 13 'face 'bold)
+     'no-longer (text-property-any 13 13 'face 'bold)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
