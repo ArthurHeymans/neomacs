@@ -33271,3 +33271,69 @@ fn ft_onward_text_property_face_stress_5_intervals_deep() {
                   (nreverse result)))))))"##,
     );
 }
+
+#[test]
+fn ft_climb_face_overlay_face_put_numeric_string_symbol_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'face-symbol (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'face-number (progn (overlay-put ov 'face 42) (overlay-get ov 'face))
+       'face-string (progn (overlay-put ov 'face "not-a-face") (overlay-get ov 'face))
+       'face-nil (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_climb_font_lock_vera_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (vera-mode) (error (fundamental-mode)))
+    (insert "// Vera test\nbit [3:0] count;\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_climb_face_overlay_face_with_no_priority_compare() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((no-prio (make-overlay 1 6))) (overlay-put no-prio 'face '(:foreground "A")))
+    (let ((has-prio (make-overlay 1 6))) (overlay-put has-prio 'face '(:foreground "B")) (overlay-put has-prio 'priority 0))
+    (list
+     'winning (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_climb_text_property_face_with_add_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (add-face-text-property 1 6 'bold)
+    (add-face-text-property 1 6 'italic)
+    (list
+     'face (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
