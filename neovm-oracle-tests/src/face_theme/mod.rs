@@ -28835,3 +28835,75 @@ fn ft_relentless_face_text_property_get_unset_reports_nil() {
      'intervals-after-remove (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_unstoppable_face_overlay_face_text_prop_union_intersection() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (put-text-property 1 11 'face 'bold)
+    (let ((ov (make-overlay 6 16)))
+      (overlay-put ov 'face 'italic))
+    (put-text-property 16 21 'face 'underline)
+    (list
+     'union-bold-only-pos3 (get-char-property 3 'face)
+     'intersection-bold-italic-pos8 (get-char-property 8 'face)
+     'italic-only-pos13 (get-char-property 13 'face)
+     'underline-only-pos18 (get-char-property 18 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_unstoppable_font_lock_fontify_macroexpand_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(macroexpand '(when t (message \"hi\")))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'macroexpand-face (save-excursion (goto-char (point-min)) (search-forward "macroexpand") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_unstoppable_face_overlay_face_survive_insert_newline() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 3)
+      (insert "\n")
+      (list
+       'face-before-newline (get-char-property 2 'face)
+       'face-after-newline (get-char-property 4 'face)
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_unstoppable_face_text_property_interval_list_empty_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (list
+     'intervals-empty (condition-case nil (length (object-intervals (current-buffer))) (error 'no))
+     'after-insert (progn (insert "X") (put-text-property 1 2 'face 'bold) (length (object-intervals (current-buffer))))))))"##,
+    );
+}
