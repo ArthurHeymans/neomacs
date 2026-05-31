@@ -905,6 +905,26 @@ impl WgpuGlyphAtlas {
         }
     }
 
+    fn rasterize_result_to_pixels(result: &RasterizeResult) -> Option<RasterizedGlyphPixels> {
+        let size = PixelSize::new(result.width, result.height)?;
+        if result.is_color {
+            Some(RasterizedGlyphPixels::Color {
+                size,
+                rgba_srgb: result.pixel_data.clone(),
+            })
+        } else if result.is_subpixel {
+            Some(RasterizedGlyphPixels::Subpixel {
+                size,
+                rgba: result.pixel_data.clone(),
+            })
+        } else {
+            Some(RasterizedGlyphPixels::Alpha {
+                size,
+                bytes: result.pixel_data.clone(),
+            })
+        }
+    }
+
     fn material_from_raster_result(result: &RasterizeResult) -> GlyphMaterialKind {
         if result.is_color {
             GlyphMaterialKind::ColorRgba
@@ -955,8 +975,8 @@ impl WgpuGlyphAtlas {
         queue: &wgpu::Queue,
         result: &RasterizeResult,
     ) -> Option<AnyAtlasEntry> {
-        let material = Self::material_from_raster_result(result);
-        let size = PixelSize::new(result.width, result.height)?;
+        let pixels = Self::rasterize_result_to_pixels(result)?;
+        let size = pixels.size();
         let page_size = self.atlas_config.page_size;
         let metrics = GlyphMetrics {
             bearing_x: result.bearing_x,
@@ -964,8 +984,8 @@ impl WgpuGlyphAtlas {
             advance_width: result.advance_width,
         };
 
-        match material {
-            GlyphMaterialKind::AlphaMask => {
+        match pixels {
+            RasterizedGlyphPixels::Alpha { bytes, .. } => {
                 let PageAllocResult {
                     page_id,
                     generation,
@@ -1004,9 +1024,9 @@ impl WgpuGlyphAtlas {
                     queue,
                     &page.texture,
                     allocation.content_rect,
-                    &result.pixel_data,
-                    result.width,
-                    result.height,
+                    &bytes,
+                    size.width(),
+                    size.height(),
                     AlphaMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
@@ -1018,7 +1038,7 @@ impl WgpuGlyphAtlas {
                     metrics,
                 )))
             }
-            GlyphMaterialKind::SubpixelMask => {
+            RasterizedGlyphPixels::Subpixel { rgba, .. } => {
                 let PageAllocResult {
                     page_id,
                     generation,
@@ -1052,9 +1072,9 @@ impl WgpuGlyphAtlas {
                     queue,
                     &page.texture,
                     allocation.content_rect,
-                    &result.pixel_data,
-                    result.width,
-                    result.height,
+                    &rgba,
+                    size.width(),
+                    size.height(),
                     SubpixelMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
@@ -1066,7 +1086,7 @@ impl WgpuGlyphAtlas {
                     metrics,
                 )))
             }
-            GlyphMaterialKind::ColorRgba => {
+            RasterizedGlyphPixels::Color { rgba_srgb, .. } => {
                 let PageAllocResult {
                     page_id,
                     generation,
@@ -1105,9 +1125,9 @@ impl WgpuGlyphAtlas {
                     queue,
                     &page.texture,
                     allocation.content_rect,
-                    &result.pixel_data,
-                    result.width,
-                    result.height,
+                    &rgba_srgb,
+                    size.width(),
+                    size.height(),
                     ColorRgba::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
