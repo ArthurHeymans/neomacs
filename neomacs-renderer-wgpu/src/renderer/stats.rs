@@ -14,6 +14,7 @@ pub struct GlyphRenderStats {
     pub composed_glyph_draw_calls: usize,
     pub cache_hits: usize,
     pub cache_misses: usize,
+    pub page_evictions: usize,
 }
 
 impl GlyphRenderStats {
@@ -27,7 +28,7 @@ impl GlyphRenderStats {
         }
         tracing::info!(
             "glyph-stats: total={} text={} composed={} unique_single={} unique_composed={} \
-             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={}",
+             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={} evictions={}",
             self.total_frame_glyphs,
             self.text_glyphs,
             self.composed_glyphs,
@@ -40,6 +41,7 @@ impl GlyphRenderStats {
             self.composed_glyph_draw_calls,
             self.cache_hits,
             self.cache_misses,
+            self.page_evictions,
         );
     }
 }
