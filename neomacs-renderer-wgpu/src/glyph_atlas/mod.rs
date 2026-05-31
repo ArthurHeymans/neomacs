@@ -1,6 +1,6 @@
 //! Glyph texture atlas for wgpu GPU rendering
 //!
-//! Caches rasterized glyphs as individual wgpu textures with bind groups.
+//! Caches rasterized glyphs on shared atlas texture pages.
 
 pub mod allocator;
 pub mod pages;
@@ -117,21 +117,6 @@ pub struct RasterizeResult {
     pub advance_width: f32,
 }
 
-/// A cached glyph with its wgpu texture and bind group
-pub struct CachedGlyph {
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub bind_group: wgpu::BindGroup,
-    pub width: u32,
-    pub height: u32,
-    pub bearing_x: f32,
-    pub bearing_y: f32,
-    pub is_color: bool,
-    pub is_subpixel: bool,
-    pub advance_width: f32,
-    last_accessed: u64,
-}
-
 struct CachedAtlasGlyph {
     entry: AnyAtlasEntry,
     advance_width: f32,
@@ -187,8 +172,6 @@ use types::*;
 
 /// Wgpu-based glyph atlas for text rendering
 pub struct WgpuGlyphAtlas {
-    cache: HashMap<CachedGlyphKey, CachedGlyph>,
-    composed_cache: HashMap<CachedComposedGlyphKey, CachedGlyph>,
     atlas_cache: HashMap<CachedGlyphKey, CachedAtlasGlyph>,
     atlas_composed_cache: HashMap<CachedComposedGlyphKey, CachedAtlasGlyph>,
     atlas_pages: GlyphAtlasPages,
@@ -251,8 +234,6 @@ impl WgpuGlyphAtlas {
         let atlas_config = GlyphAtlasConfig::default_for_device(device);
 
         Self {
-            cache: HashMap::new(),
-            composed_cache: HashMap::new(),
             atlas_cache: HashMap::new(),
             atlas_composed_cache: HashMap::new(),
             atlas_pages: GlyphAtlasPages::new(atlas_config),
@@ -286,369 +267,6 @@ impl WgpuGlyphAtlas {
     /// Get the bind group layout for glyph textures
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
-    }
-
-    /// Get or create a cached glyph
-    ///
-    /// If the glyph is already cached, returns a reference to it.
-    /// Otherwise, rasterizes the glyph, uploads to GPU, and caches it.
-    pub fn get_or_create(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        key: &GlyphKey,
-        face: Option<&Face>,
-        enable_subpixel: bool,
-    ) -> Option<&CachedGlyph> {
-        let cache_key = CachedGlyphKey {
-            glyph: key.clone(),
-            mode: self.render_mode(enable_subpixel),
-        };
-        // Check cache first — update access generation on hit
-        if let Some(cached) = self.cache.get_mut(&cache_key) {
-            cached.last_accessed = self.generation;
-            self.cache_hits_this_frame += 1;
-            return self.cache.get(&cache_key);
-        }
-
-        // Rasterize the glyph
-        let c = char::from_u32(key.charcode)?;
-
-        // Whitespace characters (space, tab, newline, carriage return) don't need
-        // visible glyphs - their backgrounds are handled separately by the renderer.
-        // Return None silently without warning.
-        if c.is_whitespace() {
-            return None;
-        }
-
-        let result = self.rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel);
-        if result.is_none() {
-            tracing::warn!(
-                "glyph_atlas: failed to rasterize '{}' (U+{:04X}) face_id={} has_face={}",
-                c,
-                key.charcode,
-                key.face_id,
-                face.is_some()
-            );
-            return None;
-        }
-        let result = result?;
-
-        if result.width == 0 || result.height == 0 {
-            tracing::debug!(
-                "glyph_atlas: skipping empty glyph '{}' ({}x{})",
-                c,
-                result.width,
-                result.height
-            );
-            return None;
-        }
-
-        tracing::debug!(
-            "glyph_atlas: rasterized '{}' {}x{} bearing ({:.1},{:.1}) color={} subpixel={}",
-            c,
-            result.width,
-            result.height,
-            result.bearing_x,
-            result.bearing_y,
-            result.is_color,
-            result.is_subpixel
-        );
-
-        // Debug: dump raw glyph rasterization to /tmp for pixel-level inspection.
-        // Set NEOMACS_DUMP_GLYPH=1 to dump ALL glyphs, or NEOMACS_DUMP_GLYPH=I
-        // to dump only the specified character.
-        if let Ok(filter) = std::env::var("NEOMACS_DUMP_GLYPH") {
-            let should_dump = filter == "1" || filter.chars().next().map_or(false, |fc| c == fc);
-            if should_dump && !result.is_color {
-                use std::io::Write;
-                let ext = if result.is_subpixel { "rgba" } else { "pgm" };
-                let fname = format!(
-                    "/tmp/glyph_U+{:04X}_{}x{}_{}.{}",
-                    c as u32, result.width, result.height, result.advance_width as u32, ext
-                );
-                if let Ok(mut f) = std::fs::File::create(&fname) {
-                    if result.is_subpixel {
-                        let _ = f.write_all(&result.pixel_data);
-                    } else {
-                        let _ = writeln!(f, "P5\n{} {}\n255", result.width, result.height);
-                        let _ = f.write_all(&result.pixel_data);
-                    }
-                    tracing::info!("glyph_atlas: dumped '{}' to {}", c, fname);
-                }
-            }
-        }
-
-        // Cache default font metrics only from glyphs rendered at the atlas
-        // default size. The renderer syncs the atlas default from the current
-        // frame before drawing, so face 0 buffer glyphs seed matching UI chrome
-        // text metrics instead of the atlas startup fallback.
-        if self.cached_char_width.is_none()
-            && key_uses_default_font_metrics(&key, self.default_font_size)
-        {
-            self.cached_char_width = Some(result.advance_width / self.scale_factor);
-            self.cached_font_ascent = Some(result.bearing_y / self.scale_factor);
-        }
-
-        let RasterizeResult {
-            width,
-            height,
-            pixel_data,
-            bearing_x,
-            bearing_y,
-            is_color,
-            is_subpixel,
-            advance_width,
-        } = result;
-
-        let (format, bytes_per_pixel) = if is_color {
-            (wgpu::TextureFormat::Rgba8UnormSrgb, 4u32)
-        } else if is_subpixel {
-            (wgpu::TextureFormat::Rgba8Unorm, 4u32)
-        } else {
-            (wgpu::TextureFormat::R8Unorm, 1u32)
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(if is_color {
-                "Color Glyph Texture"
-            } else {
-                "Glyph Texture"
-            }),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        // Upload pixel data
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &pixel_data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(width * bytes_per_pixel),
-                rows_per_image: Some(height),
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        // Create texture view
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        // Create bind group
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Glyph Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        // Evict least-recently-used entries if cache is full
-        if self.cache.len() >= self.max_size {
-            let mut entries: Vec<_> = self
-                .cache
-                .iter()
-                .map(|(k, v)| (k.clone(), v.last_accessed))
-                .collect();
-            entries.sort_by_key(|(_, generation)| *generation);
-            let evict_count = self.max_size / 4;
-            for (k, _) in entries.into_iter().take(evict_count) {
-                self.cache.remove(&k);
-            }
-        }
-
-        // Insert into cache
-        let generation = self.generation;
-        let cached_glyph = CachedGlyph {
-            texture,
-            view,
-            bind_group,
-            width,
-            height,
-            bearing_x,
-            bearing_y,
-            is_color,
-            is_subpixel,
-            advance_width,
-            last_accessed: generation,
-        };
-        self.cache.insert(cache_key.clone(), cached_glyph);
-        self.cache_misses_this_frame += 1;
-        self.cache.get(&cache_key)
-    }
-
-    /// Get or create a cached glyph for a composed (multi-codepoint) grapheme cluster.
-    ///
-    /// Used for emoji ZWJ sequences, combining diacritics, etc.
-    pub fn get_or_create_composed(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        text: &str,
-        face_id: u32,
-        font_size_bits: u32,
-        face: Option<&Face>,
-        x_bin: SubpixelBin,
-        y_bin: SubpixelBin,
-        enable_subpixel: bool,
-    ) -> Option<&CachedGlyph> {
-        let key = ComposedGlyphKey {
-            text: text.into(),
-            face_id,
-            font_size_bits,
-            font_identity: glyph_font_identity(face),
-            x_bin,
-            y_bin,
-        };
-        let cache_key = CachedComposedGlyphKey {
-            glyph: key.clone(),
-            mode: self.render_mode(enable_subpixel),
-        };
-
-        // Check cache first
-        if let Some(cached) = self.composed_cache.get_mut(&cache_key) {
-            cached.last_accessed = self.generation;
-            self.cache_hits_this_frame += 1;
-            return self.composed_cache.get(&cache_key);
-        }
-
-        // Rasterize the composed text
-        let result = self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel);
-        if result.is_none() {
-            tracing::warn!("glyph_atlas: failed to rasterize composed text '{}'", text);
-            return None;
-        }
-        let RasterizeResult {
-            width,
-            height,
-            pixel_data,
-            bearing_x,
-            bearing_y,
-            is_color,
-            is_subpixel,
-            advance_width,
-        } = result?;
-
-        if width == 0 || height == 0 {
-            return None;
-        }
-
-        // Create GPU texture (same logic as single-char path)
-        let (format, bytes_per_pixel) = if is_color {
-            (wgpu::TextureFormat::Rgba8UnormSrgb, 4u32)
-        } else if is_subpixel {
-            (wgpu::TextureFormat::Rgba8Unorm, 4u32)
-        } else {
-            (wgpu::TextureFormat::R8Unorm, 1u32)
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Composed Glyph Texture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &pixel_data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(width * bytes_per_pixel),
-                rows_per_image: Some(height),
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Composed Glyph Bind Group"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        let generation = self.generation;
-        self.composed_cache.insert(
-            cache_key.clone(),
-            CachedGlyph {
-                texture,
-                view,
-                bind_group,
-                width,
-                height,
-                bearing_x,
-                bearing_y,
-                is_color,
-                is_subpixel,
-                advance_width,
-                last_accessed: generation,
-            },
-        );
-        self.cache_misses_this_frame += 1;
-        self.composed_cache.get(&cache_key)
-    }
-
-    /// Get a cached composed glyph without creating it
-    pub fn get_composed(
-        &self,
-        key: &ComposedGlyphKey,
-        enable_subpixel: bool,
-    ) -> Option<&CachedGlyph> {
-        self.composed_cache.get(&CachedComposedGlyphKey {
-            glyph: key.clone(),
-            mode: self.render_mode(enable_subpixel),
-        })
     }
 
     /// Rasterize text (single char or multi-codepoint sequence) and return pixel data.
@@ -1173,21 +791,8 @@ impl WgpuGlyphAtlas {
         attrs
     }
 
-    /// Get a cached glyph without creating it
-    ///
-    /// Returns a reference to the cached glyph if it exists.
-    /// This is useful for immutable access after glyphs have been cached.
-    pub fn get(&self, key: &GlyphKey, enable_subpixel: bool) -> Option<&CachedGlyph> {
-        self.cache.get(&CachedGlyphKey {
-            glyph: key.clone(),
-            mode: self.render_mode(enable_subpixel),
-        })
-    }
-
     /// Clear the cache
     pub fn clear(&mut self) {
-        self.cache.clear();
-        self.composed_cache.clear();
         self.atlas_cache.clear();
         self.atlas_composed_cache.clear();
         self.atlas_pages.clear();
@@ -1200,8 +805,6 @@ impl WgpuGlyphAtlas {
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         if (self.scale_factor - scale_factor).abs() > 0.001 {
             self.scale_factor = scale_factor;
-            self.cache.clear();
-            self.composed_cache.clear();
             self.atlas_cache.clear();
             self.atlas_composed_cache.clear();
             self.atlas_pages.clear();
@@ -1214,12 +817,12 @@ impl WgpuGlyphAtlas {
 
     /// Get the number of cached glyphs
     pub fn len(&self) -> usize {
-        self.cache.len() + self.composed_cache.len()
+        self.atlas_cache.len() + self.atlas_composed_cache.len()
     }
 
     /// Check if the cache is empty
     pub fn is_empty(&self) -> bool {
-        self.cache.is_empty() && self.composed_cache.is_empty()
+        self.atlas_cache.is_empty() && self.atlas_composed_cache.is_empty()
     }
 
     /// Get the default font size
@@ -1267,10 +870,6 @@ impl WgpuGlyphAtlas {
         self.generation = self.generation.wrapping_add(1);
         self.cache_hits_this_frame = 0;
         self.cache_misses_this_frame = 0;
-        if self.composed_cache.len() > 1024 {
-            let cutoff = self.generation.saturating_sub(60);
-            self.composed_cache.retain(|_, v| v.last_accessed >= cutoff);
-        }
         if self.atlas_composed_cache.len() > 1024 {
             let cutoff = self.generation.saturating_sub(60);
             self.atlas_composed_cache.retain(|_, v| v.last_accessed >= cutoff);
