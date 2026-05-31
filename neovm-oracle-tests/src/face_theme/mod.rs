@@ -28040,3 +28040,81 @@ fn ft_crown_face_text_property_fontified_scan_pattern() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_prime_face_overlay_text_prop_interleave_check_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "1234567890")
+    (put-text-property 1 4 'face 'bold)
+    (let ((ov (make-overlay 3 8)))
+      (overlay-put ov 'face 'italic))
+    (put-text-property 7 11 'face 'underline)
+    (list
+     'tp-only (get-char-property 2 'face)
+     'tp-ov (get-char-property 4 'face)
+     'ov-only (get-char-property 6 'face)
+     'ov-tp (get-char-property 8 'face)
+     'tp2-only (get-char-property 9 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_prime_font_lock_fontify_face_remap_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (list
+   'face-remap-add-relative-fbound (fboundp 'face-remap-add-relative)
+   'face-remap-reset-base-fbound (fboundp 'face-remap-reset-base)
+   'remap-test (condition-case nil
+                  (with-temp-buffer
+                    (face-remap-add-relative 'default 'bold)
+                    (face-remap-reset-base 'default)
+                    'ok)
+                  (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_prime_face_overlay_face_clear_all_and_reassign() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'face nil)
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'face nil)
+      (overlay-put ov 'face 'underline)
+      (list
+       'current-face (overlay-get ov 'face)
+       'char-prop (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_prime_face_text_property_interval_object_sanity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXX")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'intervals-count (length (object-intervals (current-buffer)))
+     'intervals-t (let ((ints (object-intervals (current-buffer))))
+                    (mapcar (lambda (i) (list (car i) (cadr i) (get-text-property (car i) 'face))) ints)))))))"##,
+    );
+}
