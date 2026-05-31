@@ -1815,42 +1815,18 @@ fn compile_charset(
             continue;
         }
 
-        // Handle POSIX classes [[:alpha:]], etc.
-        if b == b'[' && *p < plen && pattern[*p] == b':' {
-            *p += 1; // skip :
-            let class_start = *p;
-            while *p < plen && pattern[*p] != b':' {
-                *p += 1;
-            }
-            if *p < plen {
-                let class_name = std::str::from_utf8(&pattern[class_start..*p]).unwrap_or("");
-                *p += 1; // skip :
-                if *p < plen && pattern[*p] == b']' {
-                    *p += 1; // skip ]
-                }
-                if let Some(c) = pending_char.take() {
-                    if c.is_ascii() {
-                        set_bitmap_bit(
-                            &mut buf.buffer,
-                            bitmap_start,
-                            c as u8,
-                            buf.translate.as_ref(),
-                        );
-                    } else {
-                        add_multibyte_range(&mut mb_ranges, c, c, case_fold);
-                    }
-                }
-                apply_posix_class(
-                    class_name,
-                    &mut buf.buffer,
-                    bitmap_start,
-                    &mut mb_ranges,
-                    &mut class_bits,
-                    buf.translate.as_ref(),
-                )?;
-                continue;
-            }
-        }
+        // POSIX named character classes (`[:alpha:]`, etc.) are now
+        // handled by `parse_posix_char_class` at the top of the
+        // loop, before the per-character decode.  That function
+        // does not advance `p` when the `[:` prefix is a false
+        // start, so a literal `[` inside a bracket expression
+        // (e.g. `[[`, `[a[:c]`) is treated correctly — it falls
+        // through to the character-level processing below.
+        //
+        // The previous inline handler that used to live here
+        // unconditionally advanced `p` past the pattern end when
+        // `[:` was not followed by a valid class name, causing
+        // spurious "Unmatched [" errors.
 
         // Regular character
         let c = emacs_char_to_rust_char(c);
