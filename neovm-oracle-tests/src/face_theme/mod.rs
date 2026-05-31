@@ -29192,3 +29192,74 @@ fn ft_endless_face_text_property_face_with_relation_to_window() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_unending_face_overlay_face_nil_cycle_five_times() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       's1 (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       's2 (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       's3 (progn (overlay-put ov 'face 'italic) (overlay-get ov 'face))
+       's4 (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       's5 (progn (overlay-put ov 'face 'underline) (overlay-get ov 'face))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_unending_font_lock_fontify_read_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(read \"(1 2 3)\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'read-face (save-excursion (goto-char (point-min)) (search-forward "read") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_unending_face_overlay_start_at_bob_end_at_eob() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "FIRST\nSECOND\nTHIRD")
+    (let ((ov (make-overlay (point-min) (point-max))))
+      (overlay-put ov 'face 'bold)
+      (list
+       'first-line (get-char-property 2 'face)
+       'second-line (get-char-property 8 'face)
+       'third-line (get-char-property 14 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_unending_face_text_property_get_char_property_at_point_min() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'at-point-min (get-char-property 1 'face)
+     'at-point-max (get-char-property 5 'face)
+     'no-props-pos6 (condition-case nil (get-char-property 6 'face) (error 'none))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
