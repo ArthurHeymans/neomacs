@@ -27818,3 +27818,76 @@ fn ft_apex_face_text_property_all_props_at_point_deep() {
        'fontified-val (plist-get props 'fontified))))))"##,
     );
 }
+
+#[test]
+fn ft_peak_face_overlay_face_create_during_region_edit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 2 5)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 4)
+      (insert "BB")
+      (list
+       'face-inside-ov (get-char-property 3 'face)
+       'face-after-insert (get-char-property 5 'face)
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_peak_font_lock_fontify_define_error_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(define-error 'my-error \"My error message\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'define-error-face (save-excursion (goto-char (point-min)) (search-forward "define-error") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_peak_face_overlay_after_string_face_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'after-string (propertize "END" 'face 'bold))
+      (list
+       'after-str (overlay-get ov 'after-string)
+       'face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_peak_face_text_property_face_scan_backward_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'prev-prop-from-6 (previous-single-property-change 6 'face)
+     'prev-prop-from-10 (previous-single-property-change 10 'face)
+     'next-prop-from-0 (next-single-property-change 0 'face)
+     'next-prop-from-1 (next-single-property-change 1 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
