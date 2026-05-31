@@ -32570,3 +32570,79 @@ fn ft_ember_text_property_face_find_by_position_scan() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_ember2_face_overlay_face_put_large_plist_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red" :background "green" :weight bold :slant italic :underline t :overline t :strike-through t :box t :inverse-video t :extend t :height 150 :width expanded :family "Monospace"))
+      (let ((pl (overlay-get ov 'face)))
+        (list
+         'num-attrs (/ (length pl) 2)
+         'fg (plist-get pl :foreground)
+         'bg (plist-get pl :background)
+         'height (plist-get pl :height)
+         'width (plist-get pl :width)
+         'family (plist-get pl :family)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_ember2_font_lock_pascal_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (pascal-mode) (error (fundamental-mode)))
+    (insert "program hello;\nbegin\n  writeln('hello');\nend.\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_ember2_face_overlay_face_identity_nil_then_reset() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'nil-check (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       'bold-set (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'nil-again (progn (overlay-put ov 'face nil) (overlay-get ov 'face))
+       'char-after-nil (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_ember2_text_property_text_properties_at_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'fontified t)
+    (let ((props (text-properties-at 3)))
+      (list
+       'all-props props
+       'face-present (memq 'face props)
+       'face-value (cadr (memq 'face props))
+       'fontified-present (memq 'fontified props)
+       'fontified-value (cadr (memq 'fontified props)))))))"##,
+    );
+}
