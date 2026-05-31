@@ -203,6 +203,59 @@ fn buffer_string_preserves_raw_default_interval_after_plain_replacement() {
     assert_eq!(shape, vec![(0, 3, false), (3, 4, true), (4, 9, true)]);
 }
 
+#[test]
+fn plain_insert_splits_inserted_nil_interval_like_gnu_graft() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    builtin_insert(&mut eval, vec![Value::string("AAAAABBBBB")]).expect("insert base text");
+    builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(6),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ],
+    )
+    .expect("put bold face");
+    builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(6),
+            Value::fixnum(11),
+            Value::symbol("face"),
+            Value::symbol("italic"),
+        ],
+    )
+    .expect("put italic face");
+
+    builtin_goto_char(&mut eval, vec![Value::fixnum(3)]).expect("goto first insert");
+    builtin_insert(&mut eval, vec![Value::string("SPLIT")]).expect("insert split");
+    builtin_goto_char(&mut eval, vec![Value::fixnum(6)]).expect("goto second insert");
+    builtin_insert(&mut eval, vec![Value::string("HERE")]).expect("insert here");
+
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    let shape: Vec<_> = buffer
+        .text
+        .text_props_object_interval_runs(buffer.total_chars())
+        .into_iter()
+        .map(|(start, end, plist)| (start, end, plist.is_empty()))
+        .collect();
+
+    assert_eq!(
+        shape,
+        vec![
+            (0, 2, false),
+            (2, 5, true),
+            (5, 9, true),
+            (9, 11, true),
+            (11, 14, false),
+            (14, 19, false),
+        ]
+    );
+}
+
 // -----------------------------------------------------------------------
 // get-char-property
 // -----------------------------------------------------------------------

@@ -3971,6 +3971,19 @@ impl BufferManager {
         Some(())
     }
 
+    pub(crate) fn clear_inserted_plain_text_properties(
+        &mut self,
+        id: BufferId,
+        start: usize,
+        end: usize,
+    ) -> Option<()> {
+        self.buffers
+            .get_mut(&id)?
+            .text
+            .text_props_set_properties(start, end, Vec::new());
+        Some(())
+    }
+
     pub fn set_buffer_text_properties(
         &mut self,
         id: BufferId,

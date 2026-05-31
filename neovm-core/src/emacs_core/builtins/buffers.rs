@@ -3085,6 +3085,11 @@ fn insert_pieces_in_state(
         } else {
             let _ = buffers.insert_lisp_string_into_buffer(current_id, &piece.text);
         }
+        let inserted_end = insert_pos + piece.text.sbytes();
+        if !inherit && piece.text_props.is_none() {
+            let _ =
+                buffers.clear_inserted_plain_text_properties(current_id, insert_pos, inserted_end);
+        }
         if inherit {
             apply_inherited_text_properties(
                 obarray,
@@ -3098,7 +3103,7 @@ fn insert_pieces_in_state(
                 let _ = buffers.merge_adjacent_equal_buffer_text_properties(
                     current_id,
                     insert_pos,
-                    insert_pos + piece.text.sbytes(),
+                    inserted_end,
                 );
             }
         }
