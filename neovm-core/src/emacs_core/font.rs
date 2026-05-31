@@ -3110,8 +3110,18 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 ensure_lisp_face_id_property(eval, &face_name)?;
             }
 
-            let (canonical_attr, canonical_value) =
+            let (canonical_attr, mut canonical_value) =
                 normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
+            // GNU Emacs: when updating face--new-frame-defaults, convert
+            // `unspecified' to `:ignore-defface' so the defface spec
+            // doesn't override the explicitly unspecified value
+            // (xfaces.c:3262, Finternal_set_lisp_face_attribute).
+            if defaults_frame
+                && is_reset_like_face_attr_value(&canonical_value)
+                && canonical_value.is_symbol_named("unspecified")
+            {
+                canonical_value = Value::symbol(":ignore-defface");
+            }
             set_face_override(&face_name, canonical_attr, canonical_value, defaults_frame);
             if canonical_attr == LFaceAttr::Font && !is_reset_like_face_attr_value(&canonical_value)
             {
