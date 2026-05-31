@@ -27891,3 +27891,75 @@ fn ft_peak_face_text_property_face_scan_backward_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_crest_face_overlay_face_before_after_string_both_sides() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "CORE")
+    (let ((ov (make-overlay 1 5)))
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'before-string (propertize "L" 'face 'bold))
+      (overlay-put ov 'after-string (propertize "R" 'face 'underline))
+      (list
+       'before-props (overlay-get ov 'before-string)
+       'after-props (overlay-get ov 'after-string)
+       'ov-face (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_crest_font_lock_fontify_define_widget_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(define-widget 'my-widget 'default\n  \"My widget\"\n  :format \"%v\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'define-widget-face (save-excursion (goto-char (point-min)) (search-forward "define-widget") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_crest_face_overlay_insert_mid_and_face_preserve() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 3)
+      (insert "XX")
+      (goto-char 3)
+      (delete-char 2)
+      (list
+       'face-after-undo (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_crest_face_text_property_properties_on_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((str (propertize "HELLO" 'face 'bold 'mouse-face 'highlight 'fontified t)))
+    (list
+     'len (length str)
+     'get-face (get-text-property 0 'face str)
+     'get-mouse (get-text-property 0 'mouse-face str)
+     'get-fontified (get-text-property 0 'fontified str)))))"##,
+    );
+}
