@@ -4104,6 +4104,30 @@ fn read_from_buffer_invalid_hash_dispatch_reports_post_consumption_column_like_g
 }
 
 #[test]
+fn read_from_buffer_empty_dotted_list_reports_post_dot_column_like_gnu_emacs() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf_id = ev.buffers.create_buffer(" *reader-invalid-empty-dot*");
+    {
+        let buf = ev.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("(. 1)");
+        buf.goto_byte(0);
+    }
+
+    let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "invalid-read-syntax");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("."), Value::fixnum(1), Value::fixnum(2)]
+            );
+        }
+        other => panic!("expected invalid-read-syntax, got {other:?}"),
+    }
+}
+
+#[test]
 fn read_from_string_hash_bracket_preserves_vector() {
     crate::test_utils::init_test_tracing();
     // GNU verified: `(type-of (car (read-from-string "#[...]")))` is

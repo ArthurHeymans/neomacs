@@ -567,6 +567,7 @@ impl<'a> Reader<'a> {
                 }
                 Some(code) if code == b'.' as u32 && self.is_dot_separator() => {
                     if items.is_empty() {
+                        self.bump();
                         restore_scratch_gc_roots(saved);
                         return Err(self.error("."));
                     }

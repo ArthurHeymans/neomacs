@@ -26689,7 +26689,12 @@ fn ft_nuke_face_overlay_all_properties_enum() {
       (let ((props (overlay-properties ov)))
         (list
          'props-length (length props)
-         'keys-included (mapcar (lambda (k) (if (member k (list 'face 'priority 'category 'before-string 'after-string 'evaporate 'modification-hooks)) k nil)) '(. 1 . 3 . 5 . 7 . 9 . 11 . 13))
+         'keys-included
+         (mapcar (lambda (k) (if (plist-member props k) k nil))
+                 '(face priority category before-string after-string evaporate modification-hooks))
+         'values-included
+         (mapcar (lambda (k) (list k (plist-get props k)))
+                 '(face priority category before-string after-string evaporate modification-hooks))
          (progn (delete-overlay ov) 'cleaned)))))))"##,
     );
 }
