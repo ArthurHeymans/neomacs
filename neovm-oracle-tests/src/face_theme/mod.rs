@@ -29263,3 +29263,70 @@ fn ft_unending_face_text_property_get_char_property_at_point_min() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_persistent_face_overlay_buffer_string_properties_preserved() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (let ((str (buffer-string)))
+        (list
+         'buffer-has-face (get-text-property 3 'face)
+         'string-no-face (get-text-property 0 'face str)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_persistent_font_lock_fontify_getf_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(getf '(:a 1 :b 2) :a)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'getf-face (save-excursion (goto-char (point-min)) (search-forward "getf") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_persistent_face_overlay_face_priority_check_after_delete_other() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 2))
+    (list
+     'before-delete (get-char-property 3 'face)
+     'after-delete (progn (delete-overlay ov2) (get-char-property 3 'face))
+     (progn (delete-overlay ov1) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_persistent_face_text_property_face_empty_region_put() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (condition-case err (put-text-property 3 3 'face 'bold) (error (list 'err (car err))))
+    (list
+     'after-empty-put (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
