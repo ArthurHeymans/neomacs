@@ -29915,3 +29915,73 @@ fn ft_charge_face_text_property_face_multibyte_boundary_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_surge2_face_overlay_face_exact_same_region_diff_prio() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 0))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 1))
+    (list
+     'green-wins (get-char-property 3 'face)
+     'make-red-higher (progn (overlay-put ov1 'priority 2) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_surge2_font_lock_fontify_gethash_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(gethash 'key table)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'gethash-face (save-excursion (goto-char (point-min)) (search-forward "gethash") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_surge2_face_overlay_face_remove_text_prop_from_underlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'italic)
+      (list
+       'before-remove-tp (list 'cp (get-char-property 3 'face) 'tp (get-text-property 3 'face))
+       'after-remove-tp (progn (remove-text-properties 1 6 '(face nil)) (list 'cp (get-char-property 3 'face) 'tp (get-text-property 3 'face)))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_surge2_face_text_property_char_prop_after_delete_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'italic)
+      (list
+       'with-overlay (get-char-property 3 'face)
+       'after-delete-ov (progn (delete-overlay ov) (get-char-property 3 'face))
+       'text-prop-fallthrough (get-text-property 3 'face))))))"##,
+    );
+}
