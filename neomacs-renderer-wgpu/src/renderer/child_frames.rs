@@ -17,7 +17,7 @@ impl WgpuRenderer {
     /// Uses LoadOp::Load to composite on top of whatever was rendered before.
     #[allow(clippy::too_many_arguments)]
     pub fn render_child_frame(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         child: &FrameGlyphBuffer,
         offset_x: f32,

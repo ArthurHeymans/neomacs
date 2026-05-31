@@ -107,7 +107,7 @@ impl WgpuRenderer {
     /// Uses `LoadOp::Load` to composite on top of existing content.
     /// Everything is rendered in a single encoder + single `queue.submit()`.
     pub fn render_frame_content(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         frame: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
@@ -1126,18 +1126,16 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Mask Glyph Buffer"),
-                        contents: bytemuck::cast_slice(&all_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let slice = self.glyph_vertex_buffer.upload(
+                    &self.device,
+                    &self.queue,
+                    &all_vertices,
+                );
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(glyph_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, slice);
 
                 let mut i = 0;
                 while i < mask_data.len() {
@@ -1165,18 +1163,16 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Subpixel Glyph Buffer"),
-                        contents: bytemuck::cast_slice(&all_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let slice = self.subpixel_vertex_buffer.upload(
+                    &self.device,
+                    &self.queue,
+                    &all_vertices,
+                );
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(subpixel_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, slice);
 
                 let mut i = 0;
                 while i < subpixel_data.len() {
@@ -1206,18 +1202,16 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Color Glyph Buffer"),
-                        contents: bytemuck::cast_slice(&all_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let slice = self.glyph_vertex_buffer.upload(
+                    &self.device,
+                    &self.queue,
+                    &all_vertices,
+                );
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(image_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, slice);
 
                 let mut i = 0;
                 while i < color_data.len() {

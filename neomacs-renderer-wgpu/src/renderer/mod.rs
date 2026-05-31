@@ -9,7 +9,10 @@ use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
 use neomacs_display_protocol::types::{Color, Rect};
 
 use super::image_cache::ImageCache;
-use super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms};
+use super::vertex::{
+    GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms,
+};
+use dynamic_buffer::DynamicVertexBuffer;
 #[cfg(feature = "video")]
 use super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
@@ -18,6 +21,7 @@ use super::webkit_cache::WgpuWebKitCache;
 mod child_frames;
 mod content;
 mod cursor_effects;
+mod dynamic_buffer;
 mod effect_common;
 mod effects_state;
 mod glyphs;
@@ -159,6 +163,8 @@ pub struct WgpuRenderer {
     /// Whether any fancy (animated) border styles are present in the current frame
     pub has_animated_borders: bool,
     pub glyph_stats: GlyphRenderStats,
+    pub(super) glyph_vertex_buffer: DynamicVertexBuffer<GlyphVertex>,
+    pub(super) subpixel_vertex_buffer: DynamicVertexBuffer<SubpixelGlyphVertex>,
     // --- Stencil-based clipping for child frame rounded corners ---
     pub(super) stencil_texture: wgpu::Texture,
     pub(super) stencil_view: wgpu::TextureView,
@@ -1505,6 +1511,8 @@ impl WgpuRenderer {
             render_start_time: std::time::Instant::now(),
             has_animated_borders: false,
             glyph_stats: GlyphRenderStats::new(),
+            glyph_vertex_buffer: DynamicVertexBuffer::new("Glyph Vertex Buffer"),
+            subpixel_vertex_buffer: DynamicVertexBuffer::new("Subpixel Glyph Vertex Buffer"),
             stencil_texture,
             stencil_view,
             stencil_rect_pipeline,

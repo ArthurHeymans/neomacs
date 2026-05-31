@@ -2697,16 +2697,14 @@ impl WgpuRenderer {
                         }
                     }
 
-                    let glyph_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Glyph Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&all_vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let slice = self.glyph_vertex_buffer.upload(
+                        &self.device,
+                        &self.queue,
+                        &all_vertices,
+                    );
                     stats.glyph_vertex_buffer_creations += 1;
 
-                    render_pass.set_vertex_buffer(0, glyph_buffer.slice(..));
+                    render_pass.set_vertex_buffer(0, slice);
 
                     let mut i = 0;
                     while i < mask_data.len() {
@@ -2736,16 +2734,14 @@ impl WgpuRenderer {
                         .flat_map(|(_, verts)| verts.iter().copied())
                         .collect();
 
-                    let glyph_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Subpixel Glyph Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&all_vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let slice = self.subpixel_vertex_buffer.upload(
+                        &self.device,
+                        &self.queue,
+                        &all_vertices,
+                    );
                     stats.glyph_vertex_buffer_creations += 1;
 
-                    render_pass.set_vertex_buffer(0, glyph_buffer.slice(..));
+                    render_pass.set_vertex_buffer(0, slice);
 
                     let mut i = 0;
                     while i < subpixel_data.len() {
@@ -2778,16 +2774,14 @@ impl WgpuRenderer {
                         .flat_map(|(_, verts)| verts.iter().copied())
                         .collect();
 
-                    let color_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Color Glyph Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&all_vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let slice = self.glyph_vertex_buffer.upload(
+                        &self.device,
+                        &self.queue,
+                        &all_vertices,
+                    );
                     stats.glyph_vertex_buffer_creations += 1;
 
-                    render_pass.set_vertex_buffer(0, color_buffer.slice(..));
+                    render_pass.set_vertex_buffer(0, slice);
 
                     let mut i = 0;
                     while i < color_data.len() {
