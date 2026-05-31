@@ -31573,3 +31573,76 @@ fn ft_dash_text_property_face_char_after_insert() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_bolt_face_overlay_face_seven_way_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((o1 (make-overlay 1 6))) (overlay-put o1 'face '(:foreground "1")) (overlay-put o1 'priority 1))
+    (let ((o2 (make-overlay 1 6))) (overlay-put o2 'face '(:foreground "2")) (overlay-put o2 'priority 2))
+    (let ((o3 (make-overlay 1 6))) (overlay-put o3 'face '(:foreground "3")) (overlay-put o3 'priority 3))
+    (let ((o4 (make-overlay 1 6))) (overlay-put o4 'face '(:foreground "4")) (overlay-put o4 'priority 4))
+    (let ((o5 (make-overlay 1 6))) (overlay-put o5 'face '(:foreground "5")) (overlay-put o5 'priority 5))
+    (let ((o6 (make-overlay 1 6))) (overlay-put o6 'face '(:foreground "6")) (overlay-put o6 'priority 6))
+    (let ((o7 (make-overlay 1 6))) (overlay-put o7 'face '(:foreground "7")) (overlay-put o7 'priority 7))
+    (list
+     'winning (get-char-property 3 'face)
+     'promote-o1 (progn (overlay-put o1 'priority 8) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_bolt_font_lock_xml_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (xml-mode) (error (sgml-mode)))
+    (condition-case nil (progn (xml-mode) 'ok) (error (sgml-mode)))
+    (insert "<tag attr=\"value\">text</tag>\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_bolt_face_lazy_face_computation_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (condition-case nil
+        (list
+         'face-after-create (progn (let ((ov (make-overlay 1 6))) (overlay-put ov 'face 'bold) (delete-overlay ov)) (get-char-property 3 'face))
+         'face-after-no-overlay (get-char-property 3 'face))
+        (error 'bad-state)))))"##,
+    );
+}
+
+#[test]
+fn ft_bolt_text_property_intensive_put_remove_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (let ((result nil))
+      (dotimes (i 10)
+        (put-text-property 1 11 'face (if (evenp i) 'bold 'italic))
+        (push (list i (get-text-property 5 'face)) result))
+      (list
+       'last-intervals (length (object-intervals (current-buffer)))
+       'history-last-3 (butlast (nreverse result) 7))))))"##,
+    );
+}
