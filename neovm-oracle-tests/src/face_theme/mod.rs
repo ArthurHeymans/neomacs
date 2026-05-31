@@ -28978,3 +28978,79 @@ fn ft_tireless_face_text_property_zero_len_property_boundary() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_ceaseless_face_overlay_short_vs_long_with_priority_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((short-ov (make-overlay 5 15))) (overlay-put short-ov 'face '(:background "red")) (overlay-put short-ov 'priority 3))
+    (let ((long-ov (make-overlay 1 21))) (overlay-put long-ov 'face '(:background "blue")) (overlay-put long-ov 'priority 2))
+    (list
+     'under-both (get-char-property 10 'face)
+     'short-ranges (get-char-property 3 'face)
+     'long-only (get-char-property 18 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_ceaseless_font_lock_fontify_provide_require_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(provide 'my-package)\n(require 'other-package)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'provide-face (save-excursion (goto-char (point-min)) (search-forward "provide") (get-text-property (match-beginning 0) 'face))
+     'require-face (save-excursion (goto-char (point-min)) (search-forward "require") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_ceaseless_face_overlay_face_all_props_enum_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (let ((props (overlay-properties ov)))
+        (list
+         'len (/ (length props) 2)
+         'has-face (member 'face props)
+         'face-val (cadr (member 'face props))
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_ceaseless_face_text_property_object_equals_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'intervals-buf (length (object-intervals (current-buffer)))
+     'same-buffer-eq (eq (current-buffer) (current-buffer)))
+    (let ((str "BBBBB"))
+      (put-text-property 0 5 'face 'italic str)
+      (list
+       'intervals-str (length (object-intervals str))
+       'buffer-vs-str (not (eq (current-buffer) str))
+       'different-obj-intervals-differ (/= (length (object-intervals (current-buffer))) (length (object-intervals str))))))))"##,
+    );
+}
