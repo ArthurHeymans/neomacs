@@ -31867,3 +31867,71 @@ fn ft_beam_text_property_find_next_prop_across_multiple() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_light_face_overlay_face_priority_insert_stress() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 10))
+    (goto-char 3)
+    (insert "B")
+    (list
+     'still-A (get-char-property 3 'face)
+     (progn (delete-overlay a) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_light_font_lock_fortran_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (fortran-mode) (error (fundamental-mode)))
+    (insert "      PROGRAM hello\n      PRINT *, 'world'\n      END\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_light_face_overlay_get_category_from_ov() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'category 'test-cat)
+      (list
+       'category (overlay-get ov 'category)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_light_text_property_face_get_at_all_boundaries() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAABBBB")
+    (put-text-property 1 5 'face 'bold)
+    (put-text-property 5 9 'face 'italic)
+    (list
+     'pos4-end-bold (get-text-property 4 'face)
+     'pos5-start-italic (get-text-property 5 'face)
+     'intervals (length (object-intervals (current-buffer)))
+     'next-from-4 (next-single-property-change 4 'face)
+     'prev-from-5 (previous-single-property-change 5 'face)))))"##,
+    );
+}
