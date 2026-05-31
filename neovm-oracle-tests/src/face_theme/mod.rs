@@ -32350,3 +32350,69 @@ fn ft_blaze_text_property_merge_adjacent_same_face() {
      'merged-p (= (length (object-intervals (current-buffer))) 1)))))"##,
     );
 }
+
+#[test]
+fn ft_flare_face_overlay_face_nil_reapply_cycle_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (dotimes (i 20)
+        (overlay-put ov 'face (if (evenp i) 'bold 'italic)))
+      (list
+       'final (overlay-get ov 'face)
+       'char (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_flare_font_lock_sql_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (sql-mode) (error (fundamental-mode)))
+    (insert "SELECT * FROM users WHERE id = 42;\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_flare_face_overlay_face_read_on_non_existent_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (delete-overlay ov)
+      (condition-case err (overlay-get ov 'face) (error (list 'err (car err))))))))"##,
+    );
+}
+
+#[test]
+fn ft_flare_text_property_find_face_any_or_not_all() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'any-bold (text-property-any 1 6 'face 'bold nil)
+     'not-all-bold (text-property-not-all 1 6 'face 'bold nil)
+     'any-italic (text-property-any 1 6 'face 'italic nil)
+     'not-all-italic (text-property-not-all 1 6 'face 'italic nil)))))"##,
+    );
+}
