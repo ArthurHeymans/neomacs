@@ -28699,3 +28699,69 @@ fn ft_eternal_face_text_property_iterate_all_intervals_deep() {
        'all (nreverse result))))))"##,
     );
 }
+
+#[test]
+fn ft_perpetual_face_overlay_face_property_plist_as_alist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red" :background "blue"))
+      (let ((props (overlay-properties ov)))
+        (list
+         'plist-len (length props)
+         'face-entry (assoc 'face props)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_perpetual_font_lock_fontify_subrp_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(subrp (symbol-function 'car))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'subrp-face (save-excursion (goto-char (point-min)) (search-forward "subrp") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_perpetual_face_overlay_after_delete_then_nil_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'face nil)
+      (delete-overlay ov)
+      (condition-case err (overlay-get ov 'face) (error (list 'err (car err))))))))"##,
+    );
+}
+
+#[test]
+fn ft_perpetual_face_text_property_text_before_property_change_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDE")
+    (list
+     'no-props-yet (list (get-text-property 1 'face) (get-text-property 5 'face))
+     'after-put (progn (put-text-property 1 6 'face 'bold) (list (get-text-property 1 'face) (get-text-property 5 'face)))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
