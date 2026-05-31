@@ -137,7 +137,7 @@ use crate::emacs_core::value;
 //   spans, and text-property run bounds, matching GNU pdumper's dump_off model.
 // v53: ObjectExtra is sparse: category-A mapped objects come from ObjectStarts
 //   and mapped heap headers instead of one semantic descriptor tag per object.
-const FORMAT_VERSION: u32 = 53;
+const FORMAT_VERSION: u32 = 54;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
 

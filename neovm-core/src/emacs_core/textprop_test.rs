@@ -4,6 +4,7 @@ use crate::emacs_core::builtins::{
     builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
     builtin_make_indirect_buffer,
 };
+use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 /// Helper: create an evaluator with a buffer containing the given text.
@@ -56,6 +57,21 @@ fn get_text_property_returns_nil_when_absent() {
     let result =
         builtin_get_text_property(&mut eval, vec![Value::fixnum(1), Value::symbol("face")]);
     assert!(result.as_ref().map_or(false, |v| v.is_nil()));
+}
+
+#[test]
+fn get_text_property_out_of_range_signal_uses_gnu_point_range_payload() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello");
+    let result =
+        builtin_get_text_property(&mut eval, vec![Value::fixnum(0), Value::symbol("face")]);
+    match result {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(0), Value::fixnum(0)]);
+        }
+        other => panic!("expected args-out-of-range signal, got {other:?}"),
+    }
 }
 
 #[test]
@@ -329,6 +345,44 @@ fn get_char_property_prefers_highest_priority_overlay() {
     let pair_cdr = pair.cons_cdr();
     assert_eq!(pair_car.as_symbol_name(), Some("high"));
     assert_eq!(pair_cdr, high);
+}
+
+#[test]
+fn get_char_property_same_range_overlays_use_gnu_identity_tiebreaker() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcd");
+    let first = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+    let second = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(5)]).unwrap();
+
+    builtin_overlay_put(
+        &mut eval,
+        vec![first, Value::symbol("face"), Value::symbol("first")],
+    )
+    .unwrap();
+    builtin_overlay_put(
+        &mut eval,
+        vec![second, Value::symbol("face"), Value::symbol("second")],
+    )
+    .unwrap();
+    assert_eq!(
+        lookup_overlay_property(&eval.obarray, &eval.buffers, first, Value::symbol("face"))
+            .as_symbol_name(),
+        Some("first")
+    );
+    assert_eq!(
+        lookup_overlay_property(&eval.obarray, &eval.buffers, second, Value::symbol("face"))
+            .as_symbol_name(),
+        Some("second")
+    );
+    let raw = builtin_overlays_at(&mut eval, vec![Value::fixnum(2)]).unwrap();
+    assert_eq!(list_to_vec(&raw).unwrap(), vec![second, first]);
+    let sorted = builtin_overlays_at(&mut eval, vec![Value::fixnum(2), Value::T]).unwrap();
+    assert_eq!(list_to_vec(&sorted).unwrap(), vec![second, first]);
+
+    let result =
+        builtin_get_char_property(&mut eval, vec![Value::fixnum(2), Value::symbol("face")])
+            .unwrap();
+    assert_eq!(result.as_symbol_name(), Some("second"));
 }
 
 #[test]
@@ -1500,6 +1554,31 @@ fn overlays_at_outside() {
     let result = builtin_overlays_at(&mut eval, vec![Value::fixnum(5)]).unwrap();
     let items = list_to_vec(&result).unwrap();
     assert_eq!(items.len(), 0);
+}
+
+#[test]
+fn overlays_at_unsorted_matches_gnu_same_start_itree_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello world");
+    let first = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    let second = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    let third = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+
+    let result = builtin_overlays_at(&mut eval, vec![Value::fixnum(3)]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items, vec![third, second, first]);
+}
+
+#[test]
+fn overlays_at_sorted_matches_gnu_same_range_identity_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello world");
+    let first = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    let second = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+
+    let result = builtin_overlays_at(&mut eval, vec![Value::fixnum(3), Value::T]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert_eq!(items, vec![second, first]);
 }
 
 #[test]

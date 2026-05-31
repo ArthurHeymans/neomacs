@@ -671,6 +671,7 @@ fn file_pdump_loads_overlay_object_from_mmap_image() {
     eval.obarray.set_symbol_value(
         "test-pdump-mapped-overlay",
         Value::make_overlay(OverlayData {
+            serial: 0,
             plist: Value::list(vec![
                 Value::symbol("face"),
                 Value::string("mapped-overlay-child"),

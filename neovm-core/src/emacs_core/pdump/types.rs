@@ -549,6 +549,7 @@ pub struct DumpTextPropertyTable {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpOverlay {
+    pub serial: u64,
     pub plist: DumpValue,
     pub buffer: Option<DumpBufferId>,
     pub start: usize,

@@ -3,6 +3,7 @@ use crate::buffer::BufferId;
 
 fn alloc_overlay(start: usize, end: usize) -> Value {
     Value::make_overlay(OverlayData {
+        serial: 0,
         plist: Value::NIL,
         buffer: Some(BufferId(1)),
         start,
@@ -45,6 +46,51 @@ fn same_range_overlays_remain_distinct_objects() {
 }
 
 #[test]
+fn raw_overlays_at_matches_gnu_same_start_itree_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(2, 5);
+    let second = alloc_overlay(2, 5);
+    let third = alloc_overlay(2, 5);
+    list.insert_overlay(first);
+    list.insert_overlay(second);
+    list.insert_overlay(third);
+
+    assert_eq!(list.overlays_at(3), vec![third, second, first]);
+
+    assert!(list.delete_overlay(second));
+    assert_eq!(list.overlays_at(3), vec![third, first]);
+}
+
+#[test]
+fn raw_overlays_in_matches_gnu_same_start_itree_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let start = alloc_overlay(1, 5);
+    let end = alloc_overlay(48, 52);
+    let full = alloc_overlay(1, 52);
+    list.insert_overlay(start);
+    list.insert_overlay(end);
+    list.insert_overlay(full);
+
+    assert_eq!(list.overlays_in_region(1, 52, 52), vec![full, start, end]);
+}
+
+#[test]
+fn sorted_overlay_precedence_matches_gnu_same_range_identity_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(2, 5);
+    let second = alloc_overlay(2, 5);
+    list.insert_overlay(first);
+    list.insert_overlay(second);
+
+    let mut overlays = list.overlays_at(3);
+    list.sort_overlay_ids_by_priority_desc(&mut overlays);
+    assert_eq!(overlays, vec![second, first]);
+}
+
+#[test]
 fn delete_overlay_removes_non_root_interval_entry() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -61,7 +107,7 @@ fn delete_overlay_removes_non_root_interval_entry() {
 }
 
 #[test]
-fn overlay_put_preserves_existing_property_position() {
+fn overlay_put_prepends_new_properties_and_updates_in_place() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
     let overlay = alloc_overlay(0, 1);
@@ -77,7 +123,7 @@ fn overlay_put_preserves_existing_property_position() {
     let plist = list.overlay_plist(overlay).unwrap();
     assert_eq!(
         crate::emacs_core::print::print_value(&plist),
-        "(face italic help-echo \"tip\")"
+        "(help-echo \"tip\" face italic)"
     );
 }
 

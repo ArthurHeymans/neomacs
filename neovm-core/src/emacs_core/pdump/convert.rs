@@ -1401,6 +1401,7 @@ impl<'a> LoadDecoder<'a> {
             }
             DumpHeapObject::Overlay(overlay) => {
                 let data = crate::heap_types::OverlayData {
+                    serial: overlay.serial,
                     plist: Value::NIL,
                     buffer: overlay.buffer.map(|id| BufferId(id.0)),
                     start: overlay.start,
@@ -1408,6 +1409,7 @@ impl<'a> LoadDecoder<'a> {
                     front_advance: overlay.front_advance,
                     rear_advance: overlay.rear_advance,
                 };
+                crate::heap_types::observe_overlay_serial(data.serial);
                 if let Some(ptr) =
                     self.mapped_typed_object_for_object::<OverlayObj>(id, "overlay")?
                 {
@@ -2711,6 +2713,7 @@ fn dump_text_property_table(
 
 fn dump_overlay(encoder: &mut DumpEncoder, o: &Overlay) -> DumpOverlay {
     DumpOverlay {
+        serial: o.serial,
         plist: encoder.dump_value(&o.plist),
         buffer: o.buffer.map(|id| DumpBufferId(id.0)),
         start: o.start,
@@ -4702,6 +4705,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
                 .iter()
                 .map(|d| {
                     Value::make_overlay(crate::heap_types::OverlayData {
+                        serial: d.serial,
                         plist: decoder.load_value(&d.plist),
                         buffer: d.buffer.map(|id| BufferId(id.0)),
                         start: d.start,

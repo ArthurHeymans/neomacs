@@ -1352,7 +1352,12 @@ impl TaggedValue {
     }
 
     /// Allocate an overlay.
-    pub fn make_overlay(data: crate::heap_types::OverlayData) -> Self {
+    pub fn make_overlay(mut data: crate::heap_types::OverlayData) -> Self {
+        if data.serial == 0 {
+            data.serial = crate::heap_types::next_overlay_serial();
+        } else {
+            crate::heap_types::observe_overlay_serial(data.serial);
+        }
         with_tagged_heap(|h| h.alloc_overlay(data))
     }
 

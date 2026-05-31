@@ -322,6 +322,7 @@ fn indirect_buffer_overlays_track_shared_edits() {
         .expect("indirect buffer");
 
     let overlay = Value::make_overlay(OverlayData {
+        serial: 0,
         plist: Value::NIL,
         buffer: Some(indirect_id),
         start: 2,

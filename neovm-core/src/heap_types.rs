@@ -9,6 +9,7 @@ use crate::emacs_core::emacs_char;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// A Lisp string.
@@ -899,12 +900,41 @@ mod tests {
 
 #[derive(Clone, Debug)]
 pub struct OverlayData {
+    /// Stable allocation identity used where GNU compares overlay Lisp object
+    /// identity (`XLI (overlay)`).  Rust heap addresses are not monotonic, so
+    /// this preserves GNU's allocation-order tiebreakers without depending on
+    /// allocator layout.
+    pub serial: u64,
     pub plist: crate::emacs_core::value::Value,
     pub buffer: Option<BufferId>,
     pub start: usize,
     pub end: usize,
     pub front_advance: bool,
     pub rear_advance: bool,
+}
+
+static NEXT_OVERLAY_SERIAL: AtomicU64 = AtomicU64::new(1);
+
+pub fn next_overlay_serial() -> u64 {
+    NEXT_OVERLAY_SERIAL.fetch_add(1, Ordering::Relaxed)
+}
+
+pub fn observe_overlay_serial(serial: u64) {
+    if serial == 0 {
+        return;
+    }
+    let mut current = NEXT_OVERLAY_SERIAL.load(Ordering::Relaxed);
+    while current <= serial {
+        match NEXT_OVERLAY_SERIAL.compare_exchange_weak(
+            current,
+            serial + 1,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return,
+            Err(next) => current = next,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

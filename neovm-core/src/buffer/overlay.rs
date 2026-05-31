@@ -71,6 +71,18 @@ impl Itree {
         Self::overlays_at_node(&self.root, pos, out);
     }
 
+    /// Collect all overlays overlapping `start..end` in GNU's interval-tree
+    /// ascending traversal order.
+    fn overlays_in_region(
+        &self,
+        start: usize,
+        end: usize,
+        accessible_end: usize,
+        out: &mut Vec<Value>,
+    ) {
+        Self::overlays_in_region_node(&self.root, start, end, accessible_end, out);
+    }
+
     fn overlays_at_node(node: &Option<Box<ItreeNode>>, pos: usize, out: &mut Vec<Value>) {
         let Some(n) = node.as_ref() else { return };
         // If left child's max_end > pos, it might contain covering intervals
@@ -93,10 +105,30 @@ impl Itree {
         }
     }
 
-    fn compare(start: usize, overlay: Value, node: &ItreeNode) -> Ordering {
-        start
-            .cmp(&node.start)
-            .then_with(|| overlay.bits().cmp(&node.overlay.bits()))
+    fn overlays_in_region_node(
+        node: &Option<Box<ItreeNode>>,
+        start: usize,
+        end: usize,
+        accessible_end: usize,
+        out: &mut Vec<Value>,
+    ) {
+        let Some(n) = node.as_ref() else { return };
+
+        if let Some(left) = n.left.as_ref()
+            && left.max_end >= start
+        {
+            Self::overlays_in_region_node(&n.left, start, end, accessible_end, out);
+        }
+
+        if n.start > end {
+            return;
+        }
+
+        if overlay_overlaps_region(n.overlay, start, end, accessible_end) {
+            out.push(n.overlay);
+        }
+
+        Self::overlays_in_region_node(&n.right, start, end, accessible_end, out);
     }
 
     /// Insert an interval.  Returns false if already present.
@@ -116,28 +148,31 @@ impl Itree {
                 *node = Some(Box::new(ItreeNode::new(start, end, overlay)));
                 true
             }
-            Some(n) => match Self::compare(start, overlay, n) {
-                Ordering::Equal => {
+            Some(n) => {
+                if eq_value(&n.overlay, &overlay) {
                     n.start = start;
                     n.end = end;
                     n.update_max_end();
-                    false
+                    return false;
                 }
-                Ordering::Less => {
+                // GNU's `itree_insert_node` descends left for
+                // `node->begin <= child->begin`, so same-begin overlays are
+                // visited newest-first by the ascending iterator used by
+                // `overlays-at`.
+                if start <= n.start {
                     let inserted = Self::insert_node(&mut n.left, start, end, overlay);
                     if inserted {
                         n.update_max_end();
                     }
                     inserted
-                }
-                Ordering::Greater => {
+                } else {
                     let inserted = Self::insert_node(&mut n.right, start, end, overlay);
                     if inserted {
                         n.update_max_end();
                     }
                     inserted
                 }
-            },
+            }
         }
     }
 
@@ -159,24 +194,29 @@ impl Itree {
             return false;
         };
 
-        let found = match Self::compare(start, overlay, &boxed) {
-            Ordering::Equal => {
-                // Remove this node, replace with merged children.
-                let left = boxed.left.take();
-                let right = boxed.right.take();
-                *node = match (left, right) {
-                    (None, None) => None,
-                    (Some(child), None) | (None, Some(child)) => Some(child),
-                    (Some(left), Some(right)) => {
-                        let mut merged = left;
-                        Self::attach_rightmost(&mut merged, right);
-                        Some(merged)
-                    }
-                };
-                return true;
-            }
-            Ordering::Less => Self::remove_node(&mut boxed.left, start, overlay),
-            Ordering::Greater => Self::remove_node(&mut boxed.right, start, overlay),
+        if boxed.start == start && eq_value(&boxed.overlay, &overlay) {
+            // Remove this node, replace with merged children.
+            let left = boxed.left.take();
+            let right = boxed.right.take();
+            *node = match (left, right) {
+                (None, None) => None,
+                (Some(child), None) | (None, Some(child)) => Some(child),
+                (Some(left), Some(right)) => {
+                    let mut merged = left;
+                    Self::attach_rightmost(&mut merged, right);
+                    Some(merged)
+                }
+            };
+            return true;
+        }
+
+        let found = if start < boxed.start {
+            Self::remove_node(&mut boxed.left, start, overlay)
+        } else if start > boxed.start {
+            Self::remove_node(&mut boxed.right, start, overlay)
+        } else {
+            Self::remove_node(&mut boxed.left, start, overlay)
+                || Self::remove_node(&mut boxed.right, start, overlay)
         };
         if found {
             boxed.update_max_end();
@@ -218,7 +258,9 @@ impl OverlayList {
         let data = overlay.as_overlay_data().unwrap();
         let start = data.start;
         let end = data.end;
-        self.overlays.insert(overlay);
+        if !self.overlays.insert(overlay) {
+            return;
+        }
         Self::insert_index_entry(&mut self.by_start, start, overlay);
         Self::insert_index_entry(&mut self.by_end, end, overlay);
         self.itree.insert(start, end, overlay);
@@ -262,7 +304,7 @@ impl OverlayList {
     pub fn overlay_put(&mut self, overlay: Value, prop: Value, value: Value) -> Result<bool, Flow> {
         overlay
             .with_overlay_data_mut(|data| {
-                let (plist, changed) = plist::plist_put(data.plist, prop, value)?;
+                let (plist, changed) = overlay_plist_put(data.plist, prop, value);
                 data.plist = plist;
                 Ok::<bool, Flow>(changed)
             })
@@ -342,13 +384,8 @@ impl OverlayList {
         accessible_end: usize,
     ) -> Vec<Value> {
         let mut overlays = Vec::new();
-        for (_, ids) in self.by_start.range(..=end) {
-            for overlay in ids {
-                if overlay_overlaps_region(*overlay, start, end, accessible_end) {
-                    overlays.push(*overlay);
-                }
-            }
-        }
+        self.itree
+            .overlays_in_region(start, end, accessible_end, &mut overlays);
         overlays
     }
 
@@ -714,11 +751,23 @@ fn compare_overlay_precedence(left: Value, right: Value) -> Ordering {
         left_subpriority.cmp(&right_subpriority)
     } else if eq_value(&left, &right) {
         Ordering::Equal
-    } else if left.bits() < right.bits() {
+    } else if overlay_identity_key(left) < overlay_identity_key(right) {
+        // GNU `compare_overlays` uses raw Lisp object identity as the final
+        // stable tiebreaker for otherwise equal overlays.  Neomacs stores an
+        // overlay allocation serial because Rust heap addresses are not
+        // monotonic like GNU's Lisp object representation in this path.
         Ordering::Less
     } else {
         Ordering::Greater
     }
+}
+
+fn overlay_identity_key(overlay: Value) -> u64 {
+    overlay
+        .as_overlay_data()
+        .map(|data| data.serial)
+        .filter(|serial| *serial != 0)
+        .unwrap_or(overlay.bits() as u64)
 }
 
 fn overlay_priority(overlay: &Overlay) -> (i64, i64) {
@@ -758,6 +807,26 @@ fn plist_get_named(plist: Value, prop_name: &str) -> Option<Value> {
         }
         tail = pair_cdr.cons_cdr();
     }
+}
+
+fn overlay_plist_put(plist: Value, prop: Value, value: Value) -> (Value, bool) {
+    let mut tail = plist;
+    while tail.is_cons() {
+        let rest = tail.cons_cdr();
+        if !rest.is_cons() {
+            break;
+        }
+        if eq_value(&tail.cons_car(), &prop) {
+            let changed = !eq_value(&rest.cons_car(), &value);
+            rest.set_car(value);
+            return (plist, changed);
+        }
+        tail = rest.cons_cdr();
+    }
+    (
+        Value::cons(prop, Value::cons(value, plist)),
+        !value.is_nil(),
+    )
 }
 
 impl Default for OverlayList {

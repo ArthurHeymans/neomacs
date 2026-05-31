@@ -379,6 +379,10 @@ fn args_out_of_range_point(pos: i64) -> Flow {
     signal("args-out-of-range", vec![Value::fixnum(pos)])
 }
 
+fn args_out_of_range_point_pair(pos0: Value) -> Flow {
+    signal("args-out-of-range", vec![pos0, pos0])
+}
+
 fn args_out_of_range_range(begin0: Value, end0: Value) -> Flow {
     signal("args-out-of-range", vec![begin0, end0])
 }
@@ -393,11 +397,11 @@ pub(crate) fn validate_string_point(
 pub(crate) fn validate_string_point_raw(
     s: &crate::heap_types::LispString,
     pos: i64,
-    _pos0: Value,
+    pos0: Value,
 ) -> Result<usize, Flow> {
     let len = s.schars() as i64;
     if !(0 <= pos && pos <= len) {
-        return Err(args_out_of_range_point(pos));
+        return Err(args_out_of_range_point_pair(pos0));
     }
     Ok(pos as usize)
 }
@@ -436,6 +440,19 @@ pub(crate) fn validate_buffer_point_raw(
     let point_max = buf.point_max_char() as i64 + 1;
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point(pos));
+    }
+    Ok(elisp_pos_to_byte(buf, pos))
+}
+
+fn validate_buffer_property_point_raw(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+    pos0: Value,
+) -> Result<usize, Flow> {
+    let point_min = buf.point_min_char() as i64 + 1;
+    let point_max = buf.point_max_char() as i64 + 1;
+    if !(point_min <= pos && pos <= point_max) {
+        return Err(args_out_of_range_point_pair(pos0));
     }
     Ok(elisp_pos_to_byte(buf, pos))
 }
@@ -1119,7 +1136,7 @@ pub(crate) fn builtin_get_text_property_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
+    let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
@@ -1819,7 +1836,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
+    let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
     if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
         return Ok(Value::NIL);
     }
@@ -1896,7 +1913,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
+    let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
@@ -2012,7 +2029,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
+    let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
     let (limit_pos, limit_val) = match args.get(3) {
         Some(v) if !v.is_nil() => {
             let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
@@ -2118,7 +2135,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
+    let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
     if limit_arg.is_some_and(|v| v.is_t()) {
         let next = buf
             .text
@@ -2535,6 +2552,7 @@ pub(crate) fn builtin_make_overlay_in_buffers(
 
     let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
     let overlay = Value::make_overlay(crate::heap_types::OverlayData {
+        serial: 0,
         plist: Value::NIL,
         buffer: Some(buf_id),
         start: byte_beg,

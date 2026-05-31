@@ -731,6 +731,7 @@ fn write_marker(out: &mut Vec<u8>, marker: &DumpMarker) -> Result<(), DumpError>
 }
 
 fn write_overlay(out: &mut Vec<u8>, overlay: &DumpOverlay) -> Result<(), DumpError> {
+    write_u64(out, overlay.serial);
     write_value(out, &overlay.plist)?;
     write_opt_buffer_id(out, overlay.buffer);
     write_usize(out, overlay.start)?;
@@ -1355,6 +1356,7 @@ impl<'a> Cursor<'a> {
 
     fn read_overlay(&mut self) -> Result<DumpOverlay, DumpError> {
         Ok(DumpOverlay {
+            serial: self.read_u64("overlay serial")?,
             plist: self.read_value()?,
             buffer: self.read_opt_buffer_id()?,
             start: self.read_usize("overlay start")?,
@@ -1614,6 +1616,7 @@ mod tests {
                 last_position_valid: true,
             }),
             DumpHeapObject::Overlay(DumpOverlay {
+                serial: 17,
                 plist: DumpValue::Nil,
                 buffer: Some(DumpBufferId(9)),
                 start: 10,

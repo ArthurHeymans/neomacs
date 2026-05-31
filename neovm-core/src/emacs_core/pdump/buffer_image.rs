@@ -16,9 +16,9 @@ use super::types::{
 };
 
 const BUFFER_MAGIC: [u8; 16] = *b"NEOBUFFER\0\0\0\0\0\0\0";
-const BUFFER_FORMAT_VERSION: u32 = 4;
+const BUFFER_FORMAT_VERSION: u32 = 5;
 const BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER: u32 = 4;
-const MIN_BUFFER_FORMAT_VERSION: u32 = 3;
+const MIN_BUFFER_FORMAT_VERSION: u32 = 5;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -332,6 +332,7 @@ fn read_markers(cursor: &mut Cursor<'_>) -> Result<Vec<DumpMarker>, DumpError> {
 }
 
 fn write_overlay(out: &mut Vec<u8>, overlay: &DumpOverlay) -> Result<(), DumpError> {
+    write_u64(out, overlay.serial);
     write_value(out, &overlay.plist)?;
     write_opt_buffer_id(out, overlay.buffer);
     write_usize(out, overlay.start)?;
@@ -343,6 +344,7 @@ fn write_overlay(out: &mut Vec<u8>, overlay: &DumpOverlay) -> Result<(), DumpErr
 
 fn read_overlay(cursor: &mut Cursor<'_>) -> Result<DumpOverlay, DumpError> {
     Ok(DumpOverlay {
+        serial: cursor.read_u64("overlay serial")?,
         plist: cursor.read_value()?,
         buffer: read_opt_buffer_id(cursor)?,
         start: read_usize(cursor, "overlay start")?,
@@ -946,6 +948,7 @@ mod tests {
             },
             overlays: DumpOverlayList {
                 overlays: vec![DumpOverlay {
+                    serial: 27,
                     plist: DumpValue::Nil,
                     buffer: Some(DumpBufferId(1)),
                     start: 0,

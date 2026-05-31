@@ -2331,10 +2331,7 @@ fn resolve_copy_source_face_symbol(face: &Value) -> Result<String, Flow> {
     if KNOWN_FACES.contains(&name.as_str()) || is_created_lisp_face(&name) {
         return Ok(name);
     }
-    if face.is_nil() {
-        return Err(signal("error", vec![Value::string("Invalid face")]));
-    }
-    Err(signal("error", vec![Value::string("Invalid face"), *face]))
+    Err(invalid_face_error(*face))
 }
 
 fn resolve_face_name_for_domain(face: &Value, defaults_frame: bool) -> Result<String, Flow> {
@@ -2357,13 +2354,11 @@ fn resolve_face_name_for_domain(face: &Value, defaults_frame: bool) -> Result<St
             let name = symbol_name_for_face_value(face).expect("symbol-like");
             if face_exists_for_domain(&name, defaults_frame) {
                 Ok(name)
-            } else if face.is_nil() {
-                Err(signal("error", vec![Value::string("Invalid face")]))
             } else {
-                Err(signal("error", vec![Value::string("Invalid face"), *face]))
+                Err(invalid_face_error(*face))
             }
         }
-        _ => Err(signal("error", vec![Value::string("Invalid face"), *face])),
+        _ => Err(invalid_face_error(*face)),
     }
 }
 
@@ -2384,14 +2379,22 @@ fn resolve_face_name_for_merge(face: &Value) -> Result<String, Flow> {
             let name = symbol_name_for_face_value(face).expect("symbol-like");
             if face_exists_for_domain(&name, true) {
                 Ok(name)
-            } else if face.is_nil() {
-                Err(signal("error", vec![Value::string("Invalid face")]))
             } else {
-                Err(signal("error", vec![Value::string("Invalid face"), *face]))
+                Err(invalid_face_error(*face))
             }
         }
-        _ => Err(signal("error", vec![Value::string("Invalid face"), *face])),
+        _ => Err(invalid_face_error(*face)),
     }
+}
+
+fn invalid_face_error(face: Value) -> Flow {
+    let mut data = vec![Value::string("Invalid face")];
+    if let Some(items) = list_to_vec(&face) {
+        data.extend(items);
+    } else {
+        data.push(face);
+    }
+    signal("error", data)
 }
 
 pub(crate) fn make_lisp_face_vector() -> Value {

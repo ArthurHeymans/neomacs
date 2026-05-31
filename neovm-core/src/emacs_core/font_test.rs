@@ -1275,6 +1275,33 @@ fn internal_get_lisp_face_attribute_invalid_face_errors() {
 }
 
 #[test]
+fn internal_get_lisp_face_attribute_invalid_plist_face_spreads_signal_data() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let face = Value::list(vec![
+        Value::keyword(":background"),
+        Value::string("yellow"),
+        Value::keyword(":background"),
+        Value::string("red"),
+    ]);
+
+    let result = builtin_internal_get_lisp_face_attribute(
+        &mut eval,
+        vec![face, Value::keyword(":background")],
+    );
+    let Err(Flow::Signal(signal)) = result else {
+        panic!("expected invalid face signal");
+    };
+
+    assert_eq!(signal.symbol_name(), "error");
+    assert_eq!(signal.data[0].as_utf8_str(), Some("Invalid face"));
+    assert_eq!(signal.data[1], Value::keyword(":background"));
+    assert_eq!(signal.data[2].as_utf8_str(), Some("yellow"));
+    assert_eq!(signal.data[3], Value::keyword(":background"));
+    assert_eq!(signal.data[4].as_utf8_str(), Some("red"));
+}
+
+#[test]
 fn internal_get_lisp_face_attribute_invalid_attr_errors() {
     crate::test_utils::init_test_tracing();
     let wrong_type = call_font_builtin!(
