@@ -31261,3 +31261,106 @@ fn ft_divergence2_overlay_before_string_null_edge() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_hunt2_face_overlay_invisible_plus_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'invisible t)
+      (list
+       'face (overlay-get ov 'face)
+       'invisible (overlay-get ov 'invisible)
+       'buffer-invis-spec (condition-case nil (buffer-invisibility-spec) (error 'no))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt2_font_lock_ruby_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (ruby-mode) (error (fundamental-mode)))
+    (insert "def hello\n  puts 'world'\nend\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'def-face (save-excursion (goto-char (point-min)) (search-forward "def") (get-text-property (match-beginning 0) 'face))))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt2_face_set_face_extend_property() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-extend-face) (error nil))
+  (list
+   'default-extend (condition-case nil (face-attribute 'default :extend nil 'default-on) (error 'no))
+   'set-extend-t (condition-case nil (progn (set-face-attribute 'my-extend-face nil :extend t) (face-attribute 'my-extend-face :extend nil 'default-on)) (error 'no))
+   'set-extend-nil (condition-case nil (progn (set-face-attribute 'my-extend-face nil :extend nil) (face-attribute 'my-extend-face :extend nil 'default-on)) (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt2_text_property_face_on_overlay_boundary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (list
+     'at-boundary-5-tp (get-text-property 5 'face)
+     'at-boundary-6-tp (get-text-property 6 'face)
+     'at-boundary-5-cp (get-char-property 5 'face)
+     'at-boundary-6-cp (get-char-property 6 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt2_font_lock_js_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (js-mode) (error (fundamental-mode)))
+    (insert "function hello() { return 'world'; }\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'func-face (save-excursion (goto-char (point-min)) (search-forward "function") (get-text-property (match-beginning 0) 'face))))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hunt2_face_overlay_priority_double_swap_stress() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 1))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority 2))
+    (list
+     'before (get-char-property 3 'face)
+     'swap1 (progn (overlay-put b 'priority 0) (get-char-property 3 'face))
+     'swap2 (progn (overlay-put b 'priority 3) (overlay-put a 'priority 0) (get-char-property 3 'face))
+     'swap3 (progn (overlay-put a 'priority 4) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
