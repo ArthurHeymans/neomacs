@@ -33048,3 +33048,75 @@ fn ft_hit1500_font_lock_latex_mode_fontify() {
       (error (list 'err (car err) (cadr err)))))))"##,
     );
 }
+
+#[test]
+fn ft_beyond1500_face_overlay_face_stress_change_while_inside_loop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)) (faces nil))
+      (dotimes (i 100)
+        (overlay-put ov 'face (if (evenp i) 'bold 'italic)))
+      (list
+       'final-face (overlay-get ov 'face)
+       'char-prop (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond1500_font_lock_bibtex_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (bibtex-mode) (error (fundamental-mode)))
+    (insert "@article{key,\n  author = {Author},\n  title = {Title}\n}\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond1500_face_overlay_face_self_copy_via_overlay_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'italic)
+      (let ((props (overlay-properties ov)))
+        (list
+         'props-len (length props)
+         'has-face (member 'face props)
+         'face-val (cadr (member 'face props))
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond1500_text_property_prop_scan_right_to_left() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "123456789")
+    (put-text-property 1 4 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 7 10 'face 'underline)
+    (let ((pos 9) (chain nil))
+      (while (> pos 0)
+        (push (list pos (get-text-property pos 'face)) chain)
+        (setq pos (previous-single-property-change (1+ pos) 'face nil 1)))
+      (list 'right-to-left (nreverse chain) 'intervals (length (object-intervals (current-buffer))))))))"##,
+    );
+}
