@@ -10,10 +10,14 @@ pub(crate) struct AtlasPage<M: GlyphMaterial> {
     pub bind_group: wgpu::BindGroup,
     pub allocator: ShelfAllocator,
     pub last_accessed_generation: u64,
+    pub generation: u32,
+    pub pinned_this_frame: bool,
+    pub last_used_frame: u64,
 }
 
 pub(crate) struct PageAllocResult<M: GlyphMaterial> {
     pub page_id: PageId<M>,
+    pub generation: u32,
     pub allocation: Allocation,
 }
 
@@ -109,11 +113,15 @@ impl GlyphAtlasPages {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
+        frame: u64,
     ) -> Option<PageAllocResult<AlphaMask>> {
         for page in &mut self.alpha {
             if let Some(allocation) = page.allocator.allocate(size) {
+                page.pinned_this_frame = true;
+                page.last_used_frame = frame;
                 return Some(PageAllocResult {
                     page_id: page.id,
+                    generation: page.generation,
                     allocation,
                 });
             }
@@ -143,11 +151,16 @@ impl GlyphAtlasPages {
             bind_group,
             allocator,
             last_accessed_generation: 0,
+            generation: 0,
+            pinned_this_frame: true,
+            last_used_frame: frame,
         });
         let page = self.alpha.last_mut().unwrap();
+        let generation = page.generation;
         let allocation = page.allocator.allocate(size)?;
         Some(PageAllocResult {
             page_id: id,
+            generation,
             allocation,
         })
     }
@@ -158,11 +171,15 @@ impl GlyphAtlasPages {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
+        frame: u64,
     ) -> Option<PageAllocResult<SubpixelMask>> {
         for page in &mut self.subpixel {
             if let Some(allocation) = page.allocator.allocate(size) {
+                page.pinned_this_frame = true;
+                page.last_used_frame = frame;
                 return Some(PageAllocResult {
                     page_id: page.id,
+                    generation: page.generation,
                     allocation,
                 });
             }
@@ -192,11 +209,16 @@ impl GlyphAtlasPages {
             bind_group,
             allocator,
             last_accessed_generation: 0,
+            generation: 0,
+            pinned_this_frame: true,
+            last_used_frame: frame,
         });
         let page = self.subpixel.last_mut().unwrap();
+        let generation = page.generation;
         let allocation = page.allocator.allocate(size)?;
         Some(PageAllocResult {
             page_id: id,
+            generation,
             allocation,
         })
     }
@@ -207,11 +229,15 @@ impl GlyphAtlasPages {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
+        frame: u64,
     ) -> Option<PageAllocResult<ColorRgba>> {
         for page in &mut self.color {
             if let Some(allocation) = page.allocator.allocate(size) {
+                page.pinned_this_frame = true;
+                page.last_used_frame = frame;
                 return Some(PageAllocResult {
                     page_id: page.id,
+                    generation: page.generation,
                     allocation,
                 });
             }
@@ -241,11 +267,16 @@ impl GlyphAtlasPages {
             bind_group,
             allocator,
             last_accessed_generation: 0,
+            generation: 0,
+            pinned_this_frame: true,
+            last_used_frame: frame,
         });
         let page = self.color.last_mut().unwrap();
+        let generation = page.generation;
         let allocation = page.allocator.allocate(size)?;
         Some(PageAllocResult {
             page_id: id,
+            generation,
             allocation,
         })
     }
@@ -262,22 +293,103 @@ impl GlyphAtlasPages {
         self.color.iter().find(|p| p.id == id)
     }
 
-    pub fn touch_alpha(&mut self, id: PageId<AlphaMask>, generation: u64) {
+    pub fn begin_frame(&mut self) {
+        for page in &mut self.alpha {
+            page.pinned_this_frame = false;
+        }
+        for page in &mut self.subpixel {
+            page.pinned_this_frame = false;
+        }
+        for page in &mut self.color {
+            page.pinned_this_frame = false;
+        }
+    }
+
+    pub fn pin_alpha(&mut self, id: PageId<AlphaMask>, frame: u64) {
         if let Some(page) = self.alpha.iter_mut().find(|p| p.id == id) {
-            page.last_accessed_generation = generation;
+            page.pinned_this_frame = true;
+            page.last_used_frame = frame;
         }
     }
 
-    pub fn touch_subpixel(&mut self, id: PageId<SubpixelMask>, generation: u64) {
+    pub fn pin_subpixel(&mut self, id: PageId<SubpixelMask>, frame: u64) {
         if let Some(page) = self.subpixel.iter_mut().find(|p| p.id == id) {
-            page.last_accessed_generation = generation;
+            page.pinned_this_frame = true;
+            page.last_used_frame = frame;
         }
     }
 
-    pub fn touch_color(&mut self, id: PageId<ColorRgba>, generation: u64) {
+    pub fn pin_color(&mut self, id: PageId<ColorRgba>, frame: u64) {
         if let Some(page) = self.color.iter_mut().find(|p| p.id == id) {
-            page.last_accessed_generation = generation;
+            page.pinned_this_frame = true;
+            page.last_used_frame = frame;
         }
+    }
+
+    pub fn lru_unpinned_alpha(&self) -> Option<usize> {
+        self.alpha
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| !p.pinned_this_frame)
+            .min_by_key(|(_, p)| p.last_used_frame)
+            .map(|(i, _)| i)
+    }
+
+    pub fn lru_unpinned_subpixel(&self) -> Option<usize> {
+        self.subpixel
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| !p.pinned_this_frame)
+            .min_by_key(|(_, p)| p.last_used_frame)
+            .map(|(i, _)| i)
+    }
+
+    pub fn lru_unpinned_color(&self) -> Option<usize> {
+        self.color
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| !p.pinned_this_frame)
+            .min_by_key(|(_, p)| p.last_used_frame)
+            .map(|(i, _)| i)
+    }
+
+    pub fn reset_alpha_page(
+        &mut self,
+        index: usize,
+        frame: u64,
+    ) -> Option<(PageId<AlphaMask>, u32)> {
+        let page = self.alpha.get_mut(index)?;
+        page.generation = page.generation.wrapping_add(1);
+        page.allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
+        page.pinned_this_frame = true;
+        page.last_used_frame = frame;
+        Some((page.id, page.generation))
+    }
+
+    pub fn reset_subpixel_page(
+        &mut self,
+        index: usize,
+        frame: u64,
+    ) -> Option<(PageId<SubpixelMask>, u32)> {
+        let page = self.subpixel.get_mut(index)?;
+        page.generation = page.generation.wrapping_add(1);
+        page.allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
+        page.pinned_this_frame = true;
+        page.last_used_frame = frame;
+        Some((page.id, page.generation))
+    }
+
+    pub fn reset_color_page(
+        &mut self,
+        index: usize,
+        frame: u64,
+    ) -> Option<(PageId<ColorRgba>, u32)> {
+        let page = self.color.get_mut(index)?;
+        page.generation = page.generation.wrapping_add(1);
+        page.allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
+        page.pinned_this_frame = true;
+        page.last_used_frame = frame;
+        Some((page.id, page.generation))
     }
 }
 

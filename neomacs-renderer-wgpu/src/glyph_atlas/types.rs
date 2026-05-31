@@ -110,6 +110,35 @@ impl<M: GlyphMaterial> fmt::Debug for PageId<M> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PageToken<M: GlyphMaterial> {
+    index: NonZeroU32,
+    generation: u32,
+    _marker: PhantomData<M>,
+}
+
+impl<M: GlyphMaterial> PageToken<M> {
+    pub fn new(index: NonZeroU32, generation: u32) -> Self {
+        Self {
+            index,
+            generation,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn index(self) -> u32 {
+        self.index.get()
+    }
+
+    pub fn generation(self) -> u32 {
+        self.generation
+    }
+
+    pub fn page_id(self) -> PageId<M> {
+        PageId::new(self.index)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Coordinate newtypes
 // ---------------------------------------------------------------------------
@@ -249,15 +278,23 @@ pub struct GlyphMetrics {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AtlasEntry<M: GlyphMaterial> {
     page: PageId<M>,
+    generation: u32,
     rect: AtlasContentRect,
     uv: UvRect,
     metrics: GlyphMetrics,
 }
 
 impl<M: GlyphMaterial> AtlasEntry<M> {
-    pub fn new(page: PageId<M>, rect: AtlasContentRect, uv: UvRect, metrics: GlyphMetrics) -> Self {
+    pub fn new(
+        page: PageId<M>,
+        generation: u32,
+        rect: AtlasContentRect,
+        uv: UvRect,
+        metrics: GlyphMetrics,
+    ) -> Self {
         Self {
             page,
+            generation,
             rect,
             uv,
             metrics,
@@ -266,6 +303,12 @@ impl<M: GlyphMaterial> AtlasEntry<M> {
 
     pub fn page(self) -> PageId<M> {
         self.page
+    }
+    pub fn generation(self) -> u32 {
+        self.generation
+    }
+    pub fn token(self) -> PageToken<M> {
+        PageToken::new(NonZeroU32::new(self.page.get()).unwrap(), self.generation)
     }
     pub fn rect(self) -> AtlasContentRect {
         self.rect
@@ -668,7 +711,7 @@ mod tests {
             bearing_y: 10.0,
             advance_width: 8.0,
         };
-        let entry = AtlasEntry::new(page, rect, uv, metrics);
+        let entry = AtlasEntry::new(page, 0, rect, uv, metrics);
         let any = AnyAtlasEntry::Alpha(entry);
         assert_eq!(any.material_kind(), GlyphMaterialKind::AlphaMask);
     }
