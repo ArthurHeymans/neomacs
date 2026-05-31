@@ -27744,3 +27744,77 @@ fn ft_zenith_face_overlay_face_get_set_get_three_times() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_apex_face_overlay_face_on_every_pos_in_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "123456789")
+    (let ((ov (make-overlay 1 10)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'all-positions (let ((pos 1) (res nil))
+                        (while (<= pos 9)
+                          (goto-char pos)
+                          (push (list pos (get-char-property pos 'face)) res)
+                          (setq pos (1+ pos)))
+                        (nreverse res))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_font_lock_fontify_with_hash_table_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(make-hash-table :test 'equal)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'make-hash-face (save-excursion (goto-char (point-min)) (search-forward "make-hash-table") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_overlay_face_priority_when_short_long_mix() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((short-ov (make-overlay 3 8))) (overlay-put short-ov 'face '(:background "red")) (overlay-put short-ov 'priority 1))
+    (let ((long-ov (make-overlay 1 21))) (overlay-put long-ov 'face '(:background "blue")) (overlay-put long-ov 'priority 0))
+    (list
+     'under-short (get-char-property 5 'face)
+     'under-long-only (get-char-property 15 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_apex_face_text_property_all_props_at_point_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'fontified t)
+    (let ((props (text-properties-at 3)))
+      (list
+       'props-plist props
+       'props-length (length props)
+       'face-val (plist-get props 'face)
+       'fontified-val (plist-get props 'fontified))))))"##,
+    );
+}
