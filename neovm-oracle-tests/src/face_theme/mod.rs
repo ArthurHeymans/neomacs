@@ -29694,3 +29694,78 @@ fn ft_drive_face_text_property_find_all_property_any_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_advance_face_overlay_face_priority_triple_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 1))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority 2))
+    (let ((c (make-overlay 1 6))) (overlay-put c 'face '(:foreground "C")) (overlay-put c 'priority 3))
+    (list
+     'init-c (get-char-property 3 'face)
+     'a-to-4 (progn (overlay-put a 'priority 4) (get-char-property 3 'face))
+     'c-to-0 (progn (overlay-put c 'priority 0) (get-char-property 3 'face))
+     'b-to-5 (progn (overlay-put b 'priority 5) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_advance_font_lock_fontify_rassoc_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(rassoc 1 '((a . 1) (b . 2)))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'rassoc-face (save-excursion (goto-char (point-min)) (search-forward "rassoc") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_advance_face_overlay_face_text_prop_within_overlay_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 3 9)))
+      (overlay-put ov 'face 'italic))
+    (list
+     'text-only-pos1 (get-char-property 1 'face)
+     'overlay-pos1 (get-text-property 1 'face)
+     'mixed-pos5 (list 'char (get-char-property 5 'face) 'text (get-text-property 5 'face))
+     'ov-only-pos8 (get-char-property 8 'face)
+     'text-only-pos9 (get-text-property 9 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_advance_face_text_property_text_property_any_on_entire_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "QQQQQ")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'any-bold (text-property-any (point-min) (point-max) 'face 'bold nil)
+     'not-all-nil (text-property-not-all (point-min) (point-max) 'face nil nil)
+     'all-bold (condition-case nil (text-property-not-all (point-min) (point-max) 'face 'bold nil) (error 'no))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
