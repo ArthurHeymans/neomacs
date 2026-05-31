@@ -28907,3 +28907,74 @@ fn ft_unstoppable_face_text_property_interval_list_empty_buffer() {
      'after-insert (progn (insert "X") (put-text-property 1 2 'face 'bold) (length (object-intervals (current-buffer))))))))"##,
     );
 }
+
+#[test]
+fn ft_tireless_face_overlay_face_check_every_attr_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red" :background "green" :weight bold :slant italic :underline t :overline t :strike-through t :box t :inverse-video t :extend t :height 120))
+      (let ((pl (overlay-get ov 'face)))
+        (list
+         'plist-len (length pl)
+         'keys (let ((k nil) (i 0)) (while (< i (length pl)) (push (nth i pl) k) (setq i (+ i 2))) (nreverse k))
+         'num-attrs (/ (length pl) 2)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_tireless_font_lock_fontify_featurep_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(featurep 'font-lock)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'featurep-face (save-excursion (goto-char (point-min)) (search-forward "featurep") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_tireless_face_overlay_face_with_mixed_face_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face 'bold))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "red")))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face '(italic underline)))
+    (list
+     'winning (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_tireless_face_text_property_zero_len_property_boundary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AA")
+    (put-text-property 1 3 'face 'bold)
+    (list
+     'face-pos1 (get-text-property 1 'face)
+     'face-pos2 (get-text-property 2 'face)
+     'next-from-1 (next-single-property-change 1 'face)
+     'prev-from-3 (previous-single-property-change 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
