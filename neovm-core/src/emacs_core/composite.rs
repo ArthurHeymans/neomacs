@@ -1,10 +1,8 @@
 //! Composition builtins (complex script rendering).
 //!
-//! In real Emacs, the composition system handles combining characters,
-//! ligatures, and complex script shaping.  Most of this work is done by the
-//! display engine (and in Neomacs, by the Rust layout engine), so here we
-//! provide stubs that satisfy Elisp code which queries or manipulates
-//! compositions at the Lisp level.
+//! GNU Emacs records explicit compositions as a `composition` text property.
+//! The display engine later validates and registers those properties when it
+//! needs glyph data.  The Lisp-visible mutation semantics live here.
 
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
@@ -75,6 +73,29 @@ fn integer_value(arg: &Value) -> i64 {
     }
 }
 
+fn expect_composition_components(arg: Value) -> Result<(), Flow> {
+    if arg.is_nil() || arg.is_fixnum() || arg.is_cons() || arg.is_string() || arg.is_vector() {
+        Ok(())
+    } else {
+        Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("vectorp"), arg],
+        ))
+    }
+}
+
+fn composition_property(
+    start: i64,
+    end: i64,
+    components: Value,
+    modification_func: Value,
+) -> Value {
+    Value::cons(
+        Value::cons(Value::fixnum(end - start), components),
+        modification_func,
+    )
+}
+
 fn expect_string_value(arg: &Value) -> Result<&crate::heap_types::LispString, Flow> {
     arg.as_lisp_string()
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *arg]))
@@ -85,42 +106,47 @@ fn expect_string_value(arg: &Value) -> Result<&crate::heap_types::LispString, Fl
 // ---------------------------------------------------------------------------
 
 /// Context-backed `(compose-region-internal START END &optional COMPONENTS MODIFICATION-FUNC)`.
-///
-/// Batch-compatible subset:
-/// - validates START/END type (`integer-or-marker-p`)
-/// - validates range against the current buffer's accessible positions
-/// - returns nil on success
 pub(crate) fn builtin_compose_region_internal(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("compose-region-internal", &args, 2, 4)?;
-    expect_integer_or_marker_p(&args[0])?;
-    expect_integer_or_marker_p(&args[1])?;
+    let start = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[0])?;
+    let end = super::builtins::expect_integer_or_marker_in_buffers(&ctx.buffers, &args[1])?;
+    let components = args.get(2).copied().unwrap_or(Value::NIL);
+    let modification_func = args.get(3).copied().unwrap_or(Value::NIL);
+    expect_composition_components(components)?;
 
-    let start = integer_value(&args[0]);
-    let end = integer_value(&args[1]);
     let (buffer_handle, point_max) = if let Some(buf) = ctx.buffers.current_buffer() {
         (Value::make_buffer(buf.id), buf.point_max_char() as i64 + 1)
     } else {
         (Value::NIL, 1)
     };
-
     if start < 1 || end < 1 || start > end || start > point_max || end > point_max {
         return Err(signal(
             "args-out-of-range",
             vec![buffer_handle, Value::fixnum(start), Value::fixnum(end)],
         ));
     }
+
+    let prop = composition_property(start, end, components, modification_func);
+    super::textprop::builtin_put_text_property(
+        ctx,
+        vec![
+            args[0],
+            args[1],
+            Value::symbol("composition"),
+            prop,
+            Value::NIL,
+        ],
+    )?;
+
     Ok(Value::NIL)
 }
 
 /// `(compose-string-internal STRING START END &optional COMPONENTS MODIFICATION-FUNC)`
 ///
 /// Compose text in STRING between indices START and END.
-/// Returns STRING (possibly with composition properties attached).
-///
-/// Stub: return STRING unchanged.
 pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     expect_range_args("compose-string-internal", &args, 3, 5)?;
     if !args[0].is_string() {
@@ -133,6 +159,10 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     expect_integerp(&args[2])?;
     let start = integer_value(&args[1]);
     let end = integer_value(&args[2]);
+    let components = args.get(3).copied().unwrap_or(Value::NIL);
+    let modification_func = args.get(4).copied().unwrap_or(Value::NIL);
+    expect_composition_components(components)?;
+
     let len = expect_string_value(&args[0])?.schars() as i64;
     if start < 0 || end < 0 || start > end || end > len {
         return Err(signal(
@@ -140,7 +170,17 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
             vec![args[0], Value::fixnum(start), Value::fixnum(end)],
         ));
     }
-    // Return the string argument unchanged.
+    let prop = composition_property(start, end, components, modification_func);
+    let mut table = get_string_text_properties_table_for_value(args[0]).unwrap_or_default();
+    table.put_property_for_object_len(
+        start as usize,
+        end as usize,
+        len as usize,
+        Value::symbol("composition"),
+        prop,
+    );
+    super::textprop::save_string_props_for_value(args[0], table);
+
     Ok(args[0])
 }
 

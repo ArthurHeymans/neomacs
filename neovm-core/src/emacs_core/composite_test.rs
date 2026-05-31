@@ -1,5 +1,7 @@
 use super::*;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::{
+    ValueKind, VecLikeType, equal_value, get_string_text_properties_table_for_value,
+};
 
 #[test]
 fn compose_region_internal_min_args() {
@@ -29,6 +31,34 @@ fn compose_region_internal_max_args() {
     );
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
+}
+
+#[test]
+fn compose_region_internal_sets_composition_property() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.insert("abcdef");
+    }
+    let components = Value::list(vec![Value::fixnum('X' as i64), Value::fixnum('Y' as i64)]);
+
+    builtin_compose_region_internal(
+        &mut eval,
+        vec![Value::fixnum(2), Value::fixnum(5), components, Value::NIL],
+    )
+    .expect("compose region");
+
+    let prop = crate::emacs_core::textprop::builtin_get_text_property(
+        &mut eval,
+        vec![Value::fixnum(2), Value::symbol("composition")],
+    )
+    .expect("get composition property");
+    assert!(prop.is_cons());
+    let header = prop.cons_car();
+    assert_eq!(header.cons_car().as_fixnum(), Some(3));
+    assert!(equal_value(&header.cons_cdr(), &components, 0));
+    assert!(prop.cons_cdr().is_nil());
 }
 
 #[test]
@@ -106,6 +136,30 @@ fn compose_string_internal_with_optional_args() {
     ]);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().as_utf8_str(), Some("hello"));
+}
+
+#[test]
+fn compose_string_internal_sets_composition_property() {
+    crate::test_utils::init_test_tracing();
+    let s = Value::string("hello");
+    let components = Value::string("XY");
+    let result = builtin_compose_string_internal(vec![
+        s,
+        Value::fixnum(1),
+        Value::fixnum(4),
+        components,
+        Value::NIL,
+    ]);
+    assert!(result.is_ok());
+
+    let table = get_string_text_properties_table_for_value(s).expect("string text properties");
+    let prop = table
+        .get_property(1, Value::symbol("composition"))
+        .expect("composition property");
+    let header = prop.cons_car();
+    assert_eq!(header.cons_car().as_fixnum(), Some(3));
+    assert_eq!(header.cons_cdr().as_utf8_str(), Some("XY"));
+    assert!(prop.cons_cdr().is_nil());
 }
 
 #[test]
