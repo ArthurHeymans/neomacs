@@ -9252,10 +9252,12 @@ fn ft_infinity_face_text_property_character_by_character_access_deep() {
                        (setq pos (1+ pos)))
                      (nreverse result))
      'prop-changes-everywhere (let ((pos 1) (changes nil))
-                                (while pos
+                                (while (and pos (< pos 27))
                                   (setq pos (next-single-property-change pos 'face nil 27))
-                                  (when pos (push (list pos (get-text-property pos 'face)) changes)))
-                                (nreverse changes))))))"##,
+                                  (when (and pos (< pos 27))
+                                    (push (list pos (get-text-property pos 'face)) changes)))
+                                (nreverse changes))
+     'prop-changes-limit (next-single-property-change 27 'face nil 27)))))"##,
     );
 }
 
@@ -9750,11 +9752,13 @@ fn ft_xero_face_text_property_all_intervals_list_deep() {
      'interval-list (mapcar (lambda (ov) (list (overlay-start (car (overlays-in (overlay-start ov) (overlay-end ov)))) (overlay-end (car (overlays-in (overlay-start ov) (overlay-end ov))))))
                             (object-intervals (current-buffer)))
      'manual-interval-walk (let ((pos 1) (result nil))
-                             (while pos
+                             (while (and pos (< pos 36))
                                (let ((next (next-single-property-change pos 'face nil 36)))
-                                 (when next (push (list pos next (get-text-property pos 'face)) result))
+                                 (when (and next (< next 36))
+                                   (push (list pos next (get-text-property pos 'face)) result))
                                  (setq pos next)))
-                             (nreverse result))))))"##,
+                             (nreverse result))
+     'manual-interval-limit (next-single-property-change 36 'face nil 36)))))"##,
     );
 }
 
@@ -9898,10 +9902,11 @@ fn ft_zeta_face_property_map_on_face_region_deep() {
                        (setq pos (1+ pos)))
                      (nreverse props))
      'face-change-positions (let ((pos 1) (changes nil))
-                              (while pos
+                              (while (and pos (< pos 17))
                                 (setq pos (next-single-property-change pos 'face nil 17))
-                                (when pos (push pos changes)))
+                                (when (and pos (< pos 17)) (push pos changes)))
                               (nreverse changes))
+     'face-change-limit (next-single-property-change 17 'face nil 17)
      'interval-objects (mapcar (lambda (ov) (list (overlay-start ov) (overlay-end ov)))
                                (object-intervals (current-buffer))))))"##,
     );
@@ -10797,10 +10802,12 @@ fn ft_delta_face_property_change_at_multiple_boundaries_deep() {
     (list
      'faces-all (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 2 3 4 5 6 7 8 9 10))
      'prop-changes (let ((pos 1) (changes nil))
-                     (while pos
+                     (while (and pos (< pos 11))
                        (setq pos (next-single-property-change pos 'face nil 11))
-                       (when pos (push (list pos (get-text-property pos 'face)) changes)))
+                       (when (and pos (< pos 11))
+                         (push (list pos (get-text-property pos 'face)) changes)))
                      (nreverse changes))
+     'prop-changes-limit (next-single-property-change 11 'face nil 11)
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
@@ -11672,15 +11679,17 @@ fn ft_iota_face_text_property_next_change_fast_path_deep() {
                          (nth (mod i 4) '(bold italic underline (:foreground "red")))))
     (list
      'all-next-changes (let ((pos 1) (result nil))
-                         (while pos
+                         (while (and pos (< pos 51))
                            (setq pos (next-single-property-change pos 'face nil 51))
-                           (when pos (push pos result)))
+                           (when (and pos (< pos 51)) (push pos result)))
                          (nreverse result))
+     'next-limit (next-single-property-change 51 'face nil 51)
      'all-prev-changes (let ((pos 51) (result nil))
-                         (while pos
+                         (while (and pos (> pos 1))
                            (setq pos (previous-single-property-change pos 'face nil 1))
-                           (when pos (push pos result)))
+                           (when (and pos (> pos 1)) (push pos result)))
                          (nreverse result))
+     'prev-limit (previous-single-property-change 1 'face nil 1)
      'interval-count (length (object-intervals (current-buffer)))
      'spot-faces (mapcar (lambda (pos) (goto-char pos) (list pos (get-text-property pos 'face))) '(1 6 11 16 21 26 31 36 41 46 50)))))"##,
     );
@@ -12079,10 +12088,12 @@ fn ft_lambda_face_property_interval_edge_boundary_stress() {
                      (setq i (1+ i)))
                    (nreverse result))
      'prop-changes-all (let ((pos 1) (changes nil))
-                         (while pos
+                         (while (and pos (< pos 63))
                            (setq pos (next-single-property-change pos 'face nil 63))
-                           (when pos (push (list pos (get-text-property pos 'face)) changes)))
+                           (when (and pos (< pos 63))
+                             (push (list pos (get-text-property pos 'face)) changes)))
                          (nreverse changes))
+     'prop-changes-limit (next-single-property-change 63 'face nil 63)
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
@@ -14304,10 +14315,12 @@ fn ft_omega3_face_text_property_next_single_change_multiple() {
       (put-text-property (1+ (* i 2)) (+ (* i 2) 3) 'face (if (evenp i) 'bold 'italic)))
     (list
      'all-props (let ((pos 1) (result nil))
-                  (while pos
+                  (while (and pos (< pos 33))
                     (setq pos (next-single-property-change pos 'face nil 33))
-                    (when pos (push (list pos (get-text-property pos 'face)) result)))
+                    (when (and pos (< pos 33))
+                      (push (list pos (get-text-property pos 'face)) result)))
                   (nreverse result))
+     'all-props-limit (next-single-property-change 33 'face nil 33)
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
@@ -14387,10 +14400,12 @@ fn ft_omega3_text_property_previous_single_change_deep() {
     (put-text-property 26 31 'face '(:foreground "blue"))
     (list
      'prev-from-end (let ((pos 31) (result nil))
-                      (while pos
+                      (while (and pos (> pos 1))
                         (setq pos (previous-single-property-change pos 'face nil 1))
-                        (when pos (push (list pos (get-text-property pos 'face)) result)))
+                        (when (and pos (> pos 1))
+                          (push (list pos (get-text-property pos 'face)) result)))
                       (nreverse result))
+     'prev-limit (previous-single-property-change 1 'face nil 1)
      'prev-near-start (previous-single-property-change 6 'face nil 1)
      'prev-from-15 (previous-single-property-change 15 'face nil 1)
      'interval-count (length (object-intervals (current-buffer))))))"##,
@@ -18655,10 +18670,11 @@ fn ft_lepton_face_text_property_prev_single_property_change_deep() {
      'prev-from-15 (previous-single-property-change 15 'face nil 1)
      'prev-from-5 (previous-single-property-change 5 'face nil 1)
      'all-prev (let ((pos 36) (result nil))
-                 (while pos
+                 (while (and pos (> pos 1))
                    (setq pos (previous-single-property-change pos 'face nil 1))
-                   (when pos (push pos result)))
-                 (nreverse result)))))"##,
+                   (when (and pos (> pos 1)) (push pos result)))
+                 (nreverse result))
+     'prev-limit (previous-single-property-change 1 'face nil 1)))))"##,
     );
 }
 
@@ -21541,10 +21557,12 @@ fn ft_eternity_face_text_property_prop_change_interval_deep() {
     (put-text-property 28 31 'face '(:underline t))
     (list
      'all-prop-changes (let ((pos 1) (result nil))
-                         (while pos
+                         (while (and pos (< pos 31))
                            (setq pos (next-single-property-change pos 'face nil 31))
-                           (when pos (push (list pos (get-text-property pos 'face)) result)))
+                           (when (and pos (< pos 31))
+                             (push (list pos (get-text-property pos 'face)) result)))
                          (nreverse result))
+     'all-prop-limit (next-single-property-change 31 'face nil 31)
      'interval-count (length (object-intervals (current-buffer))))))"##,
     );
 }
@@ -32936,10 +32954,10 @@ fn ft_hit1500_text_property_face_get_next_property_chain() {
     (put-text-property 11 16 'face 'underline)
     (put-text-property 16 21 'face '(:foreground "red"))
     (let ((pos 1) (chain nil))
-      (while pos
+      (while (and pos (< pos 21))
         (push (list pos (get-text-property pos 'face)) chain)
         (setq pos (next-single-property-change pos 'face nil 21)))
-      (nreverse chain)))))"##,
+      (list (nreverse chain) (next-single-property-change 21 'face nil 21))))))"##,
     );
 }
 
@@ -33116,7 +33134,8 @@ fn ft_beyond1500_text_property_prop_scan_right_to_left() {
     (let ((pos 9) (chain nil))
       (while (> pos 0)
         (push (list pos (get-text-property pos 'face)) chain)
-        (setq pos (previous-single-property-change (1+ pos) 'face nil 1)))
+        (let ((next (previous-single-property-change (1+ pos) 'face nil 1)))
+          (setq pos (and next (/= next pos) next))))
       (list 'right-to-left (nreverse chain) 'intervals (length (object-intervals (current-buffer))))))))"##,
     );
 }
