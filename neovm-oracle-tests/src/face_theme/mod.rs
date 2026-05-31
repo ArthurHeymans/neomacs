@@ -31000,3 +31000,126 @@ fn ft_velocity_face_overlay_face_buffer_kill_sanity() {
         (condition-case err (overlay-get ov 'face) (error (list 'err (car err))))))))"##,
     );
 }
+
+#[test]
+fn ft_divergence_font_lock_c_mode_regex_bracket() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c-mode)
+    (insert "int a[10];\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'face-a (save-excursion (goto-char (point-min)) (search-forward "a") (get-text-property (match-beginning 0) 'face))))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_lock_cpp_mode_templates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c++-mode)
+    (insert "std::vector<int> v;\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_next_property_change_inf_loop_guard() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AB")
+    (put-text-property 1 2 'face 'bold)
+    (put-text-property 2 3 'face 'italic)
+    (condition-case err
+        (list 'next (next-single-property-change 1 'face) 'prev (previous-single-property-change 3 'face) 'intervals (length (object-intervals (current-buffer))))
+      (error (list 'err (car err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_weight_table_access() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case err
+      (progn
+        (require 'faces)
+        (list 'weight-table (condition-case nil font-weight-table (error 'no)) 'width-table (condition-case nil font-width-table (error 'no))))
+    (error (list 'err (car err) (cadr err))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_error_nil_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'copy-nil (condition-case nil (copy-face nil 'some-new-face) (error (list (car err))))
+   'set-attrib-nil-face (condition-case nil (set-face-attribute nil nil :foreground "red") (error (list (car err))))
+   'face-attrib-nil-face (condition-case nil (face-attribute nil :foreground nil 'default-on) (error (list (car err))))
+   'face-font-nil (condition-case nil (face-font nil) (error (list (car err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_overlay_props_args_out_of_range() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (condition-case err
+        (progn
+          (let ((ov (make-overlay 1 10)))
+            (overlay-put ov 'face 'italic)
+            (list 'ov-start (overlay-start ov) 'ov-end (overlay-end ov) 'face (overlay-get ov 'face))))
+      (error (list 'err (car err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_font_lock_c_mode_conditional_directive() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (c-mode)
+    (insert "#ifdef FOO\nint x = 1;\n#endif\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence_face_copy_nonexistent_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'copy-nonexistent (condition-case nil (copy-face 'nonexistent-face-12345 'target-face) (error (list (car err))))
+   'make-face (condition-case nil (make-face 'made-face) (error (list (car err))))
+   'facep-made (condition-case nil (facep 'made-face) (error (list (car err))))
+   'face-id-made (condition-case nil (face-id 'made-face) (error (list (car err)))))))"##,
+    );
+}
