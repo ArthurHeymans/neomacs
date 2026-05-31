@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
 use bytemuck::Pod;
+use std::marker::PhantomData;
 
 pub struct DynamicVertexBuffer<T: Pod> {
     buffer: Option<wgpu::Buffer>,

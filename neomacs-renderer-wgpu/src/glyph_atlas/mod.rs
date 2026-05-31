@@ -872,7 +872,8 @@ impl WgpuGlyphAtlas {
         self.cache_misses_this_frame = 0;
         if self.atlas_composed_cache.len() > 1024 {
             let cutoff = self.generation.saturating_sub(60);
-            self.atlas_composed_cache.retain(|_, v| v.last_accessed >= cutoff);
+            self.atlas_composed_cache
+                .retain(|_, v| v.last_accessed >= cutoff);
         }
     }
 
@@ -956,7 +957,10 @@ impl WgpuGlyphAtlas {
 
         match material {
             GlyphMaterialKind::AlphaMask => {
-                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_alpha(
+                let PageAllocResult {
+                    page_id,
+                    allocation,
+                } = self.atlas_pages.allocate_alpha(
                     size,
                     device,
                     &self.bind_group_layout,
@@ -973,10 +977,18 @@ impl WgpuGlyphAtlas {
                     AlphaMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Alpha(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+                Some(AnyAtlasEntry::Alpha(AtlasEntry::new(
+                    page_id,
+                    allocation.content_rect,
+                    uv,
+                    metrics,
+                )))
             }
             GlyphMaterialKind::SubpixelMask => {
-                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_subpixel(
+                let PageAllocResult {
+                    page_id,
+                    allocation,
+                } = self.atlas_pages.allocate_subpixel(
                     size,
                     device,
                     &self.bind_group_layout,
@@ -993,10 +1005,18 @@ impl WgpuGlyphAtlas {
                     SubpixelMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Subpixel(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+                Some(AnyAtlasEntry::Subpixel(AtlasEntry::new(
+                    page_id,
+                    allocation.content_rect,
+                    uv,
+                    metrics,
+                )))
             }
             GlyphMaterialKind::ColorRgba => {
-                let PageAllocResult { page_id, allocation } = self.atlas_pages.allocate_color(
+                let PageAllocResult {
+                    page_id,
+                    allocation,
+                } = self.atlas_pages.allocate_color(
                     size,
                     device,
                     &self.bind_group_layout,
@@ -1013,7 +1033,12 @@ impl WgpuGlyphAtlas {
                     ColorRgba::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Color(AtlasEntry::new(page_id, allocation.content_rect, uv, metrics)))
+                Some(AnyAtlasEntry::Color(AtlasEntry::new(
+                    page_id,
+                    allocation.content_rect,
+                    uv,
+                    metrics,
+                )))
             }
         }
     }
@@ -1160,15 +1185,11 @@ impl WgpuGlyphAtlas {
 
     pub fn atlas_bind_group(&self, entry: AnyAtlasEntry) -> &wgpu::BindGroup {
         match entry {
-            AnyAtlasEntry::Alpha(e) => {
-                &self.atlas_pages.alpha_page(e.page()).unwrap().bind_group
-            }
+            AnyAtlasEntry::Alpha(e) => &self.atlas_pages.alpha_page(e.page()).unwrap().bind_group,
             AnyAtlasEntry::Subpixel(e) => {
                 &self.atlas_pages.subpixel_page(e.page()).unwrap().bind_group
             }
-            AnyAtlasEntry::Color(e) => {
-                &self.atlas_pages.color_page(e.page()).unwrap().bind_group
-            }
+            AnyAtlasEntry::Color(e) => &self.atlas_pages.color_page(e.page()).unwrap().bind_group,
         }
     }
 

@@ -9,14 +9,12 @@ use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
 use neomacs_display_protocol::types::{Color, Rect};
 
 use super::image_cache::ImageCache;
-use super::vertex::{
-    GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms,
-};
-use dynamic_buffer::DynamicVertexBuffer;
+use super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms};
 #[cfg(feature = "video")]
 use super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
 use super::webkit_cache::WgpuWebKitCache;
+use dynamic_buffer::DynamicVertexBuffer;
 
 mod child_frames;
 mod content;

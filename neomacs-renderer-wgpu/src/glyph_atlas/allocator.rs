@@ -142,20 +142,30 @@ mod tests {
 
         for i in 0..fits_per_shelf {
             let result = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap());
-            assert!(result.is_some(), "allocation {} should fit on first shelf", i);
+            assert!(
+                result.is_some(),
+                "allocation {} should fit on first shelf",
+                i
+            );
             assert_eq!(result.unwrap().allocation_rect.y(), 0);
         }
 
         let result = alloc.allocate(PixelSize::new(glyph_w, 10).unwrap());
         assert!(result.is_some(), "should wrap to second shelf");
-        assert!(result.unwrap().allocation_rect.y() > 0, "y must advance to new shelf");
+        assert!(
+            result.unwrap().allocation_rect.y() > 0,
+            "y must advance to new shelf"
+        );
     }
 
     #[test]
     fn rejects_oversized_glyph() {
         let mut alloc = ShelfAllocator::new(64, 1);
         let result = alloc.allocate(PixelSize::new(64, 10).unwrap());
-        assert!(result.is_none(), "glyph width 64 + 2 padding = 66 > 64 page");
+        assert!(
+            result.is_none(),
+            "glyph width 64 + 2 padding = 66 > 64 page"
+        );
     }
 
     #[test]
@@ -192,8 +202,14 @@ mod tests {
         let mut alloc = ShelfAllocator::new(256, padding);
         let result = alloc.allocate(PixelSize::new(10, 10).unwrap()).unwrap();
 
-        assert_eq!(result.content_rect.x(), result.allocation_rect.x() + padding);
-        assert_eq!(result.content_rect.y(), result.allocation_rect.y() + padding);
+        assert_eq!(
+            result.content_rect.x(),
+            result.allocation_rect.x() + padding
+        );
+        assert_eq!(
+            result.content_rect.y(),
+            result.allocation_rect.y() + padding
+        );
         assert_eq!(result.allocation_rect.width(), 10 + 2 * padding);
         assert_eq!(result.allocation_rect.height(), 10 + 2 * padding);
     }

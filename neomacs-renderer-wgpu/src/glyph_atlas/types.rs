@@ -8,8 +8,8 @@
 //! per-glyph texture path and will be wired in during later steps.
 
 use std::fmt;
-use std::num::NonZeroU32;
 use std::marker::PhantomData;
+use std::num::NonZeroU32;
 
 // ---------------------------------------------------------------------------
 // Material marker types
@@ -147,13 +147,26 @@ pub struct AtlasAllocationRect {
 
 impl AtlasAllocationRect {
     pub fn new(x: u32, y: u32, width: NonZeroU32, height: NonZeroU32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
-    pub fn x(self) -> u32 { self.x }
-    pub fn y(self) -> u32 { self.y }
-    pub fn width(self) -> u32 { self.width.get() }
-    pub fn height(self) -> u32 { self.height.get() }
+    pub fn x(self) -> u32 {
+        self.x
+    }
+    pub fn y(self) -> u32 {
+        self.y
+    }
+    pub fn width(self) -> u32 {
+        self.width.get()
+    }
+    pub fn height(self) -> u32 {
+        self.height.get()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,13 +179,26 @@ pub struct AtlasContentRect {
 
 impl AtlasContentRect {
     pub fn new(x: u32, y: u32, width: NonZeroU32, height: NonZeroU32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
-    pub fn x(self) -> u32 { self.x }
-    pub fn y(self) -> u32 { self.y }
-    pub fn width(self) -> u32 { self.width.get() }
-    pub fn height(self) -> u32 { self.height.get() }
+    pub fn x(self) -> u32 {
+        self.x
+    }
+    pub fn y(self) -> u32 {
+        self.y
+    }
+    pub fn width(self) -> u32 {
+        self.width.get()
+    }
+    pub fn height(self) -> u32 {
+        self.height.get()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -186,8 +212,12 @@ impl UvRect {
         Self { min, max }
     }
 
-    pub fn min(self) -> [f32; 2] { self.min }
-    pub fn max(self) -> [f32; 2] { self.max }
+    pub fn min(self) -> [f32; 2] {
+        self.min
+    }
+    pub fn max(self) -> [f32; 2] {
+        self.max
+    }
 
     pub fn from_content_rect(content: AtlasContentRect, page_size: u32) -> Self {
         let ps = page_size as f32;
@@ -226,13 +256,26 @@ pub struct AtlasEntry<M: GlyphMaterial> {
 
 impl<M: GlyphMaterial> AtlasEntry<M> {
     pub fn new(page: PageId<M>, rect: AtlasContentRect, uv: UvRect, metrics: GlyphMetrics) -> Self {
-        Self { page, rect, uv, metrics }
+        Self {
+            page,
+            rect,
+            uv,
+            metrics,
+        }
     }
 
-    pub fn page(self) -> PageId<M> { self.page }
-    pub fn rect(self) -> AtlasContentRect { self.rect }
-    pub fn uv(self) -> UvRect { self.uv }
-    pub fn metrics(self) -> GlyphMetrics { self.metrics }
+    pub fn page(self) -> PageId<M> {
+        self.page
+    }
+    pub fn rect(self) -> AtlasContentRect {
+        self.rect
+    }
+    pub fn uv(self) -> UvRect {
+        self.uv
+    }
+    pub fn metrics(self) -> GlyphMetrics {
+        self.metrics
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -298,18 +341,9 @@ impl AnyAtlasEntry {
 
 #[derive(Debug)]
 pub enum RasterizedGlyphPixels {
-    Alpha {
-        size: PixelSize,
-        bytes: Vec<u8>,
-    },
-    Subpixel {
-        size: PixelSize,
-        rgba: Vec<u8>,
-    },
-    Color {
-        size: PixelSize,
-        rgba_srgb: Vec<u8>,
-    },
+    Alpha { size: PixelSize, bytes: Vec<u8> },
+    Subpixel { size: PixelSize, rgba: Vec<u8> },
+    Color { size: PixelSize, rgba_srgb: Vec<u8> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -328,7 +362,11 @@ impl fmt::Display for GlyphUploadError {
         match self {
             Self::ZeroSize => write!(f, "glyph has zero size"),
             Self::GlyphTooLarge => write!(f, "glyph is larger than atlas page"),
-            Self::PixelDataLength { material, expected, actual } => write!(
+            Self::PixelDataLength {
+                material,
+                expected,
+                actual,
+            } => write!(
                 f,
                 "pixel buffer length mismatch for {:?}: expected {}, got {}",
                 material, expected, actual
@@ -344,7 +382,9 @@ impl RasterizedGlyphPixels {
         let (size, bytes, bpp, material) = match &self {
             Self::Alpha { size, bytes } => (size, bytes, 1u32, GlyphMaterialKind::AlphaMask),
             Self::Subpixel { size, rgba } => (size, rgba, 4u32, GlyphMaterialKind::SubpixelMask),
-            Self::Color { size, rgba_srgb } => (size, rgba_srgb, 4u32, GlyphMaterialKind::ColorRgba),
+            Self::Color { size, rgba_srgb } => {
+                (size, rgba_srgb, 4u32, GlyphMaterialKind::ColorRgba)
+            }
         };
         let expected = (size.width() * size.height() * bpp) as usize;
         if bytes.len() != expected {
@@ -490,7 +530,12 @@ mod tests {
 
     #[test]
     fn atlas_content_rect_preserves_values() {
-        let r = AtlasContentRect::new(10, 20, NonZeroU32::new(30).unwrap(), NonZeroU32::new(40).unwrap());
+        let r = AtlasContentRect::new(
+            10,
+            20,
+            NonZeroU32::new(30).unwrap(),
+            NonZeroU32::new(40).unwrap(),
+        );
         assert_eq!(r.x(), 10);
         assert_eq!(r.y(), 20);
         assert_eq!(r.width(), 30);
@@ -499,7 +544,12 @@ mod tests {
 
     #[test]
     fn uv_rect_from_content_rect() {
-        let content = AtlasContentRect::new(0, 0, NonZeroU32::new(512).unwrap(), NonZeroU32::new(512).unwrap());
+        let content = AtlasContentRect::new(
+            0,
+            0,
+            NonZeroU32::new(512).unwrap(),
+            NonZeroU32::new(512).unwrap(),
+        );
         let uv = UvRect::from_content_rect(content, 2048);
         assert_eq!(uv.min(), [0.0, 0.0]);
         let eps = 0.001;
@@ -524,7 +574,11 @@ mod tests {
         };
         let err = pixels.validated().unwrap_err();
         match err {
-            GlyphUploadError::PixelDataLength { material, expected, actual } => {
+            GlyphUploadError::PixelDataLength {
+                material,
+                expected,
+                actual,
+            } => {
                 assert_eq!(material, GlyphMaterialKind::AlphaMask);
                 assert_eq!(expected, 4);
                 assert_eq!(actual, 2);
@@ -553,9 +607,18 @@ mod tests {
 
     #[test]
     fn material_kind_texture_format_matches() {
-        assert_eq!(GlyphMaterialKind::AlphaMask.texture_format(), wgpu::TextureFormat::R8Unorm);
-        assert_eq!(GlyphMaterialKind::SubpixelMask.texture_format(), wgpu::TextureFormat::Rgba8Unorm);
-        assert_eq!(GlyphMaterialKind::ColorRgba.texture_format(), wgpu::TextureFormat::Rgba8UnormSrgb);
+        assert_eq!(
+            GlyphMaterialKind::AlphaMask.texture_format(),
+            wgpu::TextureFormat::R8Unorm
+        );
+        assert_eq!(
+            GlyphMaterialKind::SubpixelMask.texture_format(),
+            wgpu::TextureFormat::Rgba8Unorm
+        );
+        assert_eq!(
+            GlyphMaterialKind::ColorRgba.texture_format(),
+            wgpu::TextureFormat::Rgba8UnormSrgb
+        );
     }
 
     #[test]
@@ -568,9 +631,18 @@ mod tests {
     #[test]
     fn any_atlas_entry_material_kind_roundtrip() {
         let page = PageId::<AlphaMask>::new(NonZeroU32::new(1).unwrap());
-        let rect = AtlasContentRect::new(0, 0, NonZeroU32::new(10).unwrap(), NonZeroU32::new(10).unwrap());
+        let rect = AtlasContentRect::new(
+            0,
+            0,
+            NonZeroU32::new(10).unwrap(),
+            NonZeroU32::new(10).unwrap(),
+        );
         let uv = UvRect::new([0.0, 0.0], [1.0, 1.0]);
-        let metrics = GlyphMetrics { bearing_x: 0.0, bearing_y: 10.0, advance_width: 8.0 };
+        let metrics = GlyphMetrics {
+            bearing_x: 0.0,
+            bearing_y: 10.0,
+            advance_width: 8.0,
+        };
         let entry = AtlasEntry::new(page, rect, uv, metrics);
         let any = AnyAtlasEntry::Alpha(entry);
         assert_eq!(any.material_kind(), GlyphMaterialKind::AlphaMask);

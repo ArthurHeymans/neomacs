@@ -9,8 +9,7 @@
 //! thumbs), Image, Video, WebKit.
 
 use super::super::glyph_atlas::{
-    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas,
-    glyph_font_identity,
+    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
@@ -446,9 +445,9 @@ impl WgpuRenderer {
         }
 
         // --- Step 2: Collect text glyphs (with overstrike and composed) ---
-    let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
-    let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
-    let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
+        let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
+        let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
+        let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
 
         for glyph in &frame.glyphs {
@@ -490,43 +489,43 @@ impl WgpuRenderer {
                     stats.text_glyphs += 1;
                     stats.composed_glyphs += 1;
                     seen_composed_keys.insert(ComposedGlyphKey {
-                            text: text.clone(),
-                            face_id: *face_id,
-                            font_size_bits: font_size.to_bits(),
-                            font_identity,
-                            x_bin,
-                            y_bin,
-                        });
-                        glyph_atlas.get_or_create_composed_atlas(
-                            &self.device,
-                            &self.queue,
-                            text,
-                            *face_id,
-                            font_size.to_bits(),
-                            face,
-                            x_bin,
-                            y_bin,
-                            subpixel_request,
-                        )
-                    } else {
-                        stats.text_glyphs += 1;
-                        let key = GlyphKey {
-                            charcode: *ch as u32,
-                            face_id: *face_id,
-                            font_size_bits: font_size.to_bits(),
-                            font_identity,
-                            x_bin,
-                            y_bin,
-                        };
-                        seen_single_keys.insert(key.clone());
-                        glyph_atlas.get_or_create_atlas(
-                            &self.device,
-                            &self.queue,
-                            &key,
-                            face,
-                            subpixel_request,
-                        )
+                        text: text.clone(),
+                        face_id: *face_id,
+                        font_size_bits: font_size.to_bits(),
+                        font_identity,
+                        x_bin,
+                        y_bin,
+                    });
+                    glyph_atlas.get_or_create_composed_atlas(
+                        &self.device,
+                        &self.queue,
+                        text,
+                        *face_id,
+                        font_size.to_bits(),
+                        face,
+                        x_bin,
+                        y_bin,
+                        subpixel_request,
+                    )
+                } else {
+                    stats.text_glyphs += 1;
+                    let key = GlyphKey {
+                        charcode: *ch as u32,
+                        face_id: *face_id,
+                        font_size_bits: font_size.to_bits(),
+                        font_identity,
+                        x_bin,
+                        y_bin,
                     };
+                    seen_single_keys.insert(key.clone());
+                    glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        face,
+                        subpixel_request,
+                    )
+                };
 
                 if let Some(handle) = handle_opt {
                     let entry = handle.entry;
@@ -1126,11 +1125,9 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice = self.glyph_vertex_buffer.upload(
-                    &self.device,
-                    &self.queue,
-                    &all_vertices,
-                );
+                let slice =
+                    self.glyph_vertex_buffer
+                        .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(glyph_pl);
@@ -1163,11 +1160,9 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice = self.subpixel_vertex_buffer.upload(
-                    &self.device,
-                    &self.queue,
-                    &all_vertices,
-                );
+                let slice =
+                    self.subpixel_vertex_buffer
+                        .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(subpixel_pl);
@@ -1181,9 +1176,7 @@ impl WgpuRenderer {
                     let bg = glyph_atlas.atlas_bind_group(*entry);
                     let batch_start = i;
                     i += 1;
-                    while i < subpixel_data.len()
-                        && subpixel_data[i].0.page_id_value() == page_id
-                    {
+                    while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
                     let vert_start = (batch_start * 6) as u32;
@@ -1202,11 +1195,9 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice = self.glyph_vertex_buffer.upload(
-                    &self.device,
-                    &self.queue,
-                    &all_vertices,
-                );
+                let slice =
+                    self.glyph_vertex_buffer
+                        .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(image_pl);
@@ -1220,9 +1211,7 @@ impl WgpuRenderer {
                     let bg = glyph_atlas.atlas_bind_group(*entry);
                     let batch_start = i;
                     i += 1;
-                    while i < color_data.len()
-                        && color_data[i].0.page_id_value() == page_id
-                    {
+                    while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
                     let vert_start = (batch_start * 6) as u32;

@@ -122,9 +122,19 @@ impl GlyphAtlasPages {
             return None;
         }
         let id = PageId::new(self.next_page_id_raw());
-        let (texture, view) =
-            Self::create_page_texture(device, AlphaMask::TEXTURE_FORMAT, self.config.page_size, "Atlas Alpha Page");
-        let bind_group = Self::create_bind_group(device, layout, sampler, &view, "Atlas Alpha Page Bind Group");
+        let (texture, view) = Self::create_page_texture(
+            device,
+            AlphaMask::TEXTURE_FORMAT,
+            self.config.page_size,
+            "Atlas Alpha Page",
+        );
+        let bind_group = Self::create_bind_group(
+            device,
+            layout,
+            sampler,
+            &view,
+            "Atlas Alpha Page Bind Group",
+        );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.alpha.push(AtlasPage {
             id,
@@ -161,10 +171,19 @@ impl GlyphAtlasPages {
             return None;
         }
         let id = PageId::new(self.next_page_id_raw());
-        let (texture, view) =
-            Self::create_page_texture(device, SubpixelMask::TEXTURE_FORMAT, self.config.page_size, "Atlas Subpixel Page");
-        let bind_group =
-            Self::create_bind_group(device, layout, sampler, &view, "Atlas Subpixel Page Bind Group");
+        let (texture, view) = Self::create_page_texture(
+            device,
+            SubpixelMask::TEXTURE_FORMAT,
+            self.config.page_size,
+            "Atlas Subpixel Page",
+        );
+        let bind_group = Self::create_bind_group(
+            device,
+            layout,
+            sampler,
+            &view,
+            "Atlas Subpixel Page Bind Group",
+        );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.subpixel.push(AtlasPage {
             id,
@@ -201,10 +220,19 @@ impl GlyphAtlasPages {
             return None;
         }
         let id = PageId::new(self.next_page_id_raw());
-        let (texture, view) =
-            Self::create_page_texture(device, ColorRgba::TEXTURE_FORMAT, self.config.page_size, "Atlas Color Page");
-        let bind_group =
-            Self::create_bind_group(device, layout, sampler, &view, "Atlas Color Page Bind Group");
+        let (texture, view) = Self::create_page_texture(
+            device,
+            ColorRgba::TEXTURE_FORMAT,
+            self.config.page_size,
+            "Atlas Color Page",
+        );
+        let bind_group = Self::create_bind_group(
+            device,
+            layout,
+            sampler,
+            &view,
+            "Atlas Color Page Bind Group",
+        );
         let allocator = ShelfAllocator::new(self.config.page_size, self.config.padding);
         self.color.push(AtlasPage {
             id,

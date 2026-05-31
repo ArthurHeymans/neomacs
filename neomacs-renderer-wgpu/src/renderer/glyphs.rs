@@ -2178,8 +2178,7 @@ impl WgpuRenderer {
                 }
 
                 let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
-                let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> =
-                    Vec::new();
+                let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
                 let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
                 let mut rendered_char_bounds: Vec<RenderedCharBounds> = Vec::new();
                 let enable_subpixel = glyph_atlas.subpixel_enabled();
@@ -2697,11 +2696,9 @@ impl WgpuRenderer {
                         }
                     }
 
-                    let slice = self.glyph_vertex_buffer.upload(
-                        &self.device,
-                        &self.queue,
-                        &all_vertices,
-                    );
+                    let slice =
+                        self.glyph_vertex_buffer
+                            .upload(&self.device, &self.queue, &all_vertices);
                     stats.glyph_vertex_buffer_creations += 1;
 
                     render_pass.set_vertex_buffer(0, slice);
@@ -2774,11 +2771,9 @@ impl WgpuRenderer {
                         .flat_map(|(_, verts)| verts.iter().copied())
                         .collect();
 
-                    let slice = self.glyph_vertex_buffer.upload(
-                        &self.device,
-                        &self.queue,
-                        &all_vertices,
-                    );
+                    let slice =
+                        self.glyph_vertex_buffer
+                            .upload(&self.device, &self.queue, &all_vertices);
                     stats.glyph_vertex_buffer_creations += 1;
 
                     render_pass.set_vertex_buffer(0, slice);
@@ -2790,9 +2785,7 @@ impl WgpuRenderer {
                         let bg = glyph_atlas.atlas_bind_group(*entry);
                         let batch_start = i;
                         i += 1;
-                        while i < color_data.len()
-                            && color_data[i].0.page_id_value() == page_id
-                        {
+                        while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
                             i += 1;
                         }
                         let vert_start = (batch_start * 6) as u32;

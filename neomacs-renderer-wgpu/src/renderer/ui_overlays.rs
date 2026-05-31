@@ -1,8 +1,8 @@
 //! UI overlay rendering methods for WgpuRenderer.
 
 use super::super::glyph_atlas::{
-    AnyAtlasEntry, GlyphAtlasHandle, GlyphMaterialKind, GlyphKey, SubpixelRequest,
-    WgpuGlyphAtlas, glyph_font_identity,
+    AnyAtlasEntry, GlyphAtlasHandle, GlyphKey, GlyphMaterialKind, SubpixelRequest, WgpuGlyphAtlas,
+    glyph_font_identity,
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, Uniforms};
 use super::TitleFadeEntry;
@@ -281,7 +281,12 @@ impl WgpuRenderer {
                         None,
                         SubpixelRequest::Disabled,
                     ) {
-                        overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, iy + 2.0, color));
+                        overlay_glyphs.push((
+                            handle,
+                            label_x + (ci as f32) * char_width,
+                            iy + 2.0,
+                            color,
+                        ));
                     }
                 }
 
@@ -557,7 +562,13 @@ impl WgpuRenderer {
                     None,
                     SubpixelRequest::Disabled,
                 ) {
-                    overlay_glyphs.push((handle, start_x + ci as f32 * char_width, start_y, color, scale));
+                    overlay_glyphs.push((
+                        handle,
+                        start_x + ci as f32 * char_width,
+                        start_y,
+                        color,
+                        scale,
+                    ));
                 }
             }
         }
@@ -820,7 +831,12 @@ impl WgpuRenderer {
                     None,
                     SubpixelRequest::Disabled,
                 ) {
-                    overlay_glyphs.push((handle, tx + padding + (ci as f32) * char_width, ly, text_color));
+                    overlay_glyphs.push((
+                        handle,
+                        tx + padding + (ci as f32) * char_width,
+                        ly,
+                        text_color,
+                    ));
                 }
             }
         }
@@ -1034,7 +1050,12 @@ impl WgpuRenderer {
                 None,
                 SubpixelRequest::Disabled,
             ) {
-                overlay_glyphs.push((handle, title_x + ci as f32 * char_width, title_y, text_color));
+                overlay_glyphs.push((
+                    handle,
+                    title_x + ci as f32 * char_width,
+                    title_y,
+                    text_color,
+                ));
             }
         }
 
@@ -2237,7 +2258,12 @@ impl WgpuRenderer {
                     None,
                     SubpixelRequest::Disabled,
                 ) {
-                    overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, text_y, text_color));
+                    overlay_glyphs.push((
+                        handle,
+                        label_x + (ci as f32) * char_width,
+                        text_y,
+                        text_color,
+                    ));
                 }
             }
             let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
@@ -2450,7 +2476,12 @@ impl WgpuRenderer {
                     None,
                     SubpixelRequest::Disabled,
                 ) {
-                    overlay_glyphs.push((handle, label_x + (ci as f32) * char_width, text_y, text_color));
+                    overlay_glyphs.push((
+                        handle,
+                        label_x + (ci as f32) * char_width,
+                        text_y,
+                        text_color,
+                    ));
                 }
             }
             menu_x += item.label.len() as f32 * char_width + padding_x * 2.0;
@@ -2474,12 +2505,36 @@ impl WgpuRenderer {
                     if let Some(cached) = self.image_cache.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [
-                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y], tex_coords: [1.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
-                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
-                            GlyphVertex { position: [icon_x, icon_y + icon_sz], tex_coords: [0.0, 1.0], color: tint },
+                            GlyphVertex {
+                                position: [icon_x, icon_y],
+                                tex_coords: [0.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y],
+                                tex_coords: [1.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y + icon_sz],
+                                tex_coords: [1.0, 1.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x, icon_y],
+                                tex_coords: [0.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y + icon_sz],
+                                tex_coords: [1.0, 1.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x, icon_y + icon_sz],
+                                tex_coords: [0.0, 1.0],
+                                color: tint,
+                            },
                         ];
                         match icon_batches.last() {
                             Some((prev_id, _, _)) if *prev_id == image_id => {
@@ -2503,10 +2558,14 @@ impl WgpuRenderer {
                 let end = all_verts.len() as u32;
                 batch_ranges.push((bg, start..end));
             }
-            let slice = self.image_vertex_buffer.upload(&self.device, &self.queue, &all_verts);
-            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Compact Bar Icon Encoder"),
-            });
+            let slice = self
+                .image_vertex_buffer
+                .upload(&self.device, &self.queue, &all_verts);
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Compact Bar Icon Encoder"),
+                });
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Compact Bar Icon Pass"),
@@ -2704,12 +2763,36 @@ impl WgpuRenderer {
                     if let Some(cached) = self.image_cache.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [
-                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y], tex_coords: [1.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
-                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
-                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
-                            GlyphVertex { position: [icon_x, icon_y + icon_sz], tex_coords: [0.0, 1.0], color: tint },
+                            GlyphVertex {
+                                position: [icon_x, icon_y],
+                                tex_coords: [0.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y],
+                                tex_coords: [1.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y + icon_sz],
+                                tex_coords: [1.0, 1.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x, icon_y],
+                                tex_coords: [0.0, 0.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x + icon_sz, icon_y + icon_sz],
+                                tex_coords: [1.0, 1.0],
+                                color: tint,
+                            },
+                            GlyphVertex {
+                                position: [icon_x, icon_y + icon_sz],
+                                tex_coords: [0.0, 1.0],
+                                color: tint,
+                            },
                         ];
                         match icon_batches.last() {
                             Some((prev_id, _, _)) if *prev_id == image_id => {
@@ -2733,10 +2816,14 @@ impl WgpuRenderer {
                 let end = all_verts.len() as u32;
                 batch_ranges.push((bg, start..end));
             }
-            let slice = self.image_vertex_buffer.upload(&self.device, &self.queue, &all_verts);
-            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Toolbar Icon Encoder"),
-            });
+            let slice = self
+                .image_vertex_buffer
+                .upload(&self.device, &self.queue, &all_verts);
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Toolbar Icon Encoder"),
+                });
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Toolbar Icon Pass"),
