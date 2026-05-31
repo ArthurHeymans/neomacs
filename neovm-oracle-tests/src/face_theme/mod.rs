@@ -31646,3 +31646,76 @@ fn ft_bolt_text_property_intensive_put_remove_cycle() {
        'history-last-3 (butlast (nreverse result) 7))))))"##,
     );
 }
+
+#[test]
+fn ft_rocket_face_overlay_face_priority_jump_of_100000() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((step1 (make-overlay 1 6))) (overlay-put step1 'face '(:foreground "step1")) (overlay-put step1 'priority 0))
+    (let ((step2 (make-overlay 1 6))) (overlay-put step2 'face '(:foreground "step2")) (overlay-put step2 'priority 1))
+    (list
+     'initial (get-char-property 3 'face)
+     'jump (progn (overlay-put step1 'priority 100001) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_rocket_font_lock_diff_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (diff-mode) (error (fundamental-mode)))
+    (insert "--- a/file\n+++ b/file\n@@ -1,3 +1,3 @@\n unchanged\n-changed\n+changed\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_rocket_face_overlay_face_put_same_value_twice() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'face 'bold)
+      (list
+       'face (overlay-get ov 'face)
+       'char-prop (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_rocket_text_property_face_read_every_pos_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "1234567890")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 8 11 'face 'underline)
+    (list
+     'all (let ((pos 1) (res nil))
+            (while (<= pos 10)
+              (goto-char pos)
+              (push (list pos (char-after pos) (get-text-property pos 'face)) res)
+              (setq pos (1+ pos)))
+            (nreverse res))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
