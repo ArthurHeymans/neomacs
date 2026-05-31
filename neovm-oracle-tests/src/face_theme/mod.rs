@@ -29330,3 +29330,96 @@ fn ft_persistent_face_text_property_face_empty_region_put() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_continual_face_overlay_face_survives_multiple_inserts() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 3) (insert "1")
+      (goto-char 4) (insert "2")
+      (goto-char 5) (insert "3")
+      (list
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       'face-pos3 (get-char-property 4 'face)
+       'face-pos6 (get-char-property 7 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_continual_font_lock_fontify_memq_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(memq 'a '(a b c))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'memq-face (save-excursion (goto-char (point-min)) (search-forward "memq") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_continual_face_overlay_face_while_narrowed_then_widened() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face 'bold)
+      (narrow-to-region 3 8)
+      (list
+       'face-narrowed (get-char-property 5 'face)
+       'face-widened (progn (widen) (get-char-property 12 'face))
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_continual_face_text_property_filter_by_value_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (list
+     'bold-positions (let ((pos 1) (res nil))
+                       (while (<= pos 15)
+                         (when (eq (get-text-property pos 'face) 'bold)
+                           (push pos res))
+                         (setq pos (1+ pos)))
+                       (nreverse res))
+     'italic-positions (let ((pos 1) (res nil))
+                       (while (<= pos 15)
+                         (when (eq (get-text-property pos 'face) 'italic)
+                           (push pos res))
+                         (setq pos (1+ pos)))
+                       (nreverse res))
+     'underline-positions (let ((pos 1) (res nil))
+                       (while (<= pos 15)
+                         (when (eq (get-text-property pos 'face) 'underline)
+                           (push pos res))
+                         (setq pos (1+ pos)))
+                       (nreverse res))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
