@@ -30052,3 +30052,74 @@ fn ft_surge3_face_text_property_get_text_property_bob_eob_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_flow_face_overlay_face_priority_same_size_different_layer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((outer (make-overlay 1 21))) (overlay-put outer 'face '(:background "outer")) (overlay-put outer 'priority 1))
+    (let ((inner (make-overlay 5 16))) (overlay-put inner 'face '(:background "inner")) (overlay-put inner 'priority 2))
+    (list
+     'outer-only-pos3 (get-char-property 3 'face)
+     'inner-pos10 (get-char-property 10 'face)
+     'outer-only-pos18 (get-char-property 18 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_flow_font_lock_fontify_clrhash_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(clrhash table)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'clrhash-face (save-excursion (goto-char (point-min)) (search-forward "clrhash") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_flow_face_overlay_face_set_face_on_zero_width_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "X")
+    (let ((ov (make-overlay 1 1)))
+      (overlay-put ov 'face 'bold)
+      (insert "Y")
+      (list
+       'expanded-start (overlay-start ov)
+       'expanded-end (overlay-end ov)
+       'face-at-pos1 (get-char-property 1 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_flow_face_text_property_text_before_and_after_face_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "A")
+    (put-text-property 1 2 'face 'bold)
+    (insert "B")
+    (list
+     'A-face (get-text-property 1 'face)
+     'B-face (get-text-property 2 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
