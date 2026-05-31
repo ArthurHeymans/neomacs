@@ -153,6 +153,7 @@ fn write_charset_info(out: &mut Vec<u8>, info: &DumpCharsetInfo) -> Result<(), D
     write_opt_i64(out, info.emacs_mule_id);
     write_bool(out, info.ascii_compatible_p);
     write_bool(out, info.supplementary_p);
+    write_bool(out, info.unified_p);
     write_opt_i64(out, info.invalid_code);
     write_value(out, &info.unify_map)?;
     write_charset_method(out, &info.method)?;
@@ -181,6 +182,7 @@ fn read_charset_info(cursor: &mut Cursor<'_>) -> Result<DumpCharsetInfo, DumpErr
         emacs_mule_id: read_opt_i64(cursor, "charset emacs-mule-id")?,
         ascii_compatible_p: cursor.read_bool("charset ascii-compatible")?,
         supplementary_p: cursor.read_bool("charset supplementary")?,
+        unified_p: cursor.read_bool("charset unified")?,
         invalid_code: read_opt_i64(cursor, "charset invalid-code")?,
         unify_map: cursor.read_value()?,
         method: read_charset_method(cursor)?,
@@ -475,6 +477,7 @@ mod tests {
                     emacs_mule_id: None,
                     ascii_compatible_p: true,
                     supplementary_p: false,
+                    unified_p: true,
                     invalid_code: Some(-1),
                     unify_map: DumpValue::Vector(DumpHeapRef { index: 3 }),
                     method: DumpCharsetMethod::Subset(DumpCharsetSubsetSpec {
@@ -500,6 +503,7 @@ mod tests {
                     emacs_mule_id: Some(9),
                     ascii_compatible_p: false,
                     supplementary_p: true,
+                    unified_p: false,
                     invalid_code: None,
                     unify_map: DumpValue::Nil,
                     method: DumpCharsetMethod::SupersetSyms(vec![(DumpSymId(8), 9)]),

@@ -290,6 +290,7 @@ fn empty_context_state() -> DumpContextState {
         interactive: types::DumpInteractiveRegistry { specs: Vec::new() },
         rectangle: types::DumpRectangleState { killed: Vec::new() },
         standard_syntax_table: types::DumpValue::Nil,
+        syntax_code_objects: types::DumpValue::Nil,
         standard_category_table: types::DumpValue::Nil,
         current_local_map: types::DumpValue::Nil,
         kmacro: types::DumpKmacroManager {
@@ -356,6 +357,7 @@ pub fn dump_to_file(eval: &Context, path: &Path) -> Result<(), DumpError> {
         require_stack: state.require_stack.clone(),
         loads_in_progress: state.loads_in_progress.clone(),
         standard_syntax_table: state.standard_syntax_table.clone(),
+        syntax_code_objects: state.syntax_code_objects.clone(),
         standard_category_table: state.standard_category_table.clone(),
         current_local_map: state.current_local_map.clone(),
     })?;
@@ -512,6 +514,7 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
     state.require_stack = roots.require_stack;
     state.loads_in_progress = roots.loads_in_progress;
     state.standard_syntax_table = roots.standard_syntax_table;
+    state.syntax_code_objects = roots.syntax_code_objects;
     state.standard_category_table = roots.standard_category_table;
     state.current_local_map = roots.current_local_map;
     let autoloads_payload = image
@@ -722,6 +725,7 @@ fn reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
         load_interactive_registry(&mut decoder, &state.interactive),
         load_rectangle(&state.rectangle),
         decoder.load_value(&state.standard_syntax_table),
+        decoder.load_value(&state.syntax_code_objects),
         decoder.load_value(&state.standard_category_table),
         decoder.load_value(&state.current_local_map),
         load_kmacro(&mut decoder, &state.kmacro),

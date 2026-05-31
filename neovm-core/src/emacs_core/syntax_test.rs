@@ -114,6 +114,18 @@ fn builtin_string_to_syntax_at_returns_nil() {
 }
 
 #[test]
+fn string_to_syntax_reuses_gnu_shared_bare_syntax_objects() {
+    crate::test_utils::init_test_tracing();
+    let word_one = builtin_string_to_syntax(vec![Value::string("w")]).unwrap();
+    let word_two = builtin_string_to_syntax(vec![Value::string("w")]).unwrap();
+    assert!(eq_value(&word_one, &word_two));
+
+    let flagged_one = builtin_string_to_syntax(vec![Value::string("w1")]).unwrap();
+    let flagged_two = builtin_string_to_syntax(vec![Value::string("w1")]).unwrap();
+    assert!(!eq_value(&flagged_one, &flagged_two));
+}
+
+#[test]
 fn string_to_syntax_with_flags() {
     crate::test_utils::init_test_tracing();
     let entry = string_to_syntax(". 12").unwrap();

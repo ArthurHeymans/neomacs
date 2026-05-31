@@ -1675,6 +1675,10 @@ pub struct Context {
     /// authoritative identity here and mirrors it into thread-local state for
     /// no-evaluator syntax builtins.
     pub(crate) standard_syntax_table: Value,
+    /// GNU's `Vsyntax_code_object`: canonical `(CODE)` conses for the 16 bare
+    /// syntax classes. Standard syntax tables and `string-to-syntax` share
+    /// these objects, so `eq` identity is observable.
+    pub(crate) syntax_code_objects: Value,
     /// Last `syntax-ppss` parser state for the current evaluator.
     ///
     /// GNU implements `syntax-ppss` in Lisp as an incremental cache over
@@ -2944,6 +2948,8 @@ impl Context {
 
         let standard_syntax_table = super::syntax::builtin_standard_syntax_table(Vec::new())
             .expect("startup seeding requires standard syntax table");
+        let syntax_code_objects = super::syntax::snapshot_syntax_code_objects()
+            .unwrap_or_else(super::syntax::ensure_syntax_code_objects);
         let standard_category_table = super::category::ensure_standard_category_table_object()
             .expect("startup seeding requires standard category table");
 
@@ -4569,6 +4575,7 @@ impl Context {
             watchers: VariableWatcherList::new(),
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
+            syntax_code_objects,
             syntax_ppss_last: None,
             standard_category_table,
             current_local_map: Value::NIL,
@@ -4677,6 +4684,7 @@ impl Context {
         interactive: InteractiveRegistry,
         rectangle: RectangleState,
         standard_syntax_table: Value,
+        syntax_code_objects: Value,
         standard_category_table: Value,
         current_local_map: Value,
         kmacro: KmacroManager,
@@ -4743,6 +4751,7 @@ impl Context {
             watchers,
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
+            syntax_code_objects,
             syntax_ppss_last: None,
             standard_category_table,
             current_local_map,
@@ -4968,6 +4977,9 @@ impl Context {
         if self.standard_syntax_table.is_heap_object() {
             visit(self.standard_syntax_table);
         }
+        if self.syntax_code_objects.is_heap_object() {
+            visit(self.syntax_code_objects);
+        }
         if let Some(last) = self.syntax_ppss_last
             && last.state.is_heap_object()
         {
@@ -5100,6 +5112,7 @@ impl Context {
     pub fn setup_thread_locals(&mut self) {
         crate::tagged::gc::set_tagged_heap(&mut self.tagged_heap);
         super::syntax::restore_standard_syntax_table_object(self.standard_syntax_table);
+        super::syntax::restore_syntax_code_objects(self.syntax_code_objects);
         super::category::restore_standard_category_table_object(self.standard_category_table);
         // Install this Context's quit-request flag so leaf functions
         // (regex matcher, other long-running scans) can poll it

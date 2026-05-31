@@ -3226,6 +3226,7 @@ pub(crate) fn dump_charset_registry(encoder: &mut DumpEncoder) -> DumpCharsetReg
                 emacs_mule_id: info.emacs_mule_id,
                 ascii_compatible_p: info.ascii_compatible_p,
                 supplementary_p: info.supplementary_p,
+                unified_p: info.unified_p,
                 invalid_code: info.invalid_code,
                 unify_map: encoder.dump_value(&info.unify_map),
                 method: match info.method {
@@ -3722,6 +3723,7 @@ pub(crate) fn dump_evaluator(eval: &Context) -> DumpContextState {
         interactive: dump_interactive_registry(&mut encoder, &eval.interactive),
         rectangle: dump_rectangle(&eval.rectangle),
         standard_syntax_table: encoder.dump_value(&eval.standard_syntax_table),
+        syntax_code_objects: encoder.dump_value(&eval.syntax_code_objects),
         standard_category_table: encoder.dump_value(&eval.standard_category_table),
         current_local_map: encoder.dump_value(&eval.current_local_map),
         kmacro: dump_kmacro(&mut encoder, &eval.kmacro),
@@ -5328,6 +5330,7 @@ pub(crate) fn load_charset_registry(decoder: &mut LoadDecoder, dcr: &DumpCharset
                 emacs_mule_id: info.emacs_mule_id,
                 ascii_compatible_p: info.ascii_compatible_p,
                 supplementary_p: info.supplementary_p,
+                unified_p: info.unified_p,
                 invalid_code: info.invalid_code,
                 unify_map: decoder.load_value(&info.unify_map),
                 method: match &info.method {

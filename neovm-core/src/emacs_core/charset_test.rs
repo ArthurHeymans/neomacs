@@ -583,6 +583,71 @@ fn offset_charset_decode_encode_and_make_char_match_gnu_code_index_mapping() {
 }
 
 #[test]
+fn unify_charset_offset_map_exposes_deunified_and_raw_ranges() {
+    crate::test_utils::init_test_tracing();
+    reset_charset_registry();
+
+    let mut args = vec![Value::NIL; 17];
+    args[0] = Value::symbol("test-gb2312-like");
+    args[1] = Value::fixnum(2);
+    args[2] = Value::vector(vec![
+        Value::fixnum(33),
+        Value::fixnum(126),
+        Value::fixnum(33),
+        Value::fixnum(126),
+    ]);
+    args[11] = Value::fixnum(0x110000);
+    args[15] = Value::string("GB2312");
+    builtin_define_charset_internal(args).unwrap();
+
+    assert_eq!(
+        builtin_decode_char(vec![
+            Value::symbol("test-gb2312-like"),
+            Value::fixnum(0x2121)
+        ])
+        .unwrap(),
+        Value::fixnum(0x110000)
+    );
+    assert_eq!(
+        map_charset_char_ranges("test-gb2312-like", Some(0x2121), Some(0x217e)).unwrap(),
+        vec![(0x110000, 0x11005d)]
+    );
+
+    builtin_unify_charset(vec![Value::symbol("test-gb2312-like")]).unwrap();
+
+    assert_eq!(
+        builtin_decode_char(vec![
+            Value::symbol("test-gb2312-like"),
+            Value::fixnum(0x2121)
+        ])
+        .unwrap(),
+        Value::fixnum(0x3000)
+    );
+    let ranges = map_charset_char_ranges("test-gb2312-like", Some(0x2121), Some(0x217e)).unwrap();
+    assert!(
+        ranges
+            .iter()
+            .any(|(from, to)| *from <= 0x3000 && *to >= 0x3003)
+    );
+    assert_eq!(ranges.last().copied(), Some((0x110000, 0x11005d)));
+
+    builtin_unify_charset(vec![
+        Value::symbol("test-gb2312-like"),
+        Value::NIL,
+        Value::T,
+    ])
+    .unwrap();
+    assert_eq!(
+        builtin_decode_char(vec![
+            Value::symbol("test-gb2312-like"),
+            Value::fixnum(0x2121)
+        ])
+        .unwrap(),
+        Value::fixnum(0x110000)
+    );
+}
+
+#[test]
 fn charset_registry_plist_values_survive_exact_gc_and_pdump_dump() {
     crate::test_utils::init_test_tracing();
     reset_charset_registry();

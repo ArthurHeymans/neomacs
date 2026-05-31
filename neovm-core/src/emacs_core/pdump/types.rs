@@ -1045,6 +1045,8 @@ pub struct DumpCharsetInfo {
     pub emacs_mule_id: Option<i64>,
     pub ascii_compatible_p: bool,
     pub supplementary_p: bool,
+    #[serde(default)]
+    pub unified_p: bool,
     pub invalid_code: Option<i64>,
     pub unify_map: DumpValue,
     pub method: DumpCharsetMethod,
@@ -1324,6 +1326,7 @@ pub struct DumpContextState {
     pub interactive: DumpInteractiveRegistry,
     pub rectangle: DumpRectangleState,
     pub standard_syntax_table: DumpValue,
+    pub syntax_code_objects: DumpValue,
     pub standard_category_table: DumpValue,
     pub current_local_map: DumpValue,
     pub kmacro: DumpKmacroManager,

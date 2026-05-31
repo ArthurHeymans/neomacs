@@ -6015,12 +6015,9 @@ fn pure_dispatch_unicode_value_placeholder_cluster_matches_compat_contracts() {
     .expect("builtin unicode-property-table-internal should evaluate");
     assert!(unicode_table.is_nil());
 
-    let unify = dispatch_builtin_pure(
-        "unify-charset",
-        vec![Value::symbol("from"), Value::symbol("to"), Value::NIL],
-    )
-    .expect("builtin unify-charset should resolve")
-    .expect("builtin unify-charset should evaluate");
+    let unify = dispatch_builtin_pure("unify-charset", vec![Value::symbol("eight-bit")])
+        .expect("builtin unify-charset should resolve")
+        .expect("builtin unify-charset should evaluate");
     assert!(unify.is_nil());
 
     let unix_sync = dispatch_builtin_pure("unix-sync", vec![])

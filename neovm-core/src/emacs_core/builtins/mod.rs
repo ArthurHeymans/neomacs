@@ -6002,7 +6002,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "unify-charset",
-        |_ctx, args| builtin_unify_charset(args),
+        |_ctx, args| super::charset::builtin_unify_charset(args),
         1,
         Some(3),
     );

@@ -14,11 +14,13 @@ use crate::buffer::{Buffer, BufferManager};
 
 thread_local! {
     static STANDARD_SYNTAX_TABLE_OBJECT: RefCell<Option<Value>> = const { RefCell::new(None) };
+    static SYNTAX_CODE_OBJECTS: RefCell<Option<Value>> = const { RefCell::new(None) };
 }
 
 /// Clear cached thread-local syntax table (must be called when heap changes).
 pub fn reset_syntax_thread_locals() {
     STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| *slot.borrow_mut() = None);
+    SYNTAX_CODE_OBJECTS.with(|slot| *slot.borrow_mut() = None);
 }
 
 /// Restore the canonical standard syntax-table object for the current thread.
@@ -31,14 +33,29 @@ pub(crate) fn restore_standard_syntax_table_object(table: Value) {
     STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| *slot.borrow_mut() = Some(table));
 }
 
+/// Restore GNU's canonical vector of bare syntax descriptor objects.
+pub(crate) fn restore_syntax_code_objects(objects: Value) {
+    SYNTAX_CODE_OBJECTS.with(|slot| *slot.borrow_mut() = Some(objects));
+}
+
 /// Snapshot the current thread's canonical standard syntax-table object.
 pub(crate) fn snapshot_standard_syntax_table_object() -> Option<Value> {
     STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| *slot.borrow())
 }
 
+/// Snapshot GNU's canonical vector of bare syntax descriptor objects.
+pub(crate) fn snapshot_syntax_code_objects() -> Option<Value> {
+    SYNTAX_CODE_OBJECTS.with(|slot| *slot.borrow())
+}
+
 /// Collect GC roots from the cached syntax table.
 pub fn collect_syntax_gc_roots(roots: &mut Vec<Value>) {
     STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| {
+        if let Some(v) = *slot.borrow() {
+            roots.push(v);
+        }
+    });
+    SYNTAX_CODE_OBJECTS.with(|slot| {
         if let Some(v) = *slot.borrow() {
             roots.push(v);
         }
@@ -146,6 +163,8 @@ pub enum SyntaxClass {
     /// '|' — Generic string fence (Sstring_fence = 15)
     StringFence = 15,
 }
+
+const SYNTAX_CLASS_COUNT: usize = 16;
 
 impl SyntaxClass {
     /// Parse a syntax class from its single-character designator.
@@ -407,11 +426,45 @@ fn syntax_runtime_string(value: &Value) -> Result<String, Flow> {
 /// The CODE is computed as: `(class_code) | (flags << 16)`.
 pub fn syntax_entry_to_value(entry: &SyntaxEntry) -> Value {
     let code = entry.class.code() | ((entry.flags.bits() as i64) << 16);
+    if entry.matching_char.is_none()
+        && (0..SYNTAX_CLASS_COUNT as i64).contains(&code)
+        && let Some(cached) = syntax_code_object(code as usize)
+    {
+        return cached;
+    }
     let matching = match entry.matching_char {
         Some(ch) => Value::fixnum(ch as i64),
         None => Value::NIL,
     };
     Value::cons(Value::fixnum(code), matching)
+}
+
+fn make_syntax_code_objects() -> Value {
+    Value::vector(
+        (0..SYNTAX_CLASS_COUNT)
+            .map(|code| Value::cons(Value::fixnum(code as i64), Value::NIL))
+            .collect(),
+    )
+}
+
+pub(crate) fn ensure_syntax_code_objects() -> Value {
+    SYNTAX_CODE_OBJECTS.with(|slot| {
+        if let Some(objects) = *slot.borrow() {
+            return objects;
+        }
+        let objects = make_syntax_code_objects();
+        *slot.borrow_mut() = Some(objects);
+        objects
+    })
+}
+
+fn syntax_code_object(code: usize) -> Option<Value> {
+    if code >= SYNTAX_CLASS_COUNT {
+        return None;
+    }
+    ensure_syntax_code_objects()
+        .as_vector_data()
+        .and_then(|values| values.get(code).copied())
 }
 
 // ===========================================================================

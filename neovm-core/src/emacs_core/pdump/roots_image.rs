@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const ROOTS_MAGIC: [u8; 16] = *b"NEOROOTS\0\0\0\0\0\0\0\0";
-const ROOTS_FORMAT_VERSION: u32 = 1;
+const ROOTS_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub(crate) struct DumpRootState {
@@ -24,6 +24,7 @@ pub(crate) struct DumpRootState {
     pub require_stack: Vec<DumpSymId>,
     pub loads_in_progress: Vec<DumpLispString>,
     pub standard_syntax_table: DumpValue,
+    pub syntax_code_objects: DumpValue,
     pub standard_category_table: DumpValue,
     pub current_local_map: DumpValue,
 }
@@ -68,6 +69,7 @@ pub(crate) fn roots_section_bytes(roots: &DumpRootState) -> Result<Vec<u8>, Dump
         write_lisp_string(&mut bytes, load)?;
     }
     write_value(&mut bytes, &roots.standard_syntax_table)?;
+    write_value(&mut bytes, &roots.syntax_code_objects)?;
     write_value(&mut bytes, &roots.standard_category_table)?;
     write_value(&mut bytes, &roots.current_local_map)?;
 
@@ -126,6 +128,7 @@ pub(crate) fn load_roots_section(section: &[u8]) -> Result<DumpRootState, DumpEr
         loads_in_progress.push(read_lisp_string(&mut cursor)?);
     }
     let standard_syntax_table = cursor.read_value()?;
+    let syntax_code_objects = cursor.read_value()?;
     let standard_category_table = cursor.read_value()?;
     let current_local_map = cursor.read_value()?;
 
@@ -143,6 +146,7 @@ pub(crate) fn load_roots_section(section: &[u8]) -> Result<DumpRootState, DumpEr
         require_stack,
         loads_in_progress,
         standard_syntax_table,
+        syntax_code_objects,
         standard_category_table,
         current_local_map,
     })
@@ -332,6 +336,7 @@ mod tests {
                 size_byte: 9,
             }],
             standard_syntax_table: DumpValue::Vector(super::super::types::DumpHeapRef { index: 7 }),
+            syntax_code_objects: DumpValue::Vector(super::super::types::DumpHeapRef { index: 9 }),
             standard_category_table: DumpValue::Nil,
             current_local_map: DumpValue::Cons(super::super::types::DumpHeapRef { index: 8 }),
         };
@@ -351,6 +356,7 @@ mod tests {
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             standard_syntax_table: DumpValue::Nil,
+            syntax_code_objects: DumpValue::Nil,
             standard_category_table: DumpValue::Nil,
             current_local_map: DumpValue::Nil,
         })

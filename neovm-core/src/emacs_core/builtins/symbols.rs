@@ -3422,11 +3422,6 @@ pub(crate) fn builtin_unicode_property_table_internal(args: Vec<Value>) -> EvalR
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_unify_charset(args: Vec<Value>) -> EvalResult {
-    expect_range_args("unify-charset", &args, 1, 3)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_unix_sync(args: Vec<Value>) -> EvalResult {
     expect_args("unix-sync", &args, 0)?;
     Ok(Value::NIL)

@@ -63,7 +63,7 @@ fn parse_charset_map_file(path: &Path) -> Option<CharsetMapData> {
         for (index, code) in (from..=to).enumerate() {
             let ch = target_base + index as i64;
             code_to_char.insert(code, ch);
-            char_to_code.insert(ch, code);
+            char_to_code.entry(ch).or_insert(code);
         }
     }
 
@@ -149,6 +149,7 @@ pub(crate) struct CharsetInfoSnapshot {
     pub emacs_mule_id: Option<i64>,
     pub ascii_compatible_p: bool,
     pub supplementary_p: bool,
+    pub unified_p: bool,
     pub invalid_code: Option<i64>,
     pub unify_map: Value,
     pub method: CharsetMethodSnapshot,
@@ -176,6 +177,7 @@ struct CharsetInfo {
     emacs_mule_id: Option<i64>,
     ascii_compatible_p: bool,
     supplementary_p: bool,
+    unified_p: bool,
     invalid_code: Option<i64>,
     unify_map: Value,
     method: CharsetMethod,
@@ -216,6 +218,7 @@ impl CharsetRegistry {
             emacs_mule_id: None,
             ascii_compatible_p: false,
             supplementary_p: false,
+            unified_p: false,
             invalid_code: None,
             unify_map: Value::NIL,
             method: CharsetMethod::Offset(0),
@@ -388,6 +391,7 @@ impl CharsetRegistry {
                 emacs_mule_id: info.emacs_mule_id,
                 ascii_compatible_p: info.ascii_compatible_p,
                 supplementary_p: info.supplementary_p,
+                unified_p: info.unified_p,
                 invalid_code: info.invalid_code,
                 unify_map: info.unify_map,
                 method: match info.method {
@@ -437,6 +441,7 @@ impl CharsetRegistry {
                     emacs_mule_id: info.emacs_mule_id,
                     ascii_compatible_p: info.ascii_compatible_p,
                     supplementary_p: info.supplementary_p,
+                    unified_p: info.unified_p,
                     invalid_code: info.invalid_code,
                     unify_map: info.unify_map,
                     method: match info.method {
@@ -491,7 +496,8 @@ impl CharsetRegistry {
         if code_point < info.min_code || code_point > info.max_code {
             return None;
         }
-        if let Some(unify_map) = charset_value_text(&info.unify_map)
+        if info.unified_p
+            && let Some(unify_map) = charset_value_text(&info.unify_map)
             && let Some(decoded) = load_charset_map(&unify_map)
                 .and_then(|map| map.code_to_char.get(&code_point).copied())
         {
@@ -526,7 +532,8 @@ impl CharsetRegistry {
     /// represented in the charset.
     pub fn encode_char(&self, name: SymId, ch: i64) -> Option<i64> {
         let info = self.charsets.get(&name)?;
-        if let Some(unify_map) = charset_value_text(&info.unify_map)
+        if info.unified_p
+            && let Some(unify_map) = charset_value_text(&info.unify_map)
             && let Some(encoded) =
                 load_charset_map(&unify_map).and_then(|map| map.char_to_code.get(&ch).copied())
         {
@@ -625,43 +632,7 @@ pub(crate) fn charset_target_ranges(name: &str) -> Option<Vec<(u32, u32)>> {
         let info = reg.charsets.get(&name)?;
         match info.method {
             CharsetMethod::Offset(offset) => {
-                let span = info.max_code.checked_sub(info.min_code)?;
-                if span <= 65536 {
-                    let values = (info.min_code..=info.max_code)
-                        .filter_map(|code| reg.decode_char(name, code))
-                        .filter_map(|ch| u32::try_from(ch).ok())
-                        .collect();
-                    return coalesce_u32_ranges(values);
-                }
-
-                let mut ranges = Vec::new();
-                if info.ascii_compatible_p && info.min_code <= 0x7f {
-                    let ascii_from = u32::try_from(info.min_code.max(0)).ok()?;
-                    let ascii_to = u32::try_from(info.max_code.min(0x7f)).ok()?;
-                    if ascii_from <= ascii_to {
-                        ranges.push((ascii_from, ascii_to));
-                    }
-                }
-
-                let from_code = if info.ascii_compatible_p {
-                    info.min_code.max(0x80)
-                } else {
-                    info.min_code
-                };
-                if from_code <= info.max_code {
-                    let from = charset_code_point_to_index(info, from_code)?.checked_add(offset)?;
-                    let to =
-                        charset_code_point_to_index(info, info.max_code)?.checked_add(offset)?;
-                    let from = u32::try_from(from).ok()?;
-                    let to = u32::try_from(to).ok()?;
-                    ranges.push((from.min(to), from.max(to)));
-                }
-
-                if ranges.is_empty() {
-                    None
-                } else {
-                    Some(ranges)
-                }
+                offset_charset_char_ranges(info, offset, info.min_code, info.max_code)
             }
             CharsetMethod::Map(ref map_name) => {
                 let values = load_charset_map(map_name)?
@@ -692,6 +663,68 @@ pub(crate) fn charset_target_ranges(name: &str) -> Option<Vec<(u32, u32)>> {
     })
 }
 
+fn offset_raw_range(
+    info: &CharsetInfo,
+    offset: i64,
+    from_code: i64,
+    to_code: i64,
+) -> Option<(u32, u32)> {
+    let from_idx = charset_code_point_to_index(info, from_code)?;
+    let to_idx = charset_code_point_to_index(info, to_code)?;
+    let from = u32::try_from(from_idx.checked_add(offset)?).ok()?;
+    let to = u32::try_from(to_idx.checked_add(offset)?).ok()?;
+    Some((from.min(to), from.max(to)))
+}
+
+fn offset_unified_ranges(info: &CharsetInfo, from_code: i64, to_code: i64) -> Vec<(u32, u32)> {
+    if !info.unified_p {
+        return Vec::new();
+    }
+    let Some(unify_map) = charset_value_text(&info.unify_map) else {
+        return Vec::new();
+    };
+    let Some(map) = load_charset_map(&unify_map) else {
+        return Vec::new();
+    };
+
+    let partial = from_code > info.min_code || to_code < info.max_code;
+    let values = if partial {
+        map.char_to_code
+            .iter()
+            .filter_map(|(ch, code)| {
+                if *code >= from_code && *code <= to_code {
+                    u32::try_from(*ch).ok()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        map.char_to_code
+            .keys()
+            .filter_map(|ch| u32::try_from(*ch).ok())
+            .collect()
+    };
+    coalesce_u32_ranges(values).unwrap_or_default()
+}
+
+fn offset_charset_char_ranges(
+    info: &CharsetInfo,
+    offset: i64,
+    from_code: i64,
+    to_code: i64,
+) -> Option<Vec<(u32, u32)>> {
+    let mut ranges = offset_unified_ranges(info, from_code, to_code);
+    if let Some(raw) = offset_raw_range(info, offset, from_code, to_code) {
+        ranges.push(raw);
+    }
+    if ranges.is_empty() {
+        None
+    } else {
+        Some(ranges)
+    }
+}
+
 pub(crate) fn map_charset_char_ranges(
     name: &str,
     from_code: Option<i64>,
@@ -712,31 +745,7 @@ pub(crate) fn map_charset_char_ranges(
         }
 
         match &info.method {
-            CharsetMethod::Offset(offset) if charset_code_linear_p(info) => {
-                let mut ranges = Vec::new();
-                if info.ascii_compatible_p && from <= 0x7f {
-                    let ascii_from = u32::try_from(from.max(0)).ok()?;
-                    let ascii_to = u32::try_from(to.min(0x7f)).ok()?;
-                    if ascii_from <= ascii_to {
-                        ranges.push((ascii_from, ascii_to));
-                    }
-                }
-
-                let from_code = if info.ascii_compatible_p {
-                    from.max(0x80)
-                } else {
-                    from
-                };
-                if from_code <= to {
-                    let first =
-                        charset_code_point_to_index(info, from_code)?.checked_add(*offset)?;
-                    let last = charset_code_point_to_index(info, to)?.checked_add(*offset)?;
-                    let first = u32::try_from(first).ok()?;
-                    let last = u32::try_from(last).ok()?;
-                    ranges.push((first.min(last), first.max(last)));
-                }
-                Some(ranges)
-            }
+            CharsetMethod::Offset(offset) => offset_charset_char_ranges(info, *offset, from, to),
             CharsetMethod::Map(map_name) => {
                 let values = load_charset_map(map_name)?
                     .code_to_char
@@ -1467,6 +1476,7 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
             emacs_mule_id,
             ascii_compatible_p,
             supplementary_p,
+            unified_p: false,
             invalid_code,
             unify_map,
             method,
@@ -1681,6 +1691,49 @@ pub(crate) fn builtin_encode_char(args: Vec<Value>) -> EvalResult {
     let encoded = CHARSET_REGISTRY.with(|slot| slot.borrow().encode_char(name, ch));
 
     Ok(encoded.map_or(Value::NIL, Value::fixnum))
+}
+
+/// `(unify-charset CHARSET &optional UNIFY-MAP DEUNIFY)` -- toggle Unicode
+/// unification for an offset charset.
+pub(crate) fn builtin_unify_charset(args: Vec<Value>) -> EvalResult {
+    expect_min_args("unify-charset", &args, 1)?;
+    expect_max_args("unify-charset", &args, 3)?;
+    let name = require_known_charset(&args[0])?;
+
+    CHARSET_REGISTRY.with(|slot| {
+        let mut reg = slot.borrow_mut();
+        let info = reg.charsets.get_mut(&name).expect("known charset");
+
+        if args.get(2).is_some_and(|value| value.is_truthy()) {
+            info.unified_p = false;
+            return Ok(Value::NIL);
+        }
+
+        if let Some(unify_map) = args.get(1).filter(|value| !value.is_nil()) {
+            match unify_map.kind() {
+                ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) => {
+                    info.unify_map = *unify_map;
+                }
+                _ => {
+                    return Err(signal("error", vec![Value::string("Bad unify-map")]));
+                }
+            }
+        }
+
+        match info.method {
+            CharsetMethod::Offset(offset) if offset >= 0x110000 => {
+                info.unified_p = true;
+                Ok(Value::NIL)
+            }
+            _ => Err(signal(
+                "error",
+                vec![Value::string(format!(
+                    "Can't unify charset: {}",
+                    resolve_sym(name)
+                ))],
+            )),
+        }
+    })
 }
 
 /// `(clear-charset-maps)` -- clear charset-related caches and return nil.

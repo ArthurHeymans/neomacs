@@ -1080,6 +1080,10 @@ fn test_pdump_round_trip_preserves_runtime_derived_mode_syntax() {
                  lisp-data-mode-syntax-table)
              (eq (char-table-parent lisp-interaction-mode-syntax-table)
                  emacs-lisp-mode-syntax-table)
+             (eq (string-to-syntax "w")
+                 (char-table-range (standard-syntax-table) ?a))
+             (eq (string-to-syntax ".")
+                 (char-table-range (standard-syntax-table) ?.))
              (char-syntax ?\n)
              (char-syntax ?\;)
              (char-syntax ?{)
@@ -1090,7 +1094,7 @@ fn test_pdump_round_trip_preserves_runtime_derived_mode_syntax() {
         .expect("full bootstrap probe should run");
     assert_eq!(
         crate::emacs_core::print_value_with_buffers(&full_result, &eval.buffers),
-        "(t t t t t t 62 60 95 39)"
+        "(t t t t t t t t 62 60 95 39)"
     );
 
     let dir = tempfile::tempdir().unwrap();
@@ -1108,7 +1112,7 @@ fn test_pdump_round_trip_preserves_runtime_derived_mode_syntax() {
         .expect("loaded bootstrap probe should run");
     assert_eq!(
         crate::emacs_core::print_value_with_buffers(&loaded_result, &loaded.buffers),
-        "(t t t t t t 62 60 95 39)"
+        "(t t t t t t t t 62 60 95 39)"
     );
 }
 
@@ -1133,6 +1137,10 @@ fn test_pdump_round_trip_preserves_pre_runtime_standard_syntax_identity() {
                  lisp-data-mode-syntax-table)
              (eq (char-table-parent lisp-interaction-mode-syntax-table)
                  emacs-lisp-mode-syntax-table)
+             (eq (string-to-syntax "w")
+                 (char-table-range (standard-syntax-table) ?a))
+             (eq (string-to-syntax ".")
+                 (char-table-range (standard-syntax-table) ?.))
              (char-syntax ?\n)
              (char-syntax ?\;)
              (char-syntax ?{)
@@ -1145,7 +1153,7 @@ fn test_pdump_round_trip_preserves_pre_runtime_standard_syntax_identity() {
         .expect("loaded pre-runtime probe should run");
     assert_eq!(
         crate::emacs_core::print_value_with_buffers(&result, &loaded.buffers),
-        "(t t 62 60 95 39)"
+        "(t t t t 62 60 95 39)"
     );
 }
 
