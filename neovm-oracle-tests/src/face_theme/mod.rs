@@ -32871,3 +32871,180 @@ fn ft_1490_text_property_face_count_intervals_deep() {
                      (nreverse changes))))))"##,
     );
 }
+
+#[test]
+fn ft_hit1500_face_overlay_face_priority_range_extremes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((min (make-overlay 1 6))) (overlay-put min 'face '(:foreground "min")) (overlay-put min 'priority most-negative-fixnum))
+    (let ((zero (make-overlay 1 6))) (overlay-put zero 'face '(:foreground "zero")) (overlay-put zero 'priority 0))
+    (let ((max (make-overlay 1 6))) (overlay-put max 'face '(:foreground "max")) (overlay-put max 'priority most-positive-fixnum))
+    (list
+     'max-wins (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_font_lock_haskell_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (haskell-mode) (error (fundamental-mode)))
+    (insert "factorial :: Int -> Int\nfactorial 0 = 1\nfactorial n = n * factorial (n-1)\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_face_overlay_with_local_map_and_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'underline)
+      (overlay-put ov 'local-map (make-sparse-keymap))
+      (list
+       'face (overlay-get ov 'face)
+       'local-map-exists (condition-case nil (keymapp (overlay-get ov 'local-map)) (error 'no))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_text_property_face_get_next_property_chain() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJKLMNOPQRST")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'italic)
+    (put-text-property 11 16 'face 'underline)
+    (put-text-property 16 21 'face '(:foreground "red"))
+    (let ((pos 1) (chain nil))
+      (while pos
+        (push (list pos (get-text-property pos 'face)) chain)
+        (setq pos (next-single-property-change pos 'face nil 21)))
+      (nreverse chain)))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_face_overlay_face_intervene_between_two() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 0))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 2))
+    (let ((ov3 (make-overlay 1 6))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 1))
+    (list
+     'sorted-by-prio (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_font_lock_erlang_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (erlang-mode) (error (fundamental-mode)))
+    (insert "-module(hello).\nhello() -> io:format(\"hello~n\").\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_face_overlay_face_read_through_narrowed() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (let ((ov (make-overlay 1 16)))
+      (overlay-put ov 'face 'bold)
+      (narrow-to-region 4 12)
+      (condition-case err
+          (list 'in-narrow (get-char-property 7 'face) 'outside-narrow (get-char-property 3 'face))
+        (error (list 'err (car err) 'outside-narrow 'narrowed)))
+      (widen)
+      (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_text_property_face_get_and_put_in_loop() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((faces nil))
+      (dotimes (i 5)
+        (put-text-property 1 6 'face (intern (format "face-%d" i)))
+        (push (get-text-property 3 'face) faces))
+      (list
+       'all-faces (nreverse faces)
+       'current (get-text-property 3 'face)
+       'intervals (length (object-intervals (current-buffer))))))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_face_overlay_face_steal_from_deleted() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6)))
+      (overlay-put ov1 'face 'bold)
+      (delete-overlay ov1)
+      (let ((ov2 (make-overlay 1 6)))
+        (condition-case err
+            (progn (overlay-put ov2 'face (overlay-get ov1 'face)) (list 'copied (overlay-get ov2 'face)))
+          (error (list 'err (car err) 'ov2 (overlay-get ov2 'face))))
+        (mapc #'delete-overlay (overlays-in 1 6)))))))"##,
+    );
+}
+
+#[test]
+fn ft_hit1500_font_lock_latex_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (latex-mode) (error (fundamental-mode)))
+    (insert "\\documentclass{article}\n\\begin{document}\nHello\n\\end{document}\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
