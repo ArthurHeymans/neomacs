@@ -31431,3 +31431,73 @@ fn ft_chase2_text_property_face_intervals_object_type() {
    'buffer-equal-string (with-temp-buffer (insert "X") (put-text-property 1 2 'face 'bold) (let ((s (propertize "X" 'face 'bold))) (= (length (object-intervals (current-buffer))) (length (object-intervals s))))))))"##,
     );
 }
+
+#[test]
+fn ft_sweep_face_overlay_buffer_substring_no_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (let ((sub (buffer-substring-no-properties 1 6)))
+        (list
+         'sub-no-props (stringp sub)
+         'len (length sub)
+         'face-by-char (get-char-property 3 'face)
+         (progn (delete-overlay ov) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_sweep_font_lock_makefile_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (makefile-mode) (error (fundamental-mode)))
+    (insert "CC=gcc\nall:\n\t$(CC) main.c\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_sweep_face_set_face_inherit_multiple_faces() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-multi-inherit) (error nil))
+  (condition-case err
+      (progn
+        (set-face-attribute 'my-multi-inherit nil :inherit '(bold italic underline))
+        (list 'inherit (face-attribute 'my-multi-inherit :inherit nil)))
+    (error (list 'err (car err))))))"##,
+    );
+}
+
+#[test]
+fn ft_sweep_text_property_interval_count_with_many_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 11 'face 'bold)
+    (put-text-property 1 3 'fontified t)
+    (put-text-property 4 7 'fontified nil)
+    (put-text-property 8 11 'fontified t)
+    (list
+     'face-intervals (length (object-intervals (current-buffer)))
+     'mixed-props (let ((ints (object-intervals (current-buffer))))
+                    (list 'count (length ints)
+                          'face-pos (mapcar (lambda (i) (list (car i) (cadr i) (get-text-property (car i) 'face) (get-text-property (car i) 'fontified))) ints)))))))"##,
+    );
+}
