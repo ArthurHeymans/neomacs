@@ -32719,3 +32719,73 @@ fn ft_fire_text_property_face_after_kill_line_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_1500_face_overlay_face_with_overlays_at_vs_overlays_in() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face 'bold) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 6 11))) (overlay-put ov2 'face 'italic) (overlay-put ov2 'priority 2))
+    (list
+     'overlays-at-pos3 (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 3))
+     'overlays-at-pos8 (mapcar (lambda (ov) (overlay-get ov 'face)) (overlays-at 8))
+     'overlays-in-range (length (overlays-in 1 11))
+     (progn (mapc #'delete-overlay (overlays-in 1 11)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_1500_font_lock_simula_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (simula-mode) (error (fundamental-mode)))
+    (insert "BEGIN\n  OutText(\"hello\");\nEND;\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_1500_face_overlay_face_set_priority_negative_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((neg (make-overlay 1 6))) (overlay-put neg 'face '(:foreground "neg")) (overlay-put neg 'priority -1000))
+    (let ((pos (make-overlay 1 6))) (overlay-put pos 'face '(:foreground "pos")) (overlay-put pos 'priority 0))
+    (list
+     'zero-wins-over-neg (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_1500_text_property_face_per_char_summary() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGH")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 6 'face 'italic)
+    (put-text-property 6 9 'face 'underline)
+    (list
+     'summary (mapcar (lambda (pos)
+                        (goto-char pos)
+                        (list pos (char-after pos) (get-text-property pos 'face)))
+                      '(1 2 3 4 5 6 7 8))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
