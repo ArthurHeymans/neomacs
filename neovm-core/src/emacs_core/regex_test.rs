@@ -619,6 +619,66 @@ fn string_match_posix_space_class_with_dash_range_matches_whitespace_runs() {
 }
 
 #[test]
+fn string_match_leading_dash_before_posix_class_is_literal_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold("[-[:alnum:]]", "-", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    assert_eq!(md.expect("match data").groups[0], Some((0, 1)));
+}
+
+#[test]
+fn string_match_literal_before_posix_class_is_not_dropped() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold("[a[:digit:]]", "a", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    assert_eq!(md.expect("match data").groups[0], Some((0, 1)));
+
+    let mut md = None;
+    let result = string_match_full_with_case_fold("[a[:digit:]]", "5", 0, false, &mut md);
+    assert_eq!(result, Ok(Some(0)));
+    assert_eq!(md.expect("match data").groups[0], Some((0, 1)));
+}
+
+#[test]
+fn string_match_optional_lazy_posix_class_keeps_leftmost_match() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold(
+        "\\(\\([[:alnum:]]+?\\)-\\)?autoload",
+        "cal-autoload",
+        0,
+        false,
+        &mut md,
+    );
+    assert_eq!(result, Ok(Some(0)));
+    let md = md.expect("match data");
+    assert_eq!(md.groups[0], Some((0, 12)));
+    assert_eq!(md.groups[1], Some((0, 4)));
+    assert_eq!(md.groups[2], Some((0, 3)));
+}
+
+#[test]
+fn string_match_loaddefs_prefixed_autoload_regexp_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold(
+        "^;;;###\\(\\([-[:alnum:]]+?\\)-\\)?\\(autoload\\)",
+        ";;;###cal-autoload",
+        0,
+        false,
+        &mut md,
+    );
+    assert_eq!(result, Ok(Some(0)));
+    let md = md.expect("match data");
+    assert_eq!(md.groups[0], Some((0, 18)));
+    assert_eq!(md.groups[1], Some((6, 10)));
+    assert_eq!(md.groups[2], Some((6, 9)));
+    assert_eq!(md.groups[3], Some((10, 18)));
+}
+
+#[test]
 fn string_match_lazy_quantifier_preserves_fallback_semantics() {
     crate::test_utils::init_test_tracing();
     let mut md = None;

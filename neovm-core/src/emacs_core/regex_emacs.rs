@@ -1574,6 +1574,31 @@ enum PosixCharClassKind {
     Error,
 }
 
+impl PosixCharClassKind {
+    fn name(self) -> Option<&'static str> {
+        match self {
+            Self::Word => Some("word"),
+            Self::Space => Some("space"),
+            Self::Upper => Some("upper"),
+            Self::Lower => Some("lower"),
+            Self::Alpha => Some("alpha"),
+            Self::Alnum => Some("alnum"),
+            Self::Digit => Some("digit"),
+            Self::Xdigit => Some("xdigit"),
+            Self::Punct => Some("punct"),
+            Self::Graph => Some("graph"),
+            Self::Print => Some("print"),
+            Self::Blank => Some("blank"),
+            Self::Cntrl => Some("cntrl"),
+            Self::Ascii => Some("ascii"),
+            Self::Unibyte => Some("unibyte"),
+            Self::NonAscii => Some("nonascii"),
+            Self::Multibyte => Some("multibyte"),
+            Self::Error => None,
+        }
+    }
+}
+
 struct PosixCharClass {
     kind: PosixCharClassKind,
     byte_len: usize,
@@ -1689,31 +1714,30 @@ fn compile_charset(
         // the bracket expression.  The `]` in the closing `:]` must
         // not close the outer `[...]`.
         if let Some(cc) = parse_posix_char_class(pattern, *p, plen) {
+            if let Some(c) = pending_char.take() {
+                add_charset_char(
+                    &mut buf.buffer,
+                    bitmap_start,
+                    c,
+                    case_fold,
+                    &mut mb_ranges,
+                    buf.translate.as_ref(),
+                );
+            }
             *p += cc.byte_len;
-            class_bits |= match cc.kind {
-                PosixCharClassKind::Word => CHARSET_CLASS_BIT_WORD,
-                PosixCharClassKind::Space => CHARSET_CLASS_BIT_SPACE,
-                PosixCharClassKind::Upper => CHARSET_CLASS_BIT_UPPER,
-                PosixCharClassKind::Lower => CHARSET_CLASS_BIT_LOWER,
-                PosixCharClassKind::Alpha => CHARSET_CLASS_BIT_ALPHA,
-                PosixCharClassKind::Alnum => CHARSET_CLASS_BIT_ALNUM,
-                PosixCharClassKind::Digit => CHARSET_CLASS_BIT_DIGIT,
-                PosixCharClassKind::Xdigit => CHARSET_CLASS_BIT_XDIGIT,
-                PosixCharClassKind::Punct => CHARSET_CLASS_BIT_PUNCT,
-                PosixCharClassKind::Graph => CHARSET_CLASS_BIT_GRAPH,
-                PosixCharClassKind::Print => CHARSET_CLASS_BIT_PRINT,
-                PosixCharClassKind::Blank => CHARSET_CLASS_BIT_BLANK,
-                PosixCharClassKind::Cntrl => CHARSET_CLASS_BIT_CNTRL,
-                PosixCharClassKind::Ascii => CHARSET_CLASS_BIT_ASCII,
-                PosixCharClassKind::Unibyte => CHARSET_CLASS_BIT_UNIBYTE,
-                PosixCharClassKind::NonAscii => CHARSET_CLASS_BIT_NONASCII,
-                PosixCharClassKind::Multibyte => CHARSET_CLASS_BIT_MULTIBYTE,
-                PosixCharClassKind::Error => {
-                    return Err(RegexCompileError {
-                        message: "Invalid character class name".to_string(),
-                    });
-                }
+            let Some(class_name) = cc.kind.name() else {
+                return Err(RegexCompileError {
+                    message: "Invalid character class name".to_string(),
+                });
             };
+            apply_posix_class(
+                class_name,
+                &mut buf.buffer,
+                bitmap_start,
+                &mut mb_ranges,
+                &mut class_bits,
+                buf.translate.as_ref(),
+            )?;
             if *p >= plen {
                 return Err(RegexCompileError {
                     message: "Unmatched [ or [^".to_string(),
@@ -1791,25 +1815,16 @@ fn compile_charset(
         // the class containing `\` and `n`. Users who want a word
         // character class inside a bracket expression must use the
         // POSIX class `[[:word:]]`.
-        //
-        // Earlier versions of this file carried a workaround that
-        // expanded `\w`, `\W`, `\s-`, `\d`, `\D` to their out-of-
-        // bracket meanings for the convenience of Rust callers, at
-        // the cost of diverging from GNU. That divergence is audit
-        // finding #10 in `drafts/regex-search-audit.md`; it has
-        // been removed.
         if b == b'\\' {
             if let Some(c) = pending_char.take() {
-                if c.is_ascii() {
-                    set_bitmap_bit(
-                        &mut buf.buffer,
-                        bitmap_start,
-                        c as u8,
-                        buf.translate.as_ref(),
-                    );
-                } else {
-                    add_multibyte_range(&mut mb_ranges, c, c, case_fold);
-                }
+                add_charset_char(
+                    &mut buf.buffer,
+                    bitmap_start,
+                    c,
+                    case_fold,
+                    &mut mb_ranges,
+                    buf.translate.as_ref(),
+                );
             }
             pending_char = Some('\\');
             continue;
@@ -1831,16 +1846,14 @@ fn compile_charset(
         // Regular character
         let c = emacs_char_to_rust_char(c);
         if let Some(prev) = pending_char.take() {
-            if prev.is_ascii() {
-                set_bitmap_bit(
-                    &mut buf.buffer,
-                    bitmap_start,
-                    prev as u8,
-                    buf.translate.as_ref(),
-                );
-            } else {
-                add_multibyte_range(&mut mb_ranges, prev, prev, case_fold);
-            }
+            add_charset_char(
+                &mut buf.buffer,
+                bitmap_start,
+                prev,
+                case_fold,
+                &mut mb_ranges,
+                buf.translate.as_ref(),
+            );
         }
         pending_char = Some(c);
     }
@@ -1852,16 +1865,14 @@ fn compile_charset(
     }
 
     if let Some(c) = pending_char.take() {
-        if c.is_ascii() {
-            set_bitmap_bit(
-                &mut buf.buffer,
-                bitmap_start,
-                c as u8,
-                buf.translate.as_ref(),
-            );
-        } else {
-            add_multibyte_range(&mut mb_ranges, c, c, case_fold);
-        }
+        add_charset_char(
+            &mut buf.buffer,
+            bitmap_start,
+            c,
+            case_fold,
+            &mut mb_ranges,
+            buf.translate.as_ref(),
+        );
     }
 
     // Store multibyte ranges if any were collected.
@@ -1878,6 +1889,21 @@ fn compile_charset(
     }
 
     Ok(())
+}
+
+fn add_charset_char(
+    buffer: &mut Vec<u8>,
+    bitmap_start: usize,
+    c: char,
+    case_fold: bool,
+    mb_ranges: &mut Vec<(char, char)>,
+    translate: Option<&CaseTranslation>,
+) {
+    if c.is_ascii() {
+        set_bitmap_bit(buffer, bitmap_start, c as u8, translate);
+    } else {
+        add_multibyte_range(mb_ranges, c, c, case_fold);
+    }
 }
 
 /// Add a multibyte character range, optionally expanding for case-folding.
