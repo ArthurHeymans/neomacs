@@ -30930,3 +30930,73 @@ fn ft_mach_face_text_property_multi_prop_interval_analysis() {
      'pos5 (list (get-text-property 5 'face) (get-text-property 5 'fontified))))))"##,
     );
 }
+
+#[test]
+fn ft_velocity_face_overlay_face_five_asymmetric_priorities() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority -100))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority -50))
+    (let ((c (make-overlay 1 6))) (overlay-put c 'face '(:foreground "C")) (overlay-put c 'priority 0))
+    (let ((d (make-overlay 1 6))) (overlay-put d 'face '(:foreground "D")) (overlay-put d 'priority 50))
+    (let ((e (make-overlay 1 6))) (overlay-put e 'face '(:foreground "E")) (overlay-put e 'priority 100))
+    (list
+     'E-wins (get-char-property 3 'face)
+     'shuffle (progn (overlay-put a 'priority 200) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_velocity_font_lock_fontify_regexp_quote_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(regexp-quote \"hello.world\")\n")
+    (font-lock-fontify-buffer)
+    (list
+     'regexp-quote-face (save-excursion (goto-char (point-min)) (search-forward "regexp-quote") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_velocity_face_text_property_interval_live_updates() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((n0 (length (object-intervals (current-buffer)))))
+      (put-text-property 1 6 'face 'bold)
+      (let ((n1 (length (object-intervals (current-buffer)))))
+        (remove-text-properties 1 6 '(face nil))
+        (let ((n2 (length (object-intervals (current-buffer)))))
+          (list n0 n1 n2)))))))"##,
+    );
+}
+
+#[test]
+fn ft_velocity_face_overlay_face_buffer_kill_sanity() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (let ((buf (generate-new-buffer "kill-sanity")))
+    (with-current-buffer buf
+      (insert "AAAAA")
+      (let ((ov (make-overlay 1 6)))
+        (overlay-put ov 'face 'bold)
+        (kill-buffer buf)
+        (condition-case err (overlay-get ov 'face) (error (list 'err (car err))))))))"##,
+    );
+}
