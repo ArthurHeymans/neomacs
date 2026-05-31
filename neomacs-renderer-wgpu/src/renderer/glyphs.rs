@@ -4,6 +4,7 @@ use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas, glyp
 use super::super::vertex::{
     GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms,
 };
+use super::GlyphRenderStats;
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
@@ -15,7 +16,7 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{
     OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -2020,6 +2021,19 @@ impl WgpuRenderer {
             );
         }
 
+        let mut stats = GlyphRenderStats::new();
+        stats.total_frame_glyphs = frame_glyphs.glyphs.len();
+        for glyph in &frame_glyphs.glyphs {
+            if let FrameGlyph::Char { composed, .. } = glyph {
+                stats.text_glyphs += 1;
+                if composed.is_some() {
+                    stats.composed_glyphs += 1;
+                }
+            }
+        }
+        let mut seen_single_keys: HashSet<GlyphKey> = HashSet::new();
+        let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
+
         // Create command encoder
         let mut encoder = self
             .device
@@ -2222,7 +2236,14 @@ impl WgpuRenderer {
 
                         // Look up or create the glyph texture
                         let cached_opt = if let Some(text) = composed {
-                            // Composed grapheme cluster (emoji ZWJ, combining marks, etc.)
+                            seen_composed_keys.insert(ComposedGlyphKey {
+                                text: text.clone(),
+                                face_id: *face_id,
+                                font_size_bits: font_size.to_bits(),
+                                font_identity,
+                                x_bin,
+                                y_bin,
+                            });
                             glyph_atlas.get_or_create_composed(
                                 &self.device,
                                 &self.queue,
@@ -2235,7 +2256,6 @@ impl WgpuRenderer {
                                 enable_subpixel,
                             )
                         } else {
-                            // Single character
                             let key = GlyphKey {
                                 charcode: *char as u32,
                                 face_id: *face_id,
@@ -2244,6 +2264,7 @@ impl WgpuRenderer {
                                 x_bin,
                                 y_bin,
                             };
+                            seen_single_keys.insert(key.clone());
                             if trace_face_debug_enabled()
                                 && !want_overlay
                                 && !color_is_grayscale(*fg)
@@ -2710,6 +2731,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&all_vertices),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
+                    stats.glyph_vertex_buffer_creations += 1;
 
                     render_pass.set_vertex_buffer(0, glyph_buffer.slice(..));
 
@@ -2726,7 +2748,9 @@ impl WgpuRenderer {
                             let vert_start = (batch_start * 6) as u32;
                             let vert_end = (i * 6) as u32;
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(vert_start..vert_end, 0..1);
+                            stats.glyph_draw_calls += 1;
                         } else {
                             i += 1;
                         }
@@ -2756,6 +2780,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&all_vertices),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
+                    stats.glyph_vertex_buffer_creations += 1;
 
                     render_pass.set_vertex_buffer(0, glyph_buffer.slice(..));
 
@@ -2771,7 +2796,9 @@ impl WgpuRenderer {
                             let vert_start = (batch_start * 6) as u32;
                             let vert_end = (i * 6) as u32;
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(vert_start..vert_end, 0..1);
+                            stats.glyph_draw_calls += 1;
                         } else {
                             i += 1;
                         }
@@ -2802,6 +2829,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&all_vertices),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
+                    stats.glyph_vertex_buffer_creations += 1;
 
                     render_pass.set_vertex_buffer(0, color_buffer.slice(..));
 
@@ -2818,7 +2846,9 @@ impl WgpuRenderer {
                             let vert_start = (batch_start * 6) as u32;
                             let vert_end = (i * 6) as u32;
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(vert_start..vert_end, 0..1);
+                            stats.glyph_draw_calls += 1;
                         } else {
                             i += 1;
                         }
@@ -2839,9 +2869,13 @@ impl WgpuRenderer {
                                         contents: bytemuck::cast_slice(verts),
                                         usage: wgpu::BufferUsages::VERTEX,
                                     });
+                            stats.glyph_vertex_buffer_creations += 1;
                             render_pass.set_vertex_buffer(0, vbuf.slice(..));
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(0..6, 0..1);
+                            stats.glyph_draw_calls += 1;
+                            stats.composed_glyph_draw_calls += 1;
                         }
                     }
                 }
@@ -2859,9 +2893,13 @@ impl WgpuRenderer {
                                         contents: bytemuck::cast_slice(verts),
                                         usage: wgpu::BufferUsages::VERTEX,
                                     });
+                            stats.glyph_vertex_buffer_creations += 1;
                             render_pass.set_vertex_buffer(0, vbuf.slice(..));
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(0..6, 0..1);
+                            stats.glyph_draw_calls += 1;
+                            stats.composed_glyph_draw_calls += 1;
                         }
                     }
                 }
@@ -2880,9 +2918,13 @@ impl WgpuRenderer {
                                         contents: bytemuck::cast_slice(verts),
                                         usage: wgpu::BufferUsages::VERTEX,
                                     });
+                            stats.glyph_vertex_buffer_creations += 1;
                             render_pass.set_vertex_buffer(0, vbuf.slice(..));
                             render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                            stats.glyph_bind_group_changes += 1;
                             render_pass.draw(0..6, 0..1);
+                            stats.glyph_draw_calls += 1;
+                            stats.composed_glyph_draw_calls += 1;
                         }
                     }
                 }
@@ -3842,6 +3884,14 @@ impl WgpuRenderer {
 
             self.draw_post_content_effects(&mut render_pass, &ctx, faces);
         }
+
+        stats.unique_single_glyph_keys = seen_single_keys.len();
+        stats.unique_composed_glyph_keys = seen_composed_keys.len();
+        stats.cache_hits = glyph_atlas.cache_hits_this_frame;
+        stats.cache_misses = glyph_atlas.cache_misses_this_frame;
+        stats.glyph_texture_uploads = glyph_atlas.cache_misses_this_frame;
+        self.glyph_stats = stats.clone();
+        stats.log_if_enabled();
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }

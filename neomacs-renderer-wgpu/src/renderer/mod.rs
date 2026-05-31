@@ -23,9 +23,12 @@ mod effects_state;
 mod glyphs;
 mod media;
 mod pattern_effects;
+mod stats;
 mod transitions;
 mod ui_overlays;
 mod window_effects;
+
+pub use stats::*;
 
 /// GPU-accelerated renderer using wgpu.
 pub struct WgpuRenderer {
@@ -155,6 +158,7 @@ pub struct WgpuRenderer {
     pub(super) render_start_time: std::time::Instant,
     /// Whether any fancy (animated) border styles are present in the current frame
     pub has_animated_borders: bool,
+    pub glyph_stats: GlyphRenderStats,
     // --- Stencil-based clipping for child frame rounded corners ---
     pub(super) stencil_texture: wgpu::Texture,
     pub(super) stencil_view: wgpu::TextureView,
@@ -1500,6 +1504,7 @@ impl WgpuRenderer {
             aurora_start: std::time::Instant::now(),
             render_start_time: std::time::Instant::now(),
             has_animated_borders: false,
+            glyph_stats: GlyphRenderStats::new(),
             stencil_texture,
             stencil_view,
             stencil_rect_pipeline,
