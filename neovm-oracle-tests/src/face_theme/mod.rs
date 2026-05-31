@@ -32646,3 +32646,76 @@ fn ft_ember2_text_property_text_properties_at_deep() {
        'fontified-value (cadr (memq 'fontified props)))))))"##,
     );
 }
+
+#[test]
+fn ft_fire_face_overlay_face_overlap_three_different_sizes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (let ((ov1 (make-overlay 1 10))) (overlay-put ov1 'face '(:background "red")) (overlay-put ov1 'priority 1))
+    (let ((ov2 (make-overlay 5 16))) (overlay-put ov2 'face '(:background "green")) (overlay-put ov2 'priority 2))
+    (let ((ov3 (make-overlay 12 21))) (overlay-put ov3 'face '(:background "blue")) (overlay-put ov3 'priority 3))
+    (list
+     'ov1-only (get-char-property 3 'face)
+     'ov1+ov2 (get-char-property 8 'face)
+     'ov2+ov3 (get-char-property 14 'face)
+     'ov3-only (get-char-property 18 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 21)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_fire_font_lock_icon_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (icon-mode) (error (fundamental-mode)))
+    (insert "procedure main()\n  write(\"hello\")\nend\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_fire_face_overlay_all_nil_props_check() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'face-nil (overlay-get ov 'face)
+       'priority-nil (overlay-get ov 'priority)
+       'category-nil (overlay-get ov 'category)
+       'before-nil (overlay-get ov 'before-string)
+       'after-nil (overlay-get ov 'after-string)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_fire_text_property_face_after_kill_line_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA\nBBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 7 12 'face 'italic)
+    (kill-line)
+    (list
+     'remaining-text (buffer-string)
+     'face-pos1 (get-text-property 1 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
