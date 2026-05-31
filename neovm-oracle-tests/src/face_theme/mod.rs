@@ -27669,3 +27669,78 @@ fn ft_climax_face_text_property_exhaustive_plist_extract() {
       (nreverse result))))"##,
     );
 }
+
+#[test]
+fn ft_zenith_face_overlay_face_all_six_attrs_in_plist() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:family "Monospace" :foundry "unknown" :width normal :height 100 :weight normal :slant normal))
+      (list
+       'family (plist-get (overlay-get ov 'face) :family)
+       'foundry (plist-get (overlay-get ov 'face) :foundry)
+       'width (plist-get (overlay-get ov 'face) :width)
+       'height (plist-get (overlay-get ov 'face) :height)
+       'weight (plist-get (overlay-get ov 'face) :weight)
+       'slant (plist-get (overlay-get ov 'face) :slant)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_font_lock_fontify_with_vector_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "[1 2 3 4 5]\n")
+    (font-lock-fontify-buffer)
+    (list
+     'bracket-face (get-text-property 1 'face)
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_overlay_priority_overlay_reordering_under_insert() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 6))) (overlay-put ov1 'face '(:foreground "red")) (overlay-put ov1 'priority 5))
+    (let ((ov2 (make-overlay 1 6))) (overlay-put ov2 'face '(:foreground "green")) (overlay-put ov2 'priority 10))
+    (goto-char 3)
+    (insert "XXX")
+    (list
+     'after-insert (get-char-property 5 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 9)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_zenith_face_overlay_face_get_set_get_three_times() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (list
+       'first-get (overlay-get ov 'face)
+       'first-set (progn (overlay-put ov 'face 'bold) (overlay-get ov 'face))
+       'second-get (overlay-get ov 'face)
+       'second-set (progn (overlay-put ov 'face 'italic) (overlay-get ov 'face))
+       'third-get (overlay-get ov 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
