@@ -29559,3 +29559,69 @@ fn ft_ongoing_face_text_property_face_index_of_prop_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_momentum_face_overlay_face_on_multibyte_content_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "日本語テスト")
+    (let ((ov (make-overlay 1 7)))
+      (overlay-put ov 'face 'bold)
+      (list
+       'face-pos1 (get-char-property 1 'face)
+       'face-pos3 (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_momentum_font_lock_fontify_memql_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(memql 'a '(a b c))\n")
+    (font-lock-fontify-buffer)
+    (list
+     'memql-face (save-excursion (goto-char (point-min)) (search-forward "memql") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_momentum_face_overlay_create_delete_pause_verify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (list
+     'no-face (get-char-property 3 'face)
+     'after-create (progn (let ((ov (make-overlay 1 6))) (overlay-put ov 'face 'bold) (delete-overlay ov)) (get-char-property 3 'face))
+     'after-delete (get-char-property 3 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_momentum_face_text_property_get_all_properties_on_buffer() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((props (text-properties-at 3)))
+      (list
+       'props-pair-count (/ (length props) 2)
+       'face-present (car (memq 'face props))
+       'face-value (cadr (memq 'face props)))))))"##,
+    );
+}
