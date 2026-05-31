@@ -31792,3 +31792,78 @@ fn ft_jet_text_property_face_set_multiple_regions() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_beam_face_overlay_face_at_point_max_min_cycle() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (list
+     'at-bob (get-char-property (point-min) 'face)
+     'at-eob (condition-case nil (get-char-property (point-max) 'face) (error 'at-eob))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_font_lock_tcl_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (tcl-mode) (error (fundamental-mode)))
+    (insert "set x 42\nputs $x\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_face_overlay_face_plist_remove_key_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red" :background "blue" :weight bold))
+      (overlay-put ov 'face '(:foreground "green"))
+      (list
+       'new-face (overlay-get ov 'face)
+       'fg (plist-get (overlay-get ov 'face) :foreground)
+       'bg-missing (plist-get (overlay-get ov 'face) :background)
+       'weight-missing (plist-get (overlay-get ov 'face) :weight)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_beam_text_property_find_next_prop_across_multiple() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "ABCDEFGHIJ")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 4 7 'face 'italic)
+    (put-text-property 8 11 'face 'underline)
+    (list
+     'next-bold (next-single-property-change 1 'face)
+     'next-bold-to-italic (next-single-property-change 3 'face)
+     'next-italic-to-underline (next-single-property-change 7 'face)
+     'next-underline-to-nil (next-single-property-change 10 'face)
+     'prev-underline-to-italic (previous-single-property-change 11 'face)
+     'prev-italic-to-bold (previous-single-property-change 7 'face)
+     'prev-bold-to-nil (previous-single-property-change 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
