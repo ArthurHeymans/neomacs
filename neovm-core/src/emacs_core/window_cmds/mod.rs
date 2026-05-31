@@ -2053,11 +2053,13 @@ pub(crate) fn builtin_set_window_start(
                     if let Some(clamped) =
                         clamped_window_position_in_state(frames, buffers, fid, wid, pos)
                     {
-                        if let Some(Window::Leaf { window_start, .. }) = frames
+                        if let Some(window) = frames
                             .get_mut(fid)
                             .and_then(|frame| frame.find_window_mut(wid))
                         {
-                            *window_start = clamped;
+                            crate::window::window_markers::set_window_start_with_marker(
+                                buffers, window, clamped,
+                            );
                         }
                     }
                 }
@@ -2069,11 +2071,13 @@ pub(crate) fn builtin_set_window_start(
                         if let Some(clamped) =
                             clamped_window_position_in_state(frames, buffers, fid, wid, pos)
                         {
-                            if let Some(Window::Leaf { window_start, .. }) = frames
+                            if let Some(window) = frames
                                 .get_mut(fid)
                                 .and_then(|frame| frame.find_window_mut(wid))
                             {
-                                *window_start = clamped;
+                                crate::window::window_markers::set_window_start_with_marker(
+                                    buffers, window, clamped,
+                                );
                             }
                         }
                     }
@@ -2106,11 +2110,13 @@ pub(crate) fn builtin_set_window_group_start(
                 if let Some(clamped) =
                     clamped_window_position_in_state(frames, buffers, fid, wid, pos)
                 {
-                    if let Some(Window::Leaf { window_start, .. }) = frames
+                    if let Some(window) = frames
                         .get_mut(fid)
                         .and_then(|frame| frame.find_window_mut(wid))
                     {
-                        *window_start = clamped;
+                        crate::window::window_markers::set_window_start_with_marker(
+                            buffers, window, clamped,
+                        );
                     }
                 }
             }
@@ -2122,16 +2128,16 @@ pub(crate) fn builtin_set_window_group_start(
                     if let Some(clamped) =
                         clamped_window_position_in_state(frames, buffers, fid, wid, pos)
                     {
-                        if let Some(Window::Leaf {
-                            window_start,
-                            point,
-                            ..
-                        }) = frames
+                        if let Some(window) = frames
                             .get_mut(fid)
                             .and_then(|frame| frame.find_window_mut(wid))
                         {
-                            *window_start = clamped;
-                            *point = clamped;
+                            crate::window::window_markers::set_window_start_with_marker(
+                                buffers, window, clamped,
+                            );
+                            crate::window::window_markers::set_window_point_with_marker(
+                                buffers, window, clamped,
+                            );
                         }
                     }
                 }
@@ -2163,17 +2169,20 @@ pub(crate) fn builtin_set_window_point(
                         .get(fid)
                         .is_some_and(|frame| frame.selected_window == wid);
                     let mut buffer_to_move = None;
-                    if let Some(Window::Leaf {
-                        buffer_id, point, ..
-                    }) = frames
+                    if let Some(window) = frames
                         .get_mut(fid)
                         .and_then(|frame| frame.find_window_mut(wid))
                     {
-                        *point = clamped;
+                        let buffer_id = window.buffer_id();
+                        crate::window::window_markers::set_window_point_with_marker(
+                            buffers, window, clamped,
+                        );
                         if selected_live_window {
-                            if let Some(buffer) = buffers.get(*buffer_id) {
+                            if let Some(buffer_id) = buffer_id
+                                && let Some(buffer) = buffers.get(buffer_id)
+                            {
                                 buffer_to_move =
-                                    Some((*buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
+                                    Some((buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
                             }
                         }
                     }
@@ -2200,17 +2209,20 @@ pub(crate) fn builtin_set_window_point(
                     .get(fid)
                     .is_some_and(|frame| frame.selected_window == wid);
                 let mut buffer_to_move = None;
-                if let Some(Window::Leaf {
-                    buffer_id, point, ..
-                }) = frames
+                if let Some(window) = frames
                     .get_mut(fid)
                     .and_then(|frame| frame.find_window_mut(wid))
                 {
-                    *point = clamped;
+                    let buffer_id = window.buffer_id();
+                    crate::window::window_markers::set_window_point_with_marker(
+                        buffers, window, clamped,
+                    );
                     if selected_live_window {
-                        if let Some(buffer) = buffers.get(*buffer_id) {
+                        if let Some(buffer_id) = buffer_id
+                            && let Some(buffer) = buffers.get(buffer_id)
+                        {
                             buffer_to_move =
-                                Some((*buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
+                                Some((buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
                         }
                     }
                 }
@@ -5425,16 +5437,12 @@ fn scroll_by_lines_in_state(
 
     let point_lisp = buf.text.emacs_byte_to_char(pos) + 1;
     let _ = buffers.goto_buffer_byte(buffer_id, pos);
-    if let Some(Window::Leaf {
-        point,
-        window_start,
-        ..
-    }) = frames
+    if let Some(window) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
-        *point = point_lisp;
-        *window_start = point_lisp;
+        crate::window::window_markers::set_window_point_with_marker(buffers, window, point_lisp);
+        crate::window::window_markers::set_window_start_with_marker(buffers, window, point_lisp);
     }
     Ok(Value::NIL)
 }
@@ -5529,20 +5537,24 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let pos_lisp = buf.text.emacs_byte_to_char(pos) as i64 + 1;
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
         {
-            if let Some(Window::Leaf {
-                window_start,
-                window_end_valid,
-                vscroll,
-                preserve_vscroll_p,
-                ..
-            }) = frames
+            if let Some(window) = frames
                 .get_mut(fid)
                 .and_then(|frame| frame.find_window_mut(wid))
             {
-                *window_start = clamped;
-                *window_end_valid = false;
-                *vscroll = 0;
-                *preserve_vscroll_p = false;
+                crate::window::window_markers::set_window_start_with_marker(
+                    buffers, window, clamped,
+                );
+                if let Window::Leaf {
+                    window_end_valid,
+                    vscroll,
+                    preserve_vscroll_p,
+                    ..
+                } = window
+                {
+                    *window_end_valid = false;
+                    *vscroll = 0;
+                    *preserve_vscroll_p = false;
+                }
             }
         }
     } // end borrow scope

@@ -47,6 +47,88 @@ fn test_register_bootstrap_vars_include_tab_bar_display_vars() {
             .blv(fontification_functions)
             .is_some_and(|blv| blv.local_if_set)
     );
+    for name in [
+        "wrap-prefix",
+        "line-prefix",
+        "display-line-numbers",
+        "display-line-numbers-width",
+        "display-line-numbers-widen",
+        "display-line-numbers-offset",
+        "display-fill-column-indicator",
+        "display-fill-column-indicator-column",
+        "display-fill-column-indicator-character",
+    ] {
+        let id = intern(name);
+        assert!(obarray.is_special(name), "{name} should be special");
+        assert!(
+            obarray.blv(id).is_some_and(|blv| blv.local_if_set),
+            "{name} should be buffer-local-on-set"
+        );
+    }
+    assert_eq!(
+        obarray.default_value_id(intern("display-line-numbers-offset")),
+        Some(&Value::fixnum(0))
+    );
+}
+
+#[test]
+fn display_line_numbers_assignment_is_buffer_local_on_set() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str("(setq display-line-numbers t)")
+        .expect("setq display-line-numbers");
+    let buffer = eval.buffers.current_buffer().expect("current buffer");
+    assert_eq!(
+        buffer.get_buffer_local("display-line-numbers"),
+        Some(Value::T)
+    );
+    assert_eq!(
+        eval.obarray()
+            .default_value_id(intern("display-line-numbers")),
+        Some(&Value::NIL)
+    );
+}
+
+#[test]
+fn redisplay_fontification_walks_successive_unfontified_chunks() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let target = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.eval_str(
+        r#"
+        (insert "abcdefghij")
+        (setq redisplay-fontify-calls nil)
+        (setq fontification-functions
+              (list (lambda (start)
+                      (setq redisplay-fontify-calls
+                            (cons start redisplay-fontify-calls))
+                      (let ((end (min (point-max) (+ start 3))))
+                        (put-text-property start end 'fontified t)
+                        (put-text-property start end 'face 'bold)))))
+        "#,
+    )
+    .unwrap_or_else(|err| panic!("install chunked fontification hook: {err}"));
+
+    let other = eval.buffer_manager_mut().create_buffer("*other*");
+    eval.set_current_buffer_unrecorded(other)
+        .expect("switch to other buffer");
+
+    ensure_fontified_for_redisplay(&mut eval, target, 0, 10).expect("fontify target buffer");
+
+    assert_eq!(eval.buffers.current_buffer_id(), Some(other));
+    eval.set_current_buffer_unrecorded(target)
+        .expect("switch back to target");
+    let result = eval
+        .eval_str(
+            r#"(list redisplay-fontify-calls
+                     (text-property-not-all 1 (point-max) 'fontified t)
+                     (get-text-property 10 'face))"#,
+        )
+        .expect("inspect fontification result");
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "((10 7 4 1) nil bold)"
+    );
 }
 
 #[test]

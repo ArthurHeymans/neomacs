@@ -127,8 +127,51 @@ fn index_org_has_face_colours() {
     let gnu_d = distinct_fgs(gnu_s);
     let neo_d = distinct_fgs(neo_s);
     eprintln!("Distinct fg colours: GNU={gnu_d} NEO={neo_d} (target: NEO >= GNU)");
+    if neo_d < gnu_d {
+        dump_pair_grids("index.org colours", &gnu, &neo);
+        eprintln!("GNU fg set: {:?}", distinct_fg_set(gnu_s, rows, cols));
+        eprintln!("NEO fg set: {:?}", distinct_fg_set(neo_s, rows, cols));
+        dump_colour_rows("GNU", gnu_s, rows, cols);
+        dump_colour_rows("NEO", neo_s, rows, cols);
+    }
     assert!(
         neo_d >= gnu_d,
         "Neomacs should have at least as many distinct fg colours as GNU (NEO={neo_d} vs GNU={gnu_d})"
     );
+}
+
+fn distinct_fg_set(
+    screen: &vt100::Screen,
+    rows: u16,
+    cols: u16,
+) -> std::collections::BTreeSet<String> {
+    let mut set = std::collections::BTreeSet::new();
+    for r in 0..rows {
+        for c in 0..cols {
+            if let Some(cell) = screen.cell(r, c)
+                && !cell.contents().trim().is_empty()
+            {
+                set.insert(format!("{:?}", cell.fgcolor()));
+            }
+        }
+    }
+    set
+}
+
+fn dump_colour_rows(label: &str, screen: &vt100::Screen, rows: u16, cols: u16) {
+    for r in 0..rows {
+        let mut text = String::new();
+        let mut row_fgs = std::collections::BTreeSet::new();
+        for c in 0..cols {
+            if let Some(cell) = screen.cell(r, c) {
+                text.push_str(cell.contents());
+                if !cell.contents().trim().is_empty() {
+                    row_fgs.insert(format!("{:?}", cell.fgcolor()));
+                }
+            }
+        }
+        if !text.trim().is_empty() {
+            eprintln!("{label} row {r:02}: fg={row_fgs:?} |{}|", text.trim_end());
+        }
+    }
 }

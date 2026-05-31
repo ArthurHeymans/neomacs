@@ -370,6 +370,7 @@ fn activate_minibuffer_window_in_state(
     if let Some(frame) = frames.get_mut(frame_id) {
         if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
             window.set_buffer(minibuf_id);
+            crate::window::window_markers::create_window_markers(buffers, window, minibuf_id);
         }
         let _ = frame.select_window(minibuffer_window_id);
     }
@@ -394,6 +395,7 @@ fn activate_minibuffer_window(
 
 fn restore_minibuffer_window_in_state(
     frames: &mut crate::window::FrameManager,
+    buffers: &mut crate::buffer::BufferManager,
     minibuffer_selected_window: &mut Option<crate::window::WindowId>,
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     saved: ActiveMinibufferWindowState,
@@ -402,15 +404,21 @@ fn restore_minibuffer_window_in_state(
         if let Some(window) = frame.find_window_mut(saved.minibuffer_window_id) {
             if let Some(prev_buffer_id) = saved.previous_minibuffer_buffer {
                 window.set_buffer(prev_buffer_id);
-                if let crate::window::Window::Leaf {
-                    window_start,
-                    point,
-                    ..
-                } = window
-                {
-                    *window_start = saved.previous_minibuffer_window_start.max(1);
-                    *point = saved.previous_minibuffer_point.max(1);
-                }
+                crate::window::window_markers::create_window_markers(
+                    buffers,
+                    window,
+                    prev_buffer_id,
+                );
+                crate::window::window_markers::set_window_start_with_marker(
+                    buffers,
+                    window,
+                    saved.previous_minibuffer_window_start.max(1),
+                );
+                crate::window::window_markers::set_window_point_with_marker(
+                    buffers,
+                    window,
+                    saved.previous_minibuffer_point.max(1),
+                );
             }
         }
         let _ = frame.select_window(saved.previous_selected_window);
@@ -449,6 +457,7 @@ fn find_or_create_minibuffer_buffer_in_state(
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
     restore_minibuffer_window_in_state(
         &mut eval.frames,
+        &mut eval.buffers,
         &mut eval.minibuffer_selected_window,
         &mut eval.active_minibuffer_window,
         saved,
@@ -1068,6 +1077,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         erase_expired_minibuffer_buffer_in_state(buffers, minibuf_id);
         restore_minibuffer_window_in_state(
             frames,
+            buffers,
             minibuffer_selected_window,
             active_minibuffer_window,
             saved,
@@ -1630,6 +1640,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_id);
         restore_minibuffer_window_in_state(
             &mut shared.frames,
+            &mut shared.buffers,
             &mut shared.minibuffer_selected_window,
             &mut shared.active_minibuffer_window,
             saved,

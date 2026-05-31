@@ -2362,6 +2362,8 @@ impl LayoutEngine {
         // (TTY mode). No per-frame flag check; the backend choice
         // is frame-invariant.
 
+        evaluator.sync_runtime_faces_for_frame(frame_id);
+
         let (bootstrap_bg, bootstrap_font_size, window_system) = {
             let Some(frame) = evaluator.frame_manager().get(frame_id) else {
                 tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
@@ -2949,7 +2951,10 @@ impl LayoutEngine {
         let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
         let layout_buffer = match evaluator.buffer_manager().get(buf_id) {
-            Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer(buffer),
+            Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_with_obarray(
+                buffer,
+                evaluator.obarray(),
+            ),
             None => {
                 tracing::debug!("layout_window_rust: buffer {} not found", params.buffer_id);
                 return;
@@ -6352,35 +6357,16 @@ impl LayoutEngine {
         // before evaluating mode-line/header-line/tab-line forms so `%p/%P/%o`
         // reflect the frame we are about to render, not stale state from the
         // previous redisplay.
-        {
-            let win_id = neovm_core::window::WindowId(params.window_id as u64);
-
-            if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                let update_window = |w: &mut neovm_core::window::Window| {
-                    if let neovm_core::window::Window::Leaf {
-                        window_start: ws, ..
-                    } = w
-                    {
-                        *ws = window_start_lisp;
-                        w.set_window_end_from_positions(
-                            buffer_z_char,
-                            buffer_z_byte,
-                            window_end_lisp,
-                            window_end_byte,
-                            window_end_vpos,
-                        );
-                    }
-                };
-
-                if let Some(window) = frame.root_window.find_mut(win_id) {
-                    update_window(window);
-                } else if let Some(ref mut mini) = frame.minibuffer_leaf
-                    && mini.id() == win_id
-                {
-                    update_window(mini);
-                }
-            }
-        }
+        evaluator.publish_redisplay_window_positions(
+            frame_id,
+            neovm_core::window::WindowId(params.window_id as u64),
+            window_start_lisp,
+            buffer_z_char,
+            buffer_z_byte,
+            window_end_lisp,
+            window_end_byte,
+            window_end_vpos,
+        );
 
         // --- GlyphMatrix builder: finalize text rows, then emit chrome rows
         // into their real glyph-matrix slots before closing the window. ---
@@ -6637,41 +6623,18 @@ impl LayoutEngine {
 
     /// Trigger fontification for a buffer region via the Rust Context.
     ///
-    /// Calls `(run-hook-with-args 'fontification-functions START)` if
-    /// `fontification-functions` is bound and non-nil.  This is the same
-    /// mechanism Emacs uses in `handle_fontified_prop` to ensure text
-    /// properties (e.g. `font-lock-face`) are set before display.
-    ///
-    /// Errors are non-fatal: layout continues without fontification if
-    /// the hook signals or is not configured.
+    /// Delegates to the neovm-core redisplay helper modeled after GNU
+    /// `handle_fontified_prop`: walk the visible Lisp character region and
+    /// invoke `fontification-functions` at each unfontified position.
     fn ensure_fontified_rust(
         evaluator: &mut neovm_core::emacs_core::Context,
-        _buf_id: neovm_core::buffer::BufferId,
+        buf_id: neovm_core::buffer::BufferId,
         from: i64,
-        _to: i64,
+        to: i64,
     ) {
-        // Check if fontification-functions is bound and non-nil by evaluating
-        // the symbol.
-        let has_fontification = match evaluator.eval_str("fontification-functions") {
-            Ok(val) => !val.is_nil(),
-            Err(_) => false,
-        };
-
-        if !has_fontification {
-            return; // No fontification configured
-        }
-
-        // Call (run-hook-with-args 'fontification-functions FROM).
-        // This is what Emacs does in handle_fontified_prop to trigger
-        // jit-lock-fontify-now (via jit-lock-function on the hook).
-        // The hook functions receive the buffer position and fontify the
-        // surrounding region, setting font-lock-face text properties.
-        let expr_str = format!(
-            "(run-hook-with-args 'fontification-functions {})",
-            from.saturating_add(1)
-        );
-
-        if let Err(e) = evaluator.eval_str(&expr_str) {
+        if let Err(e) = neovm_core::emacs_core::xdisp::ensure_fontified_for_redisplay(
+            evaluator, buf_id, from, to,
+        ) {
             tracing::debug!("ensure_fontified_rust: fontification error: {:?}", e);
         }
     }

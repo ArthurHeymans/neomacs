@@ -20,6 +20,16 @@ slow-timeout = { period = "600s", terminate-after = 1, grace-period = "0s" }
 filter = 'all()'
 run-wrapper = 'memory-limit'
 
+# Minimax oracle cases intentionally evaluate game trees in both Neomacs
+# and GNU Emacs.  The exhaustive tic-tac-toe forms can legitimately exceed
+# the package-wide 60s watchdog during a full parallel run, so run this
+# small test family without parallel CPU contention while keeping the
+# per-test watchdog tight enough to catch real hangs.
+[[profile.default.overrides]]
+filter = 'package(neovm-oracle-tests) and test(combination_minimax)'
+threads-required = "num-test-threads"
+slow-timeout = { period = "120s", terminate-after = 1 }
+
 # Oracle tests compare neomacs against GNU Emacs — single-form hangs
 # should be caught quickly instead of wasting 10 minutes.
 [[profile.default.overrides]]

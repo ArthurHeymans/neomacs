@@ -7,7 +7,7 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::face::{Color, FaceAttrValue};
 use crate::heap_types::LispString;
 use crate::test_utils::runtime_startup_eval_all;
-use crate::window::{FRAME_ID_BASE, FrameId};
+use crate::window::{FRAME_ID_BASE, FrameId, FrameParam};
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -2379,6 +2379,83 @@ fn internal_merge_in_global_face_eval_updates_live_face_table() {
     .expect("read merged live background");
 
     assert_eq!(value, Value::string("grey85"));
+}
+
+#[test]
+fn runtime_face_sync_uses_frame_lisp_face_vector_as_source_of_truth() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let vector = ensure_frame_lisp_face_vector(
+        &mut eval,
+        frame_id,
+        "default",
+        FrameFaceInitial::SelectedBase,
+    )
+    .expect("default frame face vector");
+
+    set_lisp_face_vector_attr(
+        vector,
+        crate::face::LFaceAttr::Foreground,
+        Value::string("#bbc2cf"),
+    );
+    set_lisp_face_vector_attr(
+        vector,
+        crate::face::LFaceAttr::Background,
+        Value::string("#282c34"),
+    );
+    eval.set_face_attribute(
+        "default",
+        crate::face::LFaceAttr::Foreground,
+        FaceAttrValue::Color(Color::rgb(255, 255, 255)),
+    );
+    eval.set_face_attribute(
+        "default",
+        crate::face::LFaceAttr::Background,
+        FaceAttrValue::Color(Color::rgb(255, 255, 255)),
+    );
+
+    sync_runtime_face_table_from_frame_lisp_faces(&mut eval, frame_id);
+
+    let face = eval.face_table().resolve("default");
+    assert_eq!(face.foreground, Color::from_hex("#bbc2cf"));
+    assert_eq!(face.background, Color::from_hex("#282c34"));
+}
+
+#[test]
+fn runtime_face_sync_realizes_default_colors_from_frame_parameters() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let vector = ensure_frame_lisp_face_vector(
+        &mut eval,
+        frame_id,
+        "default",
+        FrameFaceInitial::SelectedBase,
+    )
+    .expect("default frame face vector");
+    set_lisp_face_vector_attr(
+        vector,
+        crate::face::LFaceAttr::Foreground,
+        Value::string("unspecified-fg"),
+    );
+    set_lisp_face_vector_attr(
+        vector,
+        crate::face::LFaceAttr::Background,
+        Value::string("unspecified-bg"),
+    );
+    let frame = eval
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("selected frame");
+    frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("#51afef"));
+    frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("#1d2026"));
+
+    sync_runtime_face_table_from_frame_lisp_faces(&mut eval, frame_id);
+
+    let face = eval.face_table().resolve("default");
+    assert_eq!(face.foreground, Color::from_hex("#51afef"));
+    assert_eq!(face.background, Color::from_hex("#1d2026"));
 }
 
 #[test]

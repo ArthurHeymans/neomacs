@@ -7187,6 +7187,47 @@ impl Context {
         &mut self.frames
     }
 
+    pub fn publish_redisplay_window_positions(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        window_id: crate::window::WindowId,
+        window_start_lisp: usize,
+        buffer_z_char: usize,
+        buffer_z_byte: usize,
+        window_end_lisp: usize,
+        window_end_byte: usize,
+        window_end_vpos: usize,
+    ) {
+        let frames = &mut self.frames;
+        let buffers = &mut self.buffers;
+        let Some(frame) = frames.get_mut(frame_id) else {
+            return;
+        };
+
+        let mut update_window = |window: &mut crate::window::Window| {
+            crate::window::window_markers::set_window_start_with_marker(
+                buffers,
+                window,
+                window_start_lisp,
+            );
+            window.set_window_end_from_positions(
+                buffer_z_char,
+                buffer_z_byte,
+                window_end_lisp,
+                window_end_byte,
+                window_end_vpos,
+            );
+        };
+
+        if let Some(window) = frame.root_window.find_mut(window_id) {
+            update_window(window);
+        } else if let Some(ref mut mini) = frame.minibuffer_leaf
+            && mini.id() == window_id
+        {
+            update_window(mini);
+        }
+    }
+
     pub fn create_window_markers_for_root(
         &mut self,
         frame_id: crate::window::FrameId,
@@ -7349,6 +7390,12 @@ impl Context {
     /// Public mutable access to the face table.
     pub fn face_table_mut(&mut self) -> &mut FaceTable {
         &mut self.face_table
+    }
+
+    /// Refresh the render-facing face table from this frame's Lisp face
+    /// vectors before redisplay.
+    pub fn sync_runtime_faces_for_frame(&mut self, frame_id: crate::window::FrameId) {
+        super::font::sync_runtime_face_table_from_frame_lisp_faces(self, frame_id);
     }
 
     /// Set a face attribute and bump the change counter.

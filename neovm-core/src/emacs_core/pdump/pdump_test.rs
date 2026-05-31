@@ -1502,71 +1502,49 @@ fn measure_timings<T>(iterations: usize, mut op: impl FnMut() -> T) -> Vec<std::
     samples
 }
 
-fn workspace_pdump_paths() -> (std::path::PathBuf, std::path::PathBuf) {
-    let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("workspace root")
-        .to_path_buf();
-    let final_path = workspace_root.join("target/debug/neomacs.pdump");
-    let bootstrap_path = workspace_root.join("target/debug/bootstrap-neomacs.pdump");
-    assert!(
-        final_path.exists(),
-        "missing final image at {}; run a fresh build first",
-        final_path.display()
-    );
-    assert!(
-        bootstrap_path.exists(),
-        "missing bootstrap image at {}; run a fresh build first",
-        bootstrap_path.display()
-    );
-    (final_path, bootstrap_path)
+struct CurrentProcessPdumpFixture {
+    _dir: tempfile::TempDir,
+    final_path: std::path::PathBuf,
+    bootstrap_path: std::path::PathBuf,
 }
 
-fn ensure_workspace_bootstrap_pdump_current(bootstrap_path: &std::path::Path) {
-    if load_from_dump(bootstrap_path).is_ok() {
-        return;
-    }
+fn current_process_pdump_fixture() -> CurrentProcessPdumpFixture {
+    let dir = tempfile::tempdir().expect("pdump fixture tempdir");
+    let bootstrap_path = dir.path().join("bootstrap-neomacs.pdump");
+    let final_path = dir.path().join("neomacs.pdump");
 
-    crate::emacs_core::load::create_bootstrap_evaluator_cached_at_path(&[], bootstrap_path)
+    crate::emacs_core::load::create_bootstrap_evaluator_cached_at_path(&[], &bootstrap_path)
         .unwrap_or_else(|err| {
             panic!(
-                "refresh workspace bootstrap pdump {}: {err}",
+                "create bootstrap pdump fixture {}: {err}",
                 bootstrap_path.display()
             )
         });
-}
-
-fn ensure_workspace_final_pdump_current(
-    final_path: &std::path::Path,
-    bootstrap_path: &std::path::Path,
-) {
-    if load_from_dump(final_path).is_ok() {
-        return;
-    }
 
     let eval =
-        crate::emacs_core::load::create_runtime_startup_evaluator_at_path(&[], bootstrap_path)
+        crate::emacs_core::load::create_runtime_startup_evaluator_at_path(&[], &bootstrap_path)
             .unwrap_or_else(|err| {
                 panic!(
-                    "refresh workspace final pdump {} from bootstrap {}: {err}",
-                    final_path.display(),
+                    "create final pdump fixture from bootstrap {}: {err}",
                     bootstrap_path.display()
                 )
             });
-    dump_to_file(&eval, final_path).unwrap_or_else(|err| {
-        panic!(
-            "rewrite workspace final pdump {}: {err}",
-            final_path.display()
-        )
-    });
+    dump_to_file(&eval, &final_path)
+        .unwrap_or_else(|err| panic!("write final pdump fixture {}: {err}", final_path.display()));
+
+    CurrentProcessPdumpFixture {
+        _dir: dir,
+        final_path,
+        bootstrap_path,
+    }
 }
 
 #[test]
-fn test_measure_current_workspace_final_pdump_performance() {
+fn test_measure_current_process_final_pdump_performance() {
     crate::test_utils::init_test_tracing();
-    let (final_path, bootstrap_path) = workspace_pdump_paths();
-    ensure_workspace_bootstrap_pdump_current(&bootstrap_path);
-    ensure_workspace_final_pdump_current(&final_path, &bootstrap_path);
+    let fixture = current_process_pdump_fixture();
+    let final_path = &fixture.final_path;
+    let bootstrap_path = &fixture.bootstrap_path;
     let final_size = std::fs::metadata(&final_path)
         .expect("stat final pdump")
         .len();
@@ -1621,10 +1599,10 @@ fn test_measure_current_workspace_final_pdump_performance() {
 }
 
 #[test]
-fn test_measure_current_workspace_bootstrap_pdump_raw_load() {
+fn test_measure_current_process_bootstrap_pdump_raw_load() {
     crate::test_utils::init_test_tracing();
-    let (_final_path, bootstrap_path) = workspace_pdump_paths();
-    ensure_workspace_bootstrap_pdump_current(&bootstrap_path);
+    let fixture = current_process_pdump_fixture();
+    let bootstrap_path = &fixture.bootstrap_path;
     let bootstrap_size = std::fs::metadata(&bootstrap_path)
         .expect("stat bootstrap pdump")
         .len();

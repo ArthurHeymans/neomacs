@@ -34,7 +34,6 @@ pub(crate) enum DisplayLineNumbersMode {
 }
 
 pub(crate) trait LayoutBufferView {
-    fn layout_get_buffer_local(&self, name: &str) -> Option<Value>;
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value>;
     fn layout_point_min_byte(&self) -> usize;
     fn layout_point_max_byte(&self) -> usize;
@@ -52,8 +51,8 @@ pub(crate) struct LayoutBufferSnapshot {
     pub zv_char: usize,
     pub local_var_alist: Value,
     pub slots: [Value; BUFFER_SLOT_COUNT],
-    pub local_flags: u64,
     pub overlays: OverlayList,
+    default_values: Vec<(neovm_core::emacs_core::intern::SymId, Value)>,
 }
 
 impl LayoutBufferSnapshot {
@@ -66,15 +65,56 @@ impl LayoutBufferSnapshot {
             zv_char: buffer.zv,
             local_var_alist: buffer.local_var_alist,
             slots: buffer.slots,
-            local_flags: buffer.local_flags,
             overlays: buffer.overlays.clone(),
+            default_values: Vec::new(),
         }
     }
 
-    fn slot_local_flag(&self, offset: usize) -> bool {
-        debug_assert!(offset < BUFFER_SLOT_COUNT);
-        (self.local_flags & (1u64 << offset)) != 0
+    pub fn from_buffer_with_obarray(buffer: &Buffer, obarray: &Obarray) -> Self {
+        let mut snapshot = Self::from_buffer(buffer);
+        snapshot.default_values = layout_default_values(obarray);
+        snapshot
     }
+
+    fn default_value(&self, name: &str) -> Option<Value> {
+        let id = intern::intern(name);
+        self.default_values
+            .iter()
+            .find_map(|(sym_id, value)| (*sym_id == id).then_some(*value))
+    }
+}
+
+const LAYOUT_DEFAULT_VALUE_SYMBOLS: &[&str] = &[
+    "display-fill-column-indicator",
+    "display-fill-column-indicator-character",
+    "display-fill-column-indicator-column",
+    "display-line-numbers",
+    "display-line-numbers-current-absolute",
+    "display-line-numbers-major-tick",
+    "display-line-numbers-minor-tick",
+    "display-line-numbers-offset",
+    "display-line-numbers-widen",
+    "display-line-numbers-width",
+    "face-remapping-alist",
+    "line-prefix",
+    "neomacs-cursor-effect",
+    "neomacs-visual-cursors",
+    "show-trailing-whitespace",
+    "tab-stop-list",
+    "wrap-prefix",
+];
+
+fn layout_default_values(obarray: &Obarray) -> Vec<(neovm_core::emacs_core::intern::SymId, Value)> {
+    LAYOUT_DEFAULT_VALUE_SYMBOLS
+        .iter()
+        .filter_map(|name| {
+            let id = intern::intern(name);
+            obarray
+                .default_value_id(id)
+                .copied()
+                .map(|value| (id, value))
+        })
+        .collect()
 }
 
 fn find_layout_local_var_alist_entry(alist: Value, key: Value) -> Option<Value> {
@@ -90,10 +130,6 @@ fn find_layout_local_var_alist_entry(alist: Value, key: Value) -> Option<Value> 
 }
 
 impl LayoutBufferView for Buffer {
-    fn layout_get_buffer_local(&self, name: &str) -> Option<Value> {
-        self.get_buffer_local(name)
-    }
-
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value> {
         self.buffer_local_value(name)
     }
@@ -120,17 +156,6 @@ impl LayoutBufferView for Buffer {
 }
 
 impl LayoutBufferView for LayoutBufferSnapshot {
-    fn layout_get_buffer_local(&self, name: &str) -> Option<Value> {
-        if let Some(info) = lookup_buffer_slot(name) {
-            if info.local_flags_idx >= 0 && !self.slot_local_flag(info.offset) {
-                return None;
-            }
-            return Some(self.slots[info.offset]);
-        }
-        let key = Value::from_sym_id(intern::intern(name));
-        find_layout_local_var_alist_entry(self.local_var_alist, key).filter(|v| !v.is_unbound())
-    }
-
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value> {
         if let Some(info) = lookup_buffer_slot(name) {
             return Some(self.slots[info.offset]);
@@ -138,6 +163,7 @@ impl LayoutBufferView for LayoutBufferSnapshot {
         let key = Value::from_sym_id(intern::intern(name));
         find_layout_local_var_alist_entry(self.local_var_alist, key)
             .and_then(|v| (!v.is_unbound()).then_some(v))
+            .or_else(|| self.default_value(name))
     }
 
     fn layout_point_min_byte(&self) -> usize {
@@ -162,12 +188,12 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 }
 
 pub(crate) fn buffer_local_value<B: LayoutBufferView>(buffer: &B, name: &str) -> Option<Value> {
-    // `Buffer::get_buffer_local` returns `Option<Value>` (by value)
-    // since the Qunbound-sentinel refactor in commit 4d34fbde3 (void
-    // buffer-local bindings): the value may come from an alist cons
-    // cell that the caller can no longer borrow a stable reference
-    // into. `Value` is `Copy` so this is zero-cost.
-    buffer.layout_get_buffer_local(name)
+    // GNU `buffer_local_value` (`buffer.c:1359-1413`) returns a buffer's
+    // local binding when present and otherwise falls through to the default
+    // value.  Layout uses this helper for display variables such as
+    // `display-line-numbers-current-absolute`; using the local-only predicate
+    // here silently loses global/default display state.
+    buffer.layout_buffer_local_value(name)
 }
 
 fn effective_buffer_value(buffer: &Buffer, obarray: &Obarray, name: &str) -> Option<Value> {

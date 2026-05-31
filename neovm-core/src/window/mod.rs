@@ -2363,7 +2363,8 @@ impl FrameManager {
         let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
         let root = Window::new_leaf(window_id, buffer_id, bounds);
 
-        let frame = Frame::new(frame_id, name, terminal_id, width, height, root);
+        let mut frame = Frame::new(frame_id, name, terminal_id, width, height, root);
+        crate::emacs_core::xfaces::init_frame_lisp_faces(&mut frame);
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
         self.note_window_selected(selected_wid);

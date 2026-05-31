@@ -452,6 +452,93 @@ impl Face {
         Self::default()
     }
 
+    /// Apply one typed Lisp face attribute to this face.
+    ///
+    /// This is the shared mutation primitive for both the global runtime
+    /// table and frame-local face realization. GNU keeps Lisp face vectors as
+    /// the authoritative storage and realizes `struct face` values from those
+    /// vectors; keeping this operation on `Face` lets callers derive runtime
+    /// faces without routing through a separate table.
+    pub fn set_attribute(&mut self, attr: LFaceAttr, value: FaceAttrValue) -> bool {
+        macro_rules! set_option {
+            ($field:expr, $variant:ident) => {
+                match value {
+                    FaceAttrValue::$variant(v) => $field = Some(v),
+                    FaceAttrValue::Unspecified => $field = None,
+                    _ => return false,
+                }
+            };
+        }
+
+        match attr {
+            LFaceAttr::Foreground => set_option!(self.foreground, Color),
+            LFaceAttr::Background => set_option!(self.background, Color),
+            LFaceAttr::DistantForeground => set_option!(self.distant_foreground, Color),
+            LFaceAttr::Weight => set_option!(self.weight, Weight),
+            LFaceAttr::Slant => set_option!(self.slant, Slant),
+            LFaceAttr::Width => set_option!(self.width, Width),
+            LFaceAttr::Height => set_option!(self.height, Height),
+            LFaceAttr::Family => match value {
+                FaceAttrValue::Text(text) => self.family = Some(text),
+                FaceAttrValue::Unspecified => self.family = None,
+                _ => return false,
+            },
+            LFaceAttr::Foundry => match value {
+                FaceAttrValue::Text(text) => self.foundry = Some(text),
+                FaceAttrValue::Unspecified => self.foundry = None,
+                _ => return false,
+            },
+            LFaceAttr::Underline => match value {
+                FaceAttrValue::Underline(u) => self.underline = Some(u),
+                FaceAttrValue::Bool(true) => {
+                    self.underline = Some(Underline {
+                        style: UnderlineStyle::Line,
+                        color: None,
+                        position: None,
+                    });
+                }
+                FaceAttrValue::Bool(false) | FaceAttrValue::Unspecified => {
+                    self.underline = None;
+                }
+                _ => self.underline = None,
+            },
+            LFaceAttr::Overline => match value {
+                FaceAttrValue::Bool(b) => self.overline = Some(b),
+                FaceAttrValue::Color(c) => {
+                    self.overline = Some(true);
+                    self.overline_color = Some(c);
+                }
+                FaceAttrValue::Unspecified => {
+                    self.overline = None;
+                    self.overline_color = None;
+                }
+                _ => return false,
+            },
+            LFaceAttr::StrikeThrough => match value {
+                FaceAttrValue::Bool(b) => self.strike_through = Some(b),
+                FaceAttrValue::Color(c) => {
+                    self.strike_through = Some(true);
+                    self.strike_through_color = Some(c);
+                }
+                FaceAttrValue::Unspecified => {
+                    self.strike_through = None;
+                    self.strike_through_color = None;
+                }
+                _ => return false,
+            },
+            LFaceAttr::Box => set_option!(self.box_border, Box),
+            LFaceAttr::InverseVideo => set_option!(self.inverse_video, Bool),
+            LFaceAttr::Extend => set_option!(self.extend, Bool),
+            LFaceAttr::Inherit => match value {
+                FaceAttrValue::Inherit(v) => self.inherit = v,
+                FaceAttrValue::Unspecified => self.inherit = None,
+                _ => return false,
+            },
+            LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => return false,
+        }
+        true
+    }
+
     /// Merge `overlay` on top of `self`.  Non-None fields in `overlay`
     /// override those in `self`.
     pub fn merge(&self, overlay: &Face) -> Face {
@@ -1286,79 +1373,7 @@ impl FaceTable {
         self.ensure_face(name);
         let key = face_symbol_value(name);
         let face = self.faces.get_mut(&key).unwrap();
-
-        // Helper: set an Option<T> field from the matching FaceAttrValue variant.
-        macro_rules! set_option {
-            ($field:expr, $variant:ident) => {
-                match value {
-                    FaceAttrValue::$variant(v) => $field = Some(v),
-                    FaceAttrValue::Unspecified => $field = None,
-                    _ => return false,
-                }
-            };
-        }
-
-        match attr {
-            LFaceAttr::Foreground => set_option!(face.foreground, Color),
-            LFaceAttr::Background => set_option!(face.background, Color),
-            LFaceAttr::DistantForeground => set_option!(face.distant_foreground, Color),
-            LFaceAttr::Weight => set_option!(face.weight, Weight),
-            LFaceAttr::Slant => set_option!(face.slant, Slant),
-            LFaceAttr::Width => set_option!(face.width, Width),
-            LFaceAttr::Height => set_option!(face.height, Height),
-            LFaceAttr::Family => match value {
-                FaceAttrValue::Text(text) => face.family = Some(text),
-                FaceAttrValue::Unspecified => face.family = None,
-                _ => return false,
-            },
-            LFaceAttr::Foundry => match value {
-                FaceAttrValue::Text(text) => face.foundry = Some(text),
-                FaceAttrValue::Unspecified => face.foundry = None,
-                _ => return false,
-            },
-            LFaceAttr::Underline => match value {
-                FaceAttrValue::Underline(u) => face.underline = Some(u),
-                FaceAttrValue::Bool(true) => {
-                    face.underline = Some(Underline {
-                        style: UnderlineStyle::Line,
-                        color: None,
-                        position: None,
-                    });
-                }
-                FaceAttrValue::Bool(false) | FaceAttrValue::Unspecified => {
-                    face.underline = None;
-                }
-                _ => face.underline = None,
-            },
-            LFaceAttr::Overline => match value {
-                FaceAttrValue::Bool(b) => face.overline = Some(b),
-                FaceAttrValue::Color(c) => {
-                    face.overline = Some(true);
-                    face.overline_color = Some(c);
-                }
-                FaceAttrValue::Unspecified => face.overline = None,
-                _ => return false,
-            },
-            LFaceAttr::StrikeThrough => match value {
-                FaceAttrValue::Bool(b) => face.strike_through = Some(b),
-                FaceAttrValue::Color(c) => {
-                    face.strike_through = Some(true);
-                    face.strike_through_color = Some(c);
-                }
-                FaceAttrValue::Unspecified => face.strike_through = None,
-                _ => return false,
-            },
-            LFaceAttr::Box => set_option!(face.box_border, Box),
-            LFaceAttr::InverseVideo => set_option!(face.inverse_video, Bool),
-            LFaceAttr::Extend => set_option!(face.extend, Bool),
-            LFaceAttr::Inherit => match value {
-                FaceAttrValue::Inherit(v) => face.inherit = v,
-                FaceAttrValue::Unspecified => face.inherit = None,
-                _ => return false,
-            },
-            LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => return false,
-        }
-        true
+        face.set_attribute(attr, value)
     }
 
     /// Look up a face by name.

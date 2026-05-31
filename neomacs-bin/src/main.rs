@@ -2777,8 +2777,8 @@ fn bootstrap_buffers(
         } = &mut frame.root_window
         {
             *buffer_id = scratch_id;
-            *window_start = 0;
-            *point = 0;
+            *window_start = 1;
+            *point = 1;
         }
     }
     eval.create_window_markers_for_root(frame_id, scratch_id);
@@ -2820,8 +2820,8 @@ fn bootstrap_buffers(
             } = mini_leaf
             {
                 *buffer_id = mini_id;
-                *window_start = 0;
-                *point = 0;
+                *window_start = 1;
+                *point = 1;
                 bounds.y = mini_y;
                 bounds.height = mini_h;
                 bounds.width = width as f32;

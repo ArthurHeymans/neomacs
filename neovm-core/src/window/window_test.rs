@@ -775,6 +775,46 @@ fn window_set_buffer_resets_position() {
 }
 
 #[test]
+fn window_start_marker_stays_before_insert_at_start() {
+    crate::test_utils::init_test_tracing();
+    let mut buffers = crate::buffer::BufferManager::new();
+    let buffer_id = buffers.create_buffer("bob-test");
+    buffers
+        .insert_into_buffer(buffer_id, "line A\nline B\n")
+        .expect("insert test text");
+    buffers
+        .goto_buffer_byte(buffer_id, 0)
+        .expect("move point to beginning");
+
+    let mut frames = FrameManager::new();
+    let frame_id = frames.create_frame("F1", 800, 600, buffer_id);
+    let selected_window = frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = frames.get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        crate::window::window_markers::create_window_markers(&mut buffers, window, buffer_id);
+    }
+
+    buffers
+        .insert_into_buffer(buffer_id, "X")
+        .expect("insert before window start");
+    crate::window::window_markers::sync_window_positions_from_markers(
+        frames.get_mut(frame_id).expect("frame"),
+        &buffers,
+        buffer_id,
+    );
+
+    let frame = frames.get(frame_id).expect("frame");
+    let Window::Leaf { window_start, .. } = frame.find_window(selected_window).expect("window")
+    else {
+        panic!("selected window should be a leaf");
+    };
+    assert_eq!(*window_start, 1);
+}
+
+#[test]
 fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

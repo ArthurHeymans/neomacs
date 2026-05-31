@@ -34,7 +34,7 @@ fn register_bootstrap_vars_matches_gnu_defaults() {
 }
 
 #[test]
-fn frame_face_hash_table_eval_is_empty_before_any_face_realization() {
+fn frame_face_hash_table_eval_has_initialized_default_face() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let out = builtin_frame_face_hash_table(&mut eval, vec![Value::NIL])
@@ -42,8 +42,9 @@ fn frame_face_hash_table_eval_is_empty_before_any_face_realization() {
     if !out.is_hash_table() {
         panic!("expected hash table");
     };
-    let len = out.as_hash_table().unwrap().data.len();
-    assert_eq!(len, 0);
+    let default = lookup_frame_face_hash_entry(out, Value::symbol("default"))
+        .expect("selected frame should have a default Lisp face vector");
+    assert!(default.is_vector());
 }
 
 #[test]

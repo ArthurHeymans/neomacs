@@ -17,6 +17,7 @@
 
 use super::chartable::{make_char_table_value, make_char_table_with_extra_slots};
 use super::error::{EvalResult, Flow, signal};
+use super::hook_runtime;
 use super::intern::intern;
 use super::value::*;
 use crate::buffer::{Buffer, BufferId, TextPropertyTable};
@@ -3642,6 +3643,179 @@ fn make_text_area_position(window_id: WindowId, metrics: ExactVisibleMetrics) ->
     ])
 }
 
+// ---------------------------------------------------------------------------
+// Redisplay fontification
+// ---------------------------------------------------------------------------
+
+fn get_fontified_property(ctx: &mut super::eval::Context, pos: i64) -> EvalResult {
+    super::textprop::builtin_get_char_property(
+        ctx,
+        vec![Value::fixnum(pos), Value::symbol("fontified")],
+    )
+}
+
+fn next_fontified_property_change(
+    ctx: &mut super::eval::Context,
+    pos: i64,
+    limit: i64,
+) -> EvalResult {
+    super::textprop::builtin_next_single_property_change(
+        ctx,
+        vec![
+            Value::fixnum(pos),
+            Value::symbol("fontified"),
+            Value::NIL,
+            Value::fixnum(limit),
+        ],
+    )
+}
+
+fn call_fontification_functions_at(ctx: &mut super::eval::Context, hook_value: Value, pos: i64) {
+    let hook_sym = intern("fontification-functions");
+    let functions = hook_runtime::collect_hook_functions_in_state(ctx, hook_sym, hook_value, true);
+    if functions.is_empty() {
+        return;
+    }
+
+    let roots = ctx.save_specpdl_roots();
+    ctx.push_specpdl_root(hook_value);
+    for function in functions.iter().copied() {
+        ctx.push_specpdl_root(function);
+    }
+    let arg = Value::fixnum(pos);
+    ctx.push_specpdl_root(arg);
+
+    let binding_count = ctx.specpdl.len();
+    ctx.specbind(hook_sym, Value::NIL);
+
+    // GNU `handle_fontified_prop` calls each function with `dsafe_call1`,
+    // which binds `inhibit-redisplay` and logs ordinary errors without
+    // aborting the redisplay pass.  Do the same per function so one broken
+    // hook cannot prevent later hooks from running.
+    for function in functions {
+        let call_count = ctx.specpdl.len();
+        ctx.specbind(intern("inhibit-redisplay"), Value::T);
+        if let Err(flow) = ctx.apply(function, vec![arg]) {
+            let rendered = super::error::format_flow_with_eval(ctx, &flow);
+            tracing::warn!(
+                "error during redisplay fontification at {}: {}",
+                pos,
+                rendered
+            );
+        }
+        ctx.unbind_to(call_count);
+    }
+
+    ctx.unbind_to(binding_count);
+    ctx.restore_specpdl_roots(roots);
+}
+
+/// Fontify a visible buffer region the same way GNU redisplay does from
+/// `handle_fontified_prop`.
+///
+/// The layout engine's window parameters use 0-based character positions.
+/// Lisp hooks receive GNU buffer positions, so this function performs the
+/// single conversion at the redisplay boundary and keeps the rest of the walk
+/// in Lisp character coordinates.
+pub fn ensure_fontified_for_redisplay(
+    ctx: &mut super::eval::Context,
+    buf_id: BufferId,
+    from_char: i64,
+    to_char: i64,
+) -> Result<(), Flow> {
+    let Some((point_min, point_max)) = ctx.buffers.get(buf_id).map(|buffer| {
+        (
+            buffer.point_min_char() as i64 + 1,
+            buffer.point_max_char() as i64 + 1,
+        )
+    }) else {
+        return Ok(());
+    };
+
+    let start = from_char.saturating_add(1).clamp(point_min, point_max);
+    let end = to_char.saturating_add(1).clamp(start, point_max);
+    if start >= end {
+        return Ok(());
+    }
+
+    let saved_current = ctx.buffers.current_buffer_id();
+    if saved_current != Some(buf_id) {
+        ctx.set_current_buffer_unrecorded(buf_id)?;
+    }
+
+    let result = (|| -> Result<(), Flow> {
+        if ctx
+            .eval_symbol("memory-full")
+            .unwrap_or(Value::NIL)
+            .is_truthy()
+        {
+            return Ok(());
+        }
+
+        let hook_sym = intern("fontification-functions");
+        let hook_value = hook_runtime::hook_value_by_id(ctx, hook_sym).unwrap_or(Value::NIL);
+        if hook_value.is_nil() {
+            return Ok(());
+        }
+
+        let mut pos = start;
+        let mut iterations = 0usize;
+        let max_iterations = (end - start).max(1) as usize * 2;
+
+        while pos < end && pos < point_max {
+            iterations += 1;
+            if iterations > max_iterations {
+                tracing::warn!(
+                    "redisplay fontification did not converge for buffer {:?}, range {}..{}",
+                    buf_id,
+                    start,
+                    end
+                );
+                break;
+            }
+
+            let before = get_fontified_property(ctx, pos)?;
+            if before.is_nil() {
+                call_fontification_functions_at(ctx, hook_value, pos);
+                if ctx.buffers.current_buffer_id() != Some(buf_id) {
+                    ctx.restore_current_buffer_if_live(buf_id);
+                }
+                if ctx.buffers.current_buffer_id() != Some(buf_id) {
+                    break;
+                }
+
+                // GNU recomputes properties only if the hook actually
+                // marked the current character fontified.  If it did not,
+                // advance one character to avoid looping forever on the
+                // same unfontified position.
+                let after = get_fontified_property(ctx, pos)?;
+                if after.is_nil() {
+                    pos += 1;
+                    continue;
+                }
+            }
+
+            let next = next_fontified_property_change(ctx, pos, end)?;
+            let Some(next_pos) = next.as_int() else {
+                break;
+            };
+            if next_pos <= pos {
+                pos += 1;
+            } else {
+                pos = next_pos.min(end);
+            }
+        }
+
+        Ok(())
+    })();
+
+    if let Some(saved) = saved_current {
+        ctx.restore_current_buffer_if_live(saved);
+    }
+
+    result
+}
+
 fn resolve_posn_at_xy_window(
     frames: &crate::window::FrameManager,
     frame_or_window: Option<&Value>,
@@ -3769,6 +3943,16 @@ fn posn_at_x_y_impl(
 // ---------------------------------------------------------------------------
 
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
+    fn defvar_buffer_local(
+        obarray: &mut crate::emacs_core::symbol::Obarray,
+        name: &str,
+        default: Value,
+    ) {
+        obarray.set_symbol_value(name, default);
+        obarray.make_special(name);
+        obarray.make_buffer_local(name, true);
+    }
+
     obarray.set_symbol_value("redisplay--inhibit-bidi", Value::T);
     obarray.set_symbol_value("inhibit-redisplay", Value::NIL);
     obarray.make_special("inhibit-redisplay");
@@ -3788,17 +3972,28 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("tool-bar-button-relief", Value::fixnum(1));
     obarray.set_symbol_value("tool-bar-style", Value::NIL);
     obarray.set_symbol_value("global-font-lock-mode", Value::NIL);
-    obarray.set_symbol_value("display-line-numbers", Value::NIL);
-    obarray.set_symbol_value("display-line-numbers-width", Value::NIL);
+    // GNU xdisp.c registers these as DEFVAR_LISP/INT/BOOL variables and
+    // calls Fmake_variable_buffer_local for the variables documented as
+    // buffer-local. In particular, `display-line-numbers-mode' relies on
+    // `display-line-numbers' being local-if-set so enabling it in one buffer
+    // does not mutate the global default.
+    defvar_buffer_local(obarray, "wrap-prefix", Value::NIL);
+    defvar_buffer_local(obarray, "line-prefix", Value::NIL);
+    defvar_buffer_local(obarray, "display-line-numbers", Value::NIL);
+    defvar_buffer_local(obarray, "display-line-numbers-width", Value::NIL);
     obarray.set_symbol_value("display-line-numbers-current-absolute", Value::T);
-    obarray.set_symbol_value("display-line-numbers-widen", Value::NIL);
-    obarray.set_symbol_value("display-fill-column-indicator", Value::NIL);
+    obarray.make_special("display-line-numbers-current-absolute");
+    defvar_buffer_local(obarray, "display-line-numbers-widen", Value::NIL);
+    defvar_buffer_local(obarray, "display-line-numbers-offset", Value::fixnum(0));
+    defvar_buffer_local(obarray, "display-fill-column-indicator", Value::NIL);
     // GNU `src/xdisp.c:38644-38652` defines this with DEFVAR_LISP,
     // initializes it to Qt, then calls Fmake_variable_buffer_local.
-    obarray.set_symbol_value("display-fill-column-indicator-column", Value::T);
-    obarray.make_special("display-fill-column-indicator-column");
-    obarray.make_buffer_local("display-fill-column-indicator-column", true);
-    obarray.set_symbol_value("display-fill-column-indicator-character", Value::NIL);
+    defvar_buffer_local(obarray, "display-fill-column-indicator-column", Value::T);
+    defvar_buffer_local(
+        obarray,
+        "display-fill-column-indicator-character",
+        Value::NIL,
+    );
     obarray.set_symbol_value("visible-bell", Value::NIL);
     obarray.set_symbol_value("no-redraw-on-reenter", Value::NIL);
     // GNU `src/dispnew.c` defines this with DEFVAR_BOOL.
@@ -3833,6 +4028,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // Cursor audit Finding 7 in `drafts/cursor-audit.md`.
     obarray.set_symbol_value("inhibit-try-cursor-movement", Value::NIL);
     obarray.set_symbol_value("show-trailing-whitespace", Value::NIL);
+    obarray.make_special("show-trailing-whitespace");
+    obarray.make_buffer_local("show-trailing-whitespace", true);
     obarray.set_symbol_value("show-paren-context-when-offscreen", Value::NIL);
     obarray.set_symbol_value("nobreak-char-display", Value::T);
     obarray.set_symbol_value("overlay-arrow-variable-list", Value::NIL);
@@ -3888,6 +4085,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
     obarray.set_symbol_value("pre-redisplay-function", Value::NIL);
     obarray.set_symbol_value("pre-redisplay-functions", Value::NIL);
+    obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
+    obarray.make_special("display-line-numbers-major-tick");
+    obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
+    obarray.make_special("display-line-numbers-minor-tick");
     // GNU `src/xdisp.c:38428-38438` defines this with DEFVAR_LISP,
     // initializes it to nil, then calls Fmake_variable_buffer_local.
     // `jit-lock.el` installs `jit-lock-function` here buffer-locally.

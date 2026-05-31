@@ -3544,20 +3544,18 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
     let mut ascii_width_cache = std::collections::HashMap::new();
     let mut font_metrics_svc = Some(FontMetricsService::new());
 
-    let regular_width = unsafe {
-        char_advance(
-            &mut ascii_width_cache,
-            &mut font_metrics_svc,
-            'A',
-            1,
-            8.0,
-            14,
-            8.0,
-            "monospace",
-            400,
-            false,
-        )
-    };
+    let regular_width = char_advance(
+        &mut ascii_width_cache,
+        &mut font_metrics_svc,
+        'A',
+        1,
+        8.0,
+        14,
+        8.0,
+        "monospace",
+        400,
+        false,
+    );
     assert!(
         regular_width > 0.0,
         "expected measurable width for regular ASCII glyph"
@@ -3568,20 +3566,18 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
         "expected one cache entry after first ASCII measurement"
     );
 
-    let bold_width = unsafe {
-        char_advance(
-            &mut ascii_width_cache,
-            &mut font_metrics_svc,
-            'A',
-            1,
-            8.0,
-            14,
-            8.0,
-            "monospace",
-            700,
-            false,
-        )
-    };
+    let bold_width = char_advance(
+        &mut ascii_width_cache,
+        &mut font_metrics_svc,
+        'A',
+        1,
+        8.0,
+        14,
+        8.0,
+        "monospace",
+        700,
+        false,
+    );
     assert!(
         bold_width > 0.0,
         "expected measurable width for bold ASCII glyph"
@@ -3592,20 +3588,18 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
         "expected distinct cache entries for different semantic font specs even when face ids match"
     );
 
-    let repeated_regular_width = unsafe {
-        char_advance(
-            &mut ascii_width_cache,
-            &mut font_metrics_svc,
-            'A',
-            1,
-            8.0,
-            14,
-            8.0,
-            "monospace",
-            400,
-            false,
-        )
-    };
+    let repeated_regular_width = char_advance(
+        &mut ascii_width_cache,
+        &mut font_metrics_svc,
+        'A',
+        1,
+        8.0,
+        14,
+        8.0,
+        "monospace",
+        400,
+        false,
+    );
     assert_eq!(
         repeated_regular_width, regular_width,
         "expected repeated measurement for the same semantic font spec to reuse the cache entry"
@@ -4337,6 +4331,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: 0,
@@ -4439,6 +4434,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
         buf.insert("Find file: ~/.config/doom/");
         let eob = buf.point_max_byte();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: eob,
@@ -4500,6 +4496,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let eob = buf.point_max_byte();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: eob,
@@ -4602,6 +4599,7 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
         buf.insert("Find file: ~/.config/doom/");
         let eob = buf.point_max_byte();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: eob,

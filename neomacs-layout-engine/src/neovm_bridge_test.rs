@@ -209,6 +209,61 @@ fn window_params_from_neovm_uses_default_header_line_and_tab_line_values() {
 }
 
 #[test]
+fn layout_snapshot_buffer_local_value_falls_back_to_default_values() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*line-numbers*");
+
+    eval_lisp(
+        &mut evaluator,
+        "(set-default 'display-line-numbers 'relative)",
+    );
+
+    let snapshot = {
+        let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
+        LayoutBufferSnapshot::from_buffer_with_obarray(buffer, evaluator.obarray())
+    };
+
+    assert_eq!(
+        buffer_display_line_numbers_mode(&snapshot),
+        DisplayLineNumbersMode::Relative
+    );
+    assert!(buffer_local_bool(
+        &snapshot,
+        "display-line-numbers-current-absolute"
+    ));
+}
+
+#[test]
+fn layout_snapshot_buffer_local_value_prefers_local_binding() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*line-numbers*");
+
+    eval_lisp(
+        &mut evaluator,
+        "(set-default 'display-line-numbers 'relative)",
+    );
+    evaluator
+        .buffer_manager_mut()
+        .get_mut(buf_id)
+        .unwrap()
+        .set_buffer_local("display-line-numbers", Value::T);
+
+    let snapshot = {
+        let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
+        LayoutBufferSnapshot::from_buffer_with_obarray(buffer, evaluator.obarray())
+    };
+
+    assert_eq!(
+        buffer_display_line_numbers_mode(&snapshot),
+        DisplayLineNumbersMode::Absolute
+    );
+}
+
+#[test]
 fn test_window_params_nonselected_reads_window_point() {
     // For NON-selected windows, `params.point` comes from
     // `Window::point` (the snapshotted pointm marker), NOT
@@ -988,6 +1043,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
         buf.insert("prompt");
 
         let bob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: 0,
@@ -1006,6 +1062,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
 
         let eob = buf.point_max_byte();
         let eob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
             start: eob,
@@ -1071,6 +1128,7 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
             (None, "GLOBAL"),
         ] {
             let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                serial: 0,
                 plist: Value::NIL,
                 buffer: Some(buf_id),
                 start: eob,

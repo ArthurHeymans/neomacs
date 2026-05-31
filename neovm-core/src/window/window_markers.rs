@@ -12,7 +12,7 @@
 //! caches are refreshed by `sync_window_positions_from_markers` after every
 //! text edit.
 
-use crate::buffer::{BufferId, BufferManager, InsertionType};
+use crate::buffer::{Buffer, BufferId, BufferManager, InsertionType};
 use crate::window::{Frame, FrameManager, Window, WindowId};
 
 /// Window-start markers use `InsertionType::Before` so the marker stays
@@ -23,6 +23,33 @@ const START_INSERTION_TYPE: InsertionType = InsertionType::Before;
 const POINT_INSERTION_TYPE: InsertionType = InsertionType::Before;
 /// Old-point markers use `InsertionType::Before`, matching GNU `w->old_pointm`.
 const OLD_POINT_INSERTION_TYPE: InsertionType = InsertionType::Before;
+
+fn lisp_position_to_restricted_marker_position(
+    bm: &BufferManager,
+    buffer_id: BufferId,
+    lisp_position: usize,
+) -> (usize, usize) {
+    let Some(buffer) = bm.get(buffer_id) else {
+        return (
+            lisp_position.saturating_sub(1),
+            lisp_position.saturating_sub(1),
+        );
+    };
+    restricted_marker_position(buffer, lisp_position)
+}
+
+fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> (usize, usize) {
+    let char_pos = lisp_position
+        .saturating_sub(1)
+        .clamp(buffer.point_min_char(), buffer.point_max_char());
+    let byte_pos = buffer.char_to_byte_clamped(char_pos);
+    (byte_pos, char_pos)
+}
+
+fn marker_lisp_position(bm: &BufferManager, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
+    bm.marker_char_position(buffer_id, marker_id)
+        .map(|char_pos| char_pos.saturating_add(1).max(1))
+}
 
 pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer_id: BufferId) {
     let Window::Leaf {
@@ -38,13 +65,17 @@ pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer
         return;
     };
 
-    let (start_mid, _) = bm.create_marker(buffer_id, *window_start, START_INSERTION_TYPE);
+    let (start_byte, _) = lisp_position_to_restricted_marker_position(bm, buffer_id, *window_start);
+    let (start_mid, _) = bm.create_marker(buffer_id, start_byte, START_INSERTION_TYPE);
     *start_marker_id = Some(start_mid);
 
-    let (pt_mid, _) = bm.create_marker(buffer_id, *point, POINT_INSERTION_TYPE);
+    let (point_byte, _) = lisp_position_to_restricted_marker_position(bm, buffer_id, *point);
+    let (pt_mid, _) = bm.create_marker(buffer_id, point_byte, POINT_INSERTION_TYPE);
     *point_marker_id = Some(pt_mid);
 
-    let (op_mid, _) = bm.create_marker(buffer_id, *old_point, OLD_POINT_INSERTION_TYPE);
+    let (old_point_byte, _) =
+        lisp_position_to_restricted_marker_position(bm, buffer_id, *old_point);
+    let (op_mid, _) = bm.create_marker(buffer_id, old_point_byte, OLD_POINT_INSERTION_TYPE);
     *old_point_marker_id = Some(op_mid);
 }
 
@@ -82,15 +113,21 @@ fn move_marker(
     bm: &mut BufferManager,
     buffer_id: BufferId,
     marker_id: Option<u64>,
-    bytepos: usize,
+    lisp_position: usize,
 ) {
     let Some(mid) = marker_id else { return };
+    let (bytepos, charpos) =
+        lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
     if let Some(buf) = bm.get(buffer_id) {
-        buf.text.move_marker_to(mid, bytepos, 0);
+        buf.text.move_marker_to(mid, bytepos, charpos);
     }
 }
 
-pub fn set_window_start_with_marker(bm: &mut BufferManager, window: &mut Window, bytepos: usize) {
+pub fn set_window_start_with_marker(
+    bm: &mut BufferManager,
+    window: &mut Window,
+    lisp_position: usize,
+) {
     let Window::Leaf {
         buffer_id,
         window_start,
@@ -100,11 +137,15 @@ pub fn set_window_start_with_marker(bm: &mut BufferManager, window: &mut Window,
     else {
         return;
     };
-    *window_start = bytepos;
-    move_marker(bm, *buffer_id, *start_marker_id, bytepos);
+    *window_start = lisp_position;
+    move_marker(bm, *buffer_id, *start_marker_id, lisp_position);
 }
 
-pub fn set_window_point_with_marker(bm: &mut BufferManager, window: &mut Window, bytepos: usize) {
+pub fn set_window_point_with_marker(
+    bm: &mut BufferManager,
+    window: &mut Window,
+    lisp_position: usize,
+) {
     let Window::Leaf {
         buffer_id,
         point,
@@ -114,14 +155,14 @@ pub fn set_window_point_with_marker(bm: &mut BufferManager, window: &mut Window,
     else {
         return;
     };
-    *point = bytepos;
-    move_marker(bm, *buffer_id, *point_marker_id, bytepos);
+    *point = lisp_position;
+    move_marker(bm, *buffer_id, *point_marker_id, lisp_position);
 }
 
 pub fn set_window_old_point_with_marker(
     bm: &mut BufferManager,
     window: &mut Window,
-    bytepos: usize,
+    lisp_position: usize,
 ) {
     let Window::Leaf {
         buffer_id,
@@ -132,8 +173,8 @@ pub fn set_window_old_point_with_marker(
     else {
         return;
     };
-    *old_point = bytepos;
-    move_marker(bm, *buffer_id, *old_point_marker_id, bytepos);
+    *old_point = lisp_position;
+    move_marker(bm, *buffer_id, *old_point_marker_id, lisp_position);
 }
 
 /// Refresh cached `usize` positions on every leaf window from its markers.
@@ -183,17 +224,17 @@ fn sync_leaf(window: &mut Window, bm: &BufferManager, edited_buffer_id: BufferId
     }
 
     if let Some(mid) = *start_marker_id {
-        if let Some(pos) = bm.marker_position(*buffer_id, mid) {
+        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
             *window_start = pos;
         }
     }
     if let Some(mid) = *point_marker_id {
-        if let Some(pos) = bm.marker_position(*buffer_id, mid) {
+        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
             *point = pos;
         }
     }
     if let Some(mid) = *old_point_marker_id {
-        if let Some(pos) = bm.marker_position(*buffer_id, mid) {
+        if let Some(pos) = marker_lisp_position(bm, *buffer_id, mid) {
             *old_point = pos;
         }
     }

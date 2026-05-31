@@ -2555,6 +2555,205 @@ fn make_lisp_face_vector_for_domain(face_name: &str, defaults_frame: bool) -> Va
     Value::vector(values)
 }
 
+pub(crate) fn make_lisp_face_vector_for_frame(face_name: &str) -> Value {
+    make_lisp_face_vector_for_domain(face_name, false)
+}
+
+fn face_hash_entry_lisp_vector(entry: Value) -> Option<Value> {
+    if entry.is_vector() {
+        Some(entry)
+    } else if entry.is_cons() {
+        let vector = entry.cons_cdr();
+        vector.is_vector().then_some(vector)
+    } else {
+        None
+    }
+}
+
+fn runtime_unspecified_lisp_face_attr(attr: LFaceAttr, value: Value) -> bool {
+    value.is_symbol_named("unspecified")
+        || value.is_symbol_named(":ignore-defface")
+        || value.is_symbol_named("reset")
+        || (attr == LFaceAttr::Foreground && value.as_utf8_str() == Some("unspecified-fg"))
+        || (attr == LFaceAttr::Background && value.as_utf8_str() == Some("unspecified-bg"))
+}
+
+fn frame_lisp_face_table_entries(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+) -> Vec<(String, Value)> {
+    let Some(table) = eval
+        .frames
+        .get(frame_id)
+        .map(|frame| frame.face_hash_table())
+    else {
+        return Vec::new();
+    };
+    let Some(hash_table) = table.as_hash_table() else {
+        return Vec::new();
+    };
+
+    hash_table
+        .data
+        .iter()
+        .filter_map(|(key, entry)| match key {
+            HashKey::Symbol(symbol) => face_hash_entry_lisp_vector(*entry)
+                .map(|vector| (resolve_sym(*symbol).to_string(), vector)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn frame_parameter_color_or_tty_default(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    param: FrameParam,
+    tty_default: &str,
+) -> Value {
+    eval.frames
+        .get(frame_id)
+        .and_then(|frame| frame.known_parameter(param))
+        .filter(|value| value.is_string())
+        .unwrap_or_else(|| Value::string(tty_default))
+}
+
+fn default_face_has_explicit_font_attr(attr: LFaceAttr) -> bool {
+    get_face_override("default", attr, false).is_some()
+        || get_face_override("default", attr, true).is_some()
+}
+
+fn realize_default_lisp_face_for_frame(eval: &mut super::eval::Context, frame_id: FrameId) {
+    let Some(vector) =
+        ensure_frame_lisp_face_vector(eval, frame_id, "default", FrameFaceInitial::SelectedBase)
+    else {
+        return;
+    };
+    let Some(frame) = eval.frames.get(frame_id) else {
+        return;
+    };
+    let window_system = frame.effective_window_system();
+    let font_pixel_size = frame.font_pixel_size;
+
+    if window_system.is_none() {
+        set_lisp_face_vector_attr(vector, LFaceAttr::Family, Value::string("default"));
+        set_lisp_face_vector_attr(vector, LFaceAttr::Foundry, Value::string("default"));
+        set_lisp_face_vector_attr(vector, LFaceAttr::Width, Value::symbol("normal"));
+        set_lisp_face_vector_attr(vector, LFaceAttr::Height, Value::fixnum(1));
+        if lisp_face_vector_attr(vector, LFaceAttr::Weight)
+            .is_none_or(|value| runtime_unspecified_lisp_face_attr(LFaceAttr::Weight, value))
+        {
+            set_lisp_face_vector_attr(vector, LFaceAttr::Weight, Value::symbol("normal"));
+        }
+        if lisp_face_vector_attr(vector, LFaceAttr::Slant)
+            .is_none_or(|value| runtime_unspecified_lisp_face_attr(LFaceAttr::Slant, value))
+        {
+            set_lisp_face_vector_attr(vector, LFaceAttr::Slant, Value::symbol("normal"));
+        }
+        if lisp_face_vector_attr(vector, LFaceAttr::Fontset)
+            .is_none_or(|value| runtime_unspecified_lisp_face_attr(LFaceAttr::Fontset, value))
+        {
+            set_lisp_face_vector_attr(vector, LFaceAttr::Fontset, Value::NIL);
+        }
+    } else {
+        for attr in [
+            LFaceAttr::Family,
+            LFaceAttr::Foundry,
+            LFaceAttr::Width,
+            LFaceAttr::Height,
+            LFaceAttr::Weight,
+            LFaceAttr::Slant,
+        ] {
+            if default_face_has_explicit_font_attr(attr) {
+                continue;
+            }
+            let fallback = live_frame_font_attribute_fallback(eval, frame_id, attr).or_else(|| {
+                (attr == LFaceAttr::Height)
+                    .then(|| Value::fixnum((font_pixel_size.max(1.0) * 10.0).round() as i64))
+            });
+            if let Some(value) = fallback {
+                set_lisp_face_vector_attr(vector, attr, value);
+            }
+        }
+    }
+
+    for attr in [
+        LFaceAttr::Extend,
+        LFaceAttr::Underline,
+        LFaceAttr::Overline,
+        LFaceAttr::StrikeThrough,
+        LFaceAttr::Box,
+        LFaceAttr::InverseVideo,
+        LFaceAttr::Stipple,
+    ] {
+        if lisp_face_vector_attr(vector, attr)
+            .is_none_or(|value| runtime_unspecified_lisp_face_attr(attr, value))
+        {
+            set_lisp_face_vector_attr(vector, attr, Value::NIL);
+        }
+    }
+
+    if lisp_face_vector_attr(vector, LFaceAttr::Foreground)
+        .is_none_or(|value| runtime_unspecified_lisp_face_attr(LFaceAttr::Foreground, value))
+    {
+        let value = frame_parameter_color_or_tty_default(
+            eval,
+            frame_id,
+            FrameParam::ForegroundColor,
+            "unspecified-fg",
+        );
+        set_lisp_face_vector_attr(vector, LFaceAttr::Foreground, value);
+    }
+    if lisp_face_vector_attr(vector, LFaceAttr::Background)
+        .is_none_or(|value| runtime_unspecified_lisp_face_attr(LFaceAttr::Background, value))
+    {
+        let value = frame_parameter_color_or_tty_default(
+            eval,
+            frame_id,
+            FrameParam::BackgroundColor,
+            "unspecified-bg",
+        );
+        set_lisp_face_vector_attr(vector, LFaceAttr::Background, value);
+    }
+}
+
+fn runtime_face_from_lisp_face_vector(face_name: &str, vector: Value) -> RuntimeFace {
+    let mut face = RuntimeFace::new(face_name);
+    for attr in LFACE_ATTRS {
+        let Some(value) = lisp_face_vector_attr(vector, attr) else {
+            continue;
+        };
+        if runtime_unspecified_lisp_face_attr(attr, value) {
+            continue;
+        }
+        if let Some(face_attr) = lisp_value_to_face_attr(attr, value) {
+            face.set_attribute(attr, face_attr);
+        }
+    }
+    face
+}
+
+/// Rebuild the display-facing runtime face cache from GNU-shaped frame-local
+/// Lisp face vectors.
+///
+/// GNU stores face definitions as Lisp vectors in `frame->face_hash_table` and
+/// realizes renderable `struct face` entries from those vectors during
+/// redisplay. Neomacs still has a Rust `FaceTable` for the layout bridge; keep
+/// it as a derived cache so redisplay follows the same ownership boundary.
+pub(crate) fn sync_runtime_face_table_from_frame_lisp_faces(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+) {
+    realize_default_lisp_face_for_frame(eval, frame_id);
+    let entries = frame_lisp_face_table_entries(eval, frame_id);
+    for (face_name, vector) in entries {
+        let face = runtime_face_from_lisp_face_vector(&face_name, vector);
+        eval.face_table.define(&face_name, face.clone());
+        if let Some(frame) = eval.frames.get_mut(frame_id) {
+            crate::emacs_core::xfaces::mirror_runtime_face_into_frame(frame, &face_name, &face);
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum FrameFaceInitial {
     Empty,
@@ -3610,14 +3809,9 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
 
     match attr {
         LFaceAttr::Foreground | LFaceAttr::Background | LFaceAttr::DistantForeground => {
-            // Doom themes store colours as cons cells (dark . light).
-            // Extract the car (dark variant) — the common TUI default.
             let s = match value.kind() {
-                ValueKind::Cons => {
-                    let items = crate::emacs_core::value::list_to_vec(&value).unwrap_or_default();
-                    items.first().and_then(|v| v.as_utf8_str())
-                }
-                _ => value.as_utf8_str(),
+                ValueKind::Cons => value.cons_car().as_utf8_str(),
+                _ => value.as_utf8_str().or_else(|| value.as_symbol_name()),
             };
             let s = s?;
             let c = Color::from_name(s).or_else(|| Color::from_hex(s))?;
