@@ -32278,3 +32278,75 @@ fn ft_zap_text_property_face_single_char_bold_deep() {
      'prev-prop (previous-single-property-change 2 'face)))))"##,
     );
 }
+
+#[test]
+fn ft_blaze_face_overlay_face_mix_all_three_face_types() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face '(:foreground "red"))
+      (list
+       'tp (get-text-property 3 'face)
+       'ov-face (overlay-get ov 'face)
+       'cp (get-char-property 3 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_blaze_font_lock_octave_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (octave-mode) (error (fundamental-mode)))
+    (insert "function y = square(x)\n  y = x * x;\nendfunction\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_blaze_face_overlay_face_create_two_read_both() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov1 (make-overlay 1 3))) (overlay-put ov1 'face 'bold))
+    (let ((ov2 (make-overlay 4 6))) (overlay-put ov2 'face 'italic))
+    (list
+     'ov1-face (overlay-get ov1 'face)
+     'ov2-face (overlay-get ov2 'face)
+     'cp-pos2 (get-char-property 2 'face)
+     'cp-pos5 (get-char-property 5 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_blaze_text_property_merge_adjacent_same_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 6 11 'face 'bold)
+    (list
+     'intervals (length (object-intervals (current-buffer)))
+     'pos1-face (get-text-property 1 'face)
+     'pos6-face (get-text-property 6 'face)
+     'merged-p (= (length (object-intervals (current-buffer))) 1)))))"##,
+    );
+}
