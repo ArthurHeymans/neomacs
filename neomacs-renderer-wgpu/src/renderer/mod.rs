@@ -165,6 +165,7 @@ pub struct WgpuRenderer {
     pub glyph_stats: GlyphRenderStats,
     pub(super) glyph_vertex_buffer: DynamicVertexBuffer<GlyphVertex>,
     pub(super) subpixel_vertex_buffer: DynamicVertexBuffer<SubpixelGlyphVertex>,
+    pub(super) image_vertex_buffer: DynamicVertexBuffer<GlyphVertex>,
     // --- Stencil-based clipping for child frame rounded corners ---
     pub(super) stencil_texture: wgpu::Texture,
     pub(super) stencil_view: wgpu::TextureView,
@@ -1513,6 +1514,7 @@ impl WgpuRenderer {
             glyph_stats: GlyphRenderStats::new(),
             glyph_vertex_buffer: DynamicVertexBuffer::new("Glyph Vertex Buffer"),
             subpixel_vertex_buffer: DynamicVertexBuffer::new("Subpixel Glyph Vertex Buffer"),
+            image_vertex_buffer: DynamicVertexBuffer::new("Image Vertex Buffer"),
             stencil_texture,
             stencil_view,
             stencil_rect_pipeline,

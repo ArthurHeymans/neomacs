@@ -156,7 +156,7 @@ impl RenderApp {
     }
 
     fn render_frame_chrome_overlays(
-        renderer: &WgpuRenderer,
+        renderer: &mut WgpuRenderer,
         surface_view: &wgpu::TextureView,
         glyph_atlas: &mut WgpuGlyphAtlas,
         overlays: GuiFrameChromeOverlays<'_>,

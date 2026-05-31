@@ -2258,7 +2258,7 @@ impl WgpuRenderer {
 
     /// Render the compact GUI chrome bar: menu labels followed by tool-bar icons.
     pub fn render_compact_bar(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         menu_items: &[MenuBarItem],
         tool_items: &[ToolBarItem],
@@ -2457,31 +2457,9 @@ impl WgpuRenderer {
         }
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Compact Bar Icon Encoder"),
-            });
+        // --- Pass 3: Tool icons (batched) ---
+        let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Compact Bar Icon Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.image_pipeline);
-            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
             let mut item_x = tool_x_origin + pad;
             for item in tool_items {
                 if item.is_separator {
@@ -2492,61 +2470,75 @@ impl WgpuRenderer {
                 let icon_y = (compact_bar_height - icon_sz) / 2.0;
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [tool_fg.0, tool_fg.1, tool_fg.2, alpha];
-                if let Some(&image_id) = icon_textures.get(&item.icon_name)
-                    && let Some(cached) = self.image_cache.get(image_id)
-                {
-                    let vertices = [
-                        GlyphVertex {
-                            position: [icon_x, icon_y],
-                            tex_coords: [0.0, 0.0],
-                            color: tint,
-                        },
-                        GlyphVertex {
-                            position: [icon_x + icon_sz, icon_y],
-                            tex_coords: [1.0, 0.0],
-                            color: tint,
-                        },
-                        GlyphVertex {
-                            position: [icon_x + icon_sz, icon_y + icon_sz],
-                            tex_coords: [1.0, 1.0],
-                            color: tint,
-                        },
-                        GlyphVertex {
-                            position: [icon_x, icon_y],
-                            tex_coords: [0.0, 0.0],
-                            color: tint,
-                        },
-                        GlyphVertex {
-                            position: [icon_x + icon_sz, icon_y + icon_sz],
-                            tex_coords: [1.0, 1.0],
-                            color: tint,
-                        },
-                        GlyphVertex {
-                            position: [icon_x, icon_y + icon_sz],
-                            tex_coords: [0.0, 1.0],
-                            color: tint,
-                        },
-                    ];
-                    let buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Compact Bar Icon Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.set_bind_group(1, &cached.bind_group, &[]);
-                    pass.draw(0..6, 0..1);
+                if let Some(&image_id) = icon_textures.get(&item.icon_name) {
+                    if let Some(cached) = self.image_cache.get(image_id) {
+                        let bg = cached.bind_group.clone();
+                        let verts = [
+                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y], tex_coords: [1.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
+                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
+                            GlyphVertex { position: [icon_x, icon_y + icon_sz], tex_coords: [0.0, 1.0], color: tint },
+                        ];
+                        match icon_batches.last() {
+                            Some((prev_id, _, _)) if *prev_id == image_id => {
+                                icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
+                            }
+                            _ => {
+                                icon_batches.push((image_id, bg, verts.to_vec()));
+                            }
+                        }
+                    }
                 }
                 item_x += item_size + item_spacing;
             }
         }
-        self.queue.submit(std::iter::once(encoder.finish()));
+        if !icon_batches.is_empty() {
+            let mut all_verts: Vec<GlyphVertex> = Vec::new();
+            let mut batch_ranges: Vec<(wgpu::BindGroup, std::ops::Range<u32>)> = Vec::new();
+            for (_, bg, verts) in icon_batches {
+                let start = all_verts.len() as u32;
+                all_verts.extend_from_slice(&verts);
+                let end = all_verts.len() as u32;
+                batch_ranges.push((bg, start..end));
+            }
+            let slice = self.image_vertex_buffer.upload(&self.device, &self.queue, &all_verts);
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Compact Bar Icon Encoder"),
+            });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Compact Bar Icon Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_pipeline(&self.image_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, slice);
+                for (bg, range) in &batch_ranges {
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.draw(range.clone(), 0..1);
+                }
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 
     /// Render the GPU toolbar overlay at the top of the frame.
     pub fn render_toolbar(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         items: &[ToolBarItem],
         toolbar_y: f32,
@@ -2695,96 +2687,82 @@ impl WgpuRenderer {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        // --- Pass 2: Icon textures ---
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Toolbar Icon Encoder"),
-            });
+        // --- Pass 2: Icon textures (batched) ---
+        let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Toolbar Icon Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.image_pipeline);
-            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
             let mut item_x = pad;
             for item in items {
                 if item.is_separator {
                     item_x += separator_width;
                     continue;
                 }
-
                 let icon_x = item_x + pad;
                 let icon_y = toolbar_y + (toolbar_height - icon_sz) / 2.0;
-
-                // Tint color: fg color for enabled, dimmed for disabled
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [fg.0, fg.1, fg.2, alpha];
-
                 if let Some(&image_id) = icon_textures.get(&item.icon_name) {
                     if let Some(cached) = self.image_cache.get(image_id) {
-                        let vertices = [
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y],
-                                tex_coords: [1.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y + icon_sz],
-                                tex_coords: [0.0, 1.0],
-                                color: tint,
-                            },
+                        let bg = cached.bind_group.clone();
+                        let verts = [
+                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y], tex_coords: [1.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
+                            GlyphVertex { position: [icon_x, icon_y], tex_coords: [0.0, 0.0], color: tint },
+                            GlyphVertex { position: [icon_x + icon_sz, icon_y + icon_sz], tex_coords: [1.0, 1.0], color: tint },
+                            GlyphVertex { position: [icon_x, icon_y + icon_sz], tex_coords: [0.0, 1.0], color: tint },
                         ];
-                        let image_buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Toolbar Icon Vertex Buffer"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        pass.set_vertex_buffer(0, image_buffer.slice(..));
-                        pass.draw(0..6, 0..1);
+                        match icon_batches.last() {
+                            Some((prev_id, _, _)) if *prev_id == image_id => {
+                                icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
+                            }
+                            _ => {
+                                icon_batches.push((image_id, bg, verts.to_vec()));
+                            }
+                        }
                     }
                 }
-
                 item_x += item_size + item_spacing;
             }
         }
-        self.queue.submit(std::iter::once(encoder.finish()));
+        if !icon_batches.is_empty() {
+            let mut all_verts: Vec<GlyphVertex> = Vec::new();
+            let mut batch_ranges: Vec<(wgpu::BindGroup, std::ops::Range<u32>)> = Vec::new();
+            for (_, bg, verts) in icon_batches {
+                let start = all_verts.len() as u32;
+                all_verts.extend_from_slice(&verts);
+                let end = all_verts.len() as u32;
+                batch_ranges.push((bg, start..end));
+            }
+            let slice = self.image_vertex_buffer.upload(&self.device, &self.queue, &all_verts);
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Toolbar Icon Encoder"),
+            });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Toolbar Icon Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_pipeline(&self.image_pipeline);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, slice);
+                for (bg, range) in &batch_ranges {
+                    pass.set_bind_group(1, bg, &[]);
+                    pass.draw(range.clone(), 0..1);
+                }
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 }
