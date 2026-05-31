@@ -8,7 +8,10 @@
 //! Background, Border, Cursor (all styles with animation), ScrollBar (with rounded
 //! thumbs), Image, Video, WebKit.
 
-use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas, glyph_font_identity};
+use super::super::glyph_atlas::{
+    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas,
+    glyph_font_identity,
+};
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
@@ -47,6 +50,8 @@ fn build_subpixel_vertices(
     glyph_y: f32,
     glyph_w: f32,
     glyph_h: f32,
+    tex_u_min: f32,
+    tex_u_max: f32,
     tex_v_min: f32,
     tex_v_max: f32,
     fg_color: [f32; 4],
@@ -55,37 +60,37 @@ fn build_subpixel_vertices(
     [
         SubpixelGlyphVertex {
             position: [glyph_x, glyph_y],
-            tex_coords: [0.0, tex_v_min],
+            tex_coords: [tex_u_min, tex_v_min],
             fg_color,
             bg_color,
         },
         SubpixelGlyphVertex {
             position: [glyph_x + glyph_w, glyph_y],
-            tex_coords: [1.0, tex_v_min],
+            tex_coords: [tex_u_max, tex_v_min],
             fg_color,
             bg_color,
         },
         SubpixelGlyphVertex {
             position: [glyph_x + glyph_w, glyph_y + glyph_h],
-            tex_coords: [1.0, tex_v_max],
+            tex_coords: [tex_u_max, tex_v_max],
             fg_color,
             bg_color,
         },
         SubpixelGlyphVertex {
             position: [glyph_x, glyph_y],
-            tex_coords: [0.0, tex_v_min],
+            tex_coords: [tex_u_min, tex_v_min],
             fg_color,
             bg_color,
         },
         SubpixelGlyphVertex {
             position: [glyph_x + glyph_w, glyph_y + glyph_h],
-            tex_coords: [1.0, tex_v_max],
+            tex_coords: [tex_u_max, tex_v_max],
             fg_color,
             bg_color,
         },
         SubpixelGlyphVertex {
             position: [glyph_x, glyph_y + glyph_h],
-            tex_coords: [0.0, tex_v_max],
+            tex_coords: [tex_u_min, tex_v_max],
             fg_color,
             bg_color,
         },
@@ -441,13 +446,9 @@ impl WgpuRenderer {
         }
 
         // --- Step 2: Collect text glyphs (with overstrike and composed) ---
-        let mut mask_data: Vec<(GlyphKey, [GlyphVertex; 6])> = Vec::new();
-        let mut subpixel_data: Vec<(GlyphKey, [SubpixelGlyphVertex; 6])> = Vec::new();
-        let mut color_data: Vec<(GlyphKey, [GlyphVertex; 6])> = Vec::new();
-        let mut composed_mask_data: Vec<(ComposedGlyphKey, [GlyphVertex; 6])> = Vec::new();
-        let mut composed_subpixel_data: Vec<(ComposedGlyphKey, [SubpixelGlyphVertex; 6])> =
-            Vec::new();
-        let mut composed_color_data: Vec<(ComposedGlyphKey, [GlyphVertex; 6])> = Vec::new();
+    let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
+    let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
+    let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
 
         for glyph in &frame.glyphs {
@@ -480,58 +481,67 @@ impl WgpuRenderer {
                 let (y_int, y_bin) = SubpixelBin::new(phys_y);
                 let font_identity = glyph_font_identity(face);
 
-                let cached_opt = if let Some(text) = composed {
+                let subpixel_request = if enable_subpixel {
+                    SubpixelRequest::Enabled
+                } else {
+                    SubpixelRequest::Disabled
+                };
+                let handle_opt = if let Some(text) = composed {
                     stats.text_glyphs += 1;
                     stats.composed_glyphs += 1;
                     seen_composed_keys.insert(ComposedGlyphKey {
-                        text: text.clone(),
-                        face_id: *face_id,
-                        font_size_bits: font_size.to_bits(),
-                        font_identity,
-                        x_bin,
-                        y_bin,
-                    });
-                    glyph_atlas.get_or_create_composed(
-                        &self.device,
-                        &self.queue,
-                        text,
-                        *face_id,
-                        font_size.to_bits(),
-                        face,
-                        x_bin,
-                        y_bin,
-                        enable_subpixel,
-                    )
-                } else {
-                    stats.text_glyphs += 1;
-                    let key = GlyphKey {
-                        charcode: *ch as u32,
-                        face_id: *face_id,
-                        font_size_bits: font_size.to_bits(),
-                        font_identity,
-                        x_bin,
-                        y_bin,
+                            text: text.clone(),
+                            face_id: *face_id,
+                            font_size_bits: font_size.to_bits(),
+                            font_identity,
+                            x_bin,
+                            y_bin,
+                        });
+                        glyph_atlas.get_or_create_composed_atlas(
+                            &self.device,
+                            &self.queue,
+                            text,
+                            *face_id,
+                            font_size.to_bits(),
+                            face,
+                            x_bin,
+                            y_bin,
+                            subpixel_request,
+                        )
+                    } else {
+                        stats.text_glyphs += 1;
+                        let key = GlyphKey {
+                            charcode: *ch as u32,
+                            face_id: *face_id,
+                            font_size_bits: font_size.to_bits(),
+                            font_identity,
+                            x_bin,
+                            y_bin,
+                        };
+                        seen_single_keys.insert(key.clone());
+                        glyph_atlas.get_or_create_atlas(
+                            &self.device,
+                            &self.queue,
+                            &key,
+                            face,
+                            subpixel_request,
+                        )
                     };
-                    seen_single_keys.insert(key.clone());
-                    glyph_atlas.get_or_create(
-                        &self.device,
-                        &self.queue,
-                        &key,
-                        face,
-                        enable_subpixel,
-                    )
-                };
 
-                if let Some(cached) = cached_opt {
-                    // Vertex positions from integer physical pixels + bearing,
-                    // converted back to logical pixels.
-                    let glyph_x = (x_int as f32 + cached.bearing_x) / sf;
-                    let glyph_y = (y_int as f32 - cached.bearing_y) / sf;
-                    let glyph_w = cached.width as f32 / sf;
-                    let glyph_h = cached.height as f32 / sf;
+                if let Some(handle) = handle_opt {
+                    let entry = handle.entry;
+                    let metrics = entry.metrics();
+                    let uv = entry.uv();
+                    let content_rect = entry.rect();
+                    let tex_u_min = uv.min()[0];
+                    let tex_u_max = uv.max()[0];
+                    let tex_v_min = uv.min()[1];
+                    let tex_v_max = uv.max()[1];
+                    let glyph_x = (x_int as f32 + metrics.bearing_x) / sf;
+                    let glyph_y = (y_int as f32 - metrics.bearing_y) / sf;
+                    let glyph_w = content_rect.width() as f32 / sf;
+                    let glyph_h = content_rect.height() as f32 / sf;
 
-                    // Inverse-video cursor support: when the filled box cursor is
-                    // visible, draw the covered character with cursor_fg.
                     let mut effective_fg = *fg;
                     let mut effective_bg = (*bg)
                         .or_else(|| face.map(|resolved| resolved.background))
@@ -545,7 +555,8 @@ impl WgpuRenderer {
                         effective_bg = cursor.color;
                     }
 
-                    let color = if cached.is_color {
+                    let is_color = matches!(entry, AnyAtlasEntry::Color(_));
+                    let color = if is_color {
                         [1.0, 1.0, 1.0, 1.0]
                     } else {
                         [
@@ -561,68 +572,67 @@ impl WgpuRenderer {
                     let vertices = [
                         GlyphVertex {
                             position: [glyph_x, glyph_y],
-                            tex_coords: [0.0, 0.0],
+                            tex_coords: [tex_u_min, tex_v_min],
                             color,
                         },
                         GlyphVertex {
                             position: [glyph_x + glyph_w, glyph_y],
-                            tex_coords: [1.0, 0.0],
+                            tex_coords: [tex_u_max, tex_v_min],
                             color,
                         },
                         GlyphVertex {
                             position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                            tex_coords: [1.0, 1.0],
+                            tex_coords: [tex_u_max, tex_v_max],
                             color,
                         },
                         GlyphVertex {
                             position: [glyph_x, glyph_y],
-                            tex_coords: [0.0, 0.0],
+                            tex_coords: [tex_u_min, tex_v_min],
                             color,
                         },
                         GlyphVertex {
                             position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                            tex_coords: [1.0, 1.0],
+                            tex_coords: [tex_u_max, tex_v_max],
                             color,
                         },
                         GlyphVertex {
                             position: [glyph_x, glyph_y + glyph_h],
-                            tex_coords: [0.0, 1.0],
+                            tex_coords: [tex_u_min, tex_v_max],
                             color,
                         },
                     ];
 
-                    // Overstrike: simulate bold by drawing shifted 1px right
                     let overstrike_vertices = if *overstrike {
                         let ox = 1.0 / sf;
                         Some([
                             GlyphVertex {
                                 position: [glyph_x + ox, glyph_y],
-                                tex_coords: [0.0, 0.0],
+                                tex_coords: [tex_u_min, tex_v_min],
                                 color,
                             },
                             GlyphVertex {
                                 position: [glyph_x + ox + glyph_w, glyph_y],
-                                tex_coords: [1.0, 0.0],
+                                tex_coords: [tex_u_max, tex_v_min],
                                 color,
                             },
                             GlyphVertex {
                                 position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [1.0, 1.0],
+                                tex_coords: [tex_u_max, tex_v_max],
                                 color,
                             },
                             GlyphVertex {
                                 position: [glyph_x + ox, glyph_y],
-                                tex_coords: [0.0, 0.0],
+                                tex_coords: [tex_u_min, tex_v_min],
                                 color,
                             },
                             GlyphVertex {
                                 position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [1.0, 1.0],
+                                tex_coords: [tex_u_max, tex_v_max],
                                 color,
                             },
                             GlyphVertex {
                                 position: [glyph_x + ox, glyph_y + glyph_h],
-                                tex_coords: [0.0, 1.0],
+                                tex_coords: [tex_u_min, tex_v_max],
                                 color,
                             },
                         ])
@@ -635,8 +645,10 @@ impl WgpuRenderer {
                         glyph_y,
                         glyph_w,
                         glyph_h,
-                        0.0,
-                        1.0,
+                        tex_u_min,
+                        tex_u_max,
+                        tex_v_min,
+                        tex_v_max,
                         subpixel_fg,
                         subpixel_bg,
                     );
@@ -648,8 +660,10 @@ impl WgpuRenderer {
                             glyph_y,
                             glyph_w,
                             glyph_h,
-                            0.0,
-                            1.0,
+                            tex_u_min,
+                            tex_u_max,
+                            tex_v_min,
+                            tex_v_max,
                             subpixel_fg,
                             subpixel_bg,
                         ))
@@ -657,55 +671,20 @@ impl WgpuRenderer {
                         None
                     };
 
-                    if let Some(text) = composed {
-                        let ckey = ComposedGlyphKey {
-                            text: text.clone(),
-                            face_id: *face_id,
-                            font_size_bits: font_size.to_bits(),
-                            font_identity,
-                            x_bin,
-                            y_bin,
-                        };
-                        if cached.is_color {
-                            composed_color_data.push((ckey.clone(), vertices));
-                            if let Some(ov) = overstrike_vertices {
-                                composed_color_data.push((ckey, ov));
-                            }
-                        } else if cached.is_subpixel {
-                            composed_subpixel_data.push((ckey.clone(), subpixel_vertices));
-                            if let Some(ov) = overstrike_subpixel_vertices {
-                                composed_subpixel_data.push((ckey, ov));
-                            }
-                        } else {
-                            composed_mask_data.push((ckey.clone(), vertices));
-                            if let Some(ov) = overstrike_vertices {
-                                composed_mask_data.push((ckey, ov));
-                            }
+                    if is_color {
+                        color_data.push((entry, vertices));
+                        if let Some(ov) = overstrike_vertices {
+                            color_data.push((entry, ov));
+                        }
+                    } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
+                        subpixel_data.push((entry, subpixel_vertices));
+                        if let Some(ov) = overstrike_subpixel_vertices {
+                            subpixel_data.push((entry, ov));
                         }
                     } else {
-                        let key = GlyphKey {
-                            charcode: *ch as u32,
-                            face_id: *face_id,
-                            font_size_bits: font_size.to_bits(),
-                            font_identity,
-                            x_bin,
-                            y_bin,
-                        };
-                        if cached.is_color {
-                            color_data.push((key.clone(), vertices));
-                            if let Some(ov) = overstrike_vertices {
-                                color_data.push((key, ov));
-                            }
-                        } else if cached.is_subpixel {
-                            subpixel_data.push((key.clone(), subpixel_vertices));
-                            if let Some(ov) = overstrike_subpixel_vertices {
-                                subpixel_data.push((key, ov));
-                            }
-                        } else {
-                            mask_data.push((key.clone(), vertices));
-                            if let Some(ov) = overstrike_vertices {
-                                mask_data.push((key, ov));
-                            }
+                        mask_data.push((entry, vertices));
+                        if let Some(ov) = overstrike_vertices {
+                            mask_data.push((entry, ov));
                         }
                     }
                 }
@@ -1142,13 +1121,6 @@ impl WgpuRenderer {
 
             // --- Draw mask text glyphs ---
             if !mask_data.is_empty() {
-                mask_data.sort_by(|(a, _), (b, _)| {
-                    a.face_id
-                        .cmp(&b.face_id)
-                        .then(a.font_size_bits.cmp(&b.font_size_bits))
-                        .then(a.charcode.cmp(&b.charcode))
-                });
-
                 let all_vertices: Vec<GlyphVertex> = mask_data
                     .iter()
                     .flat_map(|(_, verts)| verts.iter().copied())
@@ -1169,34 +1141,25 @@ impl WgpuRenderer {
 
                 let mut i = 0;
                 while i < mask_data.len() {
-                    let (ref key, _) = mask_data[i];
-                    if let Some(cached) = glyph_atlas.get(key, enable_subpixel) {
-                        let batch_start = i;
-                        i += 1;
-                        while i < mask_data.len() && mask_data[i].0 == *key {
-                            i += 1;
-                        }
-                        let vert_start = (batch_start * 6) as u32;
-                        let vert_end = (i * 6) as u32;
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(vert_start..vert_end, 0..1);
-                        stats.glyph_draw_calls += 1;
-                    } else {
+                    let (entry, _) = &mask_data[i];
+                    let page_id = entry.page_id_value();
+                    let bg = glyph_atlas.atlas_bind_group(*entry);
+                    let batch_start = i;
+                    i += 1;
+                    while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
+                    pass.set_bind_group(1, bg, &[]);
+                    stats.glyph_bind_group_changes += 1;
+                    pass.draw(vert_start..vert_end, 0..1);
+                    stats.glyph_draw_calls += 1;
                 }
             }
 
             // --- Draw subpixel LCD text glyphs ---
             if !subpixel_data.is_empty() {
-                subpixel_data.sort_by(|(a, _), (b, _)| {
-                    a.face_id
-                        .cmp(&b.face_id)
-                        .then(a.font_size_bits.cmp(&b.font_size_bits))
-                        .then(a.charcode.cmp(&b.charcode))
-                });
-
                 let all_vertices: Vec<SubpixelGlyphVertex> = subpixel_data
                     .iter()
                     .flat_map(|(_, verts)| verts.iter().copied())
@@ -1217,34 +1180,27 @@ impl WgpuRenderer {
 
                 let mut i = 0;
                 while i < subpixel_data.len() {
-                    let (ref key, _) = subpixel_data[i];
-                    if let Some(cached) = glyph_atlas.get(key, enable_subpixel) {
-                        let batch_start = i;
-                        i += 1;
-                        while i < subpixel_data.len() && subpixel_data[i].0 == *key {
-                            i += 1;
-                        }
-                        let vert_start = (batch_start * 6) as u32;
-                        let vert_end = (i * 6) as u32;
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(vert_start..vert_end, 0..1);
-                        stats.glyph_draw_calls += 1;
-                    } else {
+                    let (entry, _) = &subpixel_data[i];
+                    let page_id = entry.page_id_value();
+                    let bg = glyph_atlas.atlas_bind_group(*entry);
+                    let batch_start = i;
+                    i += 1;
+                    while i < subpixel_data.len()
+                        && subpixel_data[i].0.page_id_value() == page_id
+                    {
                         i += 1;
                     }
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
+                    pass.set_bind_group(1, bg, &[]);
+                    stats.glyph_bind_group_changes += 1;
+                    pass.draw(vert_start..vert_end, 0..1);
+                    stats.glyph_draw_calls += 1;
                 }
             }
 
             // --- Draw color text glyphs (emoji) ---
             if !color_data.is_empty() {
-                color_data.sort_by(|(a, _), (b, _)| {
-                    a.face_id
-                        .cmp(&b.face_id)
-                        .then(a.font_size_bits.cmp(&b.font_size_bits))
-                        .then(a.charcode.cmp(&b.charcode))
-                });
-
                 let all_vertices: Vec<GlyphVertex> = color_data
                     .iter()
                     .flat_map(|(_, verts)| verts.iter().copied())
@@ -1265,97 +1221,22 @@ impl WgpuRenderer {
 
                 let mut i = 0;
                 while i < color_data.len() {
-                    let (ref key, _) = color_data[i];
-                    if let Some(cached) = glyph_atlas.get(key, enable_subpixel) {
-                        let batch_start = i;
-                        i += 1;
-                        while i < color_data.len() && color_data[i].0 == *key {
-                            i += 1;
-                        }
-                        let vert_start = (batch_start * 6) as u32;
-                        let vert_end = (i * 6) as u32;
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(vert_start..vert_end, 0..1);
-                        stats.glyph_draw_calls += 1;
-                    } else {
+                    let (entry, _) = &color_data[i];
+                    let page_id = entry.page_id_value();
+                    let bg = glyph_atlas.atlas_bind_group(*entry);
+                    let batch_start = i;
+                    i += 1;
+                    while i < color_data.len()
+                        && color_data[i].0.page_id_value() == page_id
+                    {
                         i += 1;
                     }
-                }
-            }
-
-            // --- Draw composed mask glyphs ---
-            if !composed_mask_data.is_empty() {
-                pass.set_pipeline(glyph_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-                for (ckey, verts) in &composed_mask_data {
-                    if let Some(cached) = glyph_atlas.get_composed(ckey, enable_subpixel) {
-                        let vbuf =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Content Composed Mask VB"),
-                                    contents: bytemuck::cast_slice(verts),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-                        stats.glyph_vertex_buffer_creations += 1;
-                        pass.set_vertex_buffer(0, vbuf.slice(..));
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(0..6, 0..1);
-                        stats.glyph_draw_calls += 1;
-                        stats.composed_glyph_draw_calls += 1;
-                    }
-                }
-            }
-
-            // --- Draw composed subpixel glyphs ---
-            if !composed_subpixel_data.is_empty() {
-                pass.set_pipeline(subpixel_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-                for (ckey, verts) in &composed_subpixel_data {
-                    if let Some(cached) = glyph_atlas.get_composed(ckey, enable_subpixel) {
-                        let vbuf =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Content Composed Subpixel VB"),
-                                    contents: bytemuck::cast_slice(verts),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-                        stats.glyph_vertex_buffer_creations += 1;
-                        pass.set_vertex_buffer(0, vbuf.slice(..));
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(0..6, 0..1);
-                        stats.glyph_draw_calls += 1;
-                        stats.composed_glyph_draw_calls += 1;
-                    }
-                }
-            }
-
-            // --- Draw composed color glyphs (emoji ZWJ sequences) ---
-            if !composed_color_data.is_empty() {
-                pass.set_pipeline(image_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
-                for (ckey, verts) in &composed_color_data {
-                    if let Some(cached) = glyph_atlas.get_composed(ckey, enable_subpixel) {
-                        let vbuf =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Content Composed Color VB"),
-                                    contents: bytemuck::cast_slice(verts),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-                        stats.glyph_vertex_buffer_creations += 1;
-                        pass.set_vertex_buffer(0, vbuf.slice(..));
-                        pass.set_bind_group(1, &cached.bind_group, &[]);
-                        stats.glyph_bind_group_changes += 1;
-                        pass.draw(0..6, 0..1);
-                        stats.glyph_draw_calls += 1;
-                        stats.composed_glyph_draw_calls += 1;
-                    }
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
+                    pass.set_bind_group(1, bg, &[]);
+                    stats.glyph_bind_group_changes += 1;
+                    pass.draw(vert_start..vert_end, 0..1);
+                    stats.glyph_draw_calls += 1;
                 }
             }
 
