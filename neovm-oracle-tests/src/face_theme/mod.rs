@@ -31719,3 +31719,76 @@ fn ft_rocket_text_property_face_read_every_pos_deep() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_jet_face_overlay_face_priority_warp_around_test() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((low (make-overlay 1 6))) (overlay-put low 'face '(:foreground "low")) (overlay-put low 'priority 0))
+    (let ((mid (make-overlay 1 6))) (overlay-put mid 'face '(:foreground "mid")) (overlay-put mid 'priority 50000))
+    (let ((high (make-overlay 1 6))) (overlay-put high 'face '(:foreground "high")) (overlay-put high 'priority 100000))
+    (list
+     'sorted (get-char-property 3 'face)
+     'reverse (progn (overlay-put low 'priority 200000) (overlay-put high 'priority -1) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_jet_font_lock_perl_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (perl-mode) (error (fundamental-mode)))
+    (insert "#!/usr/bin/perl\nprint \"hello\\n\";\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_jet_face_string_with_props_in_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'italic)
+      (overlay-put ov 'display "REPLACEMENT")
+      (list
+       'face (overlay-get ov 'face)
+       'display (overlay-get ov 'display)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_jet_text_property_face_set_multiple_regions() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCCDDDDD")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 11 16 'face 'italic)
+    (put-text-property 16 21 'face 'underline)
+    (list
+     'regions (list
+                (get-text-property 3 'face)
+                (get-text-property 8 'face)
+                (get-text-property 13 'face)
+                (get-text-property 18 'face))
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
