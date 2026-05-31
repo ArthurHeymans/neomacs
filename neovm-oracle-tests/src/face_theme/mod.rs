@@ -30419,3 +30419,76 @@ fn ft_now_face_text_property_find_property_with_limit() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_go_face_overlay_face_consistency_after_every_operation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)) (history nil))
+      (push (list 'init (overlay-get ov 'face)) history)
+      (overlay-put ov 'face 'bold) (push (list 'set-bold (overlay-get ov 'face)) history)
+      (overlay-put ov 'face nil) (push (list 'set-nil (overlay-get ov 'face)) history)
+      (overlay-put ov 'face 'italic) (push (list 'set-italic (overlay-get ov 'face)) history)
+      (delete-overlay ov) (push (list 'deleted 'ov-deleted) history)
+      (nreverse history)))))"##,
+    );
+}
+
+#[test]
+fn ft_go_font_lock_fontify_number_to_string_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(number-to-string 42)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'num-to-str-face (save-excursion (goto-char (point-min)) (search-forward "number-to-string") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_go_face_overlay_face_immediate_recreate_after_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (delete-overlay ov)
+      (let ((ov2 (make-overlay 1 6)))
+        (overlay-put ov2 'face 'italic)
+        (list
+         'recreated-face (overlay-get ov2 'face)
+         'char-prop (get-char-property 3 'face)
+         (progn (delete-overlay ov2) 'cleaned)))))))"##,
+    );
+}
+
+#[test]
+fn ft_go_face_text_property_exhaustive_prop_changes_history() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAA")
+    (let ((history nil))
+      (push (list 't0 (get-text-property 1 'face) (get-text-property 2 'face) (get-text-property 3 'face)) history)
+      (put-text-property 1 4 'face 'bold)
+      (push (list 't1 (get-text-property 1 'face) (get-text-property 2 'face) (get-text-property 3 'face)) history)
+      (remove-text-properties 1 4 '(face nil))
+      (push (list 't2 (get-text-property 1 'face) (get-text-property 2 'face) (get-text-property 3 'face)) history)
+      (nreverse history)))))"##,
+    );
+}
