@@ -28260,3 +28260,73 @@ fn ft_alpha_face_text_property_custom_variables_face_deep() {
    'default-face-spec-fbound (fboundp 'face-spec-set))))"##,
     );
 }
+
+#[test]
+fn ft_beyond_face_overlay_face_from_make_overlay_to_delete() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (list
+     'num-overlays-before (length (overlays-in 1 6))
+     'create (progn (let ((ov (make-overlay 1 6))) (overlay-put ov 'face 'bold) (delete-overlay ov)) (length (overlays-in 1 6)))
+     'char-no-overlay (get-char-property 3 'face)
+     'verify-empty (length (overlays-in 1 6)))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond_font_lock_fontify_setf_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(setf (car list) new-value)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'setf-face (save-excursion (goto-char (point-min)) (search-forward "setf") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond_face_overlay_text_prop_outside_overlay() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBBCCCCC")
+    (put-text-property 1 6 'face 'bold)
+    (let ((ov (make-overlay 6 11)))
+      (overlay-put ov 'face 'italic))
+    (put-text-property 11 16 'face 'underline)
+    (list
+     'tp-bold (get-char-property 3 'face)
+     'ov-italic (get-char-property 8 'face)
+     'tp-underline (get-char-property 13 'face)
+     (progn (delete-overlay ov) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_beyond_face_text_property_there_then_not_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (remove-text-properties 1 6 '(face nil))
+    (put-text-property 1 6 'face 'italic)
+    (list
+     'face (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
