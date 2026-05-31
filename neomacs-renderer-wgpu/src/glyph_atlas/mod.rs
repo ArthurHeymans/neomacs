@@ -168,7 +168,6 @@ fn normalize_subpixel_mask(
     mask.to_vec()
 }
 
-use allocator::Allocation;
 use pages::{GlyphAtlasPages, PageAllocResult};
 use types::*;
 
@@ -185,7 +184,6 @@ pub struct WgpuGlyphAtlas {
     default_font_size: f32,
     default_line_height: f32,
     scale_factor: f32,
-    max_size: usize,
     interned_families: HashSet<&'static str>,
     generation: u64,
     frame_number: u64,
@@ -249,7 +247,6 @@ impl WgpuGlyphAtlas {
             default_font_size: 13.0,
             default_line_height: 17.0,
             scale_factor: 1.0,
-            max_size: 4096,
             interned_families: HashSet::new(),
             generation: 0,
             frame_number: 0,
@@ -905,34 +902,27 @@ impl WgpuGlyphAtlas {
         }
     }
 
-    fn rasterize_result_to_pixels(result: &RasterizeResult) -> Option<RasterizedGlyphPixels> {
-        let size = PixelSize::new(result.width, result.height)?;
-        if result.is_color {
-            Some(RasterizedGlyphPixels::Color {
+    fn rasterize_result_to_pixels(
+        result: &RasterizeResult,
+    ) -> Result<RasterizedGlyphPixels, GlyphAtlasError> {
+        let size = PixelSize::new(result.width, result.height).ok_or(GlyphAtlasError::ZeroSize)?;
+        let pixels = if result.is_color {
+            RasterizedGlyphPixels::Color {
                 size,
                 rgba_srgb: result.pixel_data.clone(),
-            })
+            }
         } else if result.is_subpixel {
-            Some(RasterizedGlyphPixels::Subpixel {
+            RasterizedGlyphPixels::Subpixel {
                 size,
                 rgba: result.pixel_data.clone(),
-            })
+            }
         } else {
-            Some(RasterizedGlyphPixels::Alpha {
+            RasterizedGlyphPixels::Alpha {
                 size,
                 bytes: result.pixel_data.clone(),
-            })
-        }
-    }
-
-    fn material_from_raster_result(result: &RasterizeResult) -> GlyphMaterialKind {
-        if result.is_color {
-            GlyphMaterialKind::ColorRgba
-        } else if result.is_subpixel {
-            GlyphMaterialKind::SubpixelMask
-        } else {
-            GlyphMaterialKind::AlphaMask
-        }
+            }
+        };
+        pixels.validated()
     }
 
     fn upload_to_atlas_page(
@@ -969,12 +959,176 @@ impl WgpuGlyphAtlas {
         );
     }
 
+    fn remove_alpha_page_entries(&mut self, evicted_id: PageId<AlphaMask>) {
+        self.atlas_cache
+            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Alpha(e) if e.page() == evicted_id)));
+        self.atlas_composed_cache
+            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Alpha(e) if e.page() == evicted_id)));
+    }
+
+    fn remove_subpixel_page_entries(&mut self, evicted_id: PageId<SubpixelMask>) {
+        self.atlas_cache.retain(
+            |_, v| !(matches!(v.entry, AnyAtlasEntry::Subpixel(e) if e.page() == evicted_id)),
+        );
+        self.atlas_composed_cache.retain(
+            |_, v| !(matches!(v.entry, AnyAtlasEntry::Subpixel(e) if e.page() == evicted_id)),
+        );
+    }
+
+    fn remove_color_page_entries(&mut self, evicted_id: PageId<ColorRgba>) {
+        self.atlas_cache
+            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Color(e) if e.page() == evicted_id)));
+        self.atlas_composed_cache
+            .retain(|_, v| !(matches!(v.entry, AnyAtlasEntry::Color(e) if e.page() == evicted_id)));
+    }
+
+    fn allocate_alpha_with_eviction(
+        &mut self,
+        size: PixelSize,
+        device: &wgpu::Device,
+    ) -> Result<PageAllocResult<AlphaMask>, GlyphAtlasError> {
+        if !self.atlas_config.can_fit(size) {
+            return Err(GlyphAtlasError::GlyphTooLarge);
+        }
+
+        if let Some(allocation) = self.atlas_pages.allocate_alpha(
+            size,
+            device,
+            &self.bind_group_layout,
+            &self.sampler,
+            self.frame_number,
+        ) {
+            return Ok(allocation);
+        }
+
+        let victim =
+            self.atlas_pages
+                .lru_unpinned_alpha()
+                .ok_or(GlyphAtlasError::AllPagesPinned {
+                    material: GlyphMaterialKind::AlphaMask,
+                })?;
+        let (evicted_id, _) = self
+            .atlas_pages
+            .reset_alpha_page(victim, self.frame_number)
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::AlphaMask,
+            })?;
+
+        self.remove_alpha_page_entries(evicted_id);
+        self.page_evictions_this_frame += 1;
+        self.atlas_pages
+            .allocate_alpha(
+                size,
+                device,
+                &self.bind_group_layout,
+                &self.sampler,
+                self.frame_number,
+            )
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::AlphaMask,
+            })
+    }
+
+    fn allocate_subpixel_with_eviction(
+        &mut self,
+        size: PixelSize,
+        device: &wgpu::Device,
+    ) -> Result<PageAllocResult<SubpixelMask>, GlyphAtlasError> {
+        if !self.atlas_config.can_fit(size) {
+            return Err(GlyphAtlasError::GlyphTooLarge);
+        }
+
+        if let Some(allocation) = self.atlas_pages.allocate_subpixel(
+            size,
+            device,
+            &self.bind_group_layout,
+            &self.sampler,
+            self.frame_number,
+        ) {
+            return Ok(allocation);
+        }
+
+        let victim =
+            self.atlas_pages
+                .lru_unpinned_subpixel()
+                .ok_or(GlyphAtlasError::AllPagesPinned {
+                    material: GlyphMaterialKind::SubpixelMask,
+                })?;
+        let (evicted_id, _) = self
+            .atlas_pages
+            .reset_subpixel_page(victim, self.frame_number)
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::SubpixelMask,
+            })?;
+
+        self.remove_subpixel_page_entries(evicted_id);
+        self.page_evictions_this_frame += 1;
+        self.atlas_pages
+            .allocate_subpixel(
+                size,
+                device,
+                &self.bind_group_layout,
+                &self.sampler,
+                self.frame_number,
+            )
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::SubpixelMask,
+            })
+    }
+
+    fn allocate_color_with_eviction(
+        &mut self,
+        size: PixelSize,
+        device: &wgpu::Device,
+    ) -> Result<PageAllocResult<ColorRgba>, GlyphAtlasError> {
+        if !self.atlas_config.can_fit(size) {
+            return Err(GlyphAtlasError::GlyphTooLarge);
+        }
+
+        if let Some(allocation) = self.atlas_pages.allocate_color(
+            size,
+            device,
+            &self.bind_group_layout,
+            &self.sampler,
+            self.frame_number,
+        ) {
+            return Ok(allocation);
+        }
+
+        let victim =
+            self.atlas_pages
+                .lru_unpinned_color()
+                .ok_or(GlyphAtlasError::AllPagesPinned {
+                    material: GlyphMaterialKind::ColorRgba,
+                })?;
+        let (evicted_id, _) = self
+            .atlas_pages
+            .reset_color_page(victim, self.frame_number)
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::ColorRgba,
+            })?;
+
+        self.remove_color_page_entries(evicted_id);
+        self.page_evictions_this_frame += 1;
+        self.atlas_pages
+            .allocate_color(
+                size,
+                device,
+                &self.bind_group_layout,
+                &self.sampler,
+                self.frame_number,
+            )
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: GlyphMaterialKind::ColorRgba,
+            })
+    }
+
     fn rasterize_result_to_atlas_entry(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         result: &RasterizeResult,
-    ) -> Option<AnyAtlasEntry> {
+    ) -> Result<AnyAtlasEntry, GlyphAtlasError> {
         let pixels = Self::rasterize_result_to_pixels(result)?;
         let size = pixels.size();
         let page_size = self.atlas_config.page_size;
@@ -990,36 +1144,13 @@ impl WgpuGlyphAtlas {
                     page_id,
                     generation,
                     allocation,
-                } = self
-                    .atlas_pages
-                    .allocate_alpha(
-                        size,
-                        device,
-                        &self.bind_group_layout,
-                        &self.sampler,
-                        self.frame_number,
-                    )
-                    .or_else(|| {
-                        let victim = self.atlas_pages.lru_unpinned_alpha()?;
-                        let (evicted_id, _old_gen) = self
-                            .atlas_pages
-                            .reset_alpha_page(victim, self.frame_number)?;
-                        self.atlas_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Alpha(ref e) if e.page() == evicted_id))
-                    });
-                        self.atlas_composed_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Alpha(ref e) if e.page() == evicted_id))
-                    });
-                        self.page_evictions_this_frame += 1;
-                        self.atlas_pages.allocate_alpha(
-                            size,
-                            device,
-                            &self.bind_group_layout,
-                            &self.sampler,
-                            self.frame_number,
-                        )
-                    })?;
-                let page = self.atlas_pages.alpha_page(page_id)?;
+                } = self.allocate_alpha_with_eviction(size, device)?;
+                let page = self.atlas_pages.alpha_page(page_id).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::AlphaMask,
+                        page: page_id.get(),
+                    },
+                )?;
                 Self::upload_to_atlas_page(
                     queue,
                     &page.texture,
@@ -1030,7 +1161,7 @@ impl WgpuGlyphAtlas {
                     AlphaMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Alpha(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Alpha(AtlasEntry::new(
                     page_id,
                     generation,
                     allocation.content_rect,
@@ -1043,31 +1174,13 @@ impl WgpuGlyphAtlas {
                     page_id,
                     generation,
                     allocation,
-                } = self.atlas_pages.allocate_subpixel(
-                    size,
-                    device,
-                    &self.bind_group_layout,
-                    &self.sampler,
-                    self.frame_number,
-                ).or_else(|| {
-                    let victim = self.atlas_pages.lru_unpinned_subpixel()?;
-                    let (evicted_id, _old_gen) = self.atlas_pages.reset_subpixel_page(victim, self.frame_number)?;
-                    self.atlas_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Subpixel(ref e) if e.page() == evicted_id))
-                    });
-                    self.atlas_composed_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Subpixel(ref e) if e.page() == evicted_id))
-                    });
-                    self.page_evictions_this_frame += 1;
-                    self.atlas_pages.allocate_subpixel(
-                        size,
-                        device,
-                        &self.bind_group_layout,
-                        &self.sampler,
-                        self.frame_number,
-                    )
-                })?;
-                let page = self.atlas_pages.subpixel_page(page_id)?;
+                } = self.allocate_subpixel_with_eviction(size, device)?;
+                let page = self.atlas_pages.subpixel_page(page_id).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::SubpixelMask,
+                        page: page_id.get(),
+                    },
+                )?;
                 Self::upload_to_atlas_page(
                     queue,
                     &page.texture,
@@ -1078,7 +1191,7 @@ impl WgpuGlyphAtlas {
                     SubpixelMask::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Subpixel(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Subpixel(AtlasEntry::new(
                     page_id,
                     generation,
                     allocation.content_rect,
@@ -1091,36 +1204,13 @@ impl WgpuGlyphAtlas {
                     page_id,
                     generation,
                     allocation,
-                } = self
-                    .atlas_pages
-                    .allocate_color(
-                        size,
-                        device,
-                        &self.bind_group_layout,
-                        &self.sampler,
-                        self.frame_number,
-                    )
-                    .or_else(|| {
-                        let victim = self.atlas_pages.lru_unpinned_color()?;
-                        let (evicted_id, _old_gen) = self
-                            .atlas_pages
-                            .reset_color_page(victim, self.frame_number)?;
-                        self.atlas_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Color(ref e) if e.page() == evicted_id))
-                    });
-                        self.atlas_composed_cache.retain(|_, v| {
-                        !(matches!(v.entry, AnyAtlasEntry::Color(ref e) if e.page() == evicted_id))
-                    });
-                        self.page_evictions_this_frame += 1;
-                        self.atlas_pages.allocate_color(
-                            size,
-                            device,
-                            &self.bind_group_layout,
-                            &self.sampler,
-                            self.frame_number,
-                        )
-                    })?;
-                let page = self.atlas_pages.color_page(page_id)?;
+                } = self.allocate_color_with_eviction(size, device)?;
+                let page = self.atlas_pages.color_page(page_id).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::ColorRgba,
+                        page: page_id.get(),
+                    },
+                )?;
                 Self::upload_to_atlas_page(
                     queue,
                     &page.texture,
@@ -1131,7 +1221,7 @@ impl WgpuGlyphAtlas {
                     ColorRgba::BYTES_PER_PIXEL,
                 );
                 let uv = UvRect::from_content_rect(allocation.content_rect, page_size);
-                Some(AnyAtlasEntry::Color(AtlasEntry::new(
+                Ok(AnyAtlasEntry::Color(AtlasEntry::new(
                     page_id,
                     generation,
                     allocation.content_rect,
@@ -1140,6 +1230,63 @@ impl WgpuGlyphAtlas {
                 )))
             }
         }
+    }
+
+    fn pin_entry_page(&mut self, entry: AnyAtlasEntry) -> Result<(), GlyphAtlasError> {
+        match entry {
+            AnyAtlasEntry::Alpha(e) => {
+                let generation = self
+                    .atlas_pages
+                    .alpha_page(e.page())
+                    .map(|p| p.generation)
+                    .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::AlphaMask,
+                        page: e.page().get(),
+                    })?;
+                if !e.matches_generation(generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::AlphaMask,
+                        page: e.page().get(),
+                    });
+                }
+                self.atlas_pages.pin_alpha(e.page(), self.frame_number);
+            }
+            AnyAtlasEntry::Subpixel(e) => {
+                let generation = self
+                    .atlas_pages
+                    .subpixel_page(e.page())
+                    .map(|p| p.generation)
+                    .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::SubpixelMask,
+                        page: e.page().get(),
+                    })?;
+                if !e.matches_generation(generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::SubpixelMask,
+                        page: e.page().get(),
+                    });
+                }
+                self.atlas_pages.pin_subpixel(e.page(), self.frame_number);
+            }
+            AnyAtlasEntry::Color(e) => {
+                let generation = self
+                    .atlas_pages
+                    .color_page(e.page())
+                    .map(|p| p.generation)
+                    .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::ColorRgba,
+                        page: e.page().get(),
+                    })?;
+                if !e.matches_generation(generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::ColorRgba,
+                        page: e.page().get(),
+                    });
+                }
+                self.atlas_pages.pin_color(e.page(), self.frame_number);
+            }
+        }
+        Ok(())
     }
 
     pub fn get_or_create_atlas(
@@ -1177,10 +1324,12 @@ impl WgpuGlyphAtlas {
         if let Some(cached) = self.atlas_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
             self.cache_hits_this_frame += 1;
-            return Ok(GlyphAtlasHandle {
+            let handle = GlyphAtlasHandle {
                 entry: cached.entry,
                 advance_width: cached.advance_width,
-            });
+            };
+            self.pin_entry_page(handle.entry)?;
+            return Ok(handle);
         }
 
         let c =
@@ -1205,17 +1354,7 @@ impl WgpuGlyphAtlas {
             self.cached_font_ascent = Some(result.bearing_y / self.scale_factor);
         }
 
-        let entry = self
-            .rasterize_result_to_atlas_entry(device, queue, &result)
-            .ok_or(GlyphAtlasError::PageBudgetExhausted {
-                material: if result.is_subpixel {
-                    GlyphMaterialKind::SubpixelMask
-                } else if result.is_color {
-                    GlyphMaterialKind::ColorRgba
-                } else {
-                    GlyphMaterialKind::AlphaMask
-                },
-            })?;
+        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
 
         let handle = GlyphAtlasHandle {
             entry,
@@ -1294,10 +1433,12 @@ impl WgpuGlyphAtlas {
         if let Some(cached) = self.atlas_composed_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
             self.cache_hits_this_frame += 1;
-            return Ok(GlyphAtlasHandle {
+            let handle = GlyphAtlasHandle {
                 entry: cached.entry,
                 advance_width: cached.advance_width,
-            });
+            };
+            self.pin_entry_page(handle.entry)?;
+            return Ok(handle);
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
@@ -1309,17 +1450,7 @@ impl WgpuGlyphAtlas {
             return Err(GlyphAtlasError::ZeroSize);
         }
 
-        let entry = self
-            .rasterize_result_to_atlas_entry(device, queue, &result)
-            .ok_or(GlyphAtlasError::PageBudgetExhausted {
-                material: if result.is_subpixel {
-                    GlyphMaterialKind::SubpixelMask
-                } else if result.is_color {
-                    GlyphMaterialKind::ColorRgba
-                } else {
-                    GlyphMaterialKind::AlphaMask
-                },
-            })?;
+        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
 
         let handle = GlyphAtlasHandle {
             entry,
@@ -1344,30 +1475,51 @@ impl WgpuGlyphAtlas {
         entry: AnyAtlasEntry,
     ) -> Result<&wgpu::BindGroup, GlyphAtlasError> {
         match entry {
-            AnyAtlasEntry::Alpha(e) => self
-                .atlas_pages
-                .alpha_page(e.page())
-                .map(|p| &p.bind_group)
-                .ok_or(GlyphAtlasError::StaleAtlasEntry {
-                    material: GlyphMaterialKind::AlphaMask,
-                    page: e.page().get(),
-                }),
-            AnyAtlasEntry::Subpixel(e) => self
-                .atlas_pages
-                .subpixel_page(e.page())
-                .map(|p| &p.bind_group)
-                .ok_or(GlyphAtlasError::StaleAtlasEntry {
-                    material: GlyphMaterialKind::SubpixelMask,
-                    page: e.page().get(),
-                }),
-            AnyAtlasEntry::Color(e) => self
-                .atlas_pages
-                .color_page(e.page())
-                .map(|p| &p.bind_group)
-                .ok_or(GlyphAtlasError::StaleAtlasEntry {
-                    material: GlyphMaterialKind::ColorRgba,
-                    page: e.page().get(),
-                }),
+            AnyAtlasEntry::Alpha(e) => {
+                let page = self.atlas_pages.alpha_page(e.page()).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::AlphaMask,
+                        page: e.page().get(),
+                    },
+                )?;
+                if !e.matches_generation(page.generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::AlphaMask,
+                        page: e.page().get(),
+                    });
+                }
+                Ok(&page.bind_group)
+            }
+            AnyAtlasEntry::Subpixel(e) => {
+                let page = self.atlas_pages.subpixel_page(e.page()).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::SubpixelMask,
+                        page: e.page().get(),
+                    },
+                )?;
+                if !e.matches_generation(page.generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::SubpixelMask,
+                        page: e.page().get(),
+                    });
+                }
+                Ok(&page.bind_group)
+            }
+            AnyAtlasEntry::Color(e) => {
+                let page = self.atlas_pages.color_page(e.page()).ok_or(
+                    GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::ColorRgba,
+                        page: e.page().get(),
+                    },
+                )?;
+                if !e.matches_generation(page.generation) {
+                    return Err(GlyphAtlasError::StaleAtlasEntry {
+                        material: GlyphMaterialKind::ColorRgba,
+                        page: e.page().get(),
+                    });
+                }
+                Ok(&page.bind_group)
+            }
         }
     }
 

@@ -1139,21 +1139,24 @@ impl WgpuRenderer {
                     pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
                 }
 
-                let base = mask_upload.as_ref().map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < mask_data.len() {
                     let (entry, _) = &mask_data[i];
                     let page_id = entry.page_id_value();
-                    let bg = glyph_atlas
-                        .atlas_bind_group(*entry)
-                        .expect("atlas_bind_group: stale page");
                     let batch_start = i;
                     i += 1;
                     while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = base + (batch_start * 6) as u32;
-                    let vert_end = base + (i * 6) as u32;
+                    let bg = match glyph_atlas.atlas_bind_group(*entry) {
+                        Ok(bg) => bg,
+                        Err(err) => {
+                            tracing::warn!(?err, "skipping stale content mask glyph batch");
+                            continue;
+                        }
+                    };
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);
@@ -1179,23 +1182,24 @@ impl WgpuRenderer {
                     pass.set_vertex_buffer(0, self.subpixel_vertex_arena.slice(upload));
                 }
 
-                let base = subpixel_upload
-                    .as_ref()
-                    .map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < subpixel_data.len() {
                     let (entry, _) = &subpixel_data[i];
                     let page_id = entry.page_id_value();
-                    let bg = glyph_atlas
-                        .atlas_bind_group(*entry)
-                        .expect("atlas_bind_group: stale page");
                     let batch_start = i;
                     i += 1;
                     while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = base + (batch_start * 6) as u32;
-                    let vert_end = base + (i * 6) as u32;
+                    let bg = match glyph_atlas.atlas_bind_group(*entry) {
+                        Ok(bg) => bg,
+                        Err(err) => {
+                            tracing::warn!(?err, "skipping stale content subpixel glyph batch");
+                            continue;
+                        }
+                    };
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);
@@ -1221,21 +1225,24 @@ impl WgpuRenderer {
                     pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
                 }
 
-                let base = color_upload.as_ref().map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < color_data.len() {
                     let (entry, _) = &color_data[i];
                     let page_id = entry.page_id_value();
-                    let bg = glyph_atlas
-                        .atlas_bind_group(*entry)
-                        .expect("atlas_bind_group: stale page");
                     let batch_start = i;
                     i += 1;
                     while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = base + (batch_start * 6) as u32;
-                    let vert_end = base + (i * 6) as u32;
+                    let bg = match glyph_atlas.atlas_bind_group(*entry) {
+                        Ok(bg) => bg,
+                        Err(err) => {
+                            tracing::warn!(?err, "skipping stale content color glyph batch");
+                            continue;
+                        }
+                    };
+                    let vert_start = (batch_start * 6) as u32;
+                    let vert_end = (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);

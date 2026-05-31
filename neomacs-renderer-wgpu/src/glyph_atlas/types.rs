@@ -307,6 +307,9 @@ impl<M: GlyphMaterial> AtlasEntry<M> {
     pub fn generation(self) -> u32 {
         self.generation
     }
+    pub fn matches_generation(self, generation: u32) -> bool {
+        self.generation == generation
+    }
     pub fn token(self) -> PageToken<M> {
         PageToken::new(NonZeroU32::new(self.page.get()).unwrap(), self.generation)
     }
@@ -529,6 +532,15 @@ impl GlyphAtlasConfig {
             max_pages_per_material: Self::DEFAULT_MAX_PAGES,
         }
     }
+
+    pub fn max_content_size(self) -> u32 {
+        self.page_size.saturating_sub(2 * self.padding)
+    }
+
+    pub fn can_fit(self, size: PixelSize) -> bool {
+        let max_content = self.max_content_size();
+        size.width() <= max_content && size.height() <= max_content
+    }
 }
 
 impl Default for GlyphAtlasConfig {
@@ -717,11 +729,45 @@ mod tests {
     }
 
     #[test]
+    fn atlas_entry_validates_page_generation() {
+        let page = PageId::<AlphaMask>::new(NonZeroU32::new(1).unwrap());
+        let rect = AtlasContentRect::new(
+            0,
+            0,
+            NonZeroU32::new(10).unwrap(),
+            NonZeroU32::new(10).unwrap(),
+        );
+        let uv = UvRect::new([0.0, 0.0], [1.0, 1.0]);
+        let metrics = GlyphMetrics {
+            bearing_x: 0.0,
+            bearing_y: 10.0,
+            advance_width: 8.0,
+        };
+        let entry = AtlasEntry::new(page, 7, rect, uv, metrics);
+
+        assert!(entry.matches_generation(7));
+        assert!(!entry.matches_generation(8));
+    }
+
+    #[test]
     fn glyph_atlas_config_default() {
         let config = GlyphAtlasConfig::default();
         assert_eq!(config.page_size, 2048);
         assert_eq!(config.padding, 1);
         assert_eq!(config.max_pages_per_material, 8);
+    }
+
+    #[test]
+    fn glyph_atlas_config_rejects_content_larger_than_padded_page() {
+        let config = GlyphAtlasConfig {
+            page_size: 64,
+            padding: 1,
+            max_pages_per_material: 1,
+        };
+
+        assert!(config.can_fit(PixelSize::new(62, 62).unwrap()));
+        assert!(!config.can_fit(PixelSize::new(63, 62).unwrap()));
+        assert!(!config.can_fit(PixelSize::new(62, 63).unwrap()));
     }
 
     #[test]

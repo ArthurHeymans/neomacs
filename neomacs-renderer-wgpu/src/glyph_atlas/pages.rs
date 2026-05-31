@@ -6,10 +6,8 @@ use super::types::*;
 pub(crate) struct AtlasPage<M: GlyphMaterial> {
     pub id: PageId<M>,
     pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
     pub allocator: ShelfAllocator,
-    pub last_accessed_generation: u64,
     pub generation: u32,
     pub pinned_this_frame: bool,
     pub last_used_frame: u64,
@@ -115,6 +113,10 @@ impl GlyphAtlasPages {
         sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<AlphaMask>> {
+        if !self.config.can_fit(size) {
+            return None;
+        }
+
         for page in &mut self.alpha {
             if let Some(allocation) = page.allocator.allocate(size) {
                 page.pinned_this_frame = true;
@@ -147,10 +149,8 @@ impl GlyphAtlasPages {
         self.alpha.push(AtlasPage {
             id,
             texture,
-            view,
             bind_group,
             allocator,
-            last_accessed_generation: 0,
             generation: 0,
             pinned_this_frame: true,
             last_used_frame: frame,
@@ -173,6 +173,10 @@ impl GlyphAtlasPages {
         sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<SubpixelMask>> {
+        if !self.config.can_fit(size) {
+            return None;
+        }
+
         for page in &mut self.subpixel {
             if let Some(allocation) = page.allocator.allocate(size) {
                 page.pinned_this_frame = true;
@@ -205,10 +209,8 @@ impl GlyphAtlasPages {
         self.subpixel.push(AtlasPage {
             id,
             texture,
-            view,
             bind_group,
             allocator,
-            last_accessed_generation: 0,
             generation: 0,
             pinned_this_frame: true,
             last_used_frame: frame,
@@ -231,6 +233,10 @@ impl GlyphAtlasPages {
         sampler: &wgpu::Sampler,
         frame: u64,
     ) -> Option<PageAllocResult<ColorRgba>> {
+        if !self.config.can_fit(size) {
+            return None;
+        }
+
         for page in &mut self.color {
             if let Some(allocation) = page.allocator.allocate(size) {
                 page.pinned_this_frame = true;
@@ -263,10 +269,8 @@ impl GlyphAtlasPages {
         self.color.push(AtlasPage {
             id,
             texture,
-            view,
             bind_group,
             allocator,
-            last_accessed_generation: 0,
             generation: 0,
             pinned_this_frame: true,
             last_used_frame: frame,

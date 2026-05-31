@@ -461,15 +461,6 @@ impl WgpuRenderer {
                 let (handle, _, _, _) = &glyphs[i];
                 let entry = handle.entry;
                 let page_id = entry.page_id_value();
-                let bg = glyph_atlas
-                    .atlas_bind_group(entry)
-                    .expect("atlas_bind_group: stale page");
-                if matches!(entry, AnyAtlasEntry::Color(_)) {
-                    pass.set_pipeline(&self.opaque_image_pipeline);
-                } else {
-                    pass.set_pipeline(&self.glyph_pipeline);
-                }
-                pass.set_bind_group(1, bg, &[]);
                 let batch_start = vert_idx;
                 vert_idx += 6;
                 i += 1;
@@ -477,6 +468,19 @@ impl WgpuRenderer {
                     vert_idx += 6;
                     i += 1;
                 }
+                let bg = match glyph_atlas.atlas_bind_group(entry) {
+                    Ok(bg) => bg,
+                    Err(err) => {
+                        tracing::warn!(?err, "skipping stale overlay glyph batch");
+                        continue;
+                    }
+                };
+                if matches!(entry, AnyAtlasEntry::Color(_)) {
+                    pass.set_pipeline(&self.opaque_image_pipeline);
+                } else {
+                    pass.set_pipeline(&self.glyph_pipeline);
+                }
+                pass.set_bind_group(1, bg, &[]);
                 pass.draw(batch_start..vert_idx, 0..1);
             }
         }
@@ -683,15 +687,6 @@ impl WgpuRenderer {
                 let (handle, _, _, _, _) = &overlay_glyphs[i];
                 let entry = handle.entry;
                 let page_id = entry.page_id_value();
-                let bg = glyph_atlas
-                    .atlas_bind_group(entry)
-                    .expect("atlas_bind_group: stale page");
-                if matches!(entry, AnyAtlasEntry::Color(_)) {
-                    pass.set_pipeline(&self.opaque_image_pipeline);
-                } else {
-                    pass.set_pipeline(&self.glyph_pipeline);
-                }
-                pass.set_bind_group(1, bg, &[]);
                 let batch_start = vert_idx;
                 vert_idx += 6;
                 i += 1;
@@ -699,6 +694,19 @@ impl WgpuRenderer {
                     vert_idx += 6;
                     i += 1;
                 }
+                let bg = match glyph_atlas.atlas_bind_group(entry) {
+                    Ok(bg) => bg,
+                    Err(err) => {
+                        tracing::warn!(?err, "skipping stale watermark glyph batch");
+                        continue;
+                    }
+                };
+                if matches!(entry, AnyAtlasEntry::Color(_)) {
+                    pass.set_pipeline(&self.opaque_image_pipeline);
+                } else {
+                    pass.set_pipeline(&self.glyph_pipeline);
+                }
+                pass.set_bind_group(1, bg, &[]);
                 pass.draw(batch_start..vert_idx, 0..1);
             }
         }
@@ -2567,7 +2575,6 @@ impl WgpuRenderer {
                 .image_vertex_arena
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
-                let base = upload.vertex_range().start;
                 let mut encoder =
                     self.device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2595,7 +2602,7 @@ impl WgpuRenderer {
                     pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
                     for (bg, range) in &batch_ranges {
                         pass.set_bind_group(1, bg, &[]);
-                        pass.draw(base + range.start..base + range.end, 0..1);
+                        pass.draw(range.clone(), 0..1);
                     }
                 }
                 self.queue.submit(std::iter::once(encoder.finish()));
@@ -2829,7 +2836,6 @@ impl WgpuRenderer {
                 .image_vertex_arena
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
-                let base = upload.vertex_range().start;
                 let mut encoder =
                     self.device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2857,7 +2863,7 @@ impl WgpuRenderer {
                     pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
                     for (bg, range) in &batch_ranges {
                         pass.set_bind_group(1, bg, &[]);
-                        pass.draw(base + range.start..base + range.end, 0..1);
+                        pass.draw(range.clone(), 0..1);
                     }
                 }
                 self.queue.submit(std::iter::once(encoder.finish()));

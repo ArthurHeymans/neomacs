@@ -1,6 +1,6 @@
 use super::{
-    FontconfigSubpixelOrder, GlyphKey, SubpixelBin, key_uses_default_font_metrics,
-    normalize_subpixel_mask,
+    FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
+    WgpuGlyphAtlas, key_uses_default_font_metrics, normalize_subpixel_mask,
 };
 
 #[test]
@@ -55,4 +55,45 @@ fn default_metrics_accept_explicit_default_font_size() {
     };
 
     assert!(key_uses_default_font_metrics(&key, 13.0));
+}
+
+#[test]
+fn rasterize_result_to_pixels_rejects_mismatched_alpha_length() {
+    let result = RasterizeResult {
+        width: 2,
+        height: 2,
+        pixel_data: vec![255],
+        bearing_x: 0.0,
+        bearing_y: 0.0,
+        is_color: false,
+        is_subpixel: false,
+        advance_width: 0.0,
+    };
+
+    let err = WgpuGlyphAtlas::rasterize_result_to_pixels(&result).unwrap_err();
+    assert!(matches!(
+        err,
+        GlyphAtlasError::PixelDataLength {
+            expected: 4,
+            actual: 1,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rasterize_result_to_pixels_rejects_zero_size() {
+    let result = RasterizeResult {
+        width: 0,
+        height: 2,
+        pixel_data: Vec::new(),
+        bearing_x: 0.0,
+        bearing_y: 0.0,
+        is_color: false,
+        is_subpixel: false,
+        advance_width: 0.0,
+    };
+
+    let err = WgpuGlyphAtlas::rasterize_result_to_pixels(&result).unwrap_err();
+    assert_eq!(err, GlyphAtlasError::ZeroSize);
 }

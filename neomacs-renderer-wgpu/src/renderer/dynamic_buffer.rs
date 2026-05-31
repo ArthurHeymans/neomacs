@@ -11,16 +11,14 @@ pub struct FrameVertexArena<T: Pod> {
 }
 
 pub struct VertexUpload {
-    pub offset_bytes: wgpu::BufferAddress,
-    pub len_bytes: wgpu::BufferAddress,
-    pub vertex_count: u32,
+    buffer: wgpu::Buffer,
+    offset_bytes: wgpu::BufferAddress,
+    len_bytes: wgpu::BufferAddress,
 }
 
 impl VertexUpload {
-    pub fn vertex_range(&self) -> std::ops::Range<u32> {
-        let stride = self.len_bytes / self.vertex_count as wgpu::BufferAddress;
-        let start = (self.offset_bytes / stride) as u32;
-        start..start + self.vertex_count
+    pub fn byte_range(&self) -> std::ops::Range<wgpu::BufferAddress> {
+        upload_byte_range(self.offset_bytes, self.len_bytes)
     }
 }
 
@@ -28,6 +26,13 @@ const ALIGN: wgpu::BufferAddress = 4;
 
 fn align_up(offset: wgpu::BufferAddress, align: wgpu::BufferAddress) -> wgpu::BufferAddress {
     (offset + align - 1) & !(align - 1)
+}
+
+fn upload_byte_range(
+    offset: wgpu::BufferAddress,
+    len: wgpu::BufferAddress,
+) -> std::ops::Range<wgpu::BufferAddress> {
+    offset..offset + len
 }
 
 impl<T: Pod> FrameVertexArena<T> {
@@ -64,20 +69,19 @@ impl<T: Pod> FrameVertexArena<T> {
 
         self.ensure_capacity(device, end);
 
-        let buffer = self.buffer.as_ref().unwrap();
-        queue.write_buffer(buffer, offset, bytes);
+        let buffer = self.buffer.as_ref().unwrap().clone();
+        queue.write_buffer(&buffer, offset, bytes);
         self.cursor_bytes = end;
 
         Some(VertexUpload {
+            buffer,
             offset_bytes: offset,
             len_bytes: len,
-            vertex_count: vertices.len() as u32,
         })
     }
 
-    pub fn slice(&self, upload: &VertexUpload) -> wgpu::BufferSlice<'_> {
-        let buffer = self.buffer.as_ref().unwrap();
-        buffer.slice(upload.offset_bytes..upload.offset_bytes + upload.len_bytes)
+    pub fn slice<'a>(&self, upload: &'a VertexUpload) -> wgpu::BufferSlice<'a> {
+        upload.buffer.slice(upload.byte_range())
     }
 
     fn ensure_capacity(&mut self, device: &wgpu::Device, needed_bytes: wgpu::BufferAddress) {
@@ -114,23 +118,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn vertex_upload_range_calculation() {
-        let upload = VertexUpload {
-            offset_bytes: 0,
-            len_bytes: 48,
-            vertex_count: 2,
-        };
-        assert_eq!(upload.vertex_range(), 0..2);
+    fn vertex_upload_byte_range_starts_at_zero_for_first_upload() {
+        assert_eq!(upload_byte_range(0, 48), 0..48);
     }
 
     #[test]
-    fn vertex_upload_range_with_offset() {
-        let upload = VertexUpload {
-            offset_bytes: 48,
-            len_bytes: 48,
-            vertex_count: 2,
-        };
-        assert_eq!(upload.vertex_range(), 2..4);
+    fn vertex_upload_byte_range_tracks_arena_offset() {
+        assert_eq!(upload_byte_range(48, 48), 48..96);
     }
 
     #[test]
