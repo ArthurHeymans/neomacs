@@ -30199,3 +30199,77 @@ fn ft_stream_face_text_property_text_property_search_forward_backward() {
      'intervals (length (object-intervals (current-buffer)))))))"##,
     );
 }
+
+#[test]
+fn ft_wave_face_overlay_face_make_3_overlays_cycle_priority() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 1))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority 2))
+    (let ((c (make-overlay 1 6))) (overlay-put c 'face '(:foreground "C")) (overlay-put c 'priority 3))
+    (list
+     'cycle1 (get-char-property 3 'face)
+     'cycle2 (progn (overlay-put a 'priority 4) (overlay-put b 'priority 5) (overlay-put c 'priority 6) (get-char-property 3 'face))
+     'cycle3 (progn (overlay-put c 'priority 7) (overlay-put a 'priority 8) (overlay-put b 'priority 9) (get-char-property 3 'face))
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_font_lock_fontify_hash_table_count_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(hash-table-count table)\n")
+    (font-lock-fontify-buffer)
+    (list
+     'hash-table-count-face (save-excursion (goto-char (point-min)) (search-forward "hash-table-count") (get-text-property (match-beginning 0) 'face))
+     'fontified (get-text-property 1 'fontified)))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_overlay_face_rear_advance_test_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'rear-advance t)
+      (goto-char 6)
+      (insert "X")
+      (list
+       'end-after-insert (overlay-end ov)
+       'face-at-end (get-char-property 5 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_wave_face_text_property_multi_face_interval_sort() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AABBCC")
+    (put-text-property 1 3 'face 'bold)
+    (put-text-property 3 5 'face 'italic)
+    (put-text-property 5 7 'face 'underline)
+    (list
+     'ints (mapcar (lambda (i) (list (car i) (cadr i) (plist-get (cddr i) 'face)))
+                    (object-intervals (current-buffer)))
+     'count (length (object-intervals (current-buffer)))))))"##,
+    );
+}
