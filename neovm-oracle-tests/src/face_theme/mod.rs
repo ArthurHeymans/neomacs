@@ -31123,3 +31123,141 @@ fn ft_divergence_face_copy_nonexistent_face() {
    'face-id-made (condition-case nil (face-id 'made-face) (error (list (car err)))))))"##,
     );
 }
+
+#[test]
+fn ft_divergence2_face_internal_face_id_difference() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-id-compare) (error nil))
+  (list
+   'default-id (face-id 'default)
+   'bold-id (face-id 'bold)
+   'italic-id (face-id 'italic)
+   'underline-id (face-id 'underline)
+   'my-id-compare-id (condition-case nil (face-id 'my-id-compare) (error 'no))
+   'non-existent-id (condition-case nil (face-id 'nonexistent-face-x) (error 'no))
+   'face-equal? (face-equal 'default 'default)
+   'face-diff? (face-equal 'default 'bold)))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_font_lock_java_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (java-mode) (error (c-mode)))
+    (insert "public class Test { int x = 42; }\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'public-face (save-excursion (goto-char (point-min)) (search-forward "public") (get-text-property (match-beginning 0) 'face))))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_face_overlay_window_specific_face() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'window (selected-window))
+      (list
+       'face (overlay-get ov 'face)
+       'window-bound (condition-case nil (window-live-p (overlay-get ov 'window)) (error 'no))
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_text_property_set_at_eob() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (condition-case err
+        (progn (put-text-property 6 6 'face 'bold) (list 'ok (get-text-property 6 'face)))
+      (error (list 'err (car err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_face_set_face_bold_italic_underline_simul() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-triple-face) (error nil))
+  (condition-case err
+      (progn
+        (set-face-attribute 'my-triple-face nil :weight 'bold :slant 'italic :underline t)
+        (list 'weight (face-attribute 'my-triple-face :weight nil 'default-on)
+              'slant (face-attribute 'my-triple-face :slant nil 'default-on)
+              'underline (face-attribute 'my-triple-face :underline nil 'default-on)))
+    (error (list 'err (car err))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_font_lock_python_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (python-mode) (error (fundamental-mode)))
+    (insert "def hello():\n    return 'world'\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'def-face (save-excursion (goto-char (point-min)) (search-forward "def") (get-text-property (match-beginning 0) 'face))))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_face_remap_order_nested() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (condition-case nil (copy-face 'default 'my-remap-base) (error nil))
+  (condition-case nil (copy-face 'default 'my-remap-derived) (error nil))
+  (list
+   'remap-add (condition-case nil
+                 (with-temp-buffer
+                   (face-remap-add-relative 'default 'my-remap-base)
+                   (face-remap-add-relative 'my-remap-base 'my-remap-derived)
+                   (list 'alist-len (length face-remapping-alist) 'done (progn (face-remap-reset-base 'default) (face-remap-reset-base 'my-remap-base) 'reset)))
+                 (error 'no)))))"##,
+    );
+}
+
+#[test]
+fn ft_divergence2_overlay_before_string_null_edge() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'before-string nil)
+      (overlay-put ov 'after-string nil)
+      (list
+       'face (overlay-get ov 'face)
+       'before-nil (overlay-get ov 'before-string)
+       'after-nil (overlay-get ov 'after-string)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
