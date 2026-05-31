@@ -32000,3 +32000,74 @@ fn ft_pulse_text_property_intervals_with_overlay_combos() {
        (progn (delete-overlay ov) 'cleaned))))))"##,
     );
 }
+
+#[test]
+fn ft_spark_face_overlay_face_delete_then_check_point() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (delete-overlay ov))
+    (list
+     'no-overlays-left (length (overlays-in 1 6))
+     'no-face-at-3 (get-char-property 3 'face)))))"##,
+    );
+}
+
+#[test]
+fn ft_spark_font_lock_text_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (text-mode)
+    (font-lock-mode 1)
+    (insert "Just some plain text.\n")
+    (font-lock-fontify-buffer)
+    (list
+     'fontified (get-text-property 1 'fontified)
+     'face (get-text-property 3 'face)
+     'intervals (length (object-intervals (current-buffer)))))))"##,
+    );
+}
+
+#[test]
+fn ft_spark_face_overlay_priority_check_after_set() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((ov (make-overlay 1 6)))
+      (overlay-put ov 'face 'bold)
+      (overlay-put ov 'priority 42)
+      (list
+       'face (overlay-get ov 'face)
+       'priority (overlay-get ov 'priority)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_spark_text_property_reset_all_props_deep() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "XXXXX")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'fontified t)
+    (list
+     'before (list 'face (get-text-property 3 'face) 'fontified (get-text-property 3 'fontified))
+     'after-remove-face (progn (remove-text-properties 1 6 '(face nil)) (get-text-property 3 'face))
+     'after-remove-all (progn (set-text-properties 1 6 nil) (list (get-text-property 3 'face) (get-text-property 3 'fontified)))))))"##,
+    );
+}
