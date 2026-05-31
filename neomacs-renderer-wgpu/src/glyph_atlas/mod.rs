@@ -2,6 +2,9 @@
 //!
 //! Caches rasterized glyphs as individual wgpu textures with bind groups.
 
+pub mod allocator;
+pub mod types;
+
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 
@@ -216,6 +219,8 @@ pub struct WgpuGlyphAtlas {
     font_file_cache: FontFileCache,
     /// Host LCD/subpixel order from fontconfig.
     subpixel_order: FontconfigSubpixelOrder,
+    pub(crate) cache_hits_this_frame: usize,
+    pub(crate) cache_misses_this_frame: usize,
 }
 
 impl WgpuGlyphAtlas {
@@ -272,6 +277,8 @@ impl WgpuGlyphAtlas {
             cached_font_ascent: None,
             font_file_cache: FontFileCache::new(),
             subpixel_order: default_subpixel_order(),
+            cache_hits_this_frame: 0,
+            cache_misses_this_frame: 0,
         }
     }
 
@@ -306,6 +313,7 @@ impl WgpuGlyphAtlas {
         // Check cache first — update access generation on hit
         if let Some(cached) = self.cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
+            self.cache_hits_this_frame += 1;
             return self.cache.get(&cache_key);
         }
 
@@ -496,6 +504,7 @@ impl WgpuGlyphAtlas {
             last_accessed: generation,
         };
         self.cache.insert(cache_key.clone(), cached_glyph);
+        self.cache_misses_this_frame += 1;
         self.cache.get(&cache_key)
     }
 
@@ -530,6 +539,7 @@ impl WgpuGlyphAtlas {
         // Check cache first
         if let Some(cached) = self.composed_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
+            self.cache_hits_this_frame += 1;
             return self.composed_cache.get(&cache_key);
         }
 
@@ -631,6 +641,7 @@ impl WgpuGlyphAtlas {
                 last_accessed: generation,
             },
         );
+        self.cache_misses_this_frame += 1;
         self.composed_cache.get(&cache_key)
     }
 
@@ -1254,6 +1265,8 @@ impl WgpuGlyphAtlas {
     /// Also evicts stale composed glyphs (not accessed for 60+ frames).
     pub fn advance_generation(&mut self) {
         self.generation = self.generation.wrapping_add(1);
+        self.cache_hits_this_frame = 0;
+        self.cache_misses_this_frame = 0;
         // Evict stale composed glyphs (they're less likely to be reused).
         // Threshold raised from 256 to 1024 to accommodate ligature runs
         // which generate more composed cache entries per frame.
