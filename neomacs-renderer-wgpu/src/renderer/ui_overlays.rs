@@ -461,7 +461,9 @@ impl WgpuRenderer {
                 let (handle, _, _, _) = &glyphs[i];
                 let entry = handle.entry;
                 let page_id = entry.page_id_value();
-                let bg = glyph_atlas.atlas_bind_group(entry);
+                let bg = glyph_atlas
+                    .atlas_bind_group(entry)
+                    .expect("atlas_bind_group: stale page");
                 if matches!(entry, AnyAtlasEntry::Color(_)) {
                     pass.set_pipeline(&self.opaque_image_pipeline);
                 } else {
@@ -681,7 +683,9 @@ impl WgpuRenderer {
                 let (handle, _, _, _, _) = &overlay_glyphs[i];
                 let entry = handle.entry;
                 let page_id = entry.page_id_value();
-                let bg = glyph_atlas.atlas_bind_group(entry);
+                let bg = glyph_atlas
+                    .atlas_bind_group(entry)
+                    .expect("atlas_bind_group: stale page");
                 if matches!(entry, AnyAtlasEntry::Color(_)) {
                     pass.set_pipeline(&self.opaque_image_pipeline);
                 } else {

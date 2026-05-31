@@ -347,21 +347,43 @@ pub enum RasterizedGlyphPixels {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GlyphUploadError {
+pub enum GlyphAtlasError {
+    Whitespace,
+    InvalidCharCode(u32),
+    RasterizeFailed,
     ZeroSize,
     GlyphTooLarge,
+    PageBudgetExhausted {
+        material: GlyphMaterialKind,
+    },
+    AllPagesPinned {
+        material: GlyphMaterialKind,
+    },
     PixelDataLength {
         material: GlyphMaterialKind,
         expected: usize,
         actual: usize,
     },
+    StaleAtlasEntry {
+        material: GlyphMaterialKind,
+        page: u32,
+    },
 }
 
-impl fmt::Display for GlyphUploadError {
+impl fmt::Display for GlyphAtlasError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Whitespace => write!(f, "glyph is whitespace"),
+            Self::InvalidCharCode(code) => write!(f, "invalid char code: {code}"),
+            Self::RasterizeFailed => write!(f, "glyph rasterization failed"),
             Self::ZeroSize => write!(f, "glyph has zero size"),
             Self::GlyphTooLarge => write!(f, "glyph is larger than atlas page"),
+            Self::PageBudgetExhausted { material } => {
+                write!(f, "atlas page budget exhausted for {material:?}")
+            }
+            Self::AllPagesPinned { material } => {
+                write!(f, "all atlas pages pinned for {material:?}")
+            }
             Self::PixelDataLength {
                 material,
                 expected,
@@ -371,14 +393,17 @@ impl fmt::Display for GlyphUploadError {
                 "pixel buffer length mismatch for {:?}: expected {}, got {}",
                 material, expected, actual
             ),
+            Self::StaleAtlasEntry { material, page } => {
+                write!(f, "stale atlas entry for {material:?} page {page}")
+            }
         }
     }
 }
 
-impl std::error::Error for GlyphUploadError {}
+impl std::error::Error for GlyphAtlasError {}
 
 impl RasterizedGlyphPixels {
-    pub fn validated(self) -> Result<Self, GlyphUploadError> {
+    pub fn validated(self) -> Result<Self, GlyphAtlasError> {
         let (size, bytes, bpp, material) = match &self {
             Self::Alpha { size, bytes } => (size, bytes, 1u32, GlyphMaterialKind::AlphaMask),
             Self::Subpixel { size, rgba } => (size, rgba, 4u32, GlyphMaterialKind::SubpixelMask),
@@ -388,7 +413,7 @@ impl RasterizedGlyphPixels {
         };
         let expected = (size.width() * size.height() * bpp) as usize;
         if bytes.len() != expected {
-            return Err(GlyphUploadError::PixelDataLength {
+            return Err(GlyphAtlasError::PixelDataLength {
                 material,
                 expected,
                 actual: bytes.len(),
@@ -574,7 +599,7 @@ mod tests {
         };
         let err = pixels.validated().unwrap_err();
         match err {
-            GlyphUploadError::PixelDataLength {
+            GlyphAtlasError::PixelDataLength {
                 material,
                 expected,
                 actual,

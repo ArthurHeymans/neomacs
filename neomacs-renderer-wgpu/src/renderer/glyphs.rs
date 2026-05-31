@@ -2713,7 +2713,9 @@ impl WgpuRenderer {
                     while i < mask_data.len() {
                         let (entry, _) = &mask_data[i];
                         let page_id = entry.page_id_value();
-                        let bg = glyph_atlas.atlas_bind_group(*entry);
+                        let bg = glyph_atlas
+                            .atlas_bind_group(*entry)
+                            .expect("atlas_bind_group: stale page");
                         let batch_start = i;
                         i += 1;
                         while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
@@ -2753,7 +2755,9 @@ impl WgpuRenderer {
                     while i < subpixel_data.len() {
                         let (entry, _) = &subpixel_data[i];
                         let page_id = entry.page_id_value();
-                        let bg = glyph_atlas.atlas_bind_group(*entry);
+                        let bg = glyph_atlas
+                            .atlas_bind_group(*entry)
+                            .expect("atlas_bind_group: stale page");
                         let batch_start = i;
                         i += 1;
                         while i < subpixel_data.len()
@@ -2794,7 +2798,9 @@ impl WgpuRenderer {
                     while i < color_data.len() {
                         let (entry, _) = &color_data[i];
                         let page_id = entry.page_id_value();
-                        let bg = glyph_atlas.atlas_bind_group(*entry);
+                        let bg = glyph_atlas
+                            .atlas_bind_group(*entry)
+                            .expect("atlas_bind_group: stale page");
                         let batch_start = i;
                         i += 1;
                         while i < color_data.len() && color_data[i].0.page_id_value() == page_id {

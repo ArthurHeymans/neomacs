@@ -6,7 +6,9 @@ pub mod allocator;
 pub mod pages;
 pub mod types;
 
-pub use types::{AnyAtlasEntry, GlyphAtlasHandle, GlyphMaterialKind, SubpixelRequest};
+pub use types::{
+    AnyAtlasEntry, GlyphAtlasError, GlyphAtlasHandle, GlyphMaterialKind, SubpixelRequest,
+};
 
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -1051,6 +1053,25 @@ impl WgpuGlyphAtlas {
         face: Option<&Face>,
         subpixel: SubpixelRequest,
     ) -> Option<GlyphAtlasHandle> {
+        match self.get_or_create_atlas_result(device, queue, key, face, subpixel) {
+            Ok(handle) => Some(handle),
+            Err(err) => {
+                if !matches!(err, GlyphAtlasError::Whitespace) {
+                    tracing::warn!(?err, charcode = key.charcode, "glyph atlas lookup failed");
+                }
+                None
+            }
+        }
+    }
+
+    fn get_or_create_atlas_result(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        key: &GlyphKey,
+        face: Option<&Face>,
+        subpixel: SubpixelRequest,
+    ) -> Result<GlyphAtlasHandle, GlyphAtlasError> {
         let cache_key = CachedGlyphKey {
             glyph: key.clone(),
             mode: self.render_mode_from_request(subpixel),
@@ -1059,33 +1080,25 @@ impl WgpuGlyphAtlas {
         if let Some(cached) = self.atlas_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
             self.cache_hits_this_frame += 1;
-            return Some(GlyphAtlasHandle {
+            return Ok(GlyphAtlasHandle {
                 entry: cached.entry,
                 advance_width: cached.advance_width,
             });
         }
 
-        let c = char::from_u32(key.charcode)?;
+        let c =
+            char::from_u32(key.charcode).ok_or(GlyphAtlasError::InvalidCharCode(key.charcode))?;
         if c.is_whitespace() {
-            return None;
+            return Err(GlyphAtlasError::Whitespace);
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
-        let result = self.rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel);
-        let result = match result {
-            Some(r) => r,
-            None => {
-                tracing::debug!(
-                    "glyph_atlas: atlas failed to rasterize '{}' (U+{:04X})",
-                    c,
-                    key.charcode
-                );
-                return None;
-            }
-        };
+        let result = self
+            .rasterize_glyph(c, face, key.x_bin, key.y_bin, enable_subpixel)
+            .ok_or(GlyphAtlasError::RasterizeFailed)?;
 
         if result.width == 0 || result.height == 0 {
-            return None;
+            return Err(GlyphAtlasError::ZeroSize);
         }
 
         if self.cached_char_width.is_none()
@@ -1095,7 +1108,17 @@ impl WgpuGlyphAtlas {
             self.cached_font_ascent = Some(result.bearing_y / self.scale_factor);
         }
 
-        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
+        let entry = self
+            .rasterize_result_to_atlas_entry(device, queue, &result)
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: if result.is_subpixel {
+                    GlyphMaterialKind::SubpixelMask
+                } else if result.is_color {
+                    GlyphMaterialKind::ColorRgba
+                } else {
+                    GlyphMaterialKind::AlphaMask
+                },
+            })?;
 
         let handle = GlyphAtlasHandle {
             entry,
@@ -1112,7 +1135,7 @@ impl WgpuGlyphAtlas {
         );
         self.cache_misses_this_frame += 1;
 
-        Some(handle)
+        Ok(handle)
     }
 
     pub fn get_or_create_composed_atlas(
@@ -1127,6 +1150,37 @@ impl WgpuGlyphAtlas {
         y_bin: SubpixelBin,
         subpixel: SubpixelRequest,
     ) -> Option<GlyphAtlasHandle> {
+        match self.get_or_create_composed_atlas_result(
+            device,
+            queue,
+            text,
+            face_id,
+            font_size_bits,
+            face,
+            x_bin,
+            y_bin,
+            subpixel,
+        ) {
+            Ok(handle) => Some(handle),
+            Err(err) => {
+                tracing::warn!(?err, text, "composed glyph atlas lookup failed");
+                None
+            }
+        }
+    }
+
+    fn get_or_create_composed_atlas_result(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text: &str,
+        face_id: u32,
+        font_size_bits: u32,
+        face: Option<&Face>,
+        x_bin: SubpixelBin,
+        y_bin: SubpixelBin,
+        subpixel: SubpixelRequest,
+    ) -> Result<GlyphAtlasHandle, GlyphAtlasError> {
         let key = ComposedGlyphKey {
             text: text.into(),
             face_id,
@@ -1143,27 +1197,32 @@ impl WgpuGlyphAtlas {
         if let Some(cached) = self.atlas_composed_cache.get_mut(&cache_key) {
             cached.last_accessed = self.generation;
             self.cache_hits_this_frame += 1;
-            return Some(GlyphAtlasHandle {
+            return Ok(GlyphAtlasHandle {
                 entry: cached.entry,
                 advance_width: cached.advance_width,
             });
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
-        let result = self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel);
-        let result = match result {
-            Some(r) => r,
-            None => {
-                tracing::debug!("glyph_atlas: atlas failed to rasterize composed '{}'", text);
-                return None;
-            }
-        };
+        let result = self
+            .rasterize_text(text, face, x_bin, y_bin, enable_subpixel)
+            .ok_or(GlyphAtlasError::RasterizeFailed)?;
 
         if result.width == 0 || result.height == 0 {
-            return None;
+            return Err(GlyphAtlasError::ZeroSize);
         }
 
-        let entry = self.rasterize_result_to_atlas_entry(device, queue, &result)?;
+        let entry = self
+            .rasterize_result_to_atlas_entry(device, queue, &result)
+            .ok_or(GlyphAtlasError::PageBudgetExhausted {
+                material: if result.is_subpixel {
+                    GlyphMaterialKind::SubpixelMask
+                } else if result.is_color {
+                    GlyphMaterialKind::ColorRgba
+                } else {
+                    GlyphMaterialKind::AlphaMask
+                },
+            })?;
 
         let handle = GlyphAtlasHandle {
             entry,
@@ -1180,16 +1239,38 @@ impl WgpuGlyphAtlas {
         );
         self.cache_misses_this_frame += 1;
 
-        Some(handle)
+        Ok(handle)
     }
 
-    pub fn atlas_bind_group(&self, entry: AnyAtlasEntry) -> &wgpu::BindGroup {
+    pub fn atlas_bind_group(
+        &self,
+        entry: AnyAtlasEntry,
+    ) -> Result<&wgpu::BindGroup, GlyphAtlasError> {
         match entry {
-            AnyAtlasEntry::Alpha(e) => &self.atlas_pages.alpha_page(e.page()).unwrap().bind_group,
-            AnyAtlasEntry::Subpixel(e) => {
-                &self.atlas_pages.subpixel_page(e.page()).unwrap().bind_group
-            }
-            AnyAtlasEntry::Color(e) => &self.atlas_pages.color_page(e.page()).unwrap().bind_group,
+            AnyAtlasEntry::Alpha(e) => self
+                .atlas_pages
+                .alpha_page(e.page())
+                .map(|p| &p.bind_group)
+                .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                    material: GlyphMaterialKind::AlphaMask,
+                    page: e.page().get(),
+                }),
+            AnyAtlasEntry::Subpixel(e) => self
+                .atlas_pages
+                .subpixel_page(e.page())
+                .map(|p| &p.bind_group)
+                .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                    material: GlyphMaterialKind::SubpixelMask,
+                    page: e.page().get(),
+                }),
+            AnyAtlasEntry::Color(e) => self
+                .atlas_pages
+                .color_page(e.page())
+                .map(|p| &p.bind_group)
+                .ok_or(GlyphAtlasError::StaleAtlasEntry {
+                    material: GlyphMaterialKind::ColorRgba,
+                    page: e.page().get(),
+                }),
         }
     }
 
