@@ -31364,3 +31364,70 @@ fn ft_hunt2_face_overlay_priority_double_swap_stress() {
      (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
     );
 }
+
+#[test]
+fn ft_chase2_face_overlay_face_delete_mid_insert_sequence() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAABBBBB")
+    (let ((ov (make-overlay 1 11)))
+      (overlay-put ov 'face 'bold)
+      (goto-char 6)
+      (delete-char 3)
+      (insert "XXX")
+      (list
+       'ov-start (overlay-start ov)
+       'ov-end (overlay-end ov)
+       'face-pos3 (get-char-property 3 'face)
+       'face-pos7 (get-char-property 7 'face)
+       (progn (delete-overlay ov) 'cleaned))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase2_font_lock_sh_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (sh-mode) (error (fundamental-mode)))
+    (insert "#!/bin/sh\necho hello\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified) 'shebang-face (get-text-property 1 'face)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_chase2_face_overlay_priority_with_nil_default() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((no-prio (make-overlay 1 6))) (overlay-put no-prio 'face '(:foreground "no-prio")) (overlay-put no-prio 'priority nil))
+    (let ((with-prio (make-overlay 1 6))) (overlay-put with-prio 'face '(:foreground "with-prio")) (overlay-put with-prio 'priority 0))
+    (list
+     'no-prio-vs-zero-prio (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_chase2_text_property_face_intervals_object_type() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (list
+   'buffer-intervals (with-temp-buffer (insert "X") (put-text-property 1 2 'face 'bold) (length (object-intervals (current-buffer)))))
+   'string-intervals (let ((s (propertize "X" 'face 'bold))) (length (object-intervals s)))
+   'buffer-equal-string (with-temp-buffer (insert "X") (put-text-property 1 2 'face 'bold) (let ((s (propertize "X" 'face 'bold))) (= (length (object-intervals (current-buffer))) (length (object-intervals s))))))))"##,
+    );
+}
