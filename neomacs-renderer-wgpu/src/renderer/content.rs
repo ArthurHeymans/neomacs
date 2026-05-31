@@ -119,6 +119,9 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         clip_corner_radius: f32,
     ) {
+        self.glyph_vertex_arena.begin_frame();
+        self.subpixel_vertex_arena.begin_frame();
+
         tracing::debug!(
             "render_frame_content: frame={}x{} offset=({:.1},{:.1}) {} glyphs",
             frame.width,
@@ -1125,15 +1128,18 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice =
-                    self.glyph_vertex_buffer
+                let mask_upload =
+                    self.glyph_vertex_arena
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(glyph_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, slice);
+                if let Some(ref upload) = mask_upload {
+                    pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                }
 
+                let base = mask_upload.as_ref().map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < mask_data.len() {
                     let (entry, _) = &mask_data[i];
@@ -1144,8 +1150,8 @@ impl WgpuRenderer {
                     while i < mask_data.len() && mask_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = (batch_start * 6) as u32;
-                    let vert_end = (i * 6) as u32;
+                    let vert_start = base + (batch_start * 6) as u32;
+                    let vert_end = base + (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);
@@ -1160,15 +1166,20 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice =
-                    self.subpixel_vertex_buffer
+                let subpixel_upload =
+                    self.subpixel_vertex_arena
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(subpixel_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, slice);
+                if let Some(ref upload) = subpixel_upload {
+                    pass.set_vertex_buffer(0, self.subpixel_vertex_arena.slice(upload));
+                }
 
+                let base = subpixel_upload
+                    .as_ref()
+                    .map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < subpixel_data.len() {
                     let (entry, _) = &subpixel_data[i];
@@ -1179,8 +1190,8 @@ impl WgpuRenderer {
                     while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = (batch_start * 6) as u32;
-                    let vert_end = (i * 6) as u32;
+                    let vert_start = base + (batch_start * 6) as u32;
+                    let vert_end = base + (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);
@@ -1195,15 +1206,18 @@ impl WgpuRenderer {
                     .flat_map(|(_, verts)| verts.iter().copied())
                     .collect();
 
-                let slice =
-                    self.glyph_vertex_buffer
+                let color_upload =
+                    self.glyph_vertex_arena
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(image_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, slice);
+                if let Some(ref upload) = color_upload {
+                    pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                }
 
+                let base = color_upload.as_ref().map_or(0, |u| u.vertex_range().start);
                 let mut i = 0;
                 while i < color_data.len() {
                     let (entry, _) = &color_data[i];
@@ -1214,8 +1228,8 @@ impl WgpuRenderer {
                     while i < color_data.len() && color_data[i].0.page_id_value() == page_id {
                         i += 1;
                     }
-                    let vert_start = (batch_start * 6) as u32;
-                    let vert_end = (i * 6) as u32;
+                    let vert_start = base + (batch_start * 6) as u32;
+                    let vert_end = base + (i * 6) as u32;
                     pass.set_bind_group(1, bg, &[]);
                     stats.glyph_bind_group_changes += 1;
                     pass.draw(vert_start..vert_end, 0..1);

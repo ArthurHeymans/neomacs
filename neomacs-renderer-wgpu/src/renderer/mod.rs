@@ -14,7 +14,7 @@ use super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVer
 use super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
 use super::webkit_cache::WgpuWebKitCache;
-use dynamic_buffer::DynamicVertexBuffer;
+use dynamic_buffer::FrameVertexArena;
 
 mod child_frames;
 mod content;
@@ -161,9 +161,9 @@ pub struct WgpuRenderer {
     /// Whether any fancy (animated) border styles are present in the current frame
     pub has_animated_borders: bool,
     pub glyph_stats: GlyphRenderStats,
-    pub(super) glyph_vertex_buffer: DynamicVertexBuffer<GlyphVertex>,
-    pub(super) subpixel_vertex_buffer: DynamicVertexBuffer<SubpixelGlyphVertex>,
-    pub(super) image_vertex_buffer: DynamicVertexBuffer<GlyphVertex>,
+    pub(super) glyph_vertex_arena: FrameVertexArena<GlyphVertex>,
+    pub(super) subpixel_vertex_arena: FrameVertexArena<SubpixelGlyphVertex>,
+    pub(super) image_vertex_arena: FrameVertexArena<GlyphVertex>,
     // --- Stencil-based clipping for child frame rounded corners ---
     pub(super) stencil_texture: wgpu::Texture,
     pub(super) stencil_view: wgpu::TextureView,
@@ -1510,9 +1510,9 @@ impl WgpuRenderer {
             render_start_time: std::time::Instant::now(),
             has_animated_borders: false,
             glyph_stats: GlyphRenderStats::new(),
-            glyph_vertex_buffer: DynamicVertexBuffer::new("Glyph Vertex Buffer"),
-            subpixel_vertex_buffer: DynamicVertexBuffer::new("Subpixel Glyph Vertex Buffer"),
-            image_vertex_buffer: DynamicVertexBuffer::new("Image Vertex Buffer"),
+            glyph_vertex_arena: FrameVertexArena::new("Glyph Vertex Arena"),
+            subpixel_vertex_arena: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
+            image_vertex_arena: FrameVertexArena::new("Image Vertex Arena"),
             stencil_texture,
             stencil_view,
             stencil_rect_pipeline,

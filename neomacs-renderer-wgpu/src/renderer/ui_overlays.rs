@@ -2304,6 +2304,7 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
+        self.image_vertex_arena.begin_frame();
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -2558,40 +2559,43 @@ impl WgpuRenderer {
                 let end = all_verts.len() as u32;
                 batch_ranges.push((bg, start..end));
             }
-            let slice = self
-                .image_vertex_buffer
+            let icon_upload = self
+                .image_vertex_arena
                 .upload(&self.device, &self.queue, &all_verts);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Compact Bar Icon Encoder"),
-                });
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Compact Bar Icon Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                pass.set_pipeline(&self.image_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, slice);
-                for (bg, range) in &batch_ranges {
-                    pass.set_bind_group(1, bg, &[]);
-                    pass.draw(range.clone(), 0..1);
+            if let Some(ref upload) = icon_upload {
+                let base = upload.vertex_range().start;
+                let mut encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Compact Bar Icon Encoder"),
+                        });
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Compact Bar Icon Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                    pass.set_pipeline(&self.image_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
+                    for (bg, range) in &batch_ranges {
+                        pass.set_bind_group(1, bg, &[]);
+                        pass.draw(base + range.start..base + range.end, 0..1);
+                    }
                 }
+                self.queue.submit(std::iter::once(encoder.finish()));
             }
-            self.queue.submit(std::iter::once(encoder.finish()));
         }
     }
 
@@ -2612,6 +2616,7 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
+        self.image_vertex_arena.begin_frame();
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -2816,40 +2821,43 @@ impl WgpuRenderer {
                 let end = all_verts.len() as u32;
                 batch_ranges.push((bg, start..end));
             }
-            let slice = self
-                .image_vertex_buffer
+            let icon_upload = self
+                .image_vertex_arena
                 .upload(&self.device, &self.queue, &all_verts);
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Toolbar Icon Encoder"),
-                });
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Toolbar Icon Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                pass.set_pipeline(&self.image_pipeline);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, slice);
-                for (bg, range) in &batch_ranges {
-                    pass.set_bind_group(1, bg, &[]);
-                    pass.draw(range.clone(), 0..1);
+            if let Some(ref upload) = icon_upload {
+                let base = upload.vertex_range().start;
+                let mut encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Toolbar Icon Encoder"),
+                        });
+                {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Toolbar Icon Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: None,
+                    });
+                    pass.set_pipeline(&self.image_pipeline);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
+                    for (bg, range) in &batch_ranges {
+                        pass.set_bind_group(1, bg, &[]);
+                        pass.draw(base + range.start..base + range.end, 0..1);
+                    }
                 }
+                self.queue.submit(std::iter::once(encoder.finish()));
             }
-            self.queue.submit(std::iter::once(encoder.finish()));
         }
     }
 }
