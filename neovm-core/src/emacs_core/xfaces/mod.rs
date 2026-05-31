@@ -161,11 +161,6 @@ pub(crate) fn mirror_runtime_face_into_frame(
 ) {
     let face_symbol = Value::symbol(face_name);
     frame.set_realized_face(face_symbol, face.clone());
-    upsert_frame_face_hash_entry(
-        frame.face_hash_table(),
-        face_symbol,
-        crate::emacs_core::font::runtime_face_to_lisp_vector(face),
-    );
 }
 
 pub(crate) fn seed_face_new_frame_defaults_table(table: Value) {
@@ -185,7 +180,7 @@ pub(crate) fn seed_face_new_frame_defaults_table(table: Value) {
         .collect();
 
     for (key, value) in face_entries {
-        upsert_frame_face_hash_entry(table, key, value);
+        insert_frame_face_hash_entry_if_absent(table, key, value);
     }
 }
 
@@ -204,19 +199,60 @@ pub(crate) fn ensure_face_new_frame_defaults_entry(
         .symbol_value("face--new-frame-defaults")
         .copied()?;
     seed_face_new_frame_defaults_table(table);
+    let key = Value::symbol(face_name);
+    if let Some(entry) = lookup_frame_face_hash_entry(table, key) {
+        return Some(entry);
+    }
+
     let face_id = crate::emacs_core::font::face_id_for_name(face_name)?;
-    upsert_frame_face_hash_entry(
-        table,
-        Value::symbol(face_name),
-        Value::cons(
-            Value::fixnum(face_id),
-            crate::emacs_core::font::make_lisp_face_vector(),
-        ),
+    let entry = Value::cons(
+        Value::fixnum(face_id),
+        crate::emacs_core::font::make_lisp_face_vector(),
     );
-    Some(table)
+    upsert_frame_face_hash_entry(table, key, entry);
+    Some(entry)
 }
 
-fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Value) {
+pub(crate) fn face_new_frame_defaults_vector(
+    eval: &mut crate::emacs_core::eval::Context,
+    face_name: &str,
+) -> Option<Value> {
+    let entry = ensure_face_new_frame_defaults_entry(eval, face_name)?;
+    if entry.is_cons() {
+        Some(entry.cons_cdr())
+    } else {
+        None
+    }
+}
+
+pub(crate) fn lookup_frame_face_hash_entry(table: Value, key: Value) -> Option<Value> {
+    if !table.is_hash_table() {
+        return None;
+    }
+    let hash_table = table.as_hash_table()?;
+    let hash_key = match key.kind() {
+        ValueKind::Symbol(id) => HashKey::Symbol(id),
+        _ => return None,
+    };
+    hash_table.data.get(&hash_key).copied()
+}
+
+fn insert_frame_face_hash_entry_if_absent(table: Value, key: Value, value: Value) {
+    if lookup_frame_face_hash_entry(table, key).is_none() {
+        upsert_frame_face_hash_entry(table, key, value);
+    } else {
+        let _ = table.with_hash_table_mut(|hash_table| {
+            let hash_key = match key.kind() {
+                ValueKind::Symbol(id) => HashKey::Symbol(id),
+                _ => unreachable!("face hash keys are symbols"),
+            };
+            hash_table.key_snapshots.insert(hash_key.clone(), key);
+            hash_table.ensure_hash_key_iterable(&hash_key);
+        });
+    }
+}
+
+pub(crate) fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Value) {
     if !table.is_hash_table() {
         unreachable!("frame face hash table must be a hash table");
     };

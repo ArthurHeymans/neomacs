@@ -77,6 +77,65 @@ fn gnu_faces_el_defines_x_color_aliases() {
     );
 }
 
+#[test]
+fn context_prebinds_gnu_font_style_tables() {
+    crate::test_utils::init_test_tracing();
+    let eval = Context::new();
+
+    let weight_table = eval
+        .obarray
+        .symbol_value("font-weight-table")
+        .copied()
+        .expect("font-weight-table");
+    let rows = weight_table.as_vector_data().expect("weight table vector");
+    assert_eq!(rows.len(), 11);
+    let ultra_light = rows[1].as_vector_data().expect("weight row");
+    assert_eq!(ultra_light[0], Value::fixnum(40));
+    assert_eq!(ultra_light[1].as_symbol_name(), Some("ultra-light"));
+    assert_eq!(ultra_light[4].as_symbol_name(), Some("extralight"));
+
+    let slant_table = eval
+        .obarray
+        .symbol_value("font-slant-table")
+        .copied()
+        .expect("font-slant-table");
+    let rows = slant_table.as_vector_data().expect("slant table vector");
+    assert_eq!(rows.len(), 5);
+    let normal = rows[2].as_vector_data().expect("slant row");
+    assert_eq!(normal[0], Value::fixnum(100));
+    assert_eq!(normal[1].as_symbol_name(), Some("normal"));
+    assert_eq!(normal[3].as_symbol_name(), Some("unspecified"));
+
+    let width_table = eval
+        .obarray
+        .symbol_value("font-width-table")
+        .copied()
+        .expect("font-width-table");
+    let rows = width_table.as_vector_data().expect("width table vector");
+    assert_eq!(rows.len(), 9);
+    let normal = rows[4].as_vector_data().expect("width row");
+    assert_eq!(normal[0], Value::fixnum(100));
+    assert_eq!(normal[1].as_symbol_name(), Some("normal"));
+    assert_eq!(normal[4].as_symbol_name(), Some("unspecified"));
+}
+
+#[test]
+fn gnu_font_style_tables_are_constant_symbols() {
+    crate::test_utils::init_test_tracing();
+    let eval = Context::new();
+    for name in ["font-weight-table", "font-slant-table", "font-width-table"] {
+        assert!(eval.obarray.is_constant(name), "{name} should be constant");
+    }
+    assert!(!eval.obarray.is_constant("font-log"));
+    assert_eq!(
+        eval.obarray
+            .symbol_value("font-log")
+            .copied()
+            .expect("font-log"),
+        Value::T
+    );
+}
+
 // -----------------------------------------------------------------------
 // Font builtins
 // -----------------------------------------------------------------------
@@ -900,7 +959,8 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
 #[test]
 fn internal_lisp_face_p_symbol_returns_face_vector() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_p(vec![Value::symbol("default")]).unwrap();
+    let mut eval = Context::new();
+    let result = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol("default")]).unwrap();
     let values = match result.kind() {
         ValueKind::Veclike(VecLikeType::Vector) => result.as_vector_data().unwrap().clone(),
         _ => panic!("expected vector"),
@@ -912,21 +972,25 @@ fn internal_lisp_face_p_symbol_returns_face_vector() {
 #[test]
 fn internal_lisp_face_p_non_symbol() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_p(vec![Value::fixnum(42)]).unwrap();
+    let mut eval = Context::new();
+    let result = builtin_internal_lisp_face_p(&mut eval, vec![Value::fixnum(42)]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn internal_lisp_face_p_nil_returns_nil() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_p(vec![Value::NIL]).unwrap();
+    let mut eval = Context::new();
+    let result = builtin_internal_lisp_face_p(&mut eval, vec![Value::NIL]).unwrap();
     assert!(result.is_nil());
 }
 
 #[test]
 fn internal_lisp_face_p_rejects_non_nil_frame_designator() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_internal_lisp_face_p(vec![Value::symbol("default"), Value::fixnum(1)]);
+    let mut eval = Context::new();
+    let result =
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol("default"), Value::fixnum(1)]);
     assert!(result.is_err());
 }
 
@@ -934,11 +998,13 @@ fn internal_lisp_face_p_rejects_non_nil_frame_designator() {
 fn internal_lisp_face_p_with_frame_designator_returns_resolved_vector() {
     crate::test_utils::init_test_tracing();
     clear_font_cache_state();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
 
-    let result = builtin_internal_lisp_face_p(vec![
-        Value::symbol("default"),
-        Value::make_frame(FRAME_ID_BASE),
-    ])
+    let result = builtin_internal_lisp_face_p(
+        &mut eval,
+        vec![Value::symbol("default"), Value::make_frame(frame_id.0)],
+    )
     .unwrap();
     let values = match result.kind() {
         ValueKind::Veclike(VecLikeType::Vector) => result.as_vector_data().unwrap().clone(),
@@ -962,7 +1028,7 @@ fn internal_make_lisp_face_creates_symbol_visible_to_internal_lisp_face_p() {
     let mut eval = Context::new();
     let made = builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
     assert!(made.is_vector());
-    let exists = builtin_internal_lisp_face_p(vec![Value::symbol(face_name)]).unwrap();
+    let exists = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)]).unwrap();
     assert!(exists.is_vector());
     assert_eq!(
         eval.obarray().get_property(face_name, "face"),
@@ -999,13 +1065,73 @@ fn internal_lisp_face_p_without_frame_returns_global_lface_attributes() {
     )
     .unwrap();
 
-    let result = builtin_internal_lisp_face_p(vec![Value::symbol(face_name)]).unwrap();
+    let result = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)]).unwrap();
     let values = match result.kind() {
         ValueKind::Veclike(VecLikeType::Vector) => result.as_vector_data().unwrap().clone(),
         _ => panic!("expected vector"),
     };
     assert_eq!(values[5].as_symbol_name(), Some("bold"));
     assert_eq!(values[6].as_symbol_name(), Some("italic"));
+}
+
+#[test]
+fn internal_set_lisp_face_attribute_mutates_live_global_lface_vector() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+
+    let face_name = "__neovm_live_global_lface_vector_unit_test";
+    let mut eval = Context::new();
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+    let vector = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":weight"),
+            Value::symbol("unspecified"),
+            Value::fixnum(0),
+        ],
+    )
+    .unwrap();
+
+    let values = vector.as_vector_data().unwrap().clone();
+    assert_eq!(values[5].as_symbol_name(), Some(":ignore-defface"));
+}
+
+#[test]
+fn internal_copy_lisp_face_keeps_global_and_frame_domains_separate() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+
+    let mut eval = Context::new();
+    let frame =
+        Value::make_frame(crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0);
+    let face_name = "__neovm_copy_face_domains_unit_test";
+
+    builtin_internal_copy_lisp_face(
+        &mut eval,
+        vec![
+            Value::symbol("bold"),
+            Value::symbol(face_name),
+            frame,
+            Value::NIL,
+        ],
+    )
+    .unwrap();
+
+    let frame_vector =
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name), frame]).unwrap();
+    let global_vector =
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+    assert_eq!(
+        frame_vector.as_vector_data().unwrap()[5].as_symbol_name(),
+        Some("bold")
+    );
+    assert_eq!(
+        global_vector.as_vector_data().unwrap()[5].as_symbol_name(),
+        Some("unspecified")
+    );
 }
 
 #[test]
@@ -1156,7 +1282,8 @@ fn internal_copy_lisp_face_rejects_non_t_frame_designator() {
 fn internal_copy_lisp_face_validates_new_frame_when_frame_designator_used() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let frame = Value::make_frame(FRAME_ID_BASE);
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = Value::make_frame(frame_id.0);
     let err_t = builtin_internal_copy_lisp_face(
         &mut eval,
         vec![
@@ -1810,7 +1937,8 @@ fn internal_lisp_face_helpers_accept_frame_handles() {
     let frame =
         Value::make_frame(crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval).0);
 
-    let descriptor = builtin_internal_lisp_face_p(vec![Value::symbol("default"), frame]).unwrap();
+    let descriptor =
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol("default"), frame]).unwrap();
     assert!(descriptor.is_vector());
 
     let face_name = "__neovm_face_frame_handle_unit_test";

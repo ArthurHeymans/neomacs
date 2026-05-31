@@ -33,6 +33,46 @@ use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, FrameParam, WindowId};
 type AlternativeFontFamilyAlist = Vec<(SymId, Vec<SymId>)>;
 type AlternativeFontRegistryAlist = Vec<(LispString, Vec<LispString>)>;
 
+const FONT_WEIGHT_STYLE_TABLE: &[(i64, &[&str])] = &[
+    (0, &["thin"]),
+    (
+        40,
+        &["ultra-light", "ultralight", "extra-light", "extralight"],
+    ),
+    (50, &["light"]),
+    (55, &["semi-light", "semilight", "demilight"]),
+    (80, &["regular", "normal", "unspecified", "book"]),
+    (100, &["medium"]),
+    (
+        180,
+        &["semi-bold", "semibold", "demibold", "demi-bold", "demi"],
+    ),
+    (200, &["bold"]),
+    (205, &["extra-bold", "extrabold", "ultra-bold", "ultrabold"]),
+    (210, &["black", "heavy"]),
+    (250, &["ultra-heavy", "ultraheavy"]),
+];
+
+const FONT_SLANT_STYLE_TABLE: &[(i64, &[&str])] = &[
+    (0, &["reverse-oblique", "ro"]),
+    (10, &["reverse-italic", "ri"]),
+    (100, &["normal", "r", "unspecified"]),
+    (200, &["italic", "i", "ot"]),
+    (210, &["oblique", "o"]),
+];
+
+const FONT_WIDTH_STYLE_TABLE: &[(i64, &[&str])] = &[
+    (50, &["ultra-condensed", "ultracondensed"]),
+    (63, &["extra-condensed", "extracondensed"]),
+    (75, &["condensed", "compressed", "narrow"]),
+    (87, &["semi-condensed", "semicondensed", "demicondensed"]),
+    (100, &["normal", "medium", "regular", "unspecified"]),
+    (113, &["semi-expanded", "semiexpanded", "demiexpanded"]),
+    (125, &["expanded"]),
+    (150, &["extra-expanded", "extraexpanded"]),
+    (200, &["ultra-expanded", "ultraexpanded", "wide"]),
+];
+
 static ALTERNATIVE_FONT_FAMILY_ALIST: OnceLock<RwLock<AlternativeFontFamilyAlist>> =
     OnceLock::new();
 static ALTERNATIVE_FONT_REGISTRY_ALIST: OnceLock<RwLock<AlternativeFontRegistryAlist>> =
@@ -44,6 +84,38 @@ fn alternative_font_family_alist() -> &'static RwLock<AlternativeFontFamilyAlist
 
 fn alternative_font_registry_alist() -> &'static RwLock<AlternativeFontRegistryAlist> {
     ALTERNATIVE_FONT_REGISTRY_ALIST.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+fn font_style_table(entries: &[(i64, &[&str])]) -> Value {
+    Value::vector(
+        entries
+            .iter()
+            .map(|(numeric, names)| {
+                let mut row = Vec::with_capacity(names.len() + 1);
+                row.push(Value::fixnum(*numeric));
+                row.extend(names.iter().map(|name| Value::symbol(*name)));
+                Value::vector(row)
+            })
+            .collect(),
+    )
+}
+
+pub(crate) fn init_font_vars(obarray: &mut super::symbol::Obarray) {
+    for (name, value) in [
+        (
+            "font-weight-table",
+            font_style_table(FONT_WEIGHT_STYLE_TABLE),
+        ),
+        ("font-slant-table", font_style_table(FONT_SLANT_STYLE_TABLE)),
+        ("font-width-table", font_style_table(FONT_WIDTH_STYLE_TABLE)),
+    ] {
+        obarray.set_symbol_value(name, value);
+        obarray.make_special(name);
+        obarray.set_constant(name);
+    }
+
+    obarray.set_symbol_value("font-log", Value::T);
+    obarray.make_special("font-log");
 }
 
 pub fn alternative_font_families(family: &str) -> Vec<String> {
@@ -2404,6 +2476,74 @@ pub(crate) fn make_lisp_face_vector() -> Value {
     Value::vector(values)
 }
 
+fn reset_lisp_face_vector(vector: Value) {
+    let _ = vector.with_vector_data_mut(|slots| {
+        if slots.len() != LISP_FACE_VECTOR_LEN {
+            *slots = vec![Value::symbol("unspecified"); LISP_FACE_VECTOR_LEN];
+        }
+        slots[0] = Value::symbol("face");
+        for slot in slots.iter_mut().take(LISP_FACE_VECTOR_LEN).skip(1) {
+            *slot = Value::symbol("unspecified");
+        }
+    });
+}
+
+fn copy_lisp_face_vector_slots(from: Value, to: Value) {
+    let Some(source) = from.as_vector_data() else {
+        return;
+    };
+    let _ = to.replace_vector_data(source.clone());
+}
+
+fn lisp_face_vector_attr(vector: Value, attr: LFaceAttr) -> Option<Value> {
+    vector
+        .as_vector_data()
+        .and_then(|slots| slots.get(attr as usize).copied())
+}
+
+fn set_lisp_face_vector_attr(vector: Value, attr: LFaceAttr, value: Value) {
+    let _ = vector.set_vector_slot(attr as usize, value);
+}
+
+fn set_lisp_face_vector_attr_with_font_derivatives(
+    face_name: &str,
+    vector: Value,
+    attr: LFaceAttr,
+    attr_value: Value,
+    font_derivation_value: Value,
+) -> Result<(), Flow> {
+    set_lisp_face_vector_attr(vector, attr, attr_value);
+    if attr == LFaceAttr::Font && !is_reset_like_face_attr_value(&attr_value) {
+        for (derived_attr, derived_value) in
+            derived_face_attrs_from_font_value(&font_derivation_value)
+        {
+            let (canonical_attr, canonical_value) = normalize_face_attr_for_set(
+                face_name,
+                SetFaceAttr::LFace(derived_attr),
+                derived_value,
+            )?;
+            set_lisp_face_vector_attr(vector, canonical_attr, canonical_value);
+        }
+    }
+    Ok(())
+}
+
+fn sync_face_overrides_from_lisp_face_vector(face_name: &str, vector: Value, defaults_frame: bool) {
+    clear_face_overrides(face_name, defaults_frame);
+    let Some(slots) = vector.as_vector_data() else {
+        return;
+    };
+    for attr in LFACE_ATTRS {
+        let value = slots
+            .get(attr as usize)
+            .copied()
+            .unwrap_or_else(|| Value::symbol("unspecified"));
+        if !value.is_symbol_named("unspecified") {
+            set_face_override(face_name, attr, value, defaults_frame);
+        }
+    }
+}
+
 fn make_lisp_face_vector_for_domain(face_name: &str, defaults_frame: bool) -> Value {
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
     values.push(Value::symbol("face"));
@@ -2413,6 +2553,145 @@ fn make_lisp_face_vector_for_domain(face_name: &str, defaults_frame: bool) -> Va
             .map(|attr| lisp_face_attribute_value(face_name, *attr, defaults_frame)),
     );
     Value::vector(values)
+}
+
+#[derive(Clone, Copy)]
+enum FrameFaceInitial {
+    Empty,
+    SelectedBase,
+}
+
+fn ensure_global_lisp_face_vector(
+    eval: &mut super::eval::Context,
+    face_name: &str,
+) -> Option<Value> {
+    crate::emacs_core::xfaces::face_new_frame_defaults_vector(eval, face_name)
+}
+
+fn lookup_frame_lisp_face_vector(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    face_name: &str,
+) -> Option<Value> {
+    let table = eval.frames.get(frame_id)?.face_hash_table();
+    crate::emacs_core::xfaces::lookup_frame_face_hash_entry(table, Value::symbol(face_name))
+}
+
+fn ensure_frame_lisp_face_vector(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+    face_name: &str,
+    initial: FrameFaceInitial,
+) -> Option<Value> {
+    if let Some(vector) = lookup_frame_lisp_face_vector(eval, frame_id, face_name) {
+        return Some(vector);
+    }
+    let vector = match initial {
+        FrameFaceInitial::Empty => make_lisp_face_vector(),
+        FrameFaceInitial::SelectedBase => make_lisp_face_vector_for_domain(face_name, false),
+    };
+    let frame = eval.frames.get_mut(frame_id)?;
+    crate::emacs_core::xfaces::upsert_frame_face_hash_entry(
+        frame.face_hash_table(),
+        Value::symbol(face_name),
+        vector,
+    );
+    Some(vector)
+}
+
+fn apply_lisp_face_vector_update_for_frame_arg(
+    eval: &mut super::eval::Context,
+    face_name: &str,
+    attr: LFaceAttr,
+    attr_value: Value,
+    font_derivation_value: Value,
+    frame_arg: Option<&Value>,
+) -> Result<(), Flow> {
+    match frame_arg {
+        Some(frame) if frame.is_t() => {
+            if let Some(vector) = ensure_global_lisp_face_vector(eval, face_name) {
+                set_lisp_face_vector_attr_with_font_derivatives(
+                    face_name,
+                    vector,
+                    attr,
+                    attr_value,
+                    font_derivation_value,
+                )?;
+            }
+        }
+        Some(frame) if frame.as_fixnum() == Some(0) => {
+            if let Some(vector) = ensure_global_lisp_face_vector(eval, face_name) {
+                set_lisp_face_vector_attr_with_font_derivatives(
+                    face_name,
+                    vector,
+                    attr,
+                    attr_value,
+                    font_derivation_value,
+                )?;
+            }
+            for frame_id in eval.frames.frame_list() {
+                if let Some(vector) = ensure_frame_lisp_face_vector(
+                    eval,
+                    frame_id,
+                    face_name,
+                    FrameFaceInitial::Empty,
+                ) {
+                    set_lisp_face_vector_attr_with_font_derivatives(
+                        face_name,
+                        vector,
+                        attr,
+                        attr_value,
+                        font_derivation_value,
+                    )?;
+                }
+            }
+        }
+        Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
+            let frame_id =
+                frame_id_from_designator(frame).expect("live frame designator should decode");
+            if let Some(vector) =
+                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
+            {
+                set_lisp_face_vector_attr_with_font_derivatives(
+                    face_name,
+                    vector,
+                    attr,
+                    attr_value,
+                    font_derivation_value,
+                )?;
+            }
+        }
+        None => {
+            let frame_id = super::window_cmds::ensure_selected_frame_id(eval);
+            if let Some(vector) =
+                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
+            {
+                set_lisp_face_vector_attr_with_font_derivatives(
+                    face_name,
+                    vector,
+                    attr,
+                    attr_value,
+                    font_derivation_value,
+                )?;
+            }
+        }
+        Some(frame) if frame.is_nil() => {
+            let frame_id = super::window_cmds::ensure_selected_frame_id(eval);
+            if let Some(vector) =
+                ensure_frame_lisp_face_vector(eval, frame_id, face_name, FrameFaceInitial::Empty)
+            {
+                set_lisp_face_vector_attr_with_font_derivatives(
+                    face_name,
+                    vector,
+                    attr,
+                    attr_value,
+                    font_derivation_value,
+                )?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Build a face vector that merges both selected and defaults-domain
@@ -2532,6 +2811,15 @@ fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> 
     for (field, attr) in [
         ("family", LFaceAttr::Family),
         ("foundry", LFaceAttr::Foundry),
+    ] {
+        if let Some(v) = font_vector_get_flexible(&elems, field)
+            && let Some(text) = font_value_text(&v)
+        {
+            derived.push((attr, Value::string(text)));
+        }
+    }
+
+    for (field, attr) in [
         ("weight", LFaceAttr::Weight),
         ("slant", LFaceAttr::Slant),
         ("width", LFaceAttr::Width),
@@ -2956,25 +3244,28 @@ fn normalize_face_attr_for_set_with_eval(
 
 /// `(internal-lisp-face-p FACE &optional FRAME)` -- return a face descriptor
 /// vector for known faces, nil otherwise.
-pub(crate) fn builtin_internal_lisp_face_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_internal_lisp_face_p(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("internal-lisp-face-p", &args, 1)?;
     expect_max_args("internal-lisp-face-p", &args, 2)?;
-    let frame_designator = if let Some(frame) = args.get(1) {
-        if !optional_selected_frame_designator_p(frame) {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("frame-live-p"), *frame],
-            ));
-        }
-        !frame.is_nil()
-    } else {
-        false
-    };
     if let Some(face_name) = known_face_name(&args[0]) {
-        if frame_designator {
-            Ok(make_lisp_face_vector_for_domain(&face_name, false))
+        if let Some(frame) = args.get(1) {
+            if frame.is_nil() {
+                Ok(ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL))
+            } else if live_frame_designator_in_state(&eval.frames, frame) {
+                let frame_id = frame_id_from_designator(frame)
+                    .expect("live frame designator should decode to frame id");
+                Ok(lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL))
+            } else {
+                Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("frame-live-p"), *frame],
+                ))
+            }
         } else {
-            Ok(make_lisp_face_vector_for_domain(&face_name, true))
+            Ok(ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL))
         }
     } else {
         Ok(Value::NIL)
@@ -2991,7 +3282,7 @@ pub(crate) fn builtin_internal_make_lisp_face(
     expect_max_args("internal-make-lisp-face", &args, 2)?;
     let face_name = require_symbol_face_name(&args[0])?;
     if let Some(frame) = args.get(1) {
-        if !optional_selected_frame_designator_p(frame) {
+        if !frame.is_nil() && !live_frame_designator_in_state(&eval.frames, frame) {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("frame-live-p"), *frame],
@@ -3000,9 +3291,23 @@ pub(crate) fn builtin_internal_make_lisp_face(
     }
     mark_created_lisp_face(&face_name);
     ensure_lisp_face_id_property(eval, &face_name)?;
-    clear_face_overrides(&face_name, true);
-    let result = make_lisp_face_vector();
-    crate::emacs_core::xfaces::ensure_face_new_frame_defaults_entry(eval, &face_name);
+    let _ = ensure_global_lisp_face_vector(eval, &face_name);
+    let result = if let Some(frame) = args.get(1).filter(|frame| !frame.is_nil()) {
+        let frame_id = frame_id_from_designator(frame)
+            .expect("validated frame designator should decode to frame id");
+        let vector =
+            ensure_frame_lisp_face_vector(eval, frame_id, &face_name, FrameFaceInitial::Empty)
+                .unwrap_or_else(make_lisp_face_vector);
+        reset_lisp_face_vector(vector);
+        clear_face_overrides(&face_name, false);
+        vector
+    } else {
+        let vector =
+            ensure_global_lisp_face_vector(eval, &face_name).unwrap_or_else(make_lisp_face_vector);
+        reset_lisp_face_vector(vector);
+        clear_face_overrides(&face_name, true);
+        vector
+    };
     eval.face_table.ensure_face(&face_name);
     eval.face_change_count += 1;
     Ok(result)
@@ -3018,13 +3323,16 @@ pub(crate) fn builtin_internal_copy_lisp_face(
     let _ = require_symbol_face_name(&args[0])?;
     let to_name = require_symbol_face_name(&args[1])?;
     let copy_defaults_domain = args[2].is_t();
-    if !copy_defaults_domain && !frame_device_designator_p(&args[2]) {
+    if !copy_defaults_domain && !live_frame_designator_in_state(&eval.frames, &args[2]) {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("frame-live-p"), args[2]],
         ));
     }
-    if !copy_defaults_domain && !args[3].is_nil() && !frame_device_designator_p(&args[3]) {
+    if !copy_defaults_domain
+        && !args[3].is_nil()
+        && !live_frame_designator_in_state(&eval.frames, &args[3])
+    {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("frame-live-p"), args[3]],
@@ -3033,30 +3341,36 @@ pub(crate) fn builtin_internal_copy_lisp_face(
     let from_name = resolve_copy_source_face_symbol(&args[0])?;
     mark_created_lisp_face(&to_name);
     ensure_lisp_face_id_property(eval, &to_name)?;
-
-    // Build the full merged face vector from the source, then store
-    // every non-unspecified attribute as an override for the target.
-    // This matches GNU's `vcopy(copy, 0, xvector_contents(lface),
-    // LFACE_VECTOR_SIZE)` in Finternal_copy_lisp_face.  We must
-    // explicitly populate overrides (not just copy FACE_ATTR_STATE
-    // maps) because FACE_ATTR_STATE is a Rust thread-local that is
-    // empty after a pdump reload — the source face's attributes may
-    // only exist as base values.
-    let src_vector = make_lisp_face_vector_merged(&from_name);
-    if let Some(vec_elems) = src_vector.as_vector_data() {
-        let elems = vec_elems.clone();
-        // elem[0] is the 'face symbol; elem[1..] are the attrs
-        for (i, attr) in LFACE_ATTRS.iter().enumerate() {
-            let val = *elems.get(i + 1).unwrap_or(&Value::NIL);
-            if val.is_symbol_named("unspecified") {
-                continue;
-            }
-            // Store in both override maps so facep / face-equal can
-            // find the attributes regardless of frame domain.
-            set_face_override(&to_name, *attr, val, false);
-            set_face_override(&to_name, *attr, val, true);
-        }
-    }
+    let _ = ensure_global_lisp_face_vector(eval, &to_name);
+    let (src_vector, dst_vector, defaults_frame) = if copy_defaults_domain {
+        let src_vector = ensure_global_lisp_face_vector(eval, &from_name)
+            .ok_or_else(|| invalid_face_error(args[0]))?;
+        let dst_vector =
+            ensure_global_lisp_face_vector(eval, &to_name).unwrap_or_else(make_lisp_face_vector);
+        (src_vector, dst_vector, true)
+    } else {
+        let frame_id = frame_id_from_designator(&args[2])
+            .expect("validated frame designator should decode to frame id");
+        let new_frame_id = if args[3].is_nil() {
+            frame_id
+        } else {
+            frame_id_from_designator(&args[3])
+                .expect("validated frame designator should decode to frame id")
+        };
+        let src_vector = ensure_frame_lisp_face_vector(
+            eval,
+            frame_id,
+            &from_name,
+            FrameFaceInitial::SelectedBase,
+        )
+        .ok_or_else(|| invalid_face_error(args[0]))?;
+        let dst_vector =
+            ensure_frame_lisp_face_vector(eval, new_frame_id, &to_name, FrameFaceInitial::Empty)
+                .unwrap_or_else(make_lisp_face_vector);
+        (src_vector, dst_vector, false)
+    };
+    copy_lisp_face_vector_slots(src_vector, dst_vector);
+    sync_face_overrides_from_lisp_face_vector(&to_name, dst_vector, defaults_frame);
 
     let result = args[1];
 
@@ -3068,12 +3382,6 @@ pub(crate) fn builtin_internal_copy_lisp_face(
         .cloned()
         .unwrap_or_else(|| eval.face_table.resolve(&from_name));
     eval.face_table.define(&to_name, copied);
-    // Copy the Lisp face vector — mirrors GNU's `vcopy(copy, 0,
-    // xvector_contents(lface), LFACE_VECTOR_SIZE)` in
-    // Finternal_copy_lisp_face (xfaces.c:3183).
-    if let Some(face_vec) = eval.obarray().get_property(&from_name, "face") {
-        let _ = eval.obarray_mut().put_property(&to_name, "face", face_vec);
-    }
     eval.face_change_count += 1;
 
     Ok(result)
@@ -3093,6 +3401,17 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
     let face_name = require_symbol_face_name(face)?;
     let attr_name = normalize_set_face_attribute_name(&args[1])?;
     let value = args[2];
+    if let Some(frame) = args.get(3)
+        && !frame.is_nil()
+        && !frame.is_t()
+        && frame.as_fixnum() != Some(0)
+        && !live_frame_designator_in_state(&eval.frames, frame)
+    {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("frame-live-p"), *frame],
+        ));
+    }
 
     {
         let mut apply_set = |defaults_frame: bool| -> Result<(), Flow> {
@@ -3126,6 +3445,45 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 canonical_value = Value::symbol(":ignore-defface");
             }
             set_face_override(&face_name, canonical_attr, canonical_value, defaults_frame);
+            if defaults_frame {
+                if let Some(vector) = ensure_global_lisp_face_vector(eval, &face_name) {
+                    set_lisp_face_vector_attr_with_font_derivatives(
+                        &face_name,
+                        vector,
+                        canonical_attr,
+                        canonical_value,
+                        canonical_value,
+                    )?;
+                }
+            } else {
+                let frame_ids = match args.get(3) {
+                    Some(v) if v.as_fixnum() == Some(0) => eval.frames.frame_list(),
+                    Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
+                        frame_id_from_designator(frame)
+                            .map(|frame_id| vec![frame_id])
+                            .unwrap_or_default()
+                    }
+                    _ => vec![super::window_cmds::ensure_selected_frame_id(eval)],
+                };
+                let initial = if KNOWN_FACES.contains(&face_name.as_str()) {
+                    FrameFaceInitial::SelectedBase
+                } else {
+                    FrameFaceInitial::Empty
+                };
+                for frame_id in frame_ids {
+                    if let Some(vector) =
+                        ensure_frame_lisp_face_vector(eval, frame_id, &face_name, initial)
+                    {
+                        set_lisp_face_vector_attr_with_font_derivatives(
+                            &face_name,
+                            vector,
+                            canonical_attr,
+                            canonical_value,
+                            canonical_value,
+                        )?;
+                    }
+                }
+            }
             if canonical_attr == LFaceAttr::Font && !is_reset_like_face_attr_value(&canonical_value)
             {
                 apply_derived_font_face_overrides(&face_name, &canonical_value, defaults_frame)?;
@@ -3141,13 +3499,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 apply_set(true)?;
                 apply_set(false)?;
             }
-            Some(frame) if frame_device_designator_p(frame) => apply_set(false)?,
-            Some(other) => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("frame-live-p"), *other],
-                ));
-            }
+            Some(_) => apply_set(false)?,
         }
     }
 
@@ -3182,6 +3534,16 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
 
             if canonical_attr == LFaceAttr::Font && effective_value != value {
                 set_face_override(&face_name, canonical_attr, public_effective_value, false);
+            }
+            if canonical_attr == LFaceAttr::Font {
+                apply_lisp_face_vector_update_for_frame_arg(
+                    eval,
+                    &face_name,
+                    canonical_attr,
+                    public_effective_value,
+                    effective_value,
+                    args.get(3),
+                )?;
             }
 
             let face_attr = lisp_value_to_face_attr(canonical_attr, public_effective_value);
@@ -3617,7 +3979,7 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
             false
         } else if frame.is_t() {
             true
-        } else if frame_device_designator_p(frame) {
+        } else if live_frame_designator_in_state(&eval.frames, frame) {
             false
         } else {
             return Err(signal(
@@ -3633,13 +3995,20 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
     let attr_name = normalize_face_attribute_name(&args[1])?;
 
     if defaults_frame {
+        if let Some(vector) = ensure_global_lisp_face_vector(eval, &face_name)
+            && let Some(value) = lisp_face_vector_attr(vector, attr_name)
+        {
+            return Ok(value);
+        }
         return Ok(lisp_face_attribute_value(&face_name, attr_name, true));
     }
 
     let frame_id = match args.get(2) {
         None => Some(super::window_cmds::ensure_selected_frame_id(eval)),
         Some(v) if v.is_nil() => Some(super::window_cmds::ensure_selected_frame_id(eval)),
-        Some(frame) if frame_device_designator_p(frame) => frame_id_from_designator(frame),
+        Some(frame) if live_frame_designator_in_state(&eval.frames, frame) => {
+            frame_id_from_designator(frame)
+        }
         _ => None,
     };
 
@@ -3663,7 +4032,17 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
         }
     }
 
-    let lisp_value = lisp_face_attribute_value(&face_name, attr_name, false);
+    let lisp_value = frame_id
+        .and_then(|frame_id| {
+            let initial = if KNOWN_FACES.contains(&face_name.as_str()) {
+                FrameFaceInitial::SelectedBase
+            } else {
+                FrameFaceInitial::Empty
+            };
+            ensure_frame_lisp_face_vector(eval, frame_id, &face_name, initial)
+        })
+        .and_then(|vector| lisp_face_vector_attr(vector, attr_name))
+        .unwrap_or_else(|| lisp_face_attribute_value(&face_name, attr_name, false));
     let lisp_value_unspecified = lisp_value.is_symbol_named("unspecified")
         || (attr_name == LFaceAttr::Foreground
             && lisp_value.as_utf8_str() == Some("unspecified-fg"))
@@ -3747,6 +4126,24 @@ pub(crate) fn builtin_internal_merge_in_global_face(
         mark_selected_created_lisp_face(&face_name);
     }
     merge_defaults_overrides_into_selected(&face_name);
+    let frame_id = frame_id_from_designator(&args[1])
+        .expect("validated frame designator should decode to frame id");
+    if let (Some(global_vector), Some(local_vector)) = (
+        ensure_global_lisp_face_vector(eval, &face_name),
+        ensure_frame_lisp_face_vector(eval, frame_id, &face_name, FrameFaceInitial::Empty),
+    ) {
+        for attr in LFACE_ATTRS {
+            let Some(global_value) = lisp_face_vector_attr(global_vector, attr) else {
+                continue;
+            };
+            if global_value.is_symbol_named(":ignore-defface") {
+                set_lisp_face_vector_attr(local_vector, attr, Value::symbol("unspecified"));
+            } else if !global_value.is_symbol_named("unspecified") {
+                set_lisp_face_vector_attr(local_vector, attr, global_value);
+            }
+        }
+        sync_face_overrides_from_lisp_face_vector(&face_name, local_vector, false);
+    }
 
     FACE_ATTR_STATE.with(|slot| {
         let state = slot.borrow();
@@ -3767,9 +4164,7 @@ pub(crate) fn builtin_internal_merge_in_global_face(
             }
         }
     });
-    if let Some(frame_id) = live_frame_id_for_face_update(eval, args.get(1))? {
-        mirror_runtime_face_into_frame(eval, frame_id, &face_name);
-    }
+    mirror_runtime_face_into_frame(eval, frame_id, &face_name);
     Ok(Value::NIL)
 }
 

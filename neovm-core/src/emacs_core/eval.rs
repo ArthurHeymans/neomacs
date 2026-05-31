@@ -4225,6 +4225,7 @@ impl Context {
 
         // Initialize indentation variables (tab-width, indent-tabs-mode, etc.)
         super::indent::init_indent_vars(&mut obarray);
+        super::font::init_font_vars(&mut obarray);
 
         let mut custom = CustomManager::new();
 
