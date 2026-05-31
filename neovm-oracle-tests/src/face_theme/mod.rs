@@ -33120,3 +33120,74 @@ fn ft_beyond1500_text_property_prop_scan_right_to_left() {
       (list 'right-to-left (nreverse chain) 'intervals (length (object-intervals (current-buffer))))))))"##,
     );
 }
+
+#[test]
+fn ft_upward_face_overlay_face_text_prop_overlay_ov_priority_sort() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 3))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority 2))
+    (let ((c (make-overlay 1 6))) (overlay-put c 'face '(:foreground "C")) (overlay-put c 'priority 1))
+    (list
+     'bottom-tp-face (get-text-property 3 'face)
+     'top-cp-face (get-char-property 3 'face)
+     (progn (mapc #'delete-overlay (overlays-in 1 6)) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_upward_font_lock_cobol_mode_fontify() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (require 'font-lock)
+  (with-temp-buffer
+    (condition-case nil (cobol-mode) (error (fundamental-mode)))
+    (insert "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. hello.\n")
+    (condition-case err
+        (progn (font-lock-fontify-buffer) (list 'fontified (get-text-property 1 'fontified)))
+      (error (list 'err (car err) (cadr err)))))))"##,
+    );
+}
+
+#[test]
+fn ft_upward_face_overlay_face_delete_only_one_of_many() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (let ((a (make-overlay 1 6))) (overlay-put a 'face '(:foreground "A")) (overlay-put a 'priority 1))
+    (let ((b (make-overlay 1 6))) (overlay-put b 'face '(:foreground "B")) (overlay-put b 'priority 2))
+    (let ((c (make-overlay 1 6))) (overlay-put c 'face '(:foreground "C")) (overlay-put c 'priority 3))
+    (list
+     'before-delete (get-char-property 3 'face)
+     'after-delete-b (progn (delete-overlay b) (get-char-property 3 'face))
+     'after-delete-c (progn (delete-overlay c) (get-char-property 3 'face))
+     (progn (delete-overlay a) 'cleaned)))))"##,
+    );
+}
+
+#[test]
+fn ft_upward_text_property_get_all_properties_as_list() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r##"(progn
+  (with-temp-buffer
+    (insert "AAAAA")
+    (put-text-property 1 6 'face 'bold)
+    (put-text-property 1 6 'fontified t)
+    (put-text-property 1 6 'mouse-face 'highlight)
+    (list
+     'all-at-3 (text-properties-at 3)
+     'pairs (/ (length (text-properties-at 3)) 2)))))"##,
+    );
+}
