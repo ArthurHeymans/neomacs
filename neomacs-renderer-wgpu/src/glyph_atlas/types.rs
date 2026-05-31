@@ -258,6 +258,38 @@ impl AnyAtlasEntry {
             Self::Color(e) => e.metrics().advance_width,
         }
     }
+
+    pub fn page_id_value(self) -> (GlyphMaterialKind, u32) {
+        match self {
+            Self::Alpha(e) => (GlyphMaterialKind::AlphaMask, e.page().get()),
+            Self::Subpixel(e) => (GlyphMaterialKind::SubpixelMask, e.page().get()),
+            Self::Color(e) => (GlyphMaterialKind::ColorRgba, e.page().get()),
+        }
+    }
+
+    pub fn rect(self) -> AtlasContentRect {
+        match self {
+            Self::Alpha(e) => e.rect(),
+            Self::Subpixel(e) => e.rect(),
+            Self::Color(e) => e.rect(),
+        }
+    }
+
+    pub fn uv(self) -> UvRect {
+        match self {
+            Self::Alpha(e) => e.uv(),
+            Self::Subpixel(e) => e.uv(),
+            Self::Color(e) => e.uv(),
+        }
+    }
+
+    pub fn metrics(self) -> GlyphMetrics {
+        match self {
+            Self::Alpha(e) => e.metrics(),
+            Self::Subpixel(e) => e.metrics(),
+            Self::Color(e) => e.metrics(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
