@@ -119,6 +119,25 @@ fn divergence_make_network_process_params() {
 }
 
 #[test]
+fn divergence_make_network_process_invalid_keyword_domains() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(let ((text-quoting-style 'grave))
+  (list
+   (condition-case err
+       (make-network-process :name "np-nowait" :server t :nowait t :service 0)
+     (error err))
+   (condition-case err
+       (make-network-process :name "np-type" :server t :service 0 :type 'bogus)
+     (error err))
+   (condition-case err
+       (make-network-process :name "np-family" :server t :service 0 :family 'bogus)
+     (error err))))"#,
+    );
+}
+
+#[test]
 fn divergence_num_processors_openmp_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

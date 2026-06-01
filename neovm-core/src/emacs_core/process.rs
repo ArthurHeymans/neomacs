@@ -3024,6 +3024,39 @@ impl NetworkAddressFamily {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+enum NetworkProcessFamilySymbol {
+    Local,
+    Ipv4,
+    Ipv6,
+}
+
+impl NetworkProcessFamilySymbol {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+fn validate_network_process_family(value: &Value) -> Result<(), Flow> {
+    if value.is_nil()
+        || matches!(value.kind(), ValueKind::Fixnum(_))
+        || NetworkProcessFamilySymbol::from_symbol_value(value).is_some()
+    {
+        Ok(())
+    } else {
+        Err(signal(
+            "error",
+            vec![Value::string("Unknown address family")],
+        ))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 enum NetworkLookupHint {
     Numeric,
 }
@@ -3070,6 +3103,35 @@ impl NumProcessorsQuery {
     #[cfg(test)]
     fn name(self) -> &'static str {
         self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum NetworkSocketType {
+    Datagram,
+    Seqpacket,
+}
+
+impl NetworkSocketType {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+fn validate_network_socket_type(value: &Value) -> Result<(), Flow> {
+    if value.is_nil() || NetworkSocketType::from_symbol_value(value).is_some() {
+        Ok(())
+    } else {
+        Err(signal(
+            "error",
+            vec![Value::string("Unsupported connection type")],
+        ))
     }
 }
 
@@ -4443,9 +4505,7 @@ pub(crate) fn builtin_make_network_process(
     let mut host: Option<String> = None;
     let mut service: Option<Value> = None;
     let mut server = false;
-    let mut _family: Option<String> = None;
-    let mut _type_kw: Option<String> = None;
-    let mut _nowait = false;
+    let mut nowait = false;
     let mut filter_val = Value::NIL;
     let mut sentinel_val = Value::NIL;
     let mut log_val = Value::NIL;
@@ -4470,17 +4530,9 @@ pub(crate) fn builtin_make_network_process(
             }
             ProcessKeyword::Service => service = Some(value),
             ProcessKeyword::Server => server = value.is_truthy(),
-            ProcessKeyword::Family => {
-                if !value.is_nil() {
-                    _family = value.as_symbol_name().map(|s| s.to_string());
-                }
-            }
-            ProcessKeyword::Type => {
-                if !value.is_nil() {
-                    _type_kw = value.as_symbol_name().map(|s| s.to_string());
-                }
-            }
-            ProcessKeyword::Nowait => _nowait = value.is_truthy(),
+            ProcessKeyword::Family => validate_network_process_family(&value)?,
+            ProcessKeyword::Type => validate_network_socket_type(&value)?,
+            ProcessKeyword::Nowait => nowait = value.is_truthy(),
             ProcessKeyword::Filter => filter_val = value,
             ProcessKeyword::Sentinel => sentinel_val = value,
             ProcessKeyword::Log => log_val = value,
@@ -4498,6 +4550,13 @@ pub(crate) fn builtin_make_network_process(
             vec![Value::string("Missing :name keyword parameter")],
         ));
     };
+
+    if server && nowait {
+        return Err(signal(
+            "error",
+            vec![Value::string("`:server' is incompatible with `:nowait'")],
+        ));
+    }
 
     let service = service.unwrap_or(Value::NIL);
     if service.is_nil() {

@@ -120,6 +120,21 @@ fn process_finite_domains_match_gnu_symbols() {
     );
     assert_eq!(NetworkAddressFamily::Ipv4.name(), "ipv4");
     assert_eq!(
+        NetworkProcessFamilySymbol::from_symbol_value(&Value::symbol("local")),
+        Some(NetworkProcessFamilySymbol::Local)
+    );
+    assert_eq!(
+        NetworkProcessFamilySymbol::from_symbol_value(&Value::symbol("ipv4")),
+        Some(NetworkProcessFamilySymbol::Ipv4)
+    );
+    assert_eq!(
+        NetworkProcessFamilySymbol::from_symbol_value(&Value::symbol("ipv6")),
+        Some(NetworkProcessFamilySymbol::Ipv6)
+    );
+    assert_eq!(NetworkProcessFamilySymbol::Local.name(), "local");
+    assert!(validate_network_process_family(&Value::fixnum(42)).is_ok());
+    assert!(validate_network_process_family(&Value::symbol("bogus")).is_err());
+    assert_eq!(
         NetworkLookupHint::from_symbol_value(&Value::symbol("numeric")),
         Some(NetworkLookupHint::Numeric)
     );
@@ -141,6 +156,16 @@ fn process_finite_domains_match_gnu_symbols() {
         NumProcessorsQuery::from_symbol_value(&Value::symbol("default")),
         None
     );
+    assert_eq!(
+        NetworkSocketType::from_symbol_value(&Value::symbol("datagram")),
+        Some(NetworkSocketType::Datagram)
+    );
+    assert_eq!(
+        NetworkSocketType::from_symbol_value(&Value::symbol("seqpacket")),
+        Some(NetworkSocketType::Seqpacket)
+    );
+    assert_eq!(NetworkSocketType::Datagram.name(), "datagram");
+    assert!(validate_network_socket_type(&Value::symbol("bogus")).is_err());
 
     assert_eq!(
         ProcessConnectionType::from_symbol_value(&Value::symbol("pipe")),
@@ -3210,6 +3235,29 @@ fn process_list_network_serial_runtime_surface() {
         results[2],
         "OK (nil (wrong-type-argument stringp nil) (error \":name value not a string\") (error \"Missing :name keyword parameter\") t nil t (error \":name value not a string\") nil (wrong-type-argument stringp t) (wrong-type-argument stringp 1) (error \"No port specified\") (error \":speed not specified\") error error wrong-number-of-arguments (wrong-type-argument processp 1) (error \"Process is not a network process\") (error \"Unknown or unsupported option\"))"
     );
+}
+
+#[test]
+fn make_network_process_validates_gnu_keyword_domains() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(condition-case err
+              (make-network-process :name "np-nowait" :server t :nowait t :service 0)
+            (error err))
+           (condition-case err
+              (make-network-process :name "np-type" :server t :service 0 :type 'bogus)
+            (error err))
+           (condition-case err
+              (make-network-process :name "np-family" :server t :service 0 :family 'bogus)
+            (error err))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK (error \"`:server' is incompatible with `:nowait'\")"
+    );
+    assert_eq!(results[1], "OK (error \"Unsupported connection type\")");
+    assert_eq!(results[2], "OK (error \"Unknown address family\")");
 }
 
 #[test]
