@@ -2637,8 +2637,8 @@ fn underline_style_to_u8(style: &NeoUnderlineStyle) -> u8 {
         NeoUnderlineStyle::Line => 1,
         NeoUnderlineStyle::Wave => 2,
         NeoUnderlineStyle::DoubleLine => 3,
-        NeoUnderlineStyle::Dot => 4,
-        NeoUnderlineStyle::Dash => 5,
+        NeoUnderlineStyle::Dots => 4,
+        NeoUnderlineStyle::Dashes => 5,
     }
 }
 

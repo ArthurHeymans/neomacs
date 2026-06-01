@@ -3376,8 +3376,8 @@ fn dump_underline_style(s: &UnderlineStyle) -> DumpUnderlineStyle {
     match s {
         UnderlineStyle::Line => DumpUnderlineStyle::Line,
         UnderlineStyle::Wave => DumpUnderlineStyle::Wave,
-        UnderlineStyle::Dot => DumpUnderlineStyle::Dot,
-        UnderlineStyle::Dash => DumpUnderlineStyle::Dash,
+        UnderlineStyle::Dots => DumpUnderlineStyle::Dot,
+        UnderlineStyle::Dashes => DumpUnderlineStyle::Dash,
         UnderlineStyle::DoubleLine => DumpUnderlineStyle::DoubleLine,
     }
 }
@@ -5578,8 +5578,8 @@ fn load_face(decoder: &mut LoadDecoder, df: &DumpFace) -> Face {
             style: match u.style {
                 DumpUnderlineStyle::Line => UnderlineStyle::Line,
                 DumpUnderlineStyle::Wave => UnderlineStyle::Wave,
-                DumpUnderlineStyle::Dot => UnderlineStyle::Dot,
-                DumpUnderlineStyle::Dash => UnderlineStyle::Dash,
+                DumpUnderlineStyle::Dot => UnderlineStyle::Dots,
+                DumpUnderlineStyle::Dash => UnderlineStyle::Dashes,
                 DumpUnderlineStyle::DoubleLine => UnderlineStyle::DoubleLine,
             },
             color: u.color.map(|c| load_color(&c)),

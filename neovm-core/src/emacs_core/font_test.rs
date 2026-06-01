@@ -1872,6 +1872,51 @@ fn internal_lisp_face_attribute_values_rejects_non_symbol() {
 }
 
 #[test]
+fn set_face_attribute_accepts_only_gnu_underline_style_symbols() {
+    crate::test_utils::init_test_tracing();
+    let rendered = bootstrap_eval_all(
+        r#"(list
+             (condition-case nil
+                 (progn
+                   (set-face-attribute 'default nil :underline '(:style dots))
+                   'ok)
+               (error 'error))
+             (condition-case nil
+                 (progn
+                   (set-face-attribute 'default nil :underline '(:style dash))
+                   'ok)
+               (error 'error)))"#,
+    );
+
+    assert_eq!(rendered, vec!["OK (ok error)".to_string()]);
+}
+
+#[test]
+fn set_face_attribute_accepts_only_gnu_box_style_symbols() {
+    crate::test_utils::init_test_tracing();
+    let rendered = bootstrap_eval_all(
+        r#"(list
+             (condition-case nil
+                 (progn
+                   (set-face-attribute 'default nil :box '(:style flat-button))
+                   'ok)
+               (error 'error))
+             (condition-case nil
+                 (progn
+                   (set-face-attribute 'default nil :box '(:style flat))
+                   'ok)
+               (error 'error))
+             (condition-case nil
+                 (progn
+                   (set-face-attribute 'default nil :box 0)
+                   'ok)
+               (error 'error)))"#,
+    );
+
+    assert_eq!(rendered, vec!["OK (ok error error)".to_string()]);
+}
+
+#[test]
 fn internal_lisp_face_empty_p_selected_frame_default_is_not_empty() {
     crate::test_utils::init_test_tracing();
     let result = builtin_internal_lisp_face_empty_p(vec![Value::symbol("default")]).unwrap();

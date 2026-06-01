@@ -2099,6 +2099,121 @@ const VALID_FACE_WIDTHS: &[&str] = &[
     "ultraexpanded",
 ];
 
+fn non_empty_lisp_string(value: Value) -> bool {
+    value
+        .as_lisp_string()
+        .is_some_and(|string| !string.is_empty())
+}
+
+fn valid_face_underline_value(value: Value) -> bool {
+    if value.is_nil() || value == Value::T {
+        return true;
+    }
+    if matches!(value.kind(), ValueKind::String) {
+        return non_empty_lisp_string(value);
+    }
+    if !value.is_cons() {
+        return false;
+    }
+
+    let mut list = value;
+    while list.is_cons() {
+        let key = list.cons_car();
+        if key.is_nil() {
+            break;
+        }
+        list = list.cons_cdr();
+        let val = if list.is_cons() {
+            let value = list.cons_car();
+            list = list.cons_cdr();
+            value
+        } else {
+            Value::NIL
+        };
+
+        if key.is_nil() || (val.is_nil() && !key.is_symbol_named(":position")) {
+            return false;
+        }
+        if key.is_symbol_named(":color")
+            && !(val.is_symbol_named("foreground-color") || non_empty_lisp_string(val))
+        {
+            return false;
+        }
+        if key.is_symbol_named(":style")
+            && !val
+                .as_symbol_name()
+                .and_then(UnderlineStyle::from_symbol)
+                .is_some()
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn valid_box_line_width(value: Value) -> bool {
+    if let Some(width) = value.as_fixnum() {
+        return width != 0;
+    }
+    value.is_cons()
+        && value.cons_car().as_fixnum().is_some_and(|width| width != 0)
+        && value.cons_cdr().as_fixnum().is_some_and(|width| width != 0)
+}
+
+fn valid_face_box_value(value: Value) -> bool {
+    if value == Value::T || value.is_nil() {
+        return true;
+    }
+    if let Some(width) = value.as_fixnum() {
+        return width != 0;
+    }
+    if matches!(value.kind(), ValueKind::String) {
+        return non_empty_lisp_string(value);
+    }
+    if value.is_cons() && value.cons_car().is_fixnum() && value.cons_cdr().is_fixnum() {
+        return true;
+    }
+    if !value.is_cons() {
+        return false;
+    }
+
+    let mut list = value;
+    while !list.is_nil() {
+        if !list.is_cons() {
+            return false;
+        }
+        let key = list.cons_car();
+        list = list.cons_cdr();
+        if !list.is_cons() {
+            return false;
+        }
+        let val = list.cons_car();
+        list = list.cons_cdr();
+
+        if key.is_symbol_named(":line-width") {
+            if !valid_box_line_width(val) {
+                return false;
+            }
+        } else if key.is_symbol_named(":color") {
+            if !val.is_nil() && !non_empty_lisp_string(val) {
+                return false;
+            }
+        } else if key.is_symbol_named(":style") {
+            if !val.is_nil()
+                && !val
+                    .as_symbol_name()
+                    .and_then(BoxStyle::from_symbol)
+                    .is_some()
+            {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Default)]
 struct FaceAttrState {
     selected_created: HashSet<SymId>,
@@ -3395,6 +3510,22 @@ fn normalize_face_attr_for_set_with_eval(
                 }
             }
         }
+        ":underline" => {
+            if !is_reset_like && !valid_face_underline_value(normalized) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid face underline"), normalized],
+                ));
+            }
+        }
+        ":box" => {
+            if !is_reset_like && !valid_face_box_value(normalized) {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid face box"), normalized],
+                ));
+            }
+        }
         ":inherit" => {
             // Accept any face_ref: nil / symbol / list of face_refs /
             // plist of attributes. Matches GNU `merge_face_ref`
@@ -3861,13 +3992,10 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
                     let val = &plist[i + 1];
                     match key {
                         ":style" => {
-                            style = match val.as_symbol_name().unwrap_or("line") {
-                                "wave" => UnderlineStyle::Wave,
-                                "dot" | "dots" => UnderlineStyle::Dot,
-                                "dash" | "dashes" => UnderlineStyle::Dash,
-                                "double-line" => UnderlineStyle::DoubleLine,
-                                _ => UnderlineStyle::Line,
-                            };
+                            style = val
+                                .as_symbol_name()
+                                .and_then(UnderlineStyle::from_symbol)
+                                .unwrap_or(UnderlineStyle::Line);
                         }
                         ":color" => {
                             if let Some(s) = val.as_utf8_str().or_else(|| val.as_symbol_name()) {
@@ -3954,11 +4082,10 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
                             }
                         }
                         ":style" => {
-                            border.style = match val.as_symbol_name().unwrap_or("flat") {
-                                "released-button" => BoxStyle::Raised,
-                                "pressed-button" => BoxStyle::Pressed,
-                                _ => BoxStyle::Flat,
-                            };
+                            border.style = val
+                                .as_symbol_name()
+                                .and_then(BoxStyle::from_symbol)
+                                .unwrap_or(BoxStyle::Flat);
                         }
                         _ => {}
                     }
@@ -4070,13 +4197,7 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) 
             Some(underline) => {
                 let mut plist = Vec::new();
                 plist.push(Value::keyword(":style"));
-                plist.push(Value::symbol(match underline.style {
-                    UnderlineStyle::Line => "line",
-                    UnderlineStyle::Wave => "wave",
-                    UnderlineStyle::DoubleLine => "double-line",
-                    UnderlineStyle::Dot => "dot",
-                    UnderlineStyle::Dash => "dash",
-                }));
+                plist.push(Value::symbol(underline.style.symbol_name()));
                 if let Some(color) = underline.color {
                     plist.push(Value::keyword(":color"));
                     plist.push(runtime_color_to_lisp_value(&color));
@@ -4109,11 +4230,7 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) 
                     plist.push(runtime_color_to_lisp_value(&color));
                 }
                 plist.push(Value::keyword(":style"));
-                plist.push(Value::symbol(match border.style {
-                    BoxStyle::Flat => "flat",
-                    BoxStyle::Raised => "released-button",
-                    BoxStyle::Pressed => "pressed-button",
-                }));
+                plist.push(Value::symbol(border.style.symbol_name()));
                 plist
             }),
         },

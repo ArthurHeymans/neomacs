@@ -178,13 +178,24 @@ impl Color {
 // Underline style
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum UnderlineStyle {
     Line,
     Wave,
-    Dot,
-    Dash,
+    Dots,
+    Dashes,
     DoubleLine,
+}
+
+impl UnderlineStyle {
+    pub fn from_symbol(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -205,11 +216,25 @@ pub struct BoxBorder {
     pub style: BoxStyle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum BoxStyle {
+    #[strum(to_string = "flat-button")]
     Flat,
+    #[strum(to_string = "released-button")]
     Raised,
+    #[strum(to_string = "pressed-button")]
     Pressed,
+}
+
+impl BoxStyle {
+    pub fn from_symbol(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -767,8 +792,8 @@ fn parse_underline_value(value: &Value) -> Option<Underline> {
                             style = match name {
                                 "wave" => UnderlineStyle::Wave,
                                 "double-line" => UnderlineStyle::DoubleLine,
-                                "dots" => UnderlineStyle::Dot,
-                                "dashes" => UnderlineStyle::Dash,
+                                "dots" => UnderlineStyle::Dots,
+                                "dashes" => UnderlineStyle::Dashes,
                                 _ => UnderlineStyle::Line,
                             };
                         }
@@ -848,9 +873,7 @@ fn parse_box_value(value: &Value) -> Option<BoxBorder> {
                     "style" => {
                         if let Some(name) = item.as_symbol_name() {
                             style = match name {
-                                "released-button" => BoxStyle::Raised,
-                                "pressed-button" => BoxStyle::Pressed,
-                                _ => BoxStyle::Flat,
+                                name => BoxStyle::from_symbol(name).unwrap_or(BoxStyle::Flat),
                             };
                         }
                     }
