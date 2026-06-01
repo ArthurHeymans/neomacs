@@ -1861,11 +1861,9 @@ impl<'a> Reader<'a> {
                     ));
                 };
                 test_name = Some(intern(name));
-                test = match name {
-                    "eq" => HashTableTest::Eq,
-                    "eql" => HashTableTest::Eql,
-                    "equal" => HashTableTest::Equal,
-                    _ => {
+                test = match HashTableTest::from_symbol_name(name) {
+                    Some(test) => test,
+                    None => {
                         if let Some(alias) = lookup_hash_table_test_alias(name) {
                             user_cmp_function = alias.user_cmp_function;
                             user_hash_function = alias.user_hash_function;
@@ -1894,19 +1892,16 @@ impl<'a> Reader<'a> {
                         "Invalid hash table weakness",
                     ));
                 };
-                Some(match name {
-                    "key" => HashTableWeakness::Key,
-                    "value" => HashTableWeakness::Value,
-                    "key-or-value" => HashTableWeakness::KeyOrValue,
-                    "key-and-value" => HashTableWeakness::KeyAndValue,
-                    _ => {
+                match HashTableWeakness::from_symbol_name(name) {
+                    Some(weakness) => Some(weakness),
+                    None => {
                         return Err(self.signal_error(
                             "error",
                             vec![Value::string("Invalid hash table weakness"), value],
                             "Invalid hash table weakness",
                         ));
                     }
-                })
+                }
             }
         };
 

@@ -20,6 +20,7 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use strum::{EnumString, IntoStaticStr};
 
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
@@ -573,19 +574,49 @@ pub struct LispHashTable {
     pub free_slots: Vec<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum HashTableTest {
     Eq,
     Eql,
     Equal,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl HashTableTest {
+    pub fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum HashTableWeakness {
     Key,
     Value,
     KeyOrValue,
     KeyAndValue,
+}
+
+impl HashTableWeakness {
+    pub fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 /// Key type that supports hashing for `eq`, `eql`, and `equal` tests.

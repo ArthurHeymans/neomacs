@@ -549,12 +549,7 @@ pub(crate) fn builtin_hash_table_test(args: Vec<Value>) -> EvalResult {
             if let Some(id) = table.test_name {
                 Ok(Value::from_sym_id(id))
             } else {
-                let sym = match table.test {
-                    HashTableTest::Eq => "eq",
-                    HashTableTest::Eql => "eql",
-                    HashTableTest::Equal => "equal",
-                };
-                Ok(Value::symbol(sym))
+                Ok(Value::symbol(table.test.name()))
             }
         }
         _ => Err(signal(
@@ -617,10 +612,7 @@ pub(crate) fn builtin_hash_table_weakness(args: Vec<Value>) -> EvalResult {
             let table = args[0].as_hash_table().unwrap();
             Ok(match table.weakness {
                 None => Value::NIL,
-                Some(HashTableWeakness::Key) => Value::symbol("key"),
-                Some(HashTableWeakness::Value) => Value::symbol("value"),
-                Some(HashTableWeakness::KeyOrValue) => Value::symbol("key-or-value"),
-                Some(HashTableWeakness::KeyAndValue) => Value::symbol("key-and-value"),
+                Some(weakness) => Value::symbol(weakness.name()),
             })
         }
         _ => Err(signal(

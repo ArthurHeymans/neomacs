@@ -15,6 +15,46 @@ fn with_test_heap<R>(f: impl FnOnce() -> R) -> R {
 }
 
 #[test]
+fn hash_table_domains_match_gnu_symbols() {
+    assert_eq!(
+        HashTableTest::from_symbol_value(&Value::symbol("eq")),
+        Some(HashTableTest::Eq)
+    );
+    assert_eq!(
+        HashTableTest::from_symbol_value(&Value::symbol("eql")),
+        Some(HashTableTest::Eql)
+    );
+    assert_eq!(
+        HashTableTest::from_symbol_value(&Value::symbol("equal")),
+        Some(HashTableTest::Equal)
+    );
+    assert_eq!(
+        HashTableTest::from_symbol_name("equal-including-properties"),
+        None
+    );
+    assert_eq!(HashTableTest::Equal.name(), "equal");
+
+    assert_eq!(
+        HashTableWeakness::from_symbol_value(&Value::symbol("key")),
+        Some(HashTableWeakness::Key)
+    );
+    assert_eq!(
+        HashTableWeakness::from_symbol_value(&Value::symbol("value")),
+        Some(HashTableWeakness::Value)
+    );
+    assert_eq!(
+        HashTableWeakness::from_symbol_value(&Value::symbol("key-or-value")),
+        Some(HashTableWeakness::KeyOrValue)
+    );
+    assert_eq!(
+        HashTableWeakness::from_symbol_value(&Value::symbol("key-and-value")),
+        Some(HashTableWeakness::KeyAndValue)
+    );
+    assert_eq!(HashTableWeakness::from_symbol_name("weak"), None);
+    assert_eq!(HashTableWeakness::KeyOrValue.name(), "key-or-value");
+}
+
+#[test]
 fn value_constructors() {
     crate::test_utils::init_test_tracing();
     with_test_heap(|| {

@@ -1,4 +1,7 @@
-use super::{Frame, FrameManager, FrameParam, Window, WindowDisplayState, WindowId};
+use super::{
+    Frame, FrameManager, FrameParam, HorizontalScrollBarType, VerticalScrollBarType, Window,
+    WindowDisplayState, WindowId,
+};
 use crate::buffer::BufferId;
 use crate::emacs_core::value::{Value, next_float_id};
 
@@ -22,10 +25,6 @@ pub struct WindowScrollBarGeometry {
     pub left_area_width: i64,
     pub right_area_width: i64,
     pub horizontal_area_height: i64,
-}
-
-fn symbol_name(value: &Value) -> Option<&str> {
-    value.as_symbol_name()
 }
 
 fn frame_line_height(frame: &Frame) -> i64 {
@@ -67,9 +66,8 @@ fn frame_vertical_scroll_bar_side(frame: &Frame) -> Option<Value> {
                 Value::NIL
             }
         });
-    match symbol_name(&raw) {
-        Some("left") => Some(Value::symbol("left")),
-        Some("right") => Some(Value::symbol("right")),
+    match VerticalScrollBarType::from_symbol_value(&raw) {
+        Some(side) => Some(side.symbol()),
         _ if raw.is_nil() => None,
         _ if raw.is_truthy() => Some(Value::symbol("right")),
         _ => None,
@@ -80,7 +78,7 @@ fn frame_has_horizontal_scroll_bar(frame: &Frame) -> bool {
     let raw = frame
         .known_parameter(FrameParam::HorizontalScrollBars)
         .unwrap_or(Value::NIL);
-    matches!(symbol_name(&raw), Some("bottom")) || raw.is_truthy()
+    HorizontalScrollBarType::from_symbol_value(&raw).is_some() || raw.is_truthy()
 }
 
 fn frame_config_scroll_bar_width(frame: &Frame) -> i32 {
@@ -105,9 +103,8 @@ fn effective_vertical_scroll_bar_type(
     frame: &Frame,
     display: &WindowDisplayState,
 ) -> Option<Value> {
-    match symbol_name(&display.vertical_scroll_bar_type) {
-        Some("left") => Some(Value::symbol("left")),
-        Some("right") => Some(Value::symbol("right")),
+    match VerticalScrollBarType::from_symbol_value(&display.vertical_scroll_bar_type) {
+        Some(side) => Some(side.symbol()),
         _ if display.vertical_scroll_bar_type.is_nil() => None,
         _ if display.vertical_scroll_bar_type.is_truthy() => frame_vertical_scroll_bar_side(frame),
         _ => None,
@@ -119,8 +116,8 @@ fn effective_horizontal_scroll_bar_enabled(
     display: &WindowDisplayState,
     is_minibuffer: bool,
 ) -> bool {
-    match symbol_name(&display.horizontal_scroll_bar_type) {
-        Some("bottom") => true,
+    match HorizontalScrollBarType::from_symbol_value(&display.horizontal_scroll_bar_type) {
+        Some(_) => true,
         _ if display.horizontal_scroll_bar_type.is_nil() => false,
         _ if is_minibuffer => false,
         _ if display.horizontal_scroll_bar_type.is_truthy() => {
@@ -143,8 +140,11 @@ fn vertical_scroll_bar_area_width(frame: &Frame, display: &WindowDisplayState) -
 }
 
 fn left_scroll_bar_area_width(frame: &Frame, display: &WindowDisplayState) -> i64 {
-    if matches!(effective_vertical_scroll_bar_type(frame, display), Some(value) if symbol_name(&value) == Some("left"))
-    {
+    if matches!(
+        effective_vertical_scroll_bar_type(frame, display)
+            .and_then(|value| VerticalScrollBarType::from_symbol_value(&value)),
+        Some(VerticalScrollBarType::Left)
+    ) {
         vertical_scroll_bar_area_width(frame, display)
     } else {
         0
@@ -152,8 +152,11 @@ fn left_scroll_bar_area_width(frame: &Frame, display: &WindowDisplayState) -> i6
 }
 
 fn right_scroll_bar_area_width(frame: &Frame, display: &WindowDisplayState) -> i64 {
-    if matches!(effective_vertical_scroll_bar_type(frame, display), Some(value) if symbol_name(&value) == Some("right"))
-    {
+    if matches!(
+        effective_vertical_scroll_bar_type(frame, display)
+            .and_then(|value| VerticalScrollBarType::from_symbol_value(&value)),
+        Some(VerticalScrollBarType::Right)
+    ) {
         vertical_scroll_bar_area_width(frame, display)
     } else {
         0
@@ -215,14 +218,18 @@ pub fn resolve_window_scroll_bar_geometry(
 
     WindowScrollBarGeometry {
         vertical_type,
-        left_area_width: if matches!(vertical_type, Some(value) if symbol_name(&value) == Some("left"))
-        {
+        left_area_width: if matches!(
+            vertical_type.and_then(|value| VerticalScrollBarType::from_symbol_value(&value)),
+            Some(VerticalScrollBarType::Left)
+        ) {
             vertical_area_width
         } else {
             0
         },
-        right_area_width: if matches!(vertical_type, Some(value) if symbol_name(&value) == Some("right"))
-        {
+        right_area_width: if matches!(
+            vertical_type.and_then(|value| VerticalScrollBarType::from_symbol_value(&value)),
+            Some(VerticalScrollBarType::Right)
+        ) {
             vertical_area_width
         } else {
             0
@@ -524,7 +531,8 @@ impl FrameManager {
         }
         let mut next_horizontal_type = horizontal_type;
         if height == Some(0)
-            || (is_minibuffer && !matches!(symbol_name(&next_horizontal_type), Some("bottom")))
+            || (is_minibuffer
+                && HorizontalScrollBarType::from_symbol_value(&next_horizontal_type).is_none())
         {
             next_horizontal_type = Value::NIL;
         }

@@ -17,12 +17,17 @@ mod display;
 mod frame_params;
 mod history;
 mod parameters;
+mod scroll_bar;
 pub mod window_markers;
 
 pub use display::{
     WindowBufferDisplayDefaults, WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
 };
 pub use frame_params::{FrameParam, FrameParamKey, GNU_FRAME_PARAM_COUNT, GNU_FRAME_PARAMS};
+pub use scroll_bar::{
+    HorizontalScrollBarType, VerticalScrollBarType, is_valid_horizontal_scroll_bar_value,
+    is_valid_vertical_scroll_bar_value,
+};
 
 // ---------------------------------------------------------------------------
 // IDs
@@ -1922,9 +1927,8 @@ impl Frame {
                     Value::NIL
                 }
             });
-        match raw.as_symbol_name() {
-            Some("left") => Some("left"),
-            Some("right") => Some("right"),
+        match VerticalScrollBarType::from_symbol_value(&raw) {
+            Some(side) => Some(side.name()),
             _ if raw.is_nil() => None,
             _ if raw.is_truthy() => Some("right"),
             _ => None,

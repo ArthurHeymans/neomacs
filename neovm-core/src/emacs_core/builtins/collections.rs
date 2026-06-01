@@ -369,13 +369,7 @@ fn invalid_hash_table_keyword_argument(arg: Value) -> Flow {
 }
 
 fn hash_test_from_designator(value: &Value) -> Option<HashTableTest> {
-    let name = value.as_symbol_name()?;
-    match name {
-        "eq" => Some(HashTableTest::Eq),
-        "eql" => Some(HashTableTest::Eql),
-        "equal" => Some(HashTableTest::Equal),
-        _ => None,
-    }
+    HashTableTest::from_symbol_value(value)
 }
 
 fn hash_test_from_user_test_pair(test: &Value, hash: &Value) -> Option<HashTableTest> {
@@ -503,11 +497,9 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
                     vec![Value::symbol("symbolp"), test_arg],
                 ));
             };
-            let test = match name {
-                "eq" => HashTableTest::Eq,
-                "eql" => HashTableTest::Eql,
-                "equal" => HashTableTest::Equal,
-                _ => {
+            let test = match HashTableTest::from_symbol_name(name) {
+                Some(test) => test,
+                None => {
                     if let Some(alias) = lookup_hash_table_test_alias(name) {
                         alias.standard_test.unwrap_or(HashTableTest::Equal)
                     } else {
@@ -543,18 +535,15 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
                     vec![Value::string("Invalid hash table weakness"), weakness_arg],
                 ));
             };
-            Some(match name {
-                "key" => HashTableWeakness::Key,
-                "value" => HashTableWeakness::Value,
-                "key-or-value" => HashTableWeakness::KeyOrValue,
-                "key-and-value" => HashTableWeakness::KeyAndValue,
-                _ => {
+            match HashTableWeakness::from_symbol_name(name) {
+                Some(weakness) => Some(weakness),
+                None => {
                     return Err(signal(
                         "error",
                         vec![Value::string("Invalid hash table weakness"), weakness_arg],
                     ));
                 }
-            })
+            }
         }
     };
 

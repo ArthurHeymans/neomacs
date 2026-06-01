@@ -6071,22 +6071,13 @@ fn try_convert_hash_table_literal(val: Value) -> Option<Value> {
             "size" => size = value.as_int()?,
             "test" => {
                 let name = value.as_symbol_name()?;
-                test = match name {
-                    "eq" => HashTableTest::Eq,
-                    "eql" => HashTableTest::Eql,
-                    "equal" => HashTableTest::Equal,
-                    _ => return None,
-                };
+                test = HashTableTest::from_symbol_name(name)?;
                 test_name = Some(intern(name));
             }
             "weakness" => {
                 weakness = match value.as_symbol_name() {
-                    Some("key") => Some(HashTableWeakness::Key),
-                    Some("value") => Some(HashTableWeakness::Value),
-                    Some("key-or-value") => Some(HashTableWeakness::KeyOrValue),
-                    Some("key-and-value") => Some(HashTableWeakness::KeyAndValue),
                     Some("nil") | None => None,
-                    _ => return None,
+                    Some(name) => Some(HashTableWeakness::from_symbol_name(name)?),
                 };
             }
             "rehash-size" => {

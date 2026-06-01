@@ -38,6 +38,29 @@ fn mgr_with_latin9() -> CodingSystemManager {
     m
 }
 
+#[test]
+fn eol_type_domain_matches_gnu_symbols_and_codes() {
+    assert_eq!(
+        EolType::from_specified_symbol_name("unix"),
+        Some(EolType::Unix)
+    );
+    assert_eq!(
+        EolType::from_specified_symbol_name("dos"),
+        Some(EolType::Dos)
+    );
+    assert_eq!(
+        EolType::from_specified_symbol_name("mac"),
+        Some(EolType::Mac)
+    );
+    assert_eq!(EolType::from_specified_symbol_name("undecided"), None);
+    assert_eq!(EolType::from_specified_symbol_name("crlf"), None);
+
+    assert_eq!(EolType::Unix.to_int(), 0);
+    assert_eq!(EolType::Dos.to_int(), 1);
+    assert_eq!(EolType::Mac.to_int(), 2);
+    assert_eq!(EolType::Unix.name(), "unix");
+}
+
 fn plist_get(value: &Value, key: &str) -> Option<Value> {
     let needle = key.trim_start_matches(':');
     let items = list_to_vec(value)?;

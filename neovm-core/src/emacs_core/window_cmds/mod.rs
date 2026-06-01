@@ -14,7 +14,8 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager};
 use crate::window::{
     FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection, Window,
-    WindowBufferDisplayDefaults, WindowId, window_first_child_id, window_next_sibling_id,
+    WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
+    is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
@@ -291,11 +292,11 @@ fn buffer_local_optional_dimension(
 }
 
 fn valid_vertical_scroll_bar_type(value: Value) -> bool {
-    value.is_nil() || value == Value::T || matches!(value.as_symbol_name(), Some("left" | "right"))
+    is_valid_vertical_scroll_bar_value(value)
 }
 
 fn valid_horizontal_scroll_bar_type(value: Value) -> bool {
-    value.is_nil() || value == Value::T || matches!(value.as_symbol_name(), Some("bottom"))
+    is_valid_horizontal_scroll_bar_value(value)
 }
 
 fn window_value(wid: WindowId) -> Value {
@@ -2871,10 +2872,7 @@ pub(crate) fn builtin_set_window_scroll_bars(
         None
     };
     let vertical_type = args.get(2).copied().unwrap_or(Value::T);
-    if !(vertical_type.is_nil()
-        || vertical_type == Value::T
-        || matches!(vertical_type.as_symbol_name(), Some("left" | "right")))
-    {
+    if !valid_vertical_scroll_bar_type(vertical_type) {
         return Err(signal(
             "error",
             vec![Value::string("Invalid type of vertical scroll bar")],
@@ -2895,10 +2893,7 @@ pub(crate) fn builtin_set_window_scroll_bars(
         None
     };
     let horizontal_type = args.get(4).copied().unwrap_or(Value::T);
-    if !(horizontal_type.is_nil()
-        || horizontal_type == Value::T
-        || matches!(horizontal_type.as_symbol_name(), Some("bottom")))
-    {
+    if !valid_horizontal_scroll_bar_type(horizontal_type) {
         return Err(signal(
             "error",
             vec![Value::string("Invalid type of horizontal scroll bar")],

@@ -47,10 +47,9 @@ fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
         return;
     }
 
-    match table.test {
-        HashTableTest::Eq => out.push_str(" test eq"),
-        HashTableTest::Equal => out.push_str(" test equal"),
-        HashTableTest::Eql => {}
+    if !matches!(table.test, HashTableTest::Eql) {
+        out.push_str(" test ");
+        out.push_str(table.test.name());
     }
 }
 
@@ -61,10 +60,9 @@ fn append_hash_table_test_bytes(table: &LispHashTable, out: &mut Vec<u8>) {
         return;
     }
 
-    match table.test {
-        HashTableTest::Eq => out.extend_from_slice(b" test eq"),
-        HashTableTest::Equal => out.extend_from_slice(b" test equal"),
-        HashTableTest::Eql => {}
+    if !matches!(table.test, HashTableTest::Eql) {
+        out.extend_from_slice(b" test ");
+        out.extend_from_slice(table.test.name().as_bytes());
     }
 }
 
@@ -1294,14 +1292,8 @@ fn write_hash_table_stateful(value: &Value, out: &mut String, state: &mut PrintS
     append_hash_table_test_string(&table, out);
 
     if let Some(ref weakness) = table.weakness {
-        let name = match weakness {
-            super::value::HashTableWeakness::Key => "key",
-            super::value::HashTableWeakness::Value => "value",
-            super::value::HashTableWeakness::KeyOrValue => "key-or-value",
-            super::value::HashTableWeakness::KeyAndValue => "key-and-value",
-        };
         out.push_str(" weakness ");
-        out.push_str(name);
+        out.push_str(weakness.name());
     }
 
     if !table.data.is_empty() {
@@ -2650,14 +2642,8 @@ fn format_hash_table(value: &Value, options: PrintOptions) -> String {
 
     // GNU Emacs omits weakness when there is none.
     if let Some(ref weakness) = table.weakness {
-        let name = match weakness {
-            super::value::HashTableWeakness::Key => "key",
-            super::value::HashTableWeakness::Value => "value",
-            super::value::HashTableWeakness::KeyOrValue => "key-or-value",
-            super::value::HashTableWeakness::KeyAndValue => "key-and-value",
-        };
         out.push_str(" weakness ");
-        out.push_str(name);
+        out.push_str(weakness.name());
     }
 
     // GNU Emacs omits data when the table is empty.
@@ -2690,14 +2676,8 @@ fn append_hash_table_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptio
     append_hash_table_test_bytes(&table, out);
 
     if let Some(ref weakness) = table.weakness {
-        let name = match weakness {
-            super::value::HashTableWeakness::Key => "key",
-            super::value::HashTableWeakness::Value => "value",
-            super::value::HashTableWeakness::KeyOrValue => "key-or-value",
-            super::value::HashTableWeakness::KeyAndValue => "key-and-value",
-        };
         out.extend_from_slice(b" weakness ");
-        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(weakness.name().as_bytes());
     }
 
     if !table.data.is_empty() {

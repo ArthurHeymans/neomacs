@@ -22,6 +22,7 @@ use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
 use std::collections::{HashMap, HashSet};
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Argument helpers (local to this module)
@@ -140,7 +141,8 @@ fn coding_runtime_string(value: &Value) -> Result<String, Flow> {
 // ---------------------------------------------------------------------------
 
 /// End-of-line conversion types matching Emacs conventions.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum EolType {
     /// LF (Unix) -- value 0
     Unix,
@@ -153,7 +155,24 @@ pub enum EolType {
 }
 
 impl EolType {
-    pub fn to_int(&self) -> i64 {
+    pub fn from_specified_symbol_name(name: &str) -> Option<Self> {
+        match name.parse().ok()? {
+            EolType::Unix => Some(EolType::Unix),
+            EolType::Dos => Some(EolType::Dos),
+            EolType::Mac => Some(EolType::Mac),
+            EolType::Undecided => None,
+        }
+    }
+
+    pub fn from_specified_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_specified_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn to_int(self) -> i64 {
         match self {
             EolType::Unix => 0,
             EolType::Dos => 1,
@@ -162,16 +181,11 @@ impl EolType {
         }
     }
 
-    pub fn to_symbol(&self) -> Value {
-        match self {
-            EolType::Unix => Value::symbol("unix"),
-            EolType::Dos => Value::symbol("dos"),
-            EolType::Mac => Value::symbol("mac"),
-            EolType::Undecided => Value::symbol("undecided"),
-        }
+    pub fn to_symbol(self) -> Value {
+        Value::symbol(self.name())
     }
 
-    pub fn suffix(&self) -> &'static str {
+    pub fn suffix(self) -> &'static str {
         match self {
             EolType::Unix => "-unix",
             EolType::Dos => "-dos",
@@ -1754,23 +1768,17 @@ pub(crate) fn builtin_define_coding_system_internal(
         }
     }
 
-    // arg[12]: eol-type (symbol: unix/dos/mac, or vector for auto-detect)
+    // arg[12]: eol-type (symbol: unix/dos/mac, nil, or vector for auto-detect)
     let eol_type = match args[12].kind() {
-        ValueKind::Symbol(id) => {
-            let s = resolve_sym(id);
-            match s {
-                "unix" => EolType::Unix,
-                "dos" => EolType::Dos,
-                "mac" => EolType::Mac,
-                _ => EolType::Undecided,
-            }
-        }
-        _ => EolType::Undecided,
+        ValueKind::Nil => EolType::Undecided,
+        ValueKind::Symbol(_) => EolType::from_specified_symbol_value(&args[12])
+            .ok_or_else(|| signal("error", vec![Value::string("Invalid eol-type")]))?,
+        ValueKind::Veclike(VecLikeType::Vector) => EolType::Undecided,
+        _ => return Err(signal("error", vec![Value::string("Invalid eol-type")])),
     };
 
     // Build the base coding system info.
-    let mut info =
-        CodingSystemInfo::new(&name, resolve_sym(coding_type), mnemonic, eol_type.clone());
+    let mut info = CodingSystemInfo::new(&name, resolve_sym(coding_type), mnemonic, eol_type);
     info.ascii_compatible_p = ascii_compatible_p;
     info.charset_list = charset_list;
     info.post_read_conversion = post_read_conversion;
