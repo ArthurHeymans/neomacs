@@ -45,7 +45,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 /// Two-bit `redirect` tag. Mirrors GNU `enum symbol_redirect`
 /// (`src/lisp.h:771-777`). Discriminant for [`SymbolVal`].
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, IntoPrimitive, TryFromPrimitive)]
 pub enum SymbolRedirect {
     /// Value is in `val.plain`. GNU `SYMBOL_PLAINVAL`.
     #[default]
@@ -58,10 +58,20 @@ pub enum SymbolRedirect {
     Forwarded = 3,
 }
 
+impl SymbolRedirect {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+}
+
 /// Two-bit `trapped_write` flag. Mirrors GNU `enum symbol_trapped_write`
 /// (`src/lisp.h:780-785`).
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, IntoPrimitive, TryFromPrimitive)]
 pub enum SymbolTrappedWrite {
     /// Normal symbol. GNU `SYMBOL_UNTRAPPED_WRITE`.
     #[default]
@@ -72,10 +82,20 @@ pub enum SymbolTrappedWrite {
     Trapped = 2,
 }
 
+impl SymbolTrappedWrite {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+}
+
 /// Two-bit `interned` flag. Mirrors GNU `enum symbol_interned`
 /// (`src/lisp.h:782-787`).
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default, IntoPrimitive, TryFromPrimitive)]
 pub enum SymbolInterned {
     /// Uninterned (e.g. `make-symbol`). GNU `SYMBOL_UNINTERNED`.
     #[default]
@@ -85,6 +105,16 @@ pub enum SymbolInterned {
     /// Interned in the *initial* obarray (the global one). GNU
     /// `SYMBOL_INTERNED_IN_INITIAL_OBARRAY`. Used for keywords.
     InternedInInitial = 2,
+}
+
+impl SymbolInterned {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Packed flags byte for a [`LispSymbol`]. Mirrors the bit-packed first byte
@@ -112,38 +142,37 @@ impl SymbolFlags {
 
     #[inline(always)]
     pub fn redirect(self) -> SymbolRedirect {
-        // Safety: SymbolRedirect is `#[repr(u8)]` with values 0..=3 and the
-        // mask restricts to 2 bits.
-        unsafe { std::mem::transmute(self.0 & Self::REDIRECT_MASK) }
+        SymbolRedirect::try_from(self.0 & Self::REDIRECT_MASK)
+            .expect("symbol redirect flag contains valid GNU symbol_redirect code")
     }
 
     #[inline]
     pub fn set_redirect(&mut self, r: SymbolRedirect) {
-        self.0 = (self.0 & !Self::REDIRECT_MASK) | (r as u8);
+        self.0 = (self.0 & !Self::REDIRECT_MASK) | r.gnu_code();
     }
 
     #[inline]
     pub fn trapped_write(self) -> SymbolTrappedWrite {
         let raw = (self.0 & Self::TRAPPED_WRITE_MASK) >> Self::TRAPPED_WRITE_SHIFT;
-        // Safety: 2-bit value, valid SymbolTrappedWrite discriminants.
-        unsafe { std::mem::transmute(raw) }
+        SymbolTrappedWrite::try_from(raw)
+            .expect("symbol trapped-write flag contains valid GNU symbol_trapped_write code")
     }
 
     #[inline]
     pub fn set_trapped_write(&mut self, t: SymbolTrappedWrite) {
-        self.0 = (self.0 & !Self::TRAPPED_WRITE_MASK) | ((t as u8) << Self::TRAPPED_WRITE_SHIFT);
+        self.0 = (self.0 & !Self::TRAPPED_WRITE_MASK) | (t.gnu_code() << Self::TRAPPED_WRITE_SHIFT);
     }
 
     #[inline]
     pub fn interned(self) -> SymbolInterned {
         let raw = (self.0 & Self::INTERNED_MASK) >> Self::INTERNED_SHIFT;
-        // Safety: 2-bit value, valid SymbolInterned discriminants.
-        unsafe { std::mem::transmute(raw) }
+        SymbolInterned::try_from(raw)
+            .expect("symbol interned flag contains valid GNU symbol_interned code")
     }
 
     #[inline]
     pub fn set_interned(&mut self, i: SymbolInterned) {
-        self.0 = (self.0 & !Self::INTERNED_MASK) | ((i as u8) << Self::INTERNED_SHIFT);
+        self.0 = (self.0 & !Self::INTERNED_MASK) | (i.gnu_code() << Self::INTERNED_SHIFT);
     }
 
     #[inline]

@@ -20,6 +20,58 @@ fn set_internal_bind_codes_match_gnu_set_internal_bind() {
 }
 
 #[test]
+fn symbol_redirect_codes_match_gnu_symbol_redirect() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (SymbolRedirect::Plainval, 0),
+        (SymbolRedirect::Varalias, 1),
+        (SymbolRedirect::Localized, 2),
+        (SymbolRedirect::Forwarded, 3),
+    ];
+
+    for (redirect, code) in cases {
+        assert_eq!(redirect.gnu_code(), code);
+        assert_eq!(SymbolRedirect::from_gnu_code(code), Some(redirect));
+    }
+    assert_eq!(SymbolRedirect::from_gnu_code(4), None);
+}
+
+#[test]
+fn symbol_trapped_write_codes_match_gnu_symbol_trapped_write() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (SymbolTrappedWrite::Untrapped, 0),
+        (SymbolTrappedWrite::NoWrite, 1),
+        (SymbolTrappedWrite::Trapped, 2),
+    ];
+
+    for (trapped_write, code) in cases {
+        assert_eq!(trapped_write.gnu_code(), code);
+        assert_eq!(SymbolTrappedWrite::from_gnu_code(code), Some(trapped_write));
+    }
+    assert_eq!(SymbolTrappedWrite::from_gnu_code(3), None);
+}
+
+#[test]
+fn symbol_interned_codes_match_gnu_symbol_interned() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (SymbolInterned::Uninterned, 0),
+        (SymbolInterned::Interned, 1),
+        (SymbolInterned::InternedInInitial, 2),
+    ];
+
+    for (interned, code) in cases {
+        assert_eq!(interned.gnu_code(), code);
+        assert_eq!(SymbolInterned::from_gnu_code(code), Some(interned));
+    }
+    assert_eq!(SymbolInterned::from_gnu_code(3), None);
+}
+
+#[test]
 fn intern_creates_symbol() {
     crate::test_utils::init_test_tracing();
     let mut ob = Obarray::new();
