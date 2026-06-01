@@ -9,6 +9,7 @@ use super::symbol::Obarray;
 use super::value::*;
 use std::io::Write;
 use std::time::Duration;
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,6 +57,21 @@ fn reader_initial_input_lisp_string(value: &Value) -> Option<crate::heap_types::
         ValueKind::String => value.as_lisp_string().cloned(),
         ValueKind::Cons => value.cons_car().as_lisp_string().cloned(),
         _ => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum RequireMatchSymbol {
+    #[strum(to_string = "t")]
+    T,
+    Confirm,
+    ConfirmAfterCompletion,
+}
+
+impl RequireMatchSymbol {
+    fn from_lisp_value(value: Value) -> Option<Self> {
+        value.as_symbol_name().and_then(|name| name.parse().ok())
     }
 }
 
@@ -1749,18 +1765,19 @@ pub(crate) fn finish_completing_read_in_vm_runtime(
 /// stored in `minibuffer-completion-confirm`.
 ///
 /// GNU semantics:
-///   nil        → nil   (any input accepted)
+///   nil        → nil
+///   t          → nil
 ///   confirm    → confirm
 ///   confirm-after-completion → confirm-after-completion
-///   t / other  → nil   (must-match keymap enforces exact match via
-///                        `minibuffer-complete-and-exit`)
+///   function / other non-t, non-nil → unchanged
 fn completion_confirm_from_require_match(require_match: Value) -> Value {
-    if require_match.is_symbol_named("confirm")
-        || require_match.is_symbol_named("confirm-after-completion")
-    {
-        require_match
-    } else {
-        Value::NIL
+    match RequireMatchSymbol::from_lisp_value(require_match) {
+        Some(RequireMatchSymbol::T) => Value::NIL,
+        Some(RequireMatchSymbol::Confirm | RequireMatchSymbol::ConfirmAfterCompletion) => {
+            require_match
+        }
+        None if require_match.is_nil() => Value::NIL,
+        None => require_match,
     }
 }
 

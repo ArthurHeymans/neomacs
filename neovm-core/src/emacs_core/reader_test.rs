@@ -1307,6 +1307,33 @@ fn completing_read_minibuffer_args_choose_completion_keymap_by_require_match() {
 }
 
 #[test]
+fn completion_confirm_from_require_match_matches_gnu_minibuffer_setup() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        completion_confirm_from_require_match(Value::NIL),
+        Value::NIL
+    );
+    assert_eq!(completion_confirm_from_require_match(Value::T), Value::NIL);
+    assert_eq!(
+        completion_confirm_from_require_match(Value::symbol("confirm")),
+        Value::symbol("confirm")
+    );
+    assert_eq!(
+        completion_confirm_from_require_match(Value::symbol("confirm-after-completion")),
+        Value::symbol("confirm-after-completion")
+    );
+    assert_eq!(
+        completion_confirm_from_require_match(Value::symbol("predicate-function")),
+        Value::symbol("predicate-function")
+    );
+    assert_eq!(
+        completion_confirm_from_require_match(Value::string("non-t-value")),
+        Value::string("non-t-value")
+    );
+}
+
+#[test]
 fn read_number_signals_end_of_file_even_with_default() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
