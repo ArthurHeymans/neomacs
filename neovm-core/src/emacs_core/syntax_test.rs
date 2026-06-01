@@ -80,6 +80,38 @@ fn syntax_class_dash_is_whitespace() {
     assert_eq!(SyntaxClass::from_char('-'), Some(SyntaxClass::Whitespace));
 }
 
+#[test]
+fn syntax_spec_byte_table_matches_gnu_syntax_c() {
+    crate::test_utils::init_test_tracing();
+    let cases = [
+        (b' ', SyntaxClass::Whitespace),
+        (b'-', SyntaxClass::Whitespace),
+        (b'.', SyntaxClass::Punctuation),
+        (b'w', SyntaxClass::Word),
+        (b'_', SyntaxClass::Symbol),
+        (b'(', SyntaxClass::Open),
+        (b')', SyntaxClass::Close),
+        (b'\'', SyntaxClass::Quote),
+        (b'"', SyntaxClass::StringDelim),
+        (b'$', SyntaxClass::Math),
+        (b'\\', SyntaxClass::Escape),
+        (b'/', SyntaxClass::CharQuote),
+        (b'<', SyntaxClass::Comment),
+        (b'>', SyntaxClass::EndComment),
+        (b'@', SyntaxClass::InheritStd),
+        (b'!', SyntaxClass::CommentFence),
+        (b'|', SyntaxClass::StringFence),
+    ];
+
+    for (byte, class) in cases {
+        assert_eq!(SyntaxClass::from_syntax_spec_byte(byte), Some(class));
+        assert_eq!(u8::from(class), class.code() as u8);
+    }
+    for invalid in [b'a', b'W', b'?', 0, 0x80, 0xff] {
+        assert_eq!(SyntaxClass::from_syntax_spec_byte(invalid), None);
+    }
+}
+
 // -----------------------------------------------------------------------
 // string-to-syntax parser
 // -----------------------------------------------------------------------

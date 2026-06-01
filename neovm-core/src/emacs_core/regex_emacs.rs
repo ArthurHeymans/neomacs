@@ -929,7 +929,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         pending_exact = None;
                         buf.uses_syntax = true;
                         emit_op!(RegexOp::SyntaxSpec);
-                        emit!(SyntaxClass::Word as u8);
+                        emit!(u8::from(SyntaxClass::Word));
                     }
 
                     // \W — not word constituent
@@ -938,7 +938,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         pending_exact = None;
                         buf.uses_syntax = true;
                         emit_op!(RegexOp::NotSyntaxSpec);
-                        emit!(SyntaxClass::Word as u8);
+                        emit!(u8::from(SyntaxClass::Word));
                     }
 
                     // \sC — syntax class C
@@ -1192,25 +1192,9 @@ fn at_endline_loc_p(pattern: &[u8], p: usize) -> bool {
 }
 
 fn syntax_spec_code(c: u8) -> u8 {
-    match c {
-        b' ' | b'-' => SyntaxClass::Whitespace as u8,
-        b'.' => SyntaxClass::Punctuation as u8,
-        b'w' => SyntaxClass::Word as u8,
-        b'_' => SyntaxClass::Symbol as u8,
-        b'(' => SyntaxClass::Open as u8,
-        b')' => SyntaxClass::Close as u8,
-        b'\'' => SyntaxClass::Quote as u8,
-        b'"' => SyntaxClass::StringDelim as u8,
-        b'$' => SyntaxClass::Math as u8,
-        b'\\' => SyntaxClass::Escape as u8,
-        b'/' => SyntaxClass::CharQuote as u8,
-        b'<' => SyntaxClass::Comment as u8,
-        b'>' => SyntaxClass::EndComment as u8,
-        b'@' => SyntaxClass::InheritStd as u8,
-        b'!' => SyntaxClass::CommentFence as u8,
-        b'|' => SyntaxClass::StringFence as u8,
-        _ => 0o377,
-    }
+    SyntaxClass::from_syntax_spec_byte(c)
+        .map(u8::from)
+        .unwrap_or(0o377)
 }
 
 /// Emit a literal character as part of an `exactn` sequence.

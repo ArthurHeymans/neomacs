@@ -172,27 +172,34 @@ const SYNTAX_CLASS_DESIGNATORS: [char; SYNTAX_CLASS_COUNT] = [
 ];
 
 impl SyntaxClass {
-    /// Parse a syntax class from its single-character designator.
-    pub fn from_char(ch: char) -> Option<SyntaxClass> {
-        match ch {
-            ' ' | '-' => Some(SyntaxClass::Whitespace),
-            'w' => Some(SyntaxClass::Word),
-            '_' => Some(SyntaxClass::Symbol),
-            '.' => Some(SyntaxClass::Punctuation),
-            '(' => Some(SyntaxClass::Open),
-            ')' => Some(SyntaxClass::Close),
-            '\'' => Some(SyntaxClass::Quote),
-            '"' => Some(SyntaxClass::StringDelim),
-            '$' => Some(SyntaxClass::Math),
-            '\\' => Some(SyntaxClass::Escape),
-            '/' => Some(SyntaxClass::CharQuote),
-            '<' => Some(SyntaxClass::Comment),
-            '>' => Some(SyntaxClass::EndComment),
-            '@' => Some(SyntaxClass::InheritStd),
-            '!' => Some(SyntaxClass::CommentFence),
-            '|' => Some(SyntaxClass::StringFence),
+    /// Parse a GNU syntax descriptor byte, matching
+    /// `src/syntax.c:syntax_spec_code`.
+    pub fn from_syntax_spec_byte(byte: u8) -> Option<SyntaxClass> {
+        match byte {
+            b' ' | b'-' => Some(SyntaxClass::Whitespace),
+            b'w' => Some(SyntaxClass::Word),
+            b'_' => Some(SyntaxClass::Symbol),
+            b'.' => Some(SyntaxClass::Punctuation),
+            b'(' => Some(SyntaxClass::Open),
+            b')' => Some(SyntaxClass::Close),
+            b'\'' => Some(SyntaxClass::Quote),
+            b'"' => Some(SyntaxClass::StringDelim),
+            b'$' => Some(SyntaxClass::Math),
+            b'\\' => Some(SyntaxClass::Escape),
+            b'/' => Some(SyntaxClass::CharQuote),
+            b'<' => Some(SyntaxClass::Comment),
+            b'>' => Some(SyntaxClass::EndComment),
+            b'@' => Some(SyntaxClass::InheritStd),
+            b'!' => Some(SyntaxClass::CommentFence),
+            b'|' => Some(SyntaxClass::StringFence),
             _ => None,
         }
+    }
+
+    /// Parse a syntax class from its single-character designator.
+    pub fn from_char(ch: char) -> Option<SyntaxClass> {
+        let byte = u8::try_from(u32::from(ch)).ok()?;
+        SyntaxClass::from_syntax_spec_byte(byte)
     }
 
     /// Return the canonical single-character designator for this class.
