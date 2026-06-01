@@ -4773,6 +4773,29 @@ impl LayoutEngine {
             if ch == '\n' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
+                if cursor_info.is_none() && params.point == charpos {
+                    // GNU `set_cursor_from_row` treats the terminating
+                    // newline as an exact match for point on this row.  The
+                    // newline itself has no rendered text glyph, so the
+                    // physical cursor uses the row-end cell width instead of
+                    // waiting for the next row.
+                    capture_cursor_info(
+                        &mut cursor_info,
+                        CapturedCursorInfo {
+                            x,
+                            y,
+                            face_w: face_char_w,
+                            face_h,
+                            face_ascent: face_ascent_val,
+                            bg: current_bg,
+                            byte_idx: ch_start_byte_idx,
+                            col,
+                            matrix_row: row,
+                            slot_width: Some(face_char_w.max(1.0)),
+                            stretch_like: false,
+                        },
+                    );
+                }
                 // Highlight trailing whitespace before advancing to next row
                 if let Some(_tw_bg) = trailing_ws_bg {
                     if trailing_ws_start_col >= 0 && trailing_ws_row == row {

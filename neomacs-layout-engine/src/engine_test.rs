@@ -747,6 +747,70 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
 }
 
 #[test]
+fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let text = "first line\nsecond line\nthird line\n";
+    let newline_byte = text.find('\n').expect("newline");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        buf.goto_byte(newline_byte);
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-cursor-eol", 640, 240, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = 1;
+            *point = newline_byte + 1;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let last_char = snapshot
+        .point_for_buffer_pos(newline_byte)
+        .expect("last visible char before newline");
+    let cursor = snapshot.phys_cursor.as_ref().expect("phys cursor");
+
+    assert_eq!(cursor.row, last_char.row);
+    assert_eq!(cursor.col, last_char.col + 1);
+    assert_eq!(cursor.x, last_char.x + last_char.width);
+    assert!(cursor.width > 0);
+}
+
+#[test]
 fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
     let mut eval = Context::new();
     let buf_id = eval

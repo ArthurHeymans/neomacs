@@ -564,11 +564,45 @@ fn default_cursor_color_pixel(face_table: &FaceTable) -> u32 {
         .unwrap_or(0x000000)
 }
 
-fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
+fn frame_background_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
     frame
+        .parameter("background-color")
+        .and_then(|value| parse_color_pixel(&value))
+        .or_else(|| {
+            face_table
+                .resolve("default")
+                .background
+                .map(|color| color_to_pixel(&color))
+        })
+        .unwrap_or(0x00ffffff)
+}
+
+fn frame_mouse_color_pixel(frame: &Frame) -> u32 {
+    frame
+        .parameter("mouse-color")
+        .and_then(|value| parse_color_pixel(&value))
+        .unwrap_or(0x000000)
+}
+
+fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
+    let pixel = frame
         .parameter("cursor-color")
         .and_then(|value| parse_color_pixel(&value))
-        .unwrap_or_else(|| default_cursor_color_pixel(face_table))
+        .unwrap_or_else(|| default_cursor_color_pixel(face_table));
+
+    // GNU GUI ports resolve `cursor-color` through x_set_cursor_color
+    // (xfns.c): when the requested cursor pixel equals the frame background,
+    // the actual physical cursor pixel falls back to the mouse pixel so an
+    // empty-line or end-of-line filled box remains visible.  TTY frames keep
+    // the terminal cursor color sentinel path, so only apply this to GUI
+    // frames.
+    if frame.effective_window_system().is_some()
+        && pixel == frame_background_color_pixel(frame, face_table)
+    {
+        frame_mouse_color_pixel(frame)
+    } else {
+        pixel
+    }
 }
 
 fn disabled_cursor_effects_profile() -> EffectsConfig {
