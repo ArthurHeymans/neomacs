@@ -20,8 +20,19 @@ use strum::{EnumString, IntoStaticStr};
 // X11 color table generated at compile time from etc/rgb.txt
 include!(concat!(env!("OUT_DIR"), "/x11_colors.rs"));
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, EnumString, IntoStaticStr)]
-#[repr(usize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    EnumString,
+    IntoPrimitive,
+    IntoStaticStr,
+    TryFromPrimitive,
+)]
+#[repr(u8)]
 #[strum(prefix = ":", serialize_all = "kebab-case")]
 pub enum LFaceAttr {
     Family = 1,
@@ -46,6 +57,15 @@ pub enum LFaceAttr {
 }
 
 impl LFaceAttr {
+    pub(crate) fn index(self) -> usize {
+        usize::from(u8::from(self))
+    }
+
+    pub(crate) fn from_index(index: usize) -> Option<Self> {
+        let index = u8::try_from(index).ok()?;
+        Self::try_from(index).ok()
+    }
+
     pub(crate) fn keyword(self) -> &'static str {
         self.into()
     }

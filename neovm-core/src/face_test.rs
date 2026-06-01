@@ -49,11 +49,14 @@ fn lface_attr_keyword_mapping_matches_gnu_slots() {
     ];
 
     for (attr, index, keyword) in attrs {
-        assert_eq!(attr as usize, index);
+        assert_eq!(attr.index(), index);
+        assert_eq!(LFaceAttr::from_index(index), Some(attr));
         assert_eq!(attr.keyword(), keyword);
         assert_eq!(LFaceAttr::from_keyword(keyword), Some(attr));
     }
 
+    assert_eq!(LFaceAttr::from_index(0), None);
+    assert_eq!(LFaceAttr::from_index(20), None);
     assert_eq!(LFaceAttr::from_keyword("foreground"), None);
     assert_eq!(LFaceAttr::from_keyword(":bold"), None);
     assert_eq!(LFaceAttr::from_keyword(":italic"), None);
