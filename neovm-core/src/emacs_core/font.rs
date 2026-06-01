@@ -18,6 +18,8 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, RwLock};
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
@@ -72,6 +74,48 @@ const FONT_WIDTH_STYLE_TABLE: &[(i64, &[&str])] = &[
     (150, &["extra-expanded", "extraexpanded"]),
     (200, &["ultra-expanded", "ultraexpanded", "wide"]),
 ];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(i32)]
+enum FontSpacing {
+    Proportional = 0,
+    Dual = 90,
+    Mono = 100,
+    Charcell = 110,
+}
+
+impl FontSpacing {
+    const MAX_GNU_CODE: i64 = 110;
+
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        match name {
+            "p" | "P" => Some(Self::Proportional),
+            "d" | "D" => Some(Self::Dual),
+            "m" | "M" => Some(Self::Mono),
+            "c" | "C" => Some(Self::Charcell),
+            _ => None,
+        }
+    }
+
+    fn from_gnu_code(code: i64) -> Option<Self> {
+        let code = i32::try_from(code).ok()?;
+        Self::try_from(code).ok()
+    }
+
+    fn gnu_code(self) -> i32 {
+        self.into()
+    }
+
+    fn xlfd_letter_for_gnu_code(code: i64) -> Option<&'static str> {
+        match code {
+            0..=89 => Some("p"),
+            90..=99 => Some("d"),
+            100..=109 => Some("m"),
+            110 => Some("c"),
+            _ => None,
+        }
+    }
+}
 
 static ALTERNATIVE_FONT_FAMILY_ALIST: OnceLock<RwLock<AlternativeFontFamilyAlist>> =
     OnceLock::new();
@@ -790,15 +834,9 @@ fn spacing_field(value: Option<&Value>) -> String {
         None => "*".to_string(),
         Some(v) if v.is_fixnum() => {
             let spacing = v.as_fixnum().unwrap();
-            if spacing <= 0 {
-                "p".to_string()
-            } else if spacing <= 1 {
-                "d".to_string()
-            } else if spacing <= 2 {
-                "m".to_string()
-            } else {
-                "c".to_string()
-            }
+            FontSpacing::xlfd_letter_for_gnu_code(spacing)
+                .unwrap_or("*")
+                .to_string()
         }
         Some(v) => sanitize_style_field(v),
     }
@@ -983,14 +1021,10 @@ fn validate_spacing_font_prop(prop: &Value, val: &Value) -> EvalResult {
         return Ok(*val);
     }
     match val.kind() {
-        ValueKind::Fixnum(n) if (0..=3).contains(&n) => Ok(*val),
-        ValueKind::Symbol(id) => match resolve_sym(id) {
-            "p" | "P" => Ok(Value::fixnum(0)),
-            "d" | "D" => Ok(Value::fixnum(1)),
-            "m" | "M" => Ok(Value::fixnum(2)),
-            "c" | "C" => Ok(Value::fixnum(3)),
-            _ => Err(invalid_font_property(prop, val)),
-        },
+        ValueKind::Fixnum(n) if (0..=FontSpacing::MAX_GNU_CODE).contains(&n) => Ok(*val),
+        ValueKind::Symbol(id) => FontSpacing::from_symbol_name(resolve_sym(id))
+            .map(|spacing| Value::fixnum(i64::from(spacing.gnu_code())))
+            .ok_or_else(|| invalid_font_property(prop, val)),
         _ => Err(invalid_font_property(prop, val)),
     }
 }

@@ -120,6 +120,62 @@ fn context_prebinds_gnu_font_style_tables() {
 }
 
 #[test]
+fn font_spacing_codes_match_gnu_font_spacing() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (FontSpacing::Proportional, 0, "p"),
+        (FontSpacing::Dual, 90, "d"),
+        (FontSpacing::Mono, 100, "m"),
+        (FontSpacing::Charcell, 110, "c"),
+    ];
+
+    for (spacing, code, symbol) in cases {
+        assert_eq!(spacing.gnu_code(), code);
+        assert_eq!(FontSpacing::from_gnu_code(i64::from(code)), Some(spacing));
+        assert_eq!(FontSpacing::from_symbol_name(symbol), Some(spacing));
+        assert_eq!(
+            FontSpacing::from_symbol_name(&symbol.to_ascii_uppercase()),
+            Some(spacing)
+        );
+    }
+
+    assert_eq!(FontSpacing::from_gnu_code(1), None);
+    assert_eq!(FontSpacing::from_gnu_code(111), None);
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(0), Some("p"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(89), Some("p"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(90), Some("d"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(99), Some("d"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(100), Some("m"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(109), Some("m"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(110), Some("c"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(111), None);
+}
+
+#[test]
+fn font_spec_spacing_symbols_normalize_to_gnu_codes() {
+    crate::test_utils::init_test_tracing();
+
+    for (symbol, expected) in [("p", 0), ("d", 90), ("m", 100), ("c", 110)] {
+        let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::symbol(symbol)])
+            .expect("font-spec accepts spacing symbol");
+        assert_eq!(
+            builtin_font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
+            Value::fixnum(expected)
+        );
+    }
+
+    let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(109)])
+        .expect("GNU accepts non-negative spacing fixnums through charcell");
+    assert_eq!(
+        builtin_font_get(vec![spec, Value::keyword("spacing")]).unwrap(),
+        Value::fixnum(109)
+    );
+
+    assert!(builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(111)]).is_err());
+}
+
+#[test]
 fn gnu_font_style_tables_are_constant_symbols() {
     crate::test_utils::init_test_tracing();
     let eval = Context::new();
