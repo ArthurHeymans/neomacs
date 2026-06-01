@@ -39,79 +39,130 @@
 
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neovm_core::emacs_core::Value;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// What the iterator is currently producing. GNU: `enum
 /// it_method` (`dispextern.h:2380-ish`). Neomacs uses this to tell
 /// the backend what kind of glyph to emit and to track which
 /// "source" the iterator is drawing from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum ItMethod {
     /// The iterator is reading characters from a buffer.
-    FromBuffer,
+    FromBuffer = 0,
+    /// The iterator is reading characters from a display vector.
+    FromDisplayVector = 1,
     /// The iterator is reading characters from a Lisp string
     /// (overlay string, display property string, mode-line format
     /// segment, etc.).
-    FromString,
+    FromString = 2,
+    /// The iterator is reading characters from a C string.
+    FromCString = 3,
     /// The iterator is handling an image display spec.
-    FromImage,
+    FromImage = 4,
     /// The iterator is handling a stretch glyph from a
     /// `(space :width …)` or `(space :align-to …)` display spec.
-    FromStretch,
-    /// The iterator is handling a composition (multi-codepoint
-    /// grapheme cluster, CJK composition, etc.).
-    FromComposition,
+    FromStretch = 5,
+    /// The iterator is handling an xwidget display spec.
+    FromXwidget = 6,
+}
+
+impl ItMethod {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// What kind of display element the iterator is about to emit
 /// next. GNU: `enum display_element_type` via `it->what`
 /// (`dispextern.h:2402`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum ItWhat {
     /// No element ready; the iterator needs to advance.
-    Empty,
+    Empty = u8::MAX,
     /// A character glyph (the normal case).
-    Character,
+    Character = 0,
     /// A composition glyph.
-    Composition,
+    Composition = 1,
     /// A "glyphless" character (couldn't find a font glyph for it).
-    Glyphless,
+    Glyphless = 2,
     /// An image.
-    Image,
+    Image = 3,
     /// A stretch glyph.
-    Stretch,
-    /// End of line / end of row.
-    EolOrEob,
+    Stretch = 4,
+    /// End of buffer or string.
+    Eob = 5,
     /// Truncation marker (hit the right edge, line continues
     /// off-screen).
-    Truncation,
+    Truncation = 6,
     /// Continuation marker (line wraps to the next visible row).
-    Continuation,
+    Continuation = 7,
+    /// An xwidget.
+    Xwidget = 8,
+}
+
+impl ItWhat {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        let what = Self::try_from(code).ok()?;
+        (what != Self::Empty).then_some(what)
+    }
+
+    pub fn gnu_code(self) -> Option<u8> {
+        (self != Self::Empty).then_some(self.into())
+    }
 }
 
 /// How line wrapping should be performed. GNU: `enum line_wrap_method`
 /// (`dispextern.h:1340`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum LineWrap {
     /// Never wrap; truncate instead.
-    TruncateLines,
+    Truncate = 0,
+    /// Wrap at whitespace/word boundaries.
+    WordWrap = 1,
     /// Wrap at the window edge without any special word-boundary
     /// handling.
-    WordWrap,
-    /// Wrap at whitespace/word boundaries.
-    WrapAtWhitespace,
+    WindowWrap = 2,
+}
+
+impl LineWrap {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Bidirectional text direction. GNU: `bidi_dir_t`
 /// (`dispextern.h:2400`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum BidiDir {
     /// Direction isn't specified; defer to the paragraph's base
     /// direction.
-    Neutral,
+    Neutral = 0,
     /// Left-to-right.
-    Ltr,
+    Ltr = 1,
     /// Right-to-left.
-    Rtl,
+    Rtl = 2,
+}
+
+impl BidiDir {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Placeholder bidi iterator state. GNU's `struct bidi_it` is a
@@ -273,7 +324,7 @@ impl It {
             descent: 0.0,
             pixel_width: 0.0,
             glyph_row: None,
-            line_wrap: LineWrap::TruncateLines,
+            line_wrap: LineWrap::Truncate,
             multibyte_p: true,
             mode_line_p: true,
             bidi_p: false,
@@ -305,7 +356,7 @@ impl It {
             descent: 0.0,
             pixel_width: 0.0,
             glyph_row: None,
-            line_wrap: LineWrap::WrapAtWhitespace,
+            line_wrap: LineWrap::WindowWrap,
             multibyte_p: true,
             mode_line_p: false,
             bidi_p: false,
