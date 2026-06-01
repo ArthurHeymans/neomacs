@@ -129,7 +129,7 @@ fn plist_get(plist: &Value, key: &Value) -> Value {
 /// their loaders are implemented.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
-pub(crate) enum ImageType {
+pub enum ImageType {
     Svg,
     Webp,
     Png,
@@ -154,12 +154,33 @@ impl ImageType {
         Self::Pbm,
     ];
 
-    pub(crate) fn from_symbol_name(name: &str) -> Option<Self> {
+    pub fn from_symbol_name(name: &str) -> Option<Self> {
         name.parse().ok()
     }
 
-    fn name(self) -> &'static str {
+    pub fn from_file_extension(extension: &str) -> Option<Self> {
+        let extension = extension
+            .strip_prefix('.')
+            .unwrap_or(extension)
+            .to_ascii_lowercase();
+        match extension.as_str() {
+            "jpg" => Some(Self::Jpeg),
+            "tif" => Some(Self::Tiff),
+            "svgz" => Some(Self::Svg),
+            name => Self::from_symbol_name(name),
+        }
+    }
+
+    pub fn from_file_name(path: &str) -> Option<Self> {
+        Self::from_file_extension(path.rsplit('.').next()?)
+    }
+
+    pub fn name(self) -> &'static str {
         self.into()
+    }
+
+    pub fn value(self) -> Value {
+        Value::symbol(self.name())
     }
 }
 
@@ -169,32 +190,62 @@ impl ImageType {
 /// with the keyword symbols such as `:type`, not with bare symbols like
 /// `type`.  Keep this parser exact so invalid image specs don't become valid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
 pub enum ImageSpecKey {
-    #[strum(to_string = ":type")]
     Type,
-    #[strum(to_string = ":file")]
     File,
-    #[strum(to_string = ":data")]
     Data,
-    #[strum(to_string = ":width")]
     Width,
-    #[strum(to_string = ":max-width")]
     MaxWidth,
-    #[strum(to_string = ":height")]
     Height,
-    #[strum(to_string = ":max-height")]
     MaxHeight,
-    #[strum(to_string = ":scale")]
     Scale,
-    #[strum(to_string = ":foreground")]
     Foreground,
-    #[strum(to_string = ":background")]
     Background,
+    Ascent,
+    Margin,
+    Relief,
+    Conversion,
+    ColorSymbols,
+    HeuristicMask,
+    Index,
+    Crop,
+    Rotation,
+    Matrix,
+    TransformSmoothing,
+    ColorAdjustment,
+    Mask,
+    Flip,
+    Loader,
+    PtWidth,
+    PtHeight,
+    BaseUri,
+    Css,
+    AnimateBuffer,
+    AnimateTardiness,
+    AnimatePosition,
+    Format,
 }
 
 impl ImageSpecKey {
     pub fn from_lisp_value(value: Value) -> Option<Self> {
-        value.as_symbol_name().and_then(|name| name.parse().ok())
+        Self::from_keyword(value.as_symbol_name()?)
+    }
+
+    pub fn from_keyword(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    pub fn keyword(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn value(self) -> Value {
+        Value::keyword(self.keyword())
+    }
+
+    pub fn is_value(self, value: Value) -> bool {
+        value.as_symbol_name() == Some(self.keyword())
     }
 }
 
@@ -233,8 +284,9 @@ fn normalize_image_type_name(name: &str) -> Option<&'static str> {
 }
 
 fn infer_image_type_from_filename(path: &str) -> Option<&'static str> {
-    let ext = path.rsplit('.').next()?;
-    normalize_image_type_name(ext)
+    ImageType::from_file_name(path)
+        .map(ImageType::name)
+        .or_else(|| normalize_image_type_name(path.rsplit('.').next()?))
 }
 
 fn parse_image_dimension(value: Value) -> Option<u32> {

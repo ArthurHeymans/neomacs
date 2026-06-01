@@ -27,6 +27,16 @@ fn parse_tool_bar_item_preserves_raw_unibyte_label_and_help() {
 }
 
 #[test]
+fn toolbar_image_extensions_use_typed_gnu_image_domain() {
+    assert!(is_supported_toolbar_image_file("open.xpm"));
+    assert!(is_supported_toolbar_image_file("photo.JPG"));
+    assert!(is_supported_toolbar_image_file("diagram.svgz"));
+    assert!(!is_supported_toolbar_image_file("unknown.bmp"));
+    assert!(toolbar_image_score("open.xpm") < toolbar_image_score("photo.jpg"));
+    assert!(toolbar_image_score("open.pbm") < toolbar_image_score("open.svg"));
+}
+
+#[test]
 fn collect_gui_menu_bar_items_runtime_frame_has_help_menu() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");

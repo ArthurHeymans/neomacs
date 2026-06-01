@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
+use neovm_core::emacs_core::image::{ImageSpecKey, ImageType};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::{
     KeymapMarker, MenuButtonKind, MenuItemProperty, list_keymap_for_each_binding,
@@ -217,10 +218,6 @@ fn plist_lookup(plist: &Value, wanted: MenuItemProperty) -> Option<Value> {
     plist_lookup_by_symbol(plist, |key| wanted.is_value(key))
 }
 
-fn plist_lookup_symbol_name(plist: &Value, wanted: &str) -> Option<Value> {
-    plist_lookup_by_symbol(plist, |key| key.as_symbol_name() == Some(wanted))
-}
-
 fn plist_lookup_by_symbol(
     plist: &Value,
     mut matches_key: impl FnMut(Value) -> bool,
@@ -255,7 +252,8 @@ fn image_file_from_spec(value: &Value) -> Option<String> {
     } else {
         *value
     };
-    plist_lookup_symbol_name(&plist, ":file").and_then(|file| file.as_runtime_string_owned())
+    plist_lookup_by_symbol(&plist, |key| ImageSpecKey::File.is_value(key))
+        .and_then(|file| file.as_runtime_string_owned())
 }
 
 fn best_image_file_from_expression(value: &Value) -> Option<String> {
@@ -284,10 +282,7 @@ fn collect_image_file_candidates(value: &Value, files: &mut Vec<String>) {
 }
 
 fn is_supported_toolbar_image_file(path: &str) -> bool {
-    let Some(extension) = Path::new(path).extension().and_then(|ext| ext.to_str()) else {
-        return false;
-    };
-    matches!(extension, "xpm" | "pbm" | "xbm" | "png" | "svg")
+    toolbar_image_type(Path::new(path)).is_some()
 }
 
 fn toolbar_image_score(path: &str) -> (u8, u8) {
@@ -295,15 +290,30 @@ fn toolbar_image_score(path: &str) -> (u8, u8) {
     let low_color_penalty = path
         .components()
         .any(|component| component.as_os_str() == "low-color") as u8;
-    let extension_rank = match path.extension().and_then(|ext| ext.to_str()) {
-        Some("xpm") => 0,
-        Some("pbm") => 1,
-        Some("xbm") => 2,
-        Some("png") => 3,
-        Some("svg") => 4,
-        _ => 5,
-    };
+    let extension_rank = toolbar_image_type(path)
+        .map(toolbar_image_type_rank)
+        .unwrap_or(9);
     (low_color_penalty, extension_rank)
+}
+
+fn toolbar_image_type(path: &Path) -> Option<ImageType> {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .and_then(ImageType::from_file_extension)
+}
+
+fn toolbar_image_type_rank(image_type: ImageType) -> u8 {
+    match image_type {
+        ImageType::Xpm => 0,
+        ImageType::Pbm => 1,
+        ImageType::Xbm => 2,
+        ImageType::Png => 3,
+        ImageType::Svg => 4,
+        ImageType::Gif => 5,
+        ImageType::Jpeg => 6,
+        ImageType::Tiff => 7,
+        ImageType::Webp => 8,
+    }
 }
 
 fn resolve_tool_bar_image_path(path: &str) -> String {

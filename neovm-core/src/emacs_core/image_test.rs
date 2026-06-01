@@ -67,6 +67,64 @@ fn image_type_domain_matches_gnu_available_symbols() {
     assert_eq!(normalize_image_type_name("JPG"), Some("jpeg"));
     assert_eq!(normalize_image_type_name("TIF"), Some("tiff"));
     assert_eq!(normalize_image_type_name("PNG"), Some("png"));
+    assert_eq!(ImageType::from_file_extension("jpg"), Some(ImageType::Jpeg));
+    assert_eq!(
+        ImageType::from_file_extension(".tif"),
+        Some(ImageType::Tiff)
+    );
+    assert_eq!(ImageType::from_file_extension("SVGZ"), Some(ImageType::Svg));
+    assert_eq!(
+        ImageType::from_file_name("toolbar.SEARCH.PNG"),
+        Some(ImageType::Png)
+    );
+}
+
+#[test]
+fn image_spec_key_domain_matches_gnu_image_keywords() {
+    for (keyword, parsed) in [
+        (":type", ImageSpecKey::Type),
+        (":file", ImageSpecKey::File),
+        (":data", ImageSpecKey::Data),
+        (":width", ImageSpecKey::Width),
+        (":height", ImageSpecKey::Height),
+        (":foreground", ImageSpecKey::Foreground),
+        (":background", ImageSpecKey::Background),
+        (":ascent", ImageSpecKey::Ascent),
+        (":margin", ImageSpecKey::Margin),
+        (":relief", ImageSpecKey::Relief),
+        (":conversion", ImageSpecKey::Conversion),
+        (":color-symbols", ImageSpecKey::ColorSymbols),
+        (":heuristic-mask", ImageSpecKey::HeuristicMask),
+        (":index", ImageSpecKey::Index),
+        (":crop", ImageSpecKey::Crop),
+        (":rotation", ImageSpecKey::Rotation),
+        (":matrix", ImageSpecKey::Matrix),
+        (":scale", ImageSpecKey::Scale),
+        (":transform-smoothing", ImageSpecKey::TransformSmoothing),
+        (":color-adjustment", ImageSpecKey::ColorAdjustment),
+        (":mask", ImageSpecKey::Mask),
+        (":flip", ImageSpecKey::Flip),
+        (":max-width", ImageSpecKey::MaxWidth),
+        (":max-height", ImageSpecKey::MaxHeight),
+        (":loader", ImageSpecKey::Loader),
+        (":pt-width", ImageSpecKey::PtWidth),
+        (":pt-height", ImageSpecKey::PtHeight),
+        (":base-uri", ImageSpecKey::BaseUri),
+        (":css", ImageSpecKey::Css),
+        (":animate-buffer", ImageSpecKey::AnimateBuffer),
+        (":animate-tardiness", ImageSpecKey::AnimateTardiness),
+        (":animate-position", ImageSpecKey::AnimatePosition),
+        (":format", ImageSpecKey::Format),
+    ] {
+        assert_eq!(
+            ImageSpecKey::from_lisp_value(Value::keyword(keyword)),
+            Some(parsed)
+        );
+        assert_eq!(parsed.keyword(), keyword);
+        assert_eq!(parsed.value(), Value::keyword(keyword));
+        assert!(parsed.is_value(Value::keyword(keyword)));
+    }
+    assert_eq!(ImageSpecKey::from_lisp_value(Value::symbol("type")), None);
 }
 
 #[test]
