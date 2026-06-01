@@ -25,6 +25,93 @@ use super::symbol::Obarray;
 use super::value::{
     OrderedRuntimeBindingMap, Value, ValueKind, VecLikeType, eq_value, list_to_vec,
 };
+use strum::{EnumString, IntoStaticStr};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum KeymapMarker {
+    Keymap,
+    MenuItem,
+    Remap,
+}
+
+impl KeymapMarker {
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn symbol_value(self) -> Value {
+        Value::symbol(self.symbol_name())
+    }
+
+    pub fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn from_value(value: Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub fn is_value(self, value: Value) -> bool {
+        Self::from_value(value) == Some(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+pub enum MenuItemProperty {
+    Enable,
+    Visible,
+    Help,
+    Filter,
+    Button,
+    Keys,
+    KeySequence,
+    Image,
+    Rtl,
+    Wrap,
+    Label,
+    VertOnly,
+}
+
+impl MenuItemProperty {
+    pub fn keyword(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn from_keyword(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    pub fn from_value(value: Value) -> Option<Self> {
+        Self::from_keyword(value.as_symbol_name()?)
+    }
+
+    pub fn is_value(self, value: Value) -> bool {
+        Self::from_value(value) == Some(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+pub enum MenuButtonKind {
+    Toggle,
+    Radio,
+}
+
+impl MenuButtonKind {
+    pub fn keyword(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn from_keyword(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    pub fn from_value(value: Value) -> Option<Self> {
+        Self::from_keyword(value.as_symbol_name()?)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Key events
@@ -377,18 +464,18 @@ pub fn format_key_sequence(events: &[KeyEvent]) -> String {
 /// Create a full list keymap: `(keymap CHAR-TABLE)`
 pub fn make_list_keymap() -> Value {
     let char_table = make_char_table_value(Value::NIL, Value::NIL);
-    Value::list(vec![Value::symbol("keymap"), char_table])
+    Value::list(vec![KeymapMarker::Keymap.symbol_value(), char_table])
 }
 
 /// Create a sparse list keymap: `(keymap)` — a single-element list.
 pub fn make_sparse_list_keymap() -> Value {
-    Value::list(vec![Value::symbol("keymap")])
+    Value::list(vec![KeymapMarker::Keymap.symbol_value()])
 }
 
 /// Check if a value is a keymap: `(consp x) && (car x) == 'keymap`.
 pub fn is_list_keymap(v: &Value) -> bool {
     match v.kind() {
-        ValueKind::Cons => v.cons_car().as_symbol_name() == Some("keymap"),
+        ValueKind::Cons => KeymapMarker::Keymap.is_value(v.cons_car()),
         _ => false,
     }
 }
@@ -432,7 +519,7 @@ pub(crate) fn is_keymap_autoload_form(value: &Value) -> bool {
     }
     list_to_vec(value)
         .and_then(|items| items.get(4).copied())
-        .is_some_and(|kind| kind.as_symbol_name() == Some("keymap"))
+        .is_some_and(|kind| KeymapMarker::Keymap.is_value(kind))
 }
 
 pub(crate) fn get_keymap_in_obarray(
@@ -579,7 +666,7 @@ fn get_keyelt(binding: Value) -> Value {
             }
             continue;
         }
-        if pair_car.is_symbol_named("menu-item") {
+        if KeymapMarker::MenuItem.is_value(pair_car) {
             // (menu-item NAME DEFN . PROPS) — extract DEFN (third element)
             if pair_cdr.is_cons() {
                 let p1_cdr = pair_cdr.cons_cdr();
@@ -611,7 +698,7 @@ fn menu_item_filter(tail: Value) -> Option<Value> {
     while cursor.is_cons() {
         let key = cursor.cons_car();
         let rest = cursor.cons_cdr();
-        if key.as_symbol_name() == Some(":filter") && rest.is_cons() {
+        if MenuItemProperty::Filter.is_value(key) && rest.is_cons() {
             return Some(rest.cons_car());
         }
         cursor = rest;
@@ -636,7 +723,7 @@ pub(crate) fn get_keyelt_runtime(eval: &mut Context, binding: Value, autoload: b
             continue;
         }
 
-        if pair_car.is_symbol_named("menu-item") {
+        if KeymapMarker::MenuItem.is_value(pair_car) {
             if !pair_cdr.is_cons() {
                 return Ok(object);
             }
@@ -713,7 +800,7 @@ fn keymap_binding_spine(keymap: &Value) -> Option<Value> {
         return None;
     }
 
-    if keymap.cons_car().as_symbol_name() == Some("keymap") {
+    if KeymapMarker::Keymap.is_value(keymap.cons_car()) {
         return Some(keymap.cons_cdr());
     }
 
@@ -986,7 +1073,7 @@ fn accumulate_prefix_keymap(existing: Option<Value>, next: Value) -> Value {
 /// Compose prefix keymaps with earlier maps taking precedence, matching GNU
 /// `access_keymap_1`'s temporary `(keymap MAP1 MAP2 ...)` prefix chains.
 fn compose_prefix_keymaps(first: &Value, second: &Value) -> Value {
-    Value::list(vec![Value::symbol("keymap"), *first, *second])
+    Value::list(vec![KeymapMarker::Keymap.symbol_value(), *first, *second])
 }
 
 /// Check if two event values match for keymap lookup purposes.
@@ -1209,7 +1296,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
     };
     let root_car = keymap.cons_car();
     let root_cdr = keymap.cons_cdr();
-    if root_car.as_symbol_name() != Some("keymap") {
+    if !KeymapMarker::Keymap.is_value(root_car) {
         return;
     }
 
@@ -1313,7 +1400,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
 
         // Check for 'keymap symbol in spine (start of inherited keymap)
         // GNU keymap.c:871-876
-        if entry_car.is_symbol_named("keymap") {
+        if KeymapMarker::Keymap.is_value(entry_car) {
             break;
         }
 
@@ -1367,7 +1454,7 @@ pub fn list_keymap_set_parent(keymap: Value, parent: Value) {
     };
     let root_car = keymap.cons_car();
     let root_cdr = keymap.cons_cdr();
-    if root_car.as_symbol_name() != Some("keymap") {
+    if !KeymapMarker::Keymap.is_value(root_car) {
         return;
     }
 
@@ -2390,10 +2477,10 @@ fn command_remapping_nth_list_element(value: &Value, index: usize) -> Option<Val
 }
 
 fn command_remapping_lookup_in_lisp_remap_entry(entry: &Value, command: SymId) -> Option<Value> {
-    if command_remapping_nth_list_element(entry, 0)?.as_symbol_name() != Some("remap") {
+    if !KeymapMarker::Remap.is_value(command_remapping_nth_list_element(entry, 0)?) {
         return None;
     }
-    if command_remapping_nth_list_element(entry, 1)?.as_symbol_name() != Some("keymap") {
+    if !KeymapMarker::Keymap.is_value(command_remapping_nth_list_element(entry, 1)?) {
         return None;
     }
 
@@ -2458,7 +2545,7 @@ fn command_remapping_menu_item_target(value: &Value) -> Option<Value> {
     };
     let pair_car = value.cons_car();
     let pair_cdr = value.cons_cdr();
-    if pair_car.as_symbol_name() != Some("menu-item") {
+    if !KeymapMarker::MenuItem.is_value(pair_car) {
         return None;
     }
 
@@ -3052,11 +3139,11 @@ fn list_keymap_copy_impl(keymap: &Value, depth: usize) -> Value {
     };
     let pair_car = keymap.cons_car();
     let pair_cdr = keymap.cons_cdr();
-    if pair_car.as_symbol_name() != Some("keymap") {
+    if !KeymapMarker::Keymap.is_value(pair_car) {
         return *keymap;
     }
 
-    let mut elements = vec![Value::symbol("keymap")];
+    let mut elements = vec![KeymapMarker::Keymap.symbol_value()];
     let mut cursor = pair_cdr;
     let mut tail_parent = Value::NIL;
 
@@ -3174,7 +3261,7 @@ pub fn list_keymap_accessible(
     };
     let pair_car = keymap.cons_car();
     let pair_cdr = keymap.cons_cdr();
-    if pair_car.as_symbol_name() != Some("keymap") {
+    if !KeymapMarker::Keymap.is_value(pair_car) {
         return;
     }
 

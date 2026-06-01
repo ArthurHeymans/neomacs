@@ -12,6 +12,7 @@
 
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
+use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 // decode_storage_char_codes import removed — now using emacs_char directly
 use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
@@ -2272,7 +2273,7 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         binding: Value,
     ) -> Result<Value, crate::emacs_core::error::Flow> {
-        if !binding.is_cons() || binding.cons_car().as_symbol_name() != Some("menu-item") {
+        if !binding.is_cons() || !KeymapMarker::MenuItem.is_value(binding.cons_car()) {
             return Ok(binding);
         }
 
@@ -2296,7 +2297,7 @@ impl crate::emacs_core::eval::Context {
             let value = properties.cons_car();
             properties = properties.cons_cdr();
 
-            if key.as_symbol_name() == Some(":filter") {
+            if MenuItemProperty::Filter.is_value(key) {
                 return self.apply_key_sequence_menu_item_filter(value, definition);
             }
         }
@@ -4603,7 +4604,7 @@ impl crate::emacs_core::eval::Context {
             return def.as_symbol_name() == Some("menu-bar-separator");
         }
         let car = def.cons_car();
-        car.as_symbol_name() == Some("menu-item") || car.as_runtime_string_owned().is_some()
+        KeymapMarker::MenuItem.is_value(car) || car.as_runtime_string_owned().is_some()
     }
 
     fn make_mouse_position(x: f32, y: f32, target_frame_id: u64, eval: &Self) -> Value {

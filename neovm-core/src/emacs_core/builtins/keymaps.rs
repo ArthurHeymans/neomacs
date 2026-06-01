@@ -5,14 +5,15 @@ use crate::emacs_core::symbol::Obarray;
 // Keymap builtins
 // ===========================================================================
 use super::keymap::{
-    KeyEvent, collect_minor_mode_map_entries_in_state, collect_minor_mode_maps_in_state,
-    current_active_maps_for_position, current_active_maps_for_position_read_only,
-    ensure_global_keymap_in_obarray, expand_meta_prefix_char_events_in_obarray,
-    get_keymap_in_obarray, get_keymap_in_runtime, is_list_keymap, key_event_to_emacs_event,
-    list_keymap_accessible, list_keymap_copy, list_keymap_define_seq_in_obarray,
-    list_keymap_define_seq_in_obarray_ex, list_keymap_inherits_from, list_keymap_parent,
-    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray, make_list_keymap,
-    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    KeyEvent, KeymapMarker, collect_minor_mode_map_entries_in_state,
+    collect_minor_mode_maps_in_state, current_active_maps_for_position,
+    current_active_maps_for_position_read_only, ensure_global_keymap_in_obarray,
+    expand_meta_prefix_char_events_in_obarray, get_keymap_in_obarray, get_keymap_in_runtime,
+    is_list_keymap, key_event_to_emacs_event, list_keymap_accessible, list_keymap_copy,
+    list_keymap_define_seq_in_obarray, list_keymap_define_seq_in_obarray_ex,
+    list_keymap_inherits_from, list_keymap_parent, list_keymap_set_parent,
+    lookup_key_in_keymaps_in_obarray, make_list_keymap, make_sparse_list_keymap,
+    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -299,7 +300,7 @@ pub(super) fn builtin_make_sparse_keymap(
     if let Some(prompt) = args.first() {
         if prompt.is_string() {
             return Ok(Value::cons(
-                Value::symbol("keymap"),
+                KeymapMarker::Keymap.symbol_value(),
                 Value::cons(*prompt, Value::NIL),
             ));
         }

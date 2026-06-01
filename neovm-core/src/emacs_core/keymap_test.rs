@@ -1,6 +1,53 @@
 use super::*;
 use crate::emacs_core::intern::{intern, resolve_sym};
 
+#[test]
+fn keymap_marker_and_menu_item_property_domains_match_gnu_symbols() {
+    assert_eq!(
+        KeymapMarker::from_symbol_name("keymap"),
+        Some(KeymapMarker::Keymap)
+    );
+    assert_eq!(
+        KeymapMarker::from_symbol_name("menu-item"),
+        Some(KeymapMarker::MenuItem)
+    );
+    assert_eq!(
+        KeymapMarker::from_symbol_name("remap"),
+        Some(KeymapMarker::Remap)
+    );
+    assert_eq!(KeymapMarker::from_symbol_name(":keymap"), None);
+
+    for (keyword, property) in [
+        (":enable", MenuItemProperty::Enable),
+        (":visible", MenuItemProperty::Visible),
+        (":help", MenuItemProperty::Help),
+        (":filter", MenuItemProperty::Filter),
+        (":button", MenuItemProperty::Button),
+        (":keys", MenuItemProperty::Keys),
+        (":key-sequence", MenuItemProperty::KeySequence),
+        (":image", MenuItemProperty::Image),
+        (":rtl", MenuItemProperty::Rtl),
+        (":wrap", MenuItemProperty::Wrap),
+        (":label", MenuItemProperty::Label),
+        (":vert-only", MenuItemProperty::VertOnly),
+    ] {
+        assert_eq!(MenuItemProperty::from_keyword(keyword), Some(property));
+        assert_eq!(property.keyword(), keyword);
+    }
+
+    assert_eq!(
+        MenuButtonKind::from_keyword(":toggle"),
+        Some(MenuButtonKind::Toggle)
+    );
+    assert_eq!(
+        MenuButtonKind::from_keyword(":radio"),
+        Some(MenuButtonKind::Radio)
+    );
+    assert_eq!(MenuButtonKind::from_keyword("toggle"), None);
+    assert_eq!(MenuButtonKind::Toggle.keyword(), ":toggle");
+    assert_eq!(MenuButtonKind::Radio.keyword(), ":radio");
+}
+
 // -- Key description parsing tests --
 
 #[test]

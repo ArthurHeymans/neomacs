@@ -25,7 +25,7 @@ use neovm_core::emacs_core::eval::{
     WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
-use neovm_core::emacs_core::keymap::is_list_keymap;
+use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::Color as LispColor;
@@ -311,7 +311,10 @@ fn eval_status_line_format_value(
 
 fn tab_bar_menu_item_caption(entry: Value) -> Option<String> {
     if let Some(items) = list_to_vec(&entry) {
-        if items.get(1).and_then(|v| v.as_symbol_name()) == Some("menu-item") {
+        if items
+            .get(1)
+            .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
+        {
             return items.get(2)?.as_runtime_string_owned();
         }
     }
@@ -321,7 +324,10 @@ fn tab_bar_menu_item_caption(entry: Value) -> Option<String> {
     }
     let pair_cdr = entry.cons_cdr();
     let items = list_to_vec(&pair_cdr)?;
-    if items.first().and_then(|v| v.as_symbol_name()) != Some("menu-item") {
+    if !items
+        .first()
+        .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
+    {
         return None;
     }
     items.get(1)?.as_runtime_string_owned()
@@ -368,7 +374,7 @@ fn build_tab_bar_display(
             let mut text = String::new();
             let mut items = Vec::new();
             for (index, entry) in entries.iter().enumerate() {
-                if index == 0 && entry.is_symbol_named("keymap") {
+                if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
                     continue;
                 }
 

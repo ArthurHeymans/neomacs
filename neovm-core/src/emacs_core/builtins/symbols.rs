@@ -2405,7 +2405,7 @@ fn menu_bar_label(def: Value) -> Option<String> {
     }
     let car = def.cons_car();
     let cdr = def.cons_cdr();
-    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+    if crate::emacs_core::keymap::KeymapMarker::MenuItem.is_value(car) && cdr.is_cons() {
         return cdr.cons_car().as_runtime_string_owned();
     }
     car.as_runtime_string_owned()
@@ -5650,7 +5650,9 @@ fn keymap_prompt_scan(map: Value) -> Value {
         if item.is_string() {
             return item;
         }
-        if item.is_cons() && item.cons_car().is_symbol_named("keymap") {
+        if item.is_cons()
+            && crate::emacs_core::keymap::KeymapMarker::Keymap.is_value(item.cons_car())
+        {
             let prompt = keymap_prompt_scan(item);
             if !prompt.is_nil() {
                 return prompt;

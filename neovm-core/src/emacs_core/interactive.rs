@@ -21,7 +21,8 @@ use super::keyboard::pure::{
     KEY_CHAR_SUPER, make_event_array_value,
 };
 use super::keymap::{
-    KeyEvent, command_remapping_command_name as keymap_command_remapping_command_name,
+    KeyEvent, KeymapMarker,
+    command_remapping_command_name as keymap_command_remapping_command_name,
     command_remapping_lookup_in_keymaps as keymap_command_remapping_lookup_in_keymaps,
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
@@ -3836,7 +3837,7 @@ fn binding_matches_definition(binding: &Value, definition: &Value) -> bool {
 }
 
 fn menu_item_command(binding: &Value) -> Option<Value> {
-    if !binding.is_cons() || binding.cons_car().as_symbol_name() != Some("menu-item") {
+    if !binding.is_cons() || !KeymapMarker::MenuItem.is_value(binding.cons_car()) {
         return None;
     }
     let tail = binding.cons_cdr();

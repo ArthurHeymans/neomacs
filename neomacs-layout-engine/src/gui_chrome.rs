@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neovm_core::emacs_core::intern::intern;
-use neovm_core::emacs_core::keymap::list_keymap_for_each_binding;
+use neovm_core::emacs_core::keymap::{
+    KeymapMarker, MenuButtonKind, MenuItemProperty, list_keymap_for_each_binding,
+};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::FrameId;
 
@@ -119,27 +121,28 @@ fn parse_tool_bar_item(
     }
 
     let (mut label, plist) = extract_menu_item_label_and_plist(eval, def)?;
-    if let Some(visible) = plist_lookup(&plist, ":visible")
+    if let Some(visible) = plist_lookup(&plist, MenuItemProperty::Visible)
         && !eval_menu_property(eval, visible).is_truthy()
     {
         return None;
     }
     if label.is_empty() {
-        label = plist_lookup(&plist, ":label")
+        label = plist_lookup(&plist, MenuItemProperty::Label)
             .and_then(|value| value.as_runtime_string_owned())
             .unwrap_or_default();
     }
-    let image = plist_lookup(&plist, ":image").and_then(|image| tool_bar_image_source(&image));
-    let help = plist_lookup(&plist, ":help")
+    let image = plist_lookup(&plist, MenuItemProperty::Image)
+        .and_then(|image| tool_bar_image_source(&image));
+    let help = plist_lookup(&plist, MenuItemProperty::Help)
         .and_then(|value| value.as_runtime_string_owned())
         .unwrap_or_default();
-    let enabled = plist_lookup(&plist, ":enable")
+    let enabled = plist_lookup(&plist, MenuItemProperty::Enable)
         .map(|value| eval_menu_property(eval, value).is_truthy())
         .unwrap_or(true);
-    let (item_type, selected) = plist_lookup(&plist, ":button")
+    let (item_type, selected) = plist_lookup(&plist, MenuItemProperty::Button)
         .and_then(|value| button_state(eval, value))
         .unwrap_or((ToolBarItemType::Button, false));
-    let item_type = if plist_lookup(&plist, ":wrap")
+    let item_type = if plist_lookup(&plist, MenuItemProperty::Wrap)
         .map(|value| eval_menu_property(eval, value).is_truthy())
         .unwrap_or(false)
     {
@@ -171,7 +174,7 @@ fn extract_menu_item_label_and_plist(eval: &mut Context, def: &Value) -> Option<
     let car = def.cons_car();
     let cdr = def.cons_cdr();
 
-    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+    if KeymapMarker::MenuItem.is_value(car) && cdr.is_cons() {
         let label = menu_caption_string(eval, cdr.cons_car())?;
         let mut rest = cdr.cons_cdr();
         if !rest.is_cons() {
@@ -201,15 +204,27 @@ fn button_state(eval: &mut Context, value: Value) -> Option<(ToolBarItemType, bo
         return None;
     }
     let item_type = match value.cons_car().as_symbol_name()? {
-        ":radio" => ToolBarItemType::Radio,
-        ":toggle" => ToolBarItemType::Toggle,
-        _ => return None,
+        name => match MenuButtonKind::from_keyword(name)? {
+            MenuButtonKind::Radio => ToolBarItemType::Radio,
+            MenuButtonKind::Toggle => ToolBarItemType::Toggle,
+        },
     };
     let selected = eval_menu_property(eval, value.cons_cdr()).is_truthy();
     Some((item_type, selected))
 }
 
-fn plist_lookup(plist: &Value, wanted: &str) -> Option<Value> {
+fn plist_lookup(plist: &Value, wanted: MenuItemProperty) -> Option<Value> {
+    plist_lookup_by_symbol(plist, |key| wanted.is_value(key))
+}
+
+fn plist_lookup_symbol_name(plist: &Value, wanted: &str) -> Option<Value> {
+    plist_lookup_by_symbol(plist, |key| key.as_symbol_name() == Some(wanted))
+}
+
+fn plist_lookup_by_symbol(
+    plist: &Value,
+    mut matches_key: impl FnMut(Value) -> bool,
+) -> Option<Value> {
     let mut tail = *plist;
     while tail.is_cons() {
         let key = tail.cons_car();
@@ -218,7 +233,7 @@ fn plist_lookup(plist: &Value, wanted: &str) -> Option<Value> {
             break;
         }
         let value = tail.cons_car();
-        if key.as_symbol_name() == Some(wanted) {
+        if matches_key(key) {
             return Some(value);
         }
         tail = tail.cons_cdr();
@@ -240,7 +255,7 @@ fn image_file_from_spec(value: &Value) -> Option<String> {
     } else {
         *value
     };
-    plist_lookup(&plist, ":file").and_then(|file| file.as_runtime_string_owned())
+    plist_lookup_symbol_name(&plist, ":file").and_then(|file| file.as_runtime_string_owned())
 }
 
 fn best_image_file_from_expression(value: &Value) -> Option<String> {
@@ -342,7 +357,7 @@ fn resolve_keymap(eval: &Context, value: &Value) -> Option<Value> {
 }
 
 fn is_keymap(value: &Value) -> bool {
-    value.is_cons() && value.cons_car().as_symbol_name() == Some("keymap")
+    value.is_cons() && KeymapMarker::Keymap.is_value(value.cons_car())
 }
 
 fn key_symbol_name(key: &Value) -> String {

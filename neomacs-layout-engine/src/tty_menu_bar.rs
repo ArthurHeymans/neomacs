@@ -29,8 +29,9 @@ use neomacs_display_protocol::glyph_matrix::TtyMenuBarItem;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::keymap::{
-    list_keymap_for_each_binding_recursive, list_keymap_lookup_one_unresolved, list_keymap_parent,
-    menu_bar_active_keymaps_for_frame_read_only, menu_bar_active_keymaps_read_only,
+    KeymapMarker, list_keymap_for_each_binding_recursive, list_keymap_lookup_one_unresolved,
+    list_keymap_parent, menu_bar_active_keymaps_for_frame_read_only,
+    menu_bar_active_keymaps_read_only,
 };
 use neovm_core::window::FrameId;
 
@@ -198,7 +199,7 @@ fn extract_menu_label(def: &Value) -> Option<String> {
     let cdr = def.cons_cdr();
 
     // (menu-item LABEL ...)
-    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+    if KeymapMarker::MenuItem.is_value(car) && cdr.is_cons() {
         let label = cdr.cons_car();
         if let Some(s) = label.as_runtime_string_owned() {
             return Some(s);
@@ -219,7 +220,7 @@ fn is_keymap(value: &Value) -> bool {
     if !value.is_cons() {
         return false;
     }
-    value.cons_car().as_symbol_name() == Some("keymap")
+    KeymapMarker::Keymap.is_value(value.cons_car())
 }
 
 /// Render a menu-bar key value as a printable identifier.

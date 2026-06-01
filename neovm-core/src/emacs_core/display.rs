@@ -1146,7 +1146,7 @@ fn popup_menu_item_from_binding(key: Value, def: Value) -> Option<(PopupMenuEntr
     let car = def.cons_car();
     let cdr = def.cons_cdr();
 
-    if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
+    if super::keymap::KeymapMarker::MenuItem.is_value(car) && cdr.is_cons() {
         let label = popup_menu_string(cdr.cons_car())?;
         let tail = cdr.cons_cdr();
         let command = if tail.is_cons() {
