@@ -115,9 +115,64 @@ fn gnu_pvec_type_layout_for_shared_vectorlikes() {
     for (kind, gnu_code) in shared {
         assert_eq!(u8::from(kind), gnu_code);
         assert_eq!(VecLikeType::try_from(gnu_code), Ok(kind));
+        assert_eq!(kind.gnu_pvec_code(), Some(gnu_code));
     }
 
     assert!(VecLikeType::try_from(1).is_err());
+    assert_eq!(GnuPvecType::from_gnu_code(1), Some(GnuPvecType::Free));
+    assert_eq!(VecLikeType::Macro.gnu_pvec_code(), None);
+    assert_eq!(VecLikeType::ByteCode.gnu_pvec_code(), None);
+    assert_eq!(VecLikeType::Timer.gnu_pvec_code(), None);
+}
+
+#[test]
+fn gnu_pvec_type_layout_matches_gnu_lisp_h() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (GnuPvecType::NormalVector, 0),
+        (GnuPvecType::Free, 1),
+        (GnuPvecType::Bignum, 2),
+        (GnuPvecType::Marker, 3),
+        (GnuPvecType::Overlay, 4),
+        (GnuPvecType::Finalizer, 5),
+        (GnuPvecType::SymbolWithPos, 6),
+        (GnuPvecType::MiscPtr, 7),
+        (GnuPvecType::UserPtr, 8),
+        (GnuPvecType::Process, 9),
+        (GnuPvecType::Frame, 10),
+        (GnuPvecType::Window, 11),
+        (GnuPvecType::BoolVector, 12),
+        (GnuPvecType::Buffer, 13),
+        (GnuPvecType::HashTable, 14),
+        (GnuPvecType::Obarray, 15),
+        (GnuPvecType::Terminal, 16),
+        (GnuPvecType::WindowConfiguration, 17),
+        (GnuPvecType::Subr, 18),
+        (GnuPvecType::Other, 19),
+        (GnuPvecType::Xwidget, 20),
+        (GnuPvecType::XwidgetView, 21),
+        (GnuPvecType::Thread, 22),
+        (GnuPvecType::Mutex, 23),
+        (GnuPvecType::Condvar, 24),
+        (GnuPvecType::ModuleFunction, 25),
+        (GnuPvecType::NativeCompUnit, 26),
+        (GnuPvecType::TsParser, 27),
+        (GnuPvecType::TsNode, 28),
+        (GnuPvecType::TsCompiledQuery, 29),
+        (GnuPvecType::Sqlite, 30),
+        (GnuPvecType::Closure, 31),
+        (GnuPvecType::CharTable, 32),
+        (GnuPvecType::SubCharTable, 33),
+        (GnuPvecType::Record, 34),
+        (GnuPvecType::Font, 35),
+    ];
+
+    for (kind, code) in cases {
+        assert_eq!(kind.gnu_code(), code);
+        assert_eq!(GnuPvecType::from_gnu_code(code), Some(kind));
+    }
+    assert_eq!(GnuPvecType::from_gnu_code(36), None);
 }
 
 #[test]

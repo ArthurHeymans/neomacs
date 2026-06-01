@@ -166,6 +166,90 @@ pub enum VecLikeType {
     Timer = 38,
 }
 
+impl VecLikeType {
+    pub fn gnu_pvec_type(self) -> Option<GnuPvecType> {
+        Some(match self {
+            Self::Vector => GnuPvecType::NormalVector,
+            Self::Bignum => GnuPvecType::Bignum,
+            Self::Marker => GnuPvecType::Marker,
+            Self::Overlay => GnuPvecType::Overlay,
+            Self::SymbolWithPos => GnuPvecType::SymbolWithPos,
+            Self::UserPtr => GnuPvecType::UserPtr,
+            Self::Frame => GnuPvecType::Frame,
+            Self::Window => GnuPvecType::Window,
+            Self::Buffer => GnuPvecType::Buffer,
+            Self::HashTable => GnuPvecType::HashTable,
+            Self::Obarray => GnuPvecType::Obarray,
+            Self::Subr => GnuPvecType::Subr,
+            Self::ModuleFunction => GnuPvecType::ModuleFunction,
+            Self::Sqlite => GnuPvecType::Sqlite,
+            Self::Lambda => GnuPvecType::Closure,
+            Self::CharTable => GnuPvecType::CharTable,
+            Self::SubCharTable => GnuPvecType::SubCharTable,
+            Self::Record => GnuPvecType::Record,
+            Self::Macro | Self::ByteCode | Self::Timer => return None,
+        })
+    }
+
+    pub fn gnu_pvec_code(self) -> Option<u8> {
+        self.gnu_pvec_type().map(GnuPvecType::gnu_code)
+    }
+}
+
+/// Complete GNU `enum pvec_type` domain (`src/lisp.h`). This records all
+/// public GNU pseudovector tag codes even when Neomacs does not yet allocate
+/// a corresponding runtime object.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
+pub enum GnuPvecType {
+    NormalVector = 0,
+    Free = 1,
+    Bignum = 2,
+    Marker = 3,
+    Overlay = 4,
+    Finalizer = 5,
+    SymbolWithPos = 6,
+    MiscPtr = 7,
+    UserPtr = 8,
+    Process = 9,
+    Frame = 10,
+    Window = 11,
+    BoolVector = 12,
+    Buffer = 13,
+    HashTable = 14,
+    Obarray = 15,
+    Terminal = 16,
+    WindowConfiguration = 17,
+    Subr = 18,
+    Other = 19,
+    Xwidget = 20,
+    XwidgetView = 21,
+    Thread = 22,
+    Mutex = 23,
+    Condvar = 24,
+    ModuleFunction = 25,
+    NativeCompUnit = 26,
+    TsParser = 27,
+    TsNode = 28,
+    TsCompiledQuery = 29,
+    Sqlite = 30,
+    Closure = 31,
+    CharTable = 32,
+    SubCharTable = 33,
+    Record = 34,
+    Font = 35,
+}
+
+impl GnuPvecType {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+}
+
 use std::sync::OnceLock;
 
 /// Slot storage for vectorlike objects that can either be ordinary Rust-owned
