@@ -2,6 +2,24 @@ use super::super::intern::intern;
 use super::*;
 
 #[test]
+fn set_internal_bind_codes_match_gnu_set_internal_bind() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (SetInternalBind::Set, 0),
+        (SetInternalBind::Bind, 1),
+        (SetInternalBind::Unbind, 2),
+        (SetInternalBind::ThreadSwitch, 3),
+    ];
+
+    for (bind, code) in cases {
+        assert_eq!(bind.gnu_code(), code);
+        assert_eq!(SetInternalBind::from_gnu_code(code), Some(bind));
+    }
+    assert_eq!(SetInternalBind::from_gnu_code(4), None);
+}
+
+#[test]
 fn intern_creates_symbol() {
     crate::test_utils::init_test_tracing();
     let mut ob = Obarray::new();

@@ -36,6 +36,7 @@ use super::value::{Value, ValueKind, VecLikeType};
 use crate::emacs_core::error::Flow;
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // ===========================================================================
 // Redirect machinery — mirrors GNU `lisp.h:771-829`
@@ -314,17 +315,31 @@ fn assq(key: Value, mut alist: Value) -> Value {
 
 /// `bindflag` argument for [`Obarray::set_internal_localized`].
 /// Mirrors GNU `enum Set_Internal_Bind` (`src/lisp.h:3590-3596`).
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum SetInternalBind {
     /// Ordinary `(setq foo bar)`. Auto-creates a per-buffer binding
     /// when `local_if_set` is true.
-    Set,
+    Set = 0,
     /// `let`-binding initial assignment. Never auto-creates a new
     /// per-buffer binding (the existing one or the default is
     /// stashed in specpdl for unwind).
-    Bind,
+    Bind = 1,
     /// `let`-binding unwind. Restores the previous value.
-    Unbind,
+    Unbind = 2,
+    /// Thread-switch assignment. GNU uses this path to avoid hooks and
+    /// buffer-local shadowing work while switching thread state.
+    ThreadSwitch = 3,
+}
+
+impl SetInternalBind {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Stub for GNU `let_shadows_buffer_binding_p`
