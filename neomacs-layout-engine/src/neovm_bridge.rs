@@ -36,6 +36,48 @@ pub(crate) enum DisplayLineNumbersMode {
     Visual,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayLineNumbersSymbol {
+    Relative,
+    Visual,
+}
+
+impl DisplayLineNumbersSymbol {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        match name {
+            "relative" => Some(Self::Relative),
+            "visual" => Some(Self::Visual),
+            _ => None,
+        }
+    }
+}
+
+impl DisplayLineNumbersMode {
+    fn from_lisp_value(value: Option<Value>) -> Self {
+        match value {
+            Some(v) if v.bits() == Value::T.bits() => Self::Absolute,
+            Some(value) => value
+                .as_symbol_name()
+                .and_then(DisplayLineNumbersSymbol::from_symbol_name)
+                .map(|symbol| match symbol {
+                    DisplayLineNumbersSymbol::Relative => Self::Relative,
+                    DisplayLineNumbersSymbol::Visual => Self::Visual,
+                })
+                .unwrap_or(Self::Off),
+            None => Self::Off,
+        }
+    }
+
+    pub(crate) fn engine_code(self) -> u8 {
+        match self {
+            Self::Off => 0,
+            Self::Absolute => 1,
+            Self::Relative => 2,
+            Self::Visual => 3,
+        }
+    }
+}
+
 pub(crate) trait LayoutBufferView {
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value>;
     fn layout_point_min_byte(&self) -> usize;
@@ -490,12 +532,7 @@ pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(buffer: &B, name: &s
 pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     buffer: &B,
 ) -> DisplayLineNumbersMode {
-    match buffer_local_value(buffer, "display-line-numbers") {
-        Some(v) if v.bits() == Value::T.bits() => DisplayLineNumbersMode::Absolute,
-        Some(value) if value.is_symbol_named("relative") => DisplayLineNumbersMode::Relative,
-        Some(value) if value.is_symbol_named("visual") => DisplayLineNumbersMode::Visual,
-        _ => DisplayLineNumbersMode::Off,
-    }
+    DisplayLineNumbersMode::from_lisp_value(buffer_local_value(buffer, "display-line-numbers"))
 }
 
 pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {

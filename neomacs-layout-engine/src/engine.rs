@@ -3000,12 +3000,7 @@ impl LayoutEngine {
         );
 
         // Line number configuration from buffer-local variables
-        let lnum_mode = match super::neovm_bridge::buffer_display_line_numbers_mode(buffer) {
-            super::neovm_bridge::DisplayLineNumbersMode::Off => 0,
-            super::neovm_bridge::DisplayLineNumbersMode::Absolute => 1,
-            super::neovm_bridge::DisplayLineNumbersMode::Relative => 2,
-            super::neovm_bridge::DisplayLineNumbersMode::Visual => 3,
-        };
+        let lnum_mode = super::neovm_bridge::buffer_display_line_numbers_mode(buffer).engine_code();
         let lnum_enabled = lnum_mode > 0;
         let lnum_offset =
             super::neovm_bridge::buffer_local_int(buffer, "display-line-numbers-offset", 0);
