@@ -201,7 +201,7 @@ impl GlyphMatrixBuilder {
 
         // Push the replacement glyph as the final glyph so it lands
         // at absolute column `target_col`.
-        row.glyphs[area as usize].push(Glyph::char(ch, face_id, 0));
+        row.glyphs[area.index()].push(Glyph::char(ch, face_id, 0));
     }
 
     fn write_row_metrics(row: &mut GlyphRow, pixel_y_rel: f32, height_px: f32, ascent_px: f32) {
