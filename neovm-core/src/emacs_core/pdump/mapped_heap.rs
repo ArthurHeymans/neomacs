@@ -907,7 +907,7 @@ impl MappedHeapBuilder {
         let raw = RawFloatObj {
             header: RawGcHeader {
                 marked: 0,
-                kind: HeapObjectKind::Float as u8,
+                kind: u8::from(HeapObjectKind::Float),
                 padding: [0; 6],
                 next: 0,
             },
@@ -920,11 +920,11 @@ impl MappedHeapBuilder {
         let raw = RawVecLikeHeader {
             header: RawGcHeader {
                 marked: 0,
-                kind: HeapObjectKind::VecLike as u8,
+                kind: u8::from(HeapObjectKind::VecLike),
                 padding: [0; 6],
                 next: 0,
             },
-            type_tag: type_tag as u8,
+            type_tag: u8::from(type_tag),
             padding: [0; 7],
         };
         self.write_bytes(offset, bytemuck::bytes_of(&raw));
@@ -957,7 +957,7 @@ impl MappedHeapBuilder {
         let raw = RawStringObj {
             header: RawGcHeader {
                 marked: 0,
-                kind: HeapObjectKind::String as u8,
+                kind: u8::from(HeapObjectKind::String),
                 padding: [0; 6],
                 next: 0,
             },
@@ -1059,29 +1059,9 @@ fn mapped_heap_ref_target(value: &DumpValue, heap: &DumpTaggedHeap) -> Option<(u
 }
 
 fn veclike_type_from_tag(tag: u8) -> Result<VecLikeType, DumpError> {
-    match tag {
-        0 => Ok(VecLikeType::Vector),
-        1 => Ok(VecLikeType::HashTable),
-        2 => Ok(VecLikeType::Lambda),
-        3 => Ok(VecLikeType::Macro),
-        4 => Ok(VecLikeType::ByteCode),
-        5 => Ok(VecLikeType::Record),
-        6 => Ok(VecLikeType::Overlay),
-        7 => Ok(VecLikeType::Marker),
-        8 => Ok(VecLikeType::Buffer),
-        9 => Ok(VecLikeType::Window),
-        10 => Ok(VecLikeType::Frame),
-        11 => Ok(VecLikeType::Timer),
-        12 => Ok(VecLikeType::Subr),
-        13 => Ok(VecLikeType::Bignum),
-        14 => Ok(VecLikeType::SymbolWithPos),
-        15 => Ok(VecLikeType::Sqlite),
-        16 => Ok(VecLikeType::UserPtr),
-        17 => Ok(VecLikeType::ModuleFunction),
-        other => Err(DumpError::ImageFormatError(format!(
-            "unknown mapped vectorlike type tag {other}"
-        ))),
-    }
+    VecLikeType::try_from(tag).map_err(|_| {
+        DumpError::ImageFormatError(format!("unknown mapped vectorlike type tag {tag}"))
+    })
 }
 
 fn align_padding(value: usize, align: usize) -> usize {
@@ -1093,6 +1073,42 @@ fn align_padding(value: usize, align: usize) -> usize {
 mod tests {
     use super::*;
     use crate::emacs_core::pdump::types::DumpTaggedHeap;
+
+    #[test]
+    fn mapped_veclike_tags_decode_the_full_runtime_domain() {
+        let variants = [
+            VecLikeType::Vector,
+            VecLikeType::HashTable,
+            VecLikeType::Lambda,
+            VecLikeType::Macro,
+            VecLikeType::ByteCode,
+            VecLikeType::Record,
+            VecLikeType::Overlay,
+            VecLikeType::Marker,
+            VecLikeType::Buffer,
+            VecLikeType::Window,
+            VecLikeType::Frame,
+            VecLikeType::Timer,
+            VecLikeType::Subr,
+            VecLikeType::Bignum,
+            VecLikeType::SymbolWithPos,
+            VecLikeType::Sqlite,
+            VecLikeType::UserPtr,
+            VecLikeType::ModuleFunction,
+            VecLikeType::CharTable,
+            VecLikeType::SubCharTable,
+            VecLikeType::Obarray,
+        ];
+
+        for variant in variants {
+            assert_eq!(veclike_type_from_tag(u8::from(variant)).unwrap(), variant);
+        }
+
+        assert!(matches!(
+            veclike_type_from_tag(u8::MAX),
+            Err(DumpError::ImageFormatError(_))
+        ));
+    }
 
     #[test]
     fn extracts_string_bytes_into_mapped_heap_section() {
@@ -1127,7 +1143,10 @@ mod tests {
 
         let object_offset = string_span.offset as usize;
         let data_field_offset = object_offset + std::mem::offset_of!(RawStringObj, data);
-        assert_eq!(heap.bytes[object_offset + 1], HeapObjectKind::String as u8);
+        assert_eq!(
+            heap.bytes[object_offset + 1],
+            u8::from(HeapObjectKind::String)
+        );
         assert_eq!(
             read_usize(
                 &heap.bytes,
@@ -1288,7 +1307,7 @@ mod tests {
 
         assert_eq!(
             heap.bytes[first.offset as usize + 1],
-            HeapObjectKind::Float as u8
+            u8::from(HeapObjectKind::Float)
         );
         let value_offset = first.offset as usize + std::mem::size_of::<RawGcHeader>();
         let value = f64::from_ne_bytes(

@@ -13,6 +13,7 @@
 
 use super::value::TaggedValue;
 use malachite::integer::Integer;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // ---------------------------------------------------------------------------
 // ConsCell — no header, minimal size
@@ -72,8 +73,8 @@ impl ConsCell {
 ///
 /// Provides mark bit for garbage collection and an intrusive linked list
 /// pointer for sweep-phase traversal.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 pub enum HeapObjectKind {
     String = 0,
     Float = 1,
@@ -125,8 +126,8 @@ pub struct FloatObj {
 /// Sub-type tag for vectorlike objects.
 /// Stored in the `VecLikeHeader`, distinguishes the many heap types
 /// that share the `011` pointer tag.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 pub enum VecLikeType {
     Vector = 0,
     HashTable = 1,
@@ -598,8 +599,8 @@ pub enum SubrFn {
     A8(SubrFn8),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
 pub enum SubrDispatchKind {
     Builtin,
     ContextCallable,

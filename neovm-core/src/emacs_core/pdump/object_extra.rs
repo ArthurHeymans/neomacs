@@ -852,6 +852,6 @@ mod tests {
     }
 
     fn write_test_veclike_type(bytes: &mut [u8], span: DumpVecLikeSpan, type_tag: VecLikeType) {
-        bytes[span.offset as usize + std::mem::size_of::<GcHeader>()] = type_tag as u8;
+        bytes[span.offset as usize + std::mem::size_of::<GcHeader>()] = u8::from(type_tag);
     }
 }

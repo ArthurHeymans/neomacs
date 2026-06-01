@@ -3040,6 +3040,7 @@ dependencies = [
  "neovm-host-abi",
  "network-interface",
  "notify",
+ "num_enum",
  "parking_lot",
  "polling",
  "portable-pty",
