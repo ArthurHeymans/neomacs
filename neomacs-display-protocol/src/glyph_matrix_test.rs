@@ -800,6 +800,39 @@ fn materialize_stretch_glyph() {
 }
 
 #[test]
+fn materialize_uses_explicit_stretch_geometry() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.faces.insert(0, Face::new(0));
+
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].height_px = 30.0;
+    matrix.rows[0].ascent_px = 20.0;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize]
+        .push(Glyph::stretch(4, 0).with_pixel_geometry(24.0, 12.0, 5.0));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
+        text_pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    match &buf.glyphs[0] {
+        FrameGlyph::Stretch {
+            y, width, height, ..
+        } => {
+            assert_eq!(*y, 25.0);
+            assert_eq!(*width, 24.0);
+            assert_eq!(*height, 12.0);
+        }
+        other => panic!("expected Stretch, got {:?}", other),
+    }
+}
+
+#[test]
 fn materialize_new_fields_default_to_empty() {
     let state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     assert!(state.backgrounds.is_empty());

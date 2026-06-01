@@ -1011,9 +1011,8 @@ impl LayoutEngine {
                         if let Some(pixels) =
                             calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
                         {
-                            // See the buffer-text analogue in
-                            // engine.rs::eval_display_space_as_width for
-                            // the same shape of post-processing: if the
+                            // See the buffer-text display-space geometry
+                            // path for the same shape of post-processing: if the
                             // expression contained a window-box symbol
                             // (`right`, `text`, …) it resolved a base
                             // position and `pixels` is the offset from it;

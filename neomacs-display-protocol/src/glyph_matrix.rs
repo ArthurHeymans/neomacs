@@ -65,6 +65,16 @@ pub struct Glyph {
     /// `0.0` means "not explicitly measured"; materialization falls back to
     /// character-grid width.  TTY backends ignore this field.
     pub pixel_width: f32,
+    /// Stretch-glyph height in pixels.
+    ///
+    /// GNU's `struct glyph` stores stretch height/ascent in
+    /// `glyph->u.stretch`.  `0.0` means "use the containing row height".
+    pub pixel_height: f32,
+    /// Stretch-glyph ascent in pixels.
+    ///
+    /// Used with `pixel_height`; materialization positions the stretch
+    /// relative to the row baseline.  `0.0` falls back to row ascent.
+    pub pixel_ascent: f32,
     /// Padding glyph — second cell of a wide character.
     pub padding: bool,
 }
@@ -79,6 +89,8 @@ impl Glyph {
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
             padding: false,
         }
     }
@@ -92,6 +104,8 @@ impl Glyph {
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
             padding: false,
         }
     }
@@ -105,6 +119,8 @@ impl Glyph {
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
+            pixel_height: 0.0,
+            pixel_ascent: 0.0,
             padding: true,
         }
     }
@@ -113,6 +129,31 @@ impl Glyph {
     pub fn with_pixel_width(mut self, pixel_width: f32) -> Self {
         self.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
             pixel_width
+        } else {
+            0.0
+        };
+        self
+    }
+
+    /// Return a copy with explicit GUI stretch geometry.
+    pub fn with_pixel_geometry(
+        mut self,
+        pixel_width: f32,
+        pixel_height: f32,
+        pixel_ascent: f32,
+    ) -> Self {
+        self.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
+            pixel_width
+        } else {
+            0.0
+        };
+        self.pixel_height = if pixel_height.is_finite() && pixel_height > 0.0 {
+            pixel_height
+        } else {
+            0.0
+        };
+        self.pixel_ascent = if self.pixel_height > 0.0 && pixel_ascent.is_finite() {
+            pixel_ascent.max(0.0).min(self.pixel_height)
         } else {
             0.0
         };
@@ -222,6 +263,10 @@ impl GlyphRow {
                 hash ^= glyph.face_id as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_width.to_bits() as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.pixel_height.to_bits() as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.pixel_ascent.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
@@ -1138,6 +1183,11 @@ impl FrameDisplayState {
             char_h
         };
         let row_role = glyph_row.role;
+        let row_ascent = if glyph_row.ascent_px > 0.0 {
+            glyph_row.ascent_px.min(row_height)
+        } else {
+            row_height
+        };
         let clip_rect = Some(pixel_bounds);
         let mut col = 0usize;
         let mut x_cursor = win_x;
@@ -1265,6 +1315,21 @@ impl FrameDisplayState {
                     }
                     GlyphType::Stretch { .. } => {
                         let face_data = self.resolve_face_for_materialize(glyph.face_id);
+                        let stretch_height = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_height
+                        } else {
+                            row_height
+                        };
+                        let stretch_ascent = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_ascent.min(stretch_height)
+                        } else {
+                            row_ascent.min(stretch_height)
+                        };
+                        let stretch_y = if glyph.pixel_height > 0.0 {
+                            y + row_ascent - stretch_ascent
+                        } else {
+                            y
+                        };
                         buf.glyphs.push(FrameGlyph::Stretch {
                             window_id,
                             row_role,
@@ -1272,9 +1337,9 @@ impl FrameDisplayState {
                             slot_id,
                             bidi_level: glyph.bidi_level,
                             x,
-                            y,
+                            y: stretch_y,
                             width: materialized_width,
-                            height: row_height,
+                            height: stretch_height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
                             stipple_id: 0,

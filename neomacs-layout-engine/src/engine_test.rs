@@ -2130,20 +2130,76 @@ fn display_space_relative_width_spec(factor: i64) -> Value {
     ])
 }
 
+fn display_space_relative_height_spec(factor: i64, ascent_percent: i64) -> Value {
+    Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("width"),
+        Value::fixnum(2),
+        Value::keyword("relative-height"),
+        Value::fixnum(factor),
+        Value::keyword("ascent"),
+        Value::fixnum(ascent_percent),
+    ])
+}
+
 #[test]
 fn display_space_relative_width_uses_displayed_character_width() {
     let _eval = Context::new();
     let params = test_window_params();
-    let width = eval_display_space_as_width(
+    let geometry = eval_display_space_geometry(
         &display_space_relative_width_spec(2),
         0.0,
         0.0,
         8.0,
         16.0,
+        10.0,
+        7.0,
         &params,
     );
 
-    assert_eq!(width, 32.0);
+    assert_eq!(geometry.width, 32.0);
+}
+
+#[test]
+fn display_space_geometry_uses_relative_height_and_percent_ascent() {
+    let _eval = Context::new();
+    let params = test_window_params();
+    let geometry = eval_display_space_geometry(
+        &display_space_relative_height_spec(2, 25),
+        0.0,
+        0.0,
+        8.0,
+        8.0,
+        10.0,
+        7.0,
+        &params,
+    );
+
+    assert_eq!(
+        geometry,
+        DisplaySpaceGeometry {
+            width: 16.0,
+            height: 20.0,
+            ascent: 5.0,
+        }
+    );
+}
+
+#[test]
+fn display_space_geometry_accepts_pixel_ascent_expression() {
+    let _eval = Context::new();
+    let params = test_window_params();
+    let spec = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("height"),
+        Value::list(vec![Value::fixnum(20)]),
+        Value::keyword("ascent"),
+        Value::list(vec![Value::fixnum(3)]),
+    ]);
+    let geometry = eval_display_space_geometry(&spec, 0.0, 0.0, 8.0, 8.0, 10.0, 7.0, &params);
+
+    assert_eq!(geometry.height, 20.0);
+    assert_eq!(geometry.ascent, 3.0);
 }
 
 fn scaled_face_plist() -> Value {

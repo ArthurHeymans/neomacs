@@ -192,6 +192,27 @@ fn display_width_cols(pixel_width: f32, frame_column_width: f32) -> u16 {
     (pixel_width.max(0.0) / column_width).ceil().max(1.0) as u16
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DisplaySpaceGeometry {
+    width: f32,
+    height: f32,
+    ascent: f32,
+}
+
+fn include_glyph_vertical_metrics(
+    row_height: &mut f32,
+    row_ascent: &mut f32,
+    glyph_height: f32,
+    glyph_ascent: f32,
+) {
+    let glyph_height = glyph_height.max(1.0);
+    let glyph_ascent = glyph_ascent.max(0.0).min(glyph_height);
+    let row_descent = (*row_height - *row_ascent).max(0.0);
+    let glyph_descent = (glyph_height - glyph_ascent).max(0.0);
+    *row_ascent = (*row_ascent).max(glyph_ascent);
+    *row_height = (*row_ascent + row_descent.max(glyph_descent)).max(glyph_height);
+}
+
 fn control_char_display_pair(ch: char, ctl_arrow: bool) -> Option<(char, char)> {
     if !ctl_arrow {
         return None;
@@ -758,8 +779,7 @@ fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutB
 // Display property helpers
 // ---------------------------------------------------------------------------
 
-/// Evaluate a `(space :width …)` or `(space :align-to …)` display
-/// spec into a pixel width relative to `current_x`.
+/// Evaluate a `(space ...)` display spec into GNU-shaped stretch geometry.
 ///
 /// Replaces the old `parse_display_space_width` helper. Delegates the
 /// actual expression evaluation to
@@ -773,20 +793,29 @@ fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutB
 /// units, not the currently scaled face width of the covered buffer
 /// position.
 ///
-/// Returns the canonical frame column width as a conservative default
-/// when the spec is invalid or the evaluator can't resolve it.
-fn eval_display_space_as_width(
+/// Returns canonical frame column/default face metrics when the spec is
+/// invalid or the evaluator can't resolve it.
+fn eval_display_space_geometry(
     spec: &neovm_core::emacs_core::Value,
     current_x: f32,
     content_x: f32,
     face_char_w: f32,
     display_char_width: f32,
+    default_height: f32,
+    default_ascent: f32,
     params: &WindowParams,
-) -> f32 {
+) -> DisplaySpaceGeometry {
     use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
 
+    let default_width = params.char_width.max(1.0);
+    let default_height = default_height.max(1.0);
+    let default_ascent = default_ascent.max(0.0).min(default_height);
     let Some(items) = neovm_core::emacs_core::value::list_to_vec(spec) else {
-        return face_char_w;
+        return DisplaySpaceGeometry {
+            width: default_width,
+            height: default_height,
+            ascent: default_ascent,
+        };
     };
 
     let pctx = PixelCalcContext {
@@ -794,7 +823,7 @@ fn eval_display_space_as_width(
         frame_line_height: params.char_height.max(1.0) as f64,
         frame_res_x: 96.0,
         frame_res_y: 96.0,
-        face_font_height: params.char_height.max(1.0) as f64,
+        face_font_height: default_height as f64,
         face_font_width: face_char_w.round().max(1.0) as f64,
         text_area_left: params.text_bounds.x as f64,
         text_area_right: (params.text_bounds.x + params.text_bounds.width) as f64,
@@ -816,48 +845,90 @@ fn eval_display_space_as_width(
         symbol_values: std::collections::HashMap::new(),
     };
 
-    // items[0] is the `space` symbol; walk the keyword-value plist
-    // starting at index 1.
-    let mut i = 1;
-    while i + 1 < items.len() {
-        let key = items[i];
-        let val = items[i + 1];
-        match DisplaySpaceKey::from_lisp_value(key) {
-            Some(DisplaySpaceKey::Width) => {
-                if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
-                    return pixels as f32;
-                }
-                return params.char_width.max(1.0);
+    let plist_value = |wanted: DisplaySpaceKey| -> Option<Value> {
+        let mut i = 1;
+        while i + 1 < items.len() {
+            if DisplaySpaceKey::from_lisp_value(items[i]) == Some(wanted) {
+                return Some(items[i + 1]);
             }
-            Some(DisplaySpaceKey::RelativeWidth) => {
-                if let Some(factor) = display_space_positive_number(val) {
-                    return factor * display_char_width.max(0.0);
-                }
-            }
-            Some(DisplaySpaceKey::AlignTo) => {
-                let mut align_to: i32 = -1;
-                if let Some(pixels) =
-                    calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
-                {
-                    // If the expression contained a symbol like `right`,
-                    // `align_to` was updated to that position and `pixels`
-                    // is the offset from it. Otherwise (numeric-only
-                    // :align-to N), `align_to` is still -1 and `pixels`
-                    // is a column-relative offset from `content_x`.
-                    let target_x = if align_to >= 0 {
-                        align_to as f32 + pixels as f32
-                    } else {
-                        content_x + pixels as f32
-                    };
-                    return (target_x - current_x).max(0.0);
-                }
-                return params.char_width.max(1.0);
-            }
-            _ => {}
+            i += 2;
         }
-        i += 2;
+        None
+    };
+
+    let mut width = if let Some(prop) = plist_value(DisplaySpaceKey::Width)
+        && !prop.is_nil()
+        && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, None)
+    {
+        pixels as f32
+    } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeWidth)
+        && let Some(factor) = display_space_positive_number(prop)
+    {
+        factor * display_char_width.max(0.0)
+    } else if let Some(prop) = plist_value(DisplaySpaceKey::AlignTo)
+        && !prop.is_nil()
+    {
+        let mut align_to: i32 = -1;
+        if let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, true, Some(&mut align_to)) {
+            // If the expression contained a symbol like `right`, `align_to`
+            // was updated to that position and `pixels` is the offset from it.
+            // Otherwise, numeric-only `:align-to N` is column-relative from
+            // `content_x`, matching GNU's text-area adjustment.
+            let target_x = if align_to >= 0 {
+                align_to as f32 + pixels as f32
+            } else {
+                content_x + pixels as f32
+            };
+            (target_x - current_x).max(0.0)
+        } else {
+            default_width
+        }
+    } else {
+        default_width
+    };
+    let zero_width_ok = plist_value(DisplaySpaceKey::AlignTo).is_some_and(|prop| !prop.is_nil());
+    if width <= 0.0 && (width < 0.0 || !zero_width_ok) {
+        width = 1.0;
     }
-    params.char_width.max(1.0)
+
+    let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
+        && !prop.is_nil()
+        && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+    {
+        pixels as f32
+    } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
+        && let Some(factor) = display_space_positive_number(prop)
+    {
+        default_height * factor
+    } else {
+        default_height
+    };
+    let zero_height_ok = plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
+    if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
+        height = 1.0;
+    }
+
+    let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
+        if let Some(percent) = display_space_positive_number(prop)
+            && percent <= 100.0
+        {
+            height * percent / 100.0
+        } else if !prop.is_nil()
+            && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+        {
+            (pixels as f32).max(0.0).min(height)
+        } else {
+            height * default_ascent / default_height
+        }
+    } else {
+        height * default_ascent / default_height
+    };
+
+    DisplaySpaceGeometry {
+        width,
+        height,
+        ascent: ascent.max(0.0).min(height),
+    }
 }
 
 /// Check if a Value is an image display spec: a cons whose car is the symbol `image`.
@@ -1573,15 +1644,24 @@ fn render_overlay_string(
             }
 
             if is_display_space_spec(&display_prop) {
-                let space_width = eval_display_space_as_width(
+                let space_geometry = eval_display_space_geometry(
                     &display_prop,
                     *x,
                     content_x,
                     face_char_w,
                     face_char_w,
+                    char_h,
+                    default_row_ascent,
                     params,
                 );
+                let space_width = space_geometry.width;
                 if space_width > 0.0 && *x < max_x {
+                    include_glyph_vertical_metrics(
+                        row_max_height,
+                        row_max_ascent,
+                        space_geometry.height,
+                        space_geometry.ascent,
+                    );
                     let width_cols = display_width_cols(space_width, params.char_width);
                     let face_id = overlay_string_face_id_at(
                         text_props.as_ref(),
@@ -1593,7 +1673,13 @@ fn render_overlay_string(
                         current_face_id,
                         builder,
                     );
-                    builder.push_stretch_with_pixel_width(width_cols, face_id, space_width);
+                    builder.push_stretch_with_pixel_geometry(
+                        width_cols,
+                        face_id,
+                        space_width,
+                        space_geometry.height,
+                        space_geometry.ascent,
+                    );
                     let glyph_start_x = *x;
                     let glyph_start_col = *col;
                     capture_overlay_string_cursor(
@@ -4368,14 +4454,17 @@ impl LayoutEngine {
                                 current_font_italic,
                             )
                         };
-                        let space_width = eval_display_space_as_width(
+                        let space_geometry = eval_display_space_geometry(
                             &prop_val,
                             x,
                             content_x,
                             face_char_w,
                             display_char_width,
+                            face_h,
+                            face_ascent_val,
                             params,
                         );
+                        let space_width = space_geometry.width;
                         if point_in_display_replacement {
                             capture_cursor_info(
                                 &mut cursor_info,
@@ -4396,11 +4485,19 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
+                            include_glyph_vertical_metrics(
+                                &mut row_max_height,
+                                &mut row_max_ascent,
+                                space_geometry.height,
+                                space_geometry.ascent,
+                            );
                             let width_cols = display_width_cols(space_width, params.char_width);
-                            self.matrix_builder.push_stretch_with_pixel_width(
+                            self.matrix_builder.push_stretch_with_pixel_geometry(
                                 width_cols,
                                 current_text_face_id,
                                 space_width,
+                                space_geometry.height,
+                                space_geometry.ascent,
                             );
                             x += space_width;
                             col += width_cols as usize;

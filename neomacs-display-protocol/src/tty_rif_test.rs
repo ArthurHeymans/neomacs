@@ -129,6 +129,8 @@ fn glyph_to_char_returns_first_char_for_composite() {
         bidi_level: 0,
         wide: false,
         pixel_width: 0.0,
+        pixel_height: 0.0,
+        pixel_ascent: 0.0,
         padding: false,
     };
     assert_eq!(glyph_to_char(&g), 'a');

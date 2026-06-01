@@ -506,9 +506,24 @@ impl GlyphMatrixBuilder {
         face_id: u32,
         pixel_width: f32,
     ) {
+        self.push_stretch_with_pixel_geometry(width_cols, face_id, pixel_width, 0.0, 0.0);
+    }
+
+    pub fn push_stretch_with_pixel_geometry(
+        &mut self,
+        width_cols: u16,
+        face_id: u32,
+        pixel_width: f32,
+        pixel_height: f32,
+        pixel_ascent: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let glyph = Glyph::stretch(width_cols, face_id).with_pixel_width(pixel_width);
+                let glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
+                    pixel_width,
+                    pixel_height,
+                    pixel_ascent,
+                );
                 matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);
             }
         }
@@ -524,6 +539,8 @@ impl GlyphMatrixBuilder {
                     bidi_level: 0,
                     wide: false,
                     pixel_width: 0.0,
+                    pixel_height: 0.0,
+                    pixel_ascent: 0.0,
                     padding: false,
                 };
                 matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);
