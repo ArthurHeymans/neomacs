@@ -143,11 +143,14 @@ fn font_spacing_codes_match_gnu_font_spacing() {
     assert_eq!(FontSpacing::from_gnu_code(1), None);
     assert_eq!(FontSpacing::from_gnu_code(111), None);
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(0), Some("p"));
-    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(89), Some("p"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(1), Some("d"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(89), Some("d"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(90), Some("d"));
-    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(99), Some("d"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(91), Some("m"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(99), Some("m"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(100), Some("m"));
-    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(109), Some("m"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(101), Some("c"));
+    assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(109), Some("c"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(110), Some("c"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(111), None);
 }
@@ -691,6 +694,34 @@ fn font_xlfd_name_returns_xlfd() {
     let result =
         builtin_font_xlfd_name(vec![Value::vector(vec![Value::keyword(FONT_SPEC_TAG)])]).unwrap();
     assert_eq!(result.as_utf8_str(), Some("-*-*-*-*-*-*-*-*-*-*-*-*-*-*"));
+}
+
+#[test]
+fn font_xlfd_name_uses_gnu_spacing_buckets() {
+    crate::test_utils::init_test_tracing();
+
+    for (spacing, letter) in [
+        (0, "p"),
+        (1, "d"),
+        (89, "d"),
+        (90, "d"),
+        (91, "m"),
+        (99, "m"),
+        (100, "m"),
+        (101, "c"),
+        (109, "c"),
+        (110, "c"),
+    ] {
+        let spec = builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(spacing)])
+            .expect("valid spacing");
+        let result = builtin_font_xlfd_name(vec![spec]).expect("xlfd");
+        let expected = format!("-*-*-*-*-*-*-*-*-*-*-{letter}-*-*-*");
+        assert_eq!(
+            result.as_utf8_str(),
+            Some(expected.as_str()),
+            "spacing {spacing}"
+        );
+    }
 }
 
 #[test]

@@ -106,14 +106,27 @@ impl FontSpacing {
         self.into()
     }
 
-    fn xlfd_letter_for_gnu_code(code: i64) -> Option<&'static str> {
+    fn xlfd_letter(self) -> &'static str {
+        match self {
+            Self::Proportional => "p",
+            Self::Dual => "d",
+            Self::Mono => "m",
+            Self::Charcell => "c",
+        }
+    }
+
+    fn xlfd_bucket_for_gnu_code(code: i64) -> Option<Self> {
         match code {
-            0..=89 => Some("p"),
-            90..=99 => Some("d"),
-            100..=109 => Some("m"),
-            110 => Some("c"),
+            0 => Some(Self::Proportional),
+            1..=90 => Some(Self::Dual),
+            91..=100 => Some(Self::Mono),
+            101..=Self::MAX_GNU_CODE => Some(Self::Charcell),
             _ => None,
         }
+    }
+
+    fn xlfd_letter_for_gnu_code(code: i64) -> Option<&'static str> {
+        Self::xlfd_bucket_for_gnu_code(code).map(Self::xlfd_letter)
     }
 }
 

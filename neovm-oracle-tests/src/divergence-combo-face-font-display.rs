@@ -210,6 +210,16 @@ fn divergence_font_spec_spacing_gnu_codes() {
   (font-get (font-spec :spacing 'C) :spacing)
   (font-get (font-spec :spacing 1) :spacing)
   (font-get (font-spec :spacing 109) :spacing)
+  (mapcar (lambda (spacing)
+            (list spacing
+                  (font-get (font-spec :spacing spacing) :spacing)
+                  (font-xlfd-name (font-spec :spacing spacing))))
+          '(0 1 89 90 91 99 100 101 109 110))
+  (mapcar (lambda (spacing)
+            (condition-case err
+                (font-spec :spacing spacing)
+              (error (list 'error (car err)))))
+          '(proportional mono charcell dual pp))
   (condition-case err
       (font-spec :spacing 111)
     (error (list 'error (car err))))) "#,
