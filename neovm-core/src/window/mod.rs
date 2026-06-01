@@ -11,6 +11,7 @@ use crate::buffer::BufferId;
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::face::Face as RuntimeFace;
 use crate::gc_trace::GcTrace;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 
 mod display;
@@ -1092,14 +1093,29 @@ pub struct DisplayRowSnapshot {
     pub end_buffer_pos: Option<usize>,
 }
 
-/// Last authoritative physical cursor geometry for a window.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Last authoritative physical cursor kind for a window.
+///
+/// Mirrors GNU `enum text_cursor_kinds` for resolved physical cursor states.
+/// GNU's `DEFAULT_CURSOR = -2` is intentionally absent here because
+/// `phys_cursor_type` stores the cursor kind after redisplay resolution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(i8)]
 pub enum WindowCursorKind {
-    NoCursor,
-    FilledBox,
-    HollowBox,
-    Bar,
-    Hbar,
+    NoCursor = -1,
+    FilledBox = 0,
+    HollowBox = 1,
+    Bar = 2,
+    Hbar = 3,
+}
+
+impl WindowCursorKind {
+    pub fn from_gnu_code(code: i8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> i8 {
+        self.into()
+    }
 }
 
 /// Cursor position within a window's text area.

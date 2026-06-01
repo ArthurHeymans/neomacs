@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn window_cursor_kind_codes_match_gnu_text_cursor_kinds() {
+    crate::test_utils::init_test_tracing();
+
+    let cases = [
+        (WindowCursorKind::NoCursor, -1),
+        (WindowCursorKind::FilledBox, 0),
+        (WindowCursorKind::HollowBox, 1),
+        (WindowCursorKind::Bar, 2),
+        (WindowCursorKind::Hbar, 3),
+    ];
+
+    for (kind, code) in cases {
+        assert_eq!(kind.gnu_code(), code);
+        assert_eq!(WindowCursorKind::from_gnu_code(code), Some(kind));
+    }
+
+    assert_eq!(WindowCursorKind::from_gnu_code(-2), None);
+    assert_eq!(WindowCursorKind::from_gnu_code(4), None);
+}
+
+#[test]
 fn create_frame_and_window() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();
