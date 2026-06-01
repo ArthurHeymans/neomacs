@@ -17,7 +17,9 @@ use neovm_core::face::{
     Color as NeoColor, Face as NeoFace, FaceHeight, FaceTable, FontWeight,
     UnderlineStyle as NeoUnderlineStyle,
 };
-use neovm_core::window::{Frame, FrameId, Window, resolve_window_scroll_bar_geometry};
+use neovm_core::window::{
+    CursorTypeSymbol, Frame, FrameId, Window, resolve_window_scroll_bar_geometry,
+};
 
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
 use crate::fontconfig::face_height_to_pixels;
@@ -517,31 +519,31 @@ fn parse_cursor_spec(value: &Value) -> Option<CursorSpec> {
         return Some(CursorSpec::no_cursor());
     }
 
-    if value.bits() == Value::T.bits() || value.is_symbol_named("box") {
+    if value.bits() == Value::T.bits() {
         return Some(CursorSpec::filled_box());
     }
-    if value.is_symbol_named("hollow") {
-        return Some(CursorSpec::hollow_box());
-    }
-    if value.is_symbol_named("bar") {
-        return Some(CursorSpec::bar(CursorBarWidth::TWO));
-    }
-    if value.is_symbol_named("hbar") {
-        return Some(CursorSpec::hbar(CursorBarWidth::TWO));
+    if let Some(cursor_type) = CursorTypeSymbol::from_symbol_value(value) {
+        return Some(match cursor_type {
+            CursorTypeSymbol::Box => CursorSpec::filled_box(),
+            CursorTypeSymbol::Hollow => CursorSpec::hollow_box(),
+            CursorTypeSymbol::Bar => CursorSpec::bar(CursorBarWidth::TWO),
+            CursorTypeSymbol::Hbar => CursorSpec::hbar(CursorBarWidth::TWO),
+        });
     }
     if value.is_cons() {
         let car = value.cons_car();
         let cdr = value.cons_cdr();
-        if let Some(bar_width) = cdr.as_fixnum().and_then(CursorBarWidth::from_lisp_fixnum) {
-            if car.is_symbol_named("box") {
-                return Some(CursorSpec::new(CursorKind::FilledBox, bar_width));
-            }
-            if car.is_symbol_named("bar") {
-                return Some(CursorSpec::bar(bar_width));
-            }
-            if car.is_symbol_named("hbar") {
-                return Some(CursorSpec::hbar(bar_width));
-            }
+        if let (Some(cursor_type), Some(bar_width)) = (
+            CursorTypeSymbol::from_symbol_value(&car),
+            cdr.as_fixnum().and_then(CursorBarWidth::from_lisp_fixnum),
+        ) && cursor_type.accepts_width_tail()
+        {
+            return Some(match cursor_type {
+                CursorTypeSymbol::Box => CursorSpec::new(CursorKind::FilledBox, bar_width),
+                CursorTypeSymbol::Bar => CursorSpec::bar(bar_width),
+                CursorTypeSymbol::Hbar => CursorSpec::hbar(bar_width),
+                CursorTypeSymbol::Hollow => unreachable!("hollow does not accept a width tail"),
+            });
         }
     }
 
