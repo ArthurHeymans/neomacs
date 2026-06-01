@@ -18,6 +18,51 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::heap_types::LispString;
+use strum::EnumString;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+enum AbbrevSystemKeyword {
+    Force,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AbbrevSystemSetting {
+    User,
+    System,
+    Force,
+}
+
+impl AbbrevSystemSetting {
+    fn from_system_flag(flag: Value) -> Self {
+        if flag.is_nil() {
+            return Self::User;
+        }
+        match flag.as_symbol_name().and_then(|name| name.parse().ok()) {
+            Some(AbbrevSystemKeyword::Force) => Self::Force,
+            None => Self::System,
+        }
+    }
+
+    fn is_system(self) -> bool {
+        matches!(self, Self::System | Self::Force)
+    }
+
+    fn allows_user_abbrev_overwrite(self) -> bool {
+        matches!(self, Self::Force)
+    }
+
+    fn stored_property_value(self, flag: Value) -> Value {
+        match self {
+            Self::Force => Value::T,
+            Self::User | Self::System => flag,
+        }
+    }
+
+    fn marks_abbrevs_changed(self) -> bool {
+        matches!(self, Self::User)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // AbbrevManager -- kept for backward compat (eval.rs, pdump)
@@ -587,9 +632,9 @@ pub(crate) fn builtin_define_abbrev(
         .get_property_id(sym_id, intern(":system"))
         .is_some_and(|value| value.is_truthy());
 
-    let system_is_force = matches!(system_flag.as_symbol_name(), Some("force"));
-    if !system_flag.is_nil()
-        && !system_is_force
+    let system_setting = AbbrevSystemSetting::from_system_flag(system_flag);
+    if system_setting.is_system()
+        && !system_setting.allows_user_abbrev_overwrite()
         && existing_expansion.is_some_and(|value| !value.is_nil())
         && !existing_system
     {
@@ -607,8 +652,8 @@ pub(crate) fn builtin_define_abbrev(
     let mut plist_entries = Vec::new();
     for chunk in props.chunks_exact(2) {
         if let Some(prop_name) = chunk[0].as_symbol_name() {
-            let value = if prop_name == ":system" && system_is_force {
-                Value::T
+            let value = if prop_name == ":system" {
+                system_setting.stored_property_value(chunk[1])
             } else {
                 chunk[1]
             };
@@ -619,7 +664,7 @@ pub(crate) fn builtin_define_abbrev(
         .replace_symbol_plist_id(sym_id, plist_entries);
 
     let changed = existing_expansion != Some(expansion) || existing_hook != Some(hook);
-    if changed && system_flag.is_nil() {
+    if changed && system_setting.marks_abbrevs_changed() {
         eval.obarray_mut()
             .set_symbol_value("abbrevs-changed", Value::T);
     }

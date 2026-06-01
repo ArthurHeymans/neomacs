@@ -294,6 +294,102 @@ fn test_define_abbrev_and_lookup() {
 }
 
 #[test]
+fn abbrev_system_setting_matches_gnu_force_domain() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        AbbrevSystemSetting::from_system_flag(Value::NIL),
+        AbbrevSystemSetting::User
+    );
+    assert_eq!(
+        AbbrevSystemSetting::from_system_flag(Value::T),
+        AbbrevSystemSetting::System
+    );
+    assert_eq!(
+        AbbrevSystemSetting::from_system_flag(Value::symbol("force")),
+        AbbrevSystemSetting::Force
+    );
+    assert_eq!(
+        AbbrevSystemSetting::from_system_flag(Value::keyword(":force")),
+        AbbrevSystemSetting::System
+    );
+    assert_eq!(
+        AbbrevSystemSetting::from_system_flag(Value::string("force")),
+        AbbrevSystemSetting::System
+    );
+}
+
+#[test]
+fn define_abbrev_system_force_matches_gnu_overwrite_and_storage() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let table = builtin_make_abbrev_table(&mut eval, vec![]).unwrap();
+
+    builtin_define_abbrev(
+        &mut eval,
+        vec![table, Value::string("x"), Value::string("user")],
+    )
+    .unwrap();
+    eval.obarray_mut()
+        .set_symbol_value("abbrevs-changed", Value::NIL);
+
+    builtin_define_abbrev(
+        &mut eval,
+        vec![
+            table,
+            Value::string("x"),
+            Value::string("system"),
+            Value::NIL,
+            Value::keyword(":system"),
+            Value::T,
+        ],
+    )
+    .unwrap();
+
+    let expansion = builtin_abbrev_expansion(&mut eval, vec![Value::string("x"), table]).unwrap();
+    assert_eq!(expansion.as_utf8_str(), Some("user"));
+    let sym = builtin_abbrev_symbol(&mut eval, vec![Value::string("x"), table]).unwrap();
+    let sym_id = symbol_id(sym).expect("abbrev symbol");
+    assert!(
+        eval.obarray()
+            .get_property_id(sym_id, intern(":system"))
+            .unwrap_or(Value::NIL)
+            .is_nil()
+    );
+
+    builtin_define_abbrev(
+        &mut eval,
+        vec![
+            table,
+            Value::string("x"),
+            Value::string("forced"),
+            Value::NIL,
+            Value::keyword(":system"),
+            Value::symbol("force"),
+        ],
+    )
+    .unwrap();
+
+    let expansion = builtin_abbrev_expansion(&mut eval, vec![Value::string("x"), table]).unwrap();
+    assert_eq!(expansion.as_utf8_str(), Some("forced"));
+    assert_eq!(
+        eval.obarray()
+            .get_property_id(sym_id, intern(":system"))
+            .unwrap_or(Value::NIL),
+        Value::T
+    );
+    assert!(
+        eval.obarray()
+            .symbol_value("abbrevs-changed")
+            .copied()
+            .unwrap_or(Value::NIL)
+            .is_nil()
+    );
+}
+
+#[test]
 fn test_clear_abbrev_table() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
