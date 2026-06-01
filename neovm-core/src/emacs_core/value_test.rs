@@ -52,6 +52,39 @@ fn hash_table_domains_match_gnu_symbols() {
     );
     assert_eq!(HashTableWeakness::from_symbol_name("weak"), None);
     assert_eq!(HashTableWeakness::KeyOrValue.name(), "key-or-value");
+
+    assert_eq!(
+        HashTableMakeKeyword::from_symbol_value(&Value::keyword(":test")),
+        Some(HashTableMakeKeyword::Test)
+    );
+    assert_eq!(
+        HashTableMakeKeyword::from_symbol_value(&Value::keyword(":rehash-size")),
+        Some(HashTableMakeKeyword::RehashSize)
+    );
+    assert_eq!(
+        HashTableMakeKeyword::from_symbol_value(&Value::keyword(":purecopy")),
+        Some(HashTableMakeKeyword::Purecopy)
+    );
+    assert_eq!(HashTableMakeKeyword::from_symbol_name(":data"), None);
+    assert_eq!(
+        HashTableMakeKeyword::RehashThreshold.name(),
+        ":rehash-threshold"
+    );
+
+    assert_eq!(
+        HashTableLiteralKey::from_symbol_value(&Value::symbol("test")),
+        Some(HashTableLiteralKey::Test)
+    );
+    assert_eq!(
+        HashTableLiteralKey::from_symbol_value(&Value::symbol("data")),
+        Some(HashTableLiteralKey::Data)
+    );
+    assert_eq!(
+        HashTableLiteralKey::from_symbol_value(&Value::symbol("purecopy")),
+        Some(HashTableLiteralKey::Purecopy)
+    );
+    assert_eq!(HashTableLiteralKey::from_symbol_name(":test"), None);
+    assert_eq!(HashTableLiteralKey::RehashSize.name(), "rehash-size");
 }
 
 #[test]

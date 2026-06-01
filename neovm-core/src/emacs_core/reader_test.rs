@@ -3861,7 +3861,8 @@ fn read_from_string_hash_bracket_end_position() {
 fn read_from_string_hash_table_literal_returns_hash_table() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let input = "#s(hash-table size 3 test equal data (\"a\" 1 \"b\" 2))";
+    let input =
+        "#s(hash-table size 3 test equal purecopy t unknown-key ignored data (\"a\" 1 \"b\" 2))";
     let result = builtin_read_from_string(&mut ev, vec![Value::string(input)]).unwrap();
     if !result.is_cons() {
         panic!("Expected cons");

@@ -1,7 +1,7 @@
 use super::*;
 use crate::emacs_core::eval::LispArgVec;
 use crate::emacs_core::hashtab::hash_key_to_visible_value;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::{HashTableMakeKeyword, ValueKind, VecLikeType};
 
 // ===========================================================================
 // Vector operations
@@ -479,12 +479,16 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
         let arg = args[i];
         i -= 1;
         let kw = args[i];
-        match kw.as_symbol_name() {
-            Some(":test") => test_arg = arg,
-            Some(":weakness") => weakness_arg = arg,
-            Some(":size") => size_arg = arg,
-            Some(":rehash-threshold") | Some(":rehash-size") | Some(":purecopy") => {}
-            _ => return Err(invalid_hash_table_keyword_argument(kw)),
+        match HashTableMakeKeyword::from_symbol_value(&kw) {
+            Some(HashTableMakeKeyword::Test) => test_arg = arg,
+            Some(HashTableMakeKeyword::Weakness) => weakness_arg = arg,
+            Some(HashTableMakeKeyword::Size) => size_arg = arg,
+            Some(
+                HashTableMakeKeyword::RehashThreshold
+                | HashTableMakeKeyword::RehashSize
+                | HashTableMakeKeyword::Purecopy,
+            ) => {}
+            None => return Err(invalid_hash_table_keyword_argument(kw)),
         }
     }
 

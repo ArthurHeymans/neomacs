@@ -65,6 +65,8 @@ fn hash_table_rehash_options_are_ignored() {
         Value::make_float(2.0),
         Value::keyword(":rehash-threshold"),
         Value::make_float(0.9),
+        Value::keyword(":purecopy"),
+        Value::T,
     ])
     .unwrap();
 

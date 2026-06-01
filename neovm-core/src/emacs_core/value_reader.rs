@@ -23,8 +23,8 @@ use smallvec::SmallVec;
 
 use super::builtins::collections::lookup_hash_table_test_alias;
 use super::value::{
-    HashTableTest, HashTableWeakness, StringTextPropertyRun, Value, build_hash_table_literal_value,
-    eq_value, get_string_text_properties_for_value, list_to_vec,
+    HashTableLiteralKey, HashTableTest, HashTableWeakness, StringTextPropertyRun, Value,
+    build_hash_table_literal_value, eq_value, get_string_text_properties_for_value, list_to_vec,
     set_string_text_properties_for_value,
 };
 
@@ -49,10 +49,10 @@ fn apply_control_modifier(value: u32) -> u32 {
     }
 }
 
-fn plist_get(plist: &[Value], key: &str) -> Option<Value> {
+fn plist_get(plist: &[Value], key: HashTableLiteralKey) -> Option<Value> {
     let mut i = 0;
     while i + 1 < plist.len() {
-        if plist[i].as_symbol_name() == Some(key) {
+        if HashTableLiteralKey::from_symbol_value(&plist[i]) == Some(key) {
             return Some(plist[i + 1]);
         }
         i += 2;
@@ -1851,7 +1851,7 @@ impl<'a> Reader<'a> {
         let mut user_cmp_function = None;
         let mut user_hash_function = None;
 
-        if let Some(test_value) = plist_get(plist, "test") {
+        if let Some(test_value) = plist_get(plist, HashTableLiteralKey::Test) {
             if !test_value.is_nil() {
                 let Some(name) = test_value.as_symbol_name() else {
                     return Err(self.signal_error(
@@ -1880,7 +1880,7 @@ impl<'a> Reader<'a> {
             }
         }
 
-        let weakness = match plist_get(plist, "weakness") {
+        let weakness = match plist_get(plist, HashTableLiteralKey::Weakness) {
             None => None,
             Some(value) if value.is_nil() => None,
             Some(value) if value.is_t() => Some(HashTableWeakness::KeyAndValue),
@@ -1905,7 +1905,7 @@ impl<'a> Reader<'a> {
             }
         };
 
-        let data_value = plist_get(plist, "data").unwrap_or(Value::NIL);
+        let data_value = plist_get(plist, HashTableLiteralKey::Data).unwrap_or(Value::NIL);
         let data = if data_value.is_nil() {
             Vec::new()
         } else if !data_value.is_cons() {

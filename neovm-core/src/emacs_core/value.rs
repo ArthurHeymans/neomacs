@@ -619,6 +619,57 @@ impl HashTableWeakness {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+pub(crate) enum HashTableMakeKeyword {
+    Test,
+    Size,
+    Purecopy,
+    RehashSize,
+    RehashThreshold,
+    Weakness,
+}
+
+impl HashTableMakeKeyword {
+    pub(crate) fn from_symbol_name(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    pub(crate) fn from_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum HashTableLiteralKey {
+    Test,
+    Size,
+    Purecopy,
+    RehashSize,
+    RehashThreshold,
+    Weakness,
+    Data,
+}
+
+impl HashTableLiteralKey {
+    pub(crate) fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub(crate) fn from_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 /// Key type that supports hashing for `eq`, `eql`, and `equal` tests.
 #[derive(Clone, Debug)]
 pub enum HashKey {

@@ -6067,27 +6067,31 @@ fn try_convert_hash_table_literal(val: Value) -> Option<Value> {
     while i + 1 < spec.len() {
         let key = spec[i].as_symbol_name()?;
         let value = spec[i + 1];
+        let Some(key) = HashTableLiteralKey::from_symbol_name(key) else {
+            i += 2;
+            continue;
+        };
         match key {
-            "size" => size = value.as_int()?,
-            "test" => {
+            HashTableLiteralKey::Size => size = value.as_int()?,
+            HashTableLiteralKey::Test => {
                 let name = value.as_symbol_name()?;
                 test = HashTableTest::from_symbol_name(name)?;
                 test_name = Some(intern(name));
             }
-            "weakness" => {
+            HashTableLiteralKey::Weakness => {
                 weakness = match value.as_symbol_name() {
                     Some("nil") | None => None,
                     Some(name) => Some(HashTableWeakness::from_symbol_name(name)?),
                 };
             }
-            "rehash-size" => {
+            HashTableLiteralKey::RehashSize => {
                 rehash_size = value.as_float().unwrap_or(value.as_int()? as f64);
             }
-            "rehash-threshold" => {
+            HashTableLiteralKey::RehashThreshold => {
                 rehash_threshold = value.as_float().unwrap_or(value.as_int()? as f64);
             }
-            "data" => data_value = Some(value),
-            _ => {}
+            HashTableLiteralKey::Data => data_value = Some(value),
+            HashTableLiteralKey::Purecopy => {}
         }
         i += 2;
     }
