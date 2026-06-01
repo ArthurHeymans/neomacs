@@ -1216,30 +1216,31 @@ impl WindowDisplaySnapshot {
         if pos < visible_start || pos > visible_end {
             return None;
         }
-        match self
+        let idx = self.points.partition_point(|point| point.buffer_pos < pos);
+        if self
             .points
-            .binary_search_by_key(&pos, |point| point.buffer_pos)
+            .get(idx)
+            .is_some_and(|point| point.buffer_pos == pos)
         {
-            Ok(idx) => self.points.get(idx),
-            Err(_) => {
-                let row = self.row_for_buffer_pos(pos)?;
-                let next_on_row = self
-                    .points
-                    .iter()
-                    .find(|point| point.row == row.row && point.buffer_pos > pos);
-                let prev_on_row = self
-                    .points
-                    .iter()
-                    .rev()
-                    .find(|point| point.row == row.row && point.buffer_pos < pos);
-                match (prev_on_row, next_on_row) {
-                    // GNU `posn-at-point` may report neighboring positions when
-                    // the requested buffer position is hidden by redisplay
-                    // within the same visible row, but it returns nil when the
-                    // position is not visible at all.
-                    (Some(_), Some(next)) => Some(next),
-                    _ => None,
-                }
+            self.points.get(idx)
+        } else {
+            let row = self.row_for_buffer_pos(pos)?;
+            let next_on_row = self
+                .points
+                .iter()
+                .find(|point| point.row == row.row && point.buffer_pos > pos);
+            let prev_on_row = self
+                .points
+                .iter()
+                .rev()
+                .find(|point| point.row == row.row && point.buffer_pos < pos);
+            match (prev_on_row, next_on_row) {
+                // GNU `posn-at-point` may report neighboring positions when
+                // the requested buffer position is hidden by redisplay
+                // within the same visible row, but it returns nil when the
+                // position is not visible at all.
+                (Some(_), Some(next)) => Some(next),
+                _ => None,
             }
         }
     }
@@ -1253,7 +1254,13 @@ impl WindowDisplaySnapshot {
             .rows
             .iter()
             .find(|row| y >= row.y && y < row.y.saturating_add(row.height.max(1)))?;
-        let mut row_points = self.points.iter().filter(|point| point.row == row.row);
+        let mut row_points: Vec<_> = self
+            .points
+            .iter()
+            .filter(|point| point.row == row.row)
+            .collect();
+        row_points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
+        let mut row_points = row_points.into_iter();
         let mut last = row_points.next()?;
         if x <= last.x {
             return Some(last);

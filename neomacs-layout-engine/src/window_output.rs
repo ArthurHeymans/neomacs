@@ -390,6 +390,8 @@ impl WindowOutputEmitter {
         let window_id = self.window_id;
         let logical_cursor = self.logical_cursor.take();
         let phys_cursor = self.phys_cursor.take();
+        self.points
+            .sort_by_key(|point| (point.buffer_pos, point.row, point.col, point.x));
         self.rows.sort_by_key(|row| row.row);
         let snapshot = WindowDisplaySnapshot {
             window_id,

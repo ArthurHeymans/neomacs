@@ -678,10 +678,16 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
 
     let frame_id = eval.frame_manager_mut().create_frame(
         "layout-cursor-current-glyph-advance",
-        320,
-        120,
+        800,
+        400,
         buf_id,
     );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -703,12 +709,13 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         }
     }
 
+    let mut engine = LayoutEngine::new();
+    engine.enable_cosmic_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let face_font_size = frame.font_pixel_size;
     let mut metrics = FontMetricsService::new();
-    let face_font_size = eval
-        .frame_manager()
-        .get(frame_id)
-        .expect("frame")
-        .font_pixel_size;
     let expected_i = metrics
         .char_width('i', "Noto Sans", 400, false, face_font_size)
         .round() as i64;
@@ -719,12 +726,6 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         expected_i, expected_w,
         "test requires proportional metrics for i and W"
     );
-
-    let mut engine = LayoutEngine::new();
-    engine.enable_cosmic_metrics();
-    engine.layout_frame_rust(&mut eval, frame_id);
-
-    let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
         .window_display_snapshot(selected_window)
         .expect("display snapshot");
@@ -1157,7 +1158,13 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
 
     let frame_id = eval
         .frame_manager_mut()
-        .create_frame("layout-display-cursor", 320, 120, buf_id);
+        .create_frame("layout-display-cursor", 800, 400, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
     let selected_window = eval
         .frame_manager()
         .get(frame_id)

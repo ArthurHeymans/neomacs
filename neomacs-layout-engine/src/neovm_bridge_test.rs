@@ -2,7 +2,7 @@ use super::*;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
 use neovm_core::buffer::BufferManager;
 use neovm_core::emacs_core::value::Value;
-use neovm_core::window::{FrameManager, Rect as NeoRect, WindowId};
+use neovm_core::window::{FrameManager, FrameParam, Rect as NeoRect, WindowId};
 
 fn eval_lisp(eval: &mut neovm_core::emacs_core::Context, source: &str) -> Value {
     eval.eval_str(source).expect("evaluate form")
@@ -520,6 +520,12 @@ fn test_frame_cursor_color_uses_cursor_face_background() {
     let frame_id = evaluator
         .frame_manager_mut()
         .create_frame("test", 800, 600, buf_id);
+    evaluator
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .unwrap()
+        .parameters
+        .remove(&FrameParam::CursorColor.symbol());
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
 
     let cursor_color = frame_cursor_color_pixel(frame, evaluator.face_table());
@@ -531,6 +537,22 @@ fn test_frame_cursor_color_uses_cursor_face_background() {
         .unwrap();
 
     assert_eq!(cursor_color, expected);
+}
+
+#[test]
+fn test_frame_cursor_color_prefers_frame_parameter_like_gnu() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*cursor-color*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+
+    let cursor_color = frame_cursor_color_pixel(frame, evaluator.face_table());
+
+    assert_eq!(cursor_color, 0xFFFFFF);
 }
 
 #[test]
