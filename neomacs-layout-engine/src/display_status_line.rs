@@ -20,6 +20,7 @@
 //! display-engine unification plan merged it into the backend
 //! trait and renamed the file to reflect its new role.
 
+use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
 use super::engine::LayoutEngine;
 use super::neovm_bridge::{FaceResolver, ResolvedFace};
 use super::unicode::decode_utf8;
@@ -965,10 +966,7 @@ impl LayoutEngine {
             // (strings, images, margin specs) follow their own paths
             // that status_line.rs does not yet support; they remain
             // TODO for future commits.
-            if !disp_prop.is_cons() {
-                continue;
-            }
-            if !disp_prop.cons_car().is_symbol_named("space") {
+            if !is_display_space_spec(disp_prop) {
                 continue;
             }
             let byte_start = char_index_to_byte(&spec.text, interval.start);
@@ -983,46 +981,62 @@ impl LayoutEngine {
             while i + 1 < items.len() && !done {
                 let key = items[i];
                 let val = items[i + 1];
-                if key.is_symbol_named(":width") {
-                    if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
-                        let byte_offset =
-                            (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
-                        spec.display_props.push(DisplayPropRecord {
-                            byte_offset,
-                            covers_bytes,
-                            width: (pixels as u16).max(0),
-                        });
-                        done = true;
+                match DisplaySpaceKey::from_lisp_value(key) {
+                    Some(DisplaySpaceKey::Width) => {
+                        if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
+                            let byte_offset =
+                                (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
+                            spec.display_props.push(DisplayPropRecord {
+                                byte_offset,
+                                covers_bytes,
+                                width: (pixels as u16).max(0),
+                            });
+                            done = true;
+                        }
                     }
-                } else if key.is_symbol_named(":align-to") {
-                    let mut align_to: i32 = -1;
-                    if let Some(pixels) =
-                        calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
-                    {
-                        // See the buffer-text analogue in
-                        // engine.rs::eval_display_space_as_width for
-                        // the same shape of post-processing: if the
-                        // expression contained a window-box symbol
-                        // (`right`, `text`, …) it resolved a base
-                        // position and `pixels` is the offset from it;
-                        // otherwise `pixels` is a column-relative
-                        // offset and the caller adds content_x. For
-                        // status-line-local coordinates, content_x is
-                        // 0.
-                        let target_x = if align_to >= 0 {
-                            align_to as f32 + pixels as f32
-                        } else {
-                            pixels as f32
-                        };
-                        let byte_offset =
-                            (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
-                        spec.align_entries.push(OverlayAlignEntry {
-                            byte_offset,
-                            covers_bytes,
-                            align_to_px: target_x,
-                        });
-                        done = true;
+                    Some(DisplaySpaceKey::RelativeWidth) => {
+                        if let Some(factor) = display_space_positive_number(val) {
+                            let byte_offset =
+                                (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
+                            spec.display_props.push(DisplayPropRecord {
+                                byte_offset,
+                                covers_bytes,
+                                width: (factor * char_width).round().max(0.0) as u16,
+                            });
+                            done = true;
+                        }
                     }
+                    Some(DisplaySpaceKey::AlignTo) => {
+                        let mut align_to: i32 = -1;
+                        if let Some(pixels) =
+                            calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
+                        {
+                            // See the buffer-text analogue in
+                            // engine.rs::eval_display_space_as_width for
+                            // the same shape of post-processing: if the
+                            // expression contained a window-box symbol
+                            // (`right`, `text`, …) it resolved a base
+                            // position and `pixels` is the offset from it;
+                            // otherwise `pixels` is a column-relative
+                            // offset and the caller adds content_x. For
+                            // status-line-local coordinates, content_x is
+                            // 0.
+                            let target_x = if align_to >= 0 {
+                                align_to as f32 + pixels as f32
+                            } else {
+                                pixels as f32
+                            };
+                            let byte_offset =
+                                (byte_start as u16).min(spec.text.len().saturating_sub(1) as u16);
+                            spec.align_entries.push(OverlayAlignEntry {
+                                byte_offset,
+                                covers_bytes,
+                                align_to_px: target_x,
+                            });
+                            done = true;
+                        }
+                    }
+                    _ => {}
                 }
                 i += 2;
             }

@@ -2116,6 +2116,30 @@ fn display_space_width_spec(columns: i64) -> Value {
     ])
 }
 
+fn display_space_relative_width_spec(factor: i64) -> Value {
+    Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword("relative-width"),
+        Value::fixnum(factor),
+    ])
+}
+
+#[test]
+fn display_space_relative_width_uses_displayed_character_width() {
+    let _eval = Context::new();
+    let params = test_window_params();
+    let width = eval_display_space_as_width(
+        &display_space_relative_width_spec(2),
+        0.0,
+        0.0,
+        8.0,
+        16.0,
+        &params,
+    );
+
+    assert_eq!(width, 32.0);
+}
+
 fn scaled_face_plist() -> Value {
     Value::list(vec![
         Value::keyword("family"),

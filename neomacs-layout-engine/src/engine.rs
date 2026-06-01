@@ -4,6 +4,7 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
+use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
 use super::display_status_line::*;
 use super::font_metrics::{FontMetrics, FontMetricsService};
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -755,15 +756,6 @@ fn next_window_start_for_point_line_continuation<B: super::neovm_bridge::LayoutB
 // Display property helpers
 // ---------------------------------------------------------------------------
 
-/// Check if a Value is a space display spec: a cons whose car is the symbol `space`.
-/// e.g., `(space :width 5)` or `(space :align-to 40)`
-fn is_display_space_spec(val: &neovm_core::emacs_core::Value) -> bool {
-    if val.is_cons() {
-        return val.cons_car().is_symbol_named("space");
-    }
-    false
-}
-
 /// Evaluate a `(space :width …)` or `(space :align-to …)` display
 /// spec into a pixel width relative to `current_x`.
 ///
@@ -786,6 +778,7 @@ fn eval_display_space_as_width(
     current_x: f32,
     content_x: f32,
     face_char_w: f32,
+    display_char_width: f32,
     params: &WindowParams,
 ) -> f32 {
     use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
@@ -827,29 +820,38 @@ fn eval_display_space_as_width(
     while i + 1 < items.len() {
         let key = items[i];
         let val = items[i + 1];
-        if key.is_symbol_named(":width") {
-            if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
-                return pixels as f32;
+        match DisplaySpaceKey::from_lisp_value(key) {
+            Some(DisplaySpaceKey::Width) => {
+                if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, None) {
+                    return pixels as f32;
+                }
+                return params.char_width.max(1.0);
             }
-            return params.char_width.max(1.0);
-        }
-        if key.is_symbol_named(":align-to") {
-            let mut align_to: i32 = -1;
-            if let Some(pixels) = calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
-            {
-                // If the expression contained a symbol like `right`,
-                // `align_to` was updated to that position and `pixels`
-                // is the offset from it. Otherwise (numeric-only
-                // :align-to N), `align_to` is still -1 and `pixels`
-                // is a column-relative offset from `content_x`.
-                let target_x = if align_to >= 0 {
-                    align_to as f32 + pixels as f32
-                } else {
-                    content_x + pixels as f32
-                };
-                return (target_x - current_x).max(0.0);
+            Some(DisplaySpaceKey::RelativeWidth) => {
+                if let Some(factor) = display_space_positive_number(val) {
+                    return factor * display_char_width.max(0.0);
+                }
             }
-            return params.char_width.max(1.0);
+            Some(DisplaySpaceKey::AlignTo) => {
+                let mut align_to: i32 = -1;
+                if let Some(pixels) =
+                    calc_pixel_width_or_height(&pctx, &val, true, Some(&mut align_to))
+                {
+                    // If the expression contained a symbol like `right`,
+                    // `align_to` was updated to that position and `pixels`
+                    // is the offset from it. Otherwise (numeric-only
+                    // :align-to N), `align_to` is still -1 and `pixels`
+                    // is a column-relative offset from `content_x`.
+                    let target_x = if align_to >= 0 {
+                        align_to as f32 + pixels as f32
+                    } else {
+                        content_x + pixels as f32
+                    };
+                    return (target_x - current_x).max(0.0);
+                }
+                return params.char_width.max(1.0);
+            }
+            _ => {}
         }
         i += 2;
     }
@@ -1551,8 +1553,14 @@ fn render_overlay_string(
             }
 
             if is_display_space_spec(&display_prop) {
-                let space_width =
-                    eval_display_space_as_width(&display_prop, *x, content_x, face_char_w, params);
+                let space_width = eval_display_space_as_width(
+                    &display_prop,
+                    *x,
+                    content_x,
+                    face_char_w,
+                    face_char_w,
+                    params,
+                );
                 if space_width > 0.0 && *x < max_x {
                     let width_cols = display_width_cols(space_width, params.char_width);
                     let face_id = overlay_string_face_id_at(
@@ -4315,11 +4323,37 @@ impl LayoutEngine {
                     if is_display_space_spec(&prop_val) {
                         let replacement_start_x = x;
                         let replacement_start_col = col;
+                        let (display_ch, _) = decode_utf8(&text[byte_idx..]);
+                        let display_ch_cols = if is_cluster_extender(display_ch) {
+                            0
+                        } else if is_wide_char(display_ch) {
+                            2
+                        } else {
+                            1
+                        };
+                        let display_char_width = if display_ch_cols == 0 {
+                            0.0
+                        } else {
+                            char_pixel_advance(
+                                &mut self.ascii_width_cache,
+                                frame_params.window_system,
+                                &mut self.font_metrics,
+                                display_ch,
+                                display_ch_cols,
+                                char_w,
+                                current_font_size_px,
+                                face_char_w,
+                                &self.current_resolved_family,
+                                current_font_weight,
+                                current_font_italic,
+                            )
+                        };
                         let space_width = eval_display_space_as_width(
                             &prop_val,
                             x,
                             content_x,
                             face_char_w,
+                            display_char_width,
                             params,
                         );
                         if point_in_display_replacement {

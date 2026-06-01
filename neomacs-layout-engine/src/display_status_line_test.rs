@@ -612,6 +612,58 @@ fn build_rust_status_line_spec_preserves_display_space_align_entries() {
 }
 
 #[test]
+fn build_rust_status_line_spec_supports_display_space_relative_width() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let mut engine = LayoutEngine::new();
+    let table = neovm_core::face::FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let rendered = Value::string("C R");
+    neovm_core::emacs_core::value::set_string_text_properties_for_value(
+        rendered,
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("relative-width"),
+                    Value::fixnum(2),
+                ]),
+            ]),
+        }],
+    );
+
+    let mut next_face_id = 1;
+    let spec = engine
+        .build_rust_status_line_spec(
+            0.0,
+            0.0,
+            80.0,
+            16.0,
+            1,
+            8.0,
+            12.0,
+            &mut next_face_id,
+            resolver.default_face(),
+            rendered,
+            &resolver,
+            HashMap::new(),
+            StatusLineKind::HeaderLine,
+        )
+        .expect("status line spec");
+
+    assert_eq!(spec.display_props.len(), 1);
+    assert_eq!(spec.display_props[0].byte_offset, 1);
+    assert_eq!(spec.display_props[0].covers_bytes, 1);
+    assert_eq!(
+        spec.display_props[0].width,
+        (2.0 * spec.char_width).round() as u16
+    );
+    assert!(spec.align_entries.is_empty());
+}
+
+#[test]
 fn render_status_line_spec_skips_zero_gap_align_to_placeholder_space() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();
