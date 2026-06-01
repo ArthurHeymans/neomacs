@@ -6120,7 +6120,7 @@ impl LayoutEngine {
         }
 
         // Render fill-column indicator
-        if params.fill_column_indicator > 0 {
+        if params.fill_column_indicator >= 0 {
             let fci_col = params.fill_column_indicator;
             let _fci_char = params.fill_column_indicator_char;
             let _fci_fg = if params.fill_column_indicator_fg != 0 {

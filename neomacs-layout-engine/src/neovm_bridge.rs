@@ -535,6 +535,32 @@ pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     DisplayLineNumbersMode::from_lisp_value(buffer_local_value(buffer, "display-line-numbers"))
 }
 
+fn buffer_fill_column_indicator<B: LayoutBufferView>(buffer: &B) -> Option<(i32, char)> {
+    // GNU `fill_column_indicator_column` in xdisp.c enables the indicator only
+    // when `display-fill-column-indicator` is non-nil, the indicator character
+    // satisfies CHARACTERP, and the effective column is a nonnegative integer.
+    if !buffer_local_bool(buffer, "display-fill-column-indicator") {
+        return None;
+    }
+
+    let character_value = buffer_local_value(buffer, "display-fill-column-indicator-character")?;
+    if !character_value.is_char() {
+        return None;
+    }
+    let character = character_value.as_char()?;
+
+    let column_value = match buffer_local_value(buffer, "display-fill-column-indicator-column") {
+        Some(value) if value.bits() == Value::T.bits() => buffer_local_value(buffer, "fill-column"),
+        value => value,
+    }?;
+    let column = column_value.as_fixnum()?;
+    if column < 0 || column > i32::MAX as i64 {
+        return None;
+    }
+
+    Some((column as i32, character))
+}
+
 pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {
     match buffer_local_value(buffer, "selective-display") {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as i32,
@@ -1036,6 +1062,7 @@ pub fn window_params_from_neovm(
     });
     let visual_cursors = parse_visual_cursors(buffer, cursor_color);
     let x_stretch_cursor = global_bool(obarray, "x-stretch-cursor");
+    let fill_column_indicator = buffer_fill_column_indicator(buffer);
 
     let header_line_height = if wants_header_line {
         let header_line_face_name = if is_selected {
@@ -1140,9 +1167,12 @@ pub fn window_params_from_neovm(
         },
         show_trailing_whitespace: buffer_local_bool(buffer, "show-trailing-whitespace"),
         trailing_ws_bg: 0,
-        fill_column_indicator: buffer_local_int(buffer, "display-fill-column-indicator-column", 0)
-            as i32,
-        fill_column_indicator_char: '|',
+        fill_column_indicator: fill_column_indicator
+            .map(|(column, _)| column)
+            .unwrap_or(-1),
+        fill_column_indicator_char: fill_column_indicator
+            .map(|(_, character)| character)
+            .unwrap_or('|'),
         fill_column_indicator_fg: 0,
         extra_line_spacing: match buffer_local_value(buffer, "line-spacing") {
             Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() as f32,

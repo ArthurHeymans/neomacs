@@ -627,6 +627,43 @@ fn test_window_params_buffer_locals() {
 }
 
 #[test]
+fn window_params_fill_column_indicator_follows_gnu_conditions() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator.buffer_manager_mut().create_buffer("*fci*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).unwrap();
+    assert_eq!(wps[0].fill_column_indicator, -1);
+
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.set_buffer_local("display-fill-column-indicator", Value::T);
+        buf.set_buffer_local("display-fill-column-indicator-character", Value::char('|'));
+        buf.set_buffer_local("display-fill-column-indicator-column", Value::T);
+        buf.set_buffer_local("fill-column", Value::fixnum(73));
+    }
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).unwrap();
+    assert_eq!(wps[0].fill_column_indicator, 73);
+    assert_eq!(wps[0].fill_column_indicator_char, '|');
+
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.set_buffer_local("display-fill-column-indicator-column", Value::fixnum(0));
+    }
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).unwrap();
+    assert_eq!(wps[0].fill_column_indicator, 0);
+
+    {
+        let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
+        buf.set_buffer_local("display-fill-column-indicator-character", Value::NIL);
+    }
+    let (_, wps) = collect_layout_params(&evaluator, frame_id, None).unwrap();
+    assert_eq!(wps[0].fill_column_indicator, -1);
+}
+
+#[test]
 fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
     use neovm_core::window::SplitDirection;
 
