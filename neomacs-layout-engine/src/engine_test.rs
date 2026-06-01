@@ -1438,6 +1438,10 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
                 Value::fixnum(32),
                 Value::keyword("max-height"),
                 Value::fixnum(24),
+                Value::keyword("foreground"),
+                Value::string("#112233"),
+                Value::keyword("background"),
+                Value::string("red"),
             ]),
         );
     }
@@ -1462,6 +1466,8 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].max_width, 32);
     assert_eq!(requests[0].max_height, 24);
+    assert_eq!(requests[0].fg_color, 0x112233);
+    assert_eq!(requests[0].bg_color, 0xff0000);
 }
 
 #[test]

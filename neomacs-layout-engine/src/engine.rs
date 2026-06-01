@@ -24,9 +24,11 @@ use neovm_core::emacs_core::eval::{
     ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
 };
+use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::keymap::is_list_keymap;
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
+use neovm_core::face::Color as LispColor;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot, WindowId,
@@ -928,6 +930,13 @@ fn parse_image_scale(value: Value) -> Option<f32> {
     }
 }
 
+fn parse_image_color_pixel(value: Value) -> Option<u32> {
+    let color = value
+        .as_lisp_string()
+        .and_then(|name| LispColor::parse(name.as_utf8_str()?))?;
+    Some(((color.r as u32) << 16) | ((color.g as u32) << 8) | color.b as u32)
+}
+
 fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
     let raw = evaluator
         .obarray()
@@ -993,7 +1002,11 @@ fn minibuffer_echo_message_for_window(
     current_message.filter(|message| !message.is_empty())
 }
 
-fn parse_display_image_layout(prop_val: &Value) -> Option<DisplayImageLayout> {
+fn parse_display_image_layout(
+    prop_val: &Value,
+    default_fg: u32,
+    default_bg: u32,
+) -> Option<DisplayImageLayout> {
     let items = list_to_vec(prop_val)?;
     if items.first()?.as_symbol_name() != Some("image") {
         return None;
@@ -1003,31 +1016,38 @@ fn parse_display_image_layout(prop_val: &Value) -> Option<DisplayImageLayout> {
     let mut max_width = 0u32;
     let mut max_height = 0u32;
     let mut scale = 1.0f32;
+    let mut fg_color = default_fg;
+    let mut bg_color = default_bg;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
-        let key = items[i].as_symbol_name();
         let value = items[i + 1];
-        match key {
-            Some(":file") => {
+        match ImageSpecKey::from_lisp_value(items[i]) {
+            Some(ImageSpecKey::File) => {
                 source = value
                     .as_lisp_string()
                     .cloned()
                     .map(ImageResolveSource::File);
             }
-            Some(":data") => {
+            Some(ImageSpecKey::Data) => {
                 source = value
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
             }
-            Some(":width") | Some(":max-width") => {
+            Some(ImageSpecKey::Width | ImageSpecKey::MaxWidth) => {
                 max_width = parse_image_dimension(value).unwrap_or(max_width);
             }
-            Some(":height") | Some(":max-height") => {
+            Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
                 max_height = parse_image_dimension(value).unwrap_or(max_height);
             }
-            Some(":scale") => {
+            Some(ImageSpecKey::Scale) => {
                 scale = parse_image_scale(value).unwrap_or(scale);
+            }
+            Some(ImageSpecKey::Foreground) => {
+                fg_color = parse_image_color_pixel(value).unwrap_or(fg_color);
+            }
+            Some(ImageSpecKey::Background) => {
+                bg_color = parse_image_color_pixel(value).unwrap_or(bg_color);
             }
             _ => {}
         }
@@ -1039,8 +1059,8 @@ fn parse_display_image_layout(prop_val: &Value) -> Option<DisplayImageLayout> {
             source: source?,
             max_width,
             max_height,
-            fg_color: 0,
-            bg_color: 0,
+            fg_color,
+            bg_color,
         },
         scale,
     })
@@ -4412,7 +4432,12 @@ impl LayoutEngine {
                     if is_display_image_spec(&prop_val) {
                         let replacement_start_x = x;
                         let replacement_start_col = col;
-                        let maybe_image = parse_display_image_layout(&prop_val).and_then(|spec| {
+                        let maybe_image = parse_display_image_layout(
+                            &prop_val,
+                            current_resolved_face.fg,
+                            current_resolved_face.bg,
+                        )
+                        .and_then(|spec| {
                             evaluator
                                 .display_host
                                 .as_ref()
