@@ -13,8 +13,8 @@ use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager};
 use crate::window::{
-    FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection, Window,
-    WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
+    CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
+    Window, WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
@@ -1698,16 +1698,15 @@ fn is_valid_cursor_type(value: Value) -> bool {
     if value.is_nil() || value == Value::T {
         return true;
     }
-    if let Some(name) = value.as_symbol_name() {
-        if matches!(name, "box" | "hollow" | "bar" | "hbar") {
-            return true;
-        }
+    if CursorTypeSymbol::from_symbol_value(&value).is_some() {
+        return true;
     }
     if matches!(value.kind(), crate::emacs_core::value::ValueKind::Cons) {
         let head_ok = value
             .cons_car()
             .as_symbol_name()
-            .is_some_and(|n| matches!(n, "box" | "bar" | "hbar"));
+            .and_then(CursorTypeSymbol::from_symbol_name)
+            .is_some_and(CursorTypeSymbol::accepts_width_tail);
         let tail = value.cons_cdr();
         let tail_ok = tail.is_integer();
         return head_ok && tail_ok;

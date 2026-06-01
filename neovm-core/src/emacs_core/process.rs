@@ -30,6 +30,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use strum::{EnumString, IntoStaticStr};
 
 /// A TLS-wrapped TCP stream using rustls.
 /// The underlying `TcpStream` is owned by `StreamOwned`, so when TLS is active
@@ -55,12 +56,19 @@ use crate::window::FrameManager;
 pub type ProcessId = u64;
 
 /// Process family used by compatibility helpers.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ProcessKind {
     Real,
     Network,
     Pipe,
     Serial,
+}
+
+impl ProcessKind {
+    fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 /// A tracked process record.
@@ -197,12 +205,7 @@ fn process_name_runtime(name: Value) -> String {
 }
 
 fn process_type_value(kind: &ProcessKind) -> Value {
-    Value::symbol(match kind {
-        ProcessKind::Real => "real",
-        ProcessKind::Network => "network",
-        ProcessKind::Pipe => "pipe",
-        ProcessKind::Serial => "serial",
-    })
+    Value::symbol(kind.name())
 }
 
 fn make_process_command_lisp_value(
@@ -2901,10 +2904,63 @@ fn value_as_nonnegative_integer(value: &Value) -> Option<i64> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 enum NetworkAddressFamily {
+    #[strum(serialize = "ipv4")]
     Ipv4,
+    #[strum(serialize = "ipv6")]
     Ipv6,
+}
+
+impl NetworkAddressFamily {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ProcessConnectionType {
+    Pipe,
+    Pty,
+}
+
+impl ProcessConnectionType {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn uses_pty(self) -> bool {
+        matches!(self, Self::Pty)
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+fn resolve_process_connection_type_use_pty(
+    connection_type: Option<&Value>,
+    default_use_pty: bool,
+) -> Result<bool, Flow> {
+    match connection_type {
+        None => Ok(default_use_pty),
+        Some(value) if value.is_nil() => Ok(default_use_pty),
+        Some(value) => ProcessConnectionType::from_symbol_value(value)
+            .map(ProcessConnectionType::uses_pty)
+            .ok_or_else(|| {
+                signal(
+                    "file-error",
+                    vec![Value::string("Unknown connection type"), *value],
+                )
+            }),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3857,22 +3913,17 @@ pub(crate) fn builtin_network_interface_list_impl(args: Vec<Value>) -> EvalResul
 
     let full = args.first().is_some_and(|v| v.is_truthy());
     let family = args.get(1).cloned().unwrap_or(Value::NIL);
-    let include_ipv4 = if family.is_nil() {
-        true
+    let requested_family = if family.is_nil() {
+        None
     } else {
-        matches!(family.as_symbol_name(), Some("ipv4"))
+        Some(
+            NetworkAddressFamily::from_symbol_value(&family).ok_or_else(|| {
+                signal("error", vec![Value::string("Unsupported address family")])
+            })?,
+        )
     };
-    let include_ipv6 = if family.is_nil() {
-        true
-    } else {
-        matches!(family.as_symbol_name(), Some("ipv6"))
-    };
-    if !family.is_nil() && !include_ipv4 && !include_ipv6 {
-        return Err(signal(
-            "error",
-            vec![Value::string("Unsupported address family")],
-        ));
-    }
+    let include_ipv4 = requested_family.is_none_or(|family| family == NetworkAddressFamily::Ipv4);
+    let include_ipv6 = requested_family.is_none_or(|family| family == NetworkAddressFamily::Ipv6);
 
     let mut entries = Vec::new();
     if let Some(host_entries) = host_interface_snapshot() {
@@ -4003,12 +4054,11 @@ pub(crate) fn builtin_network_lookup_address_info_impl(args: Vec<Value>) -> Eval
 
     let lookup_family = if family.is_nil() {
         None
-    } else if matches!(family.as_symbol_name(), Some("ipv4")) {
-        Some(NetworkAddressFamily::Ipv4)
-    } else if matches!(family.as_symbol_name(), Some("ipv6")) {
-        Some(NetworkAddressFamily::Ipv6)
     } else {
-        return Err(signal("error", vec![Value::string("Unsupported family")]));
+        Some(
+            NetworkAddressFamily::from_symbol_value(&family)
+                .ok_or_else(|| signal("error", vec![Value::string("Unsupported family")]))?,
+        )
     };
     let entries = resolve_network_lookup_addresses(&name, lookup_family);
     Ok(Value::list(entries))
@@ -5379,15 +5429,11 @@ fn builtin_make_process_impl_with_environment(
         ));
     };
 
-    // Determine PTY vs pipe: :connection-type overrides process-connection-type.
-    // :connection-type 'pty or 't -> PTY, :connection-type 'pipe or nil -> pipe.
-    let use_pty = match connection_type.as_ref().map(|v| v.kind()) {
-        Some(ValueKind::Nil) => false,
-        Some(ValueKind::Symbol(sym)) if resolve_sym(sym) == "pipe" => false,
-        Some(ValueKind::Symbol(sym)) if resolve_sym(sym) == "pty" => true,
-        Some(_) => true, // truthy -> PTY
-        None => default_use_pty,
-    };
+    // Determine PTY vs pipe as GNU's `is_pty_from_symbol` does:
+    // nil inherits `process-connection-type`; only `pipe` and `pty` are
+    // accepted explicit symbols.
+    let use_pty =
+        resolve_process_connection_type_use_pty(connection_type.as_ref(), default_use_pty)?;
 
     let command = command.unwrap_or_default();
     let (program, argv) = if command.is_empty() {

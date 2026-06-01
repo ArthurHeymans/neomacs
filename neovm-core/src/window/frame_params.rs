@@ -72,6 +72,90 @@ pub enum FrameParam {
     NsTransparentTitlebar,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum FrameFullscreen {
+    Fullboth,
+    Fullscreen,
+    Fullwidth,
+    Fullheight,
+    Maximized,
+}
+
+impl FrameFullscreen {
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum FrameToolBarPosition {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl FrameToolBarPosition {
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum FrameZGroup {
+    Above,
+    AboveSuspended,
+    Below,
+}
+
+impl FrameZGroup {
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub enum CursorTypeSymbol {
+    Box,
+    Hollow,
+    Bar,
+    Hbar,
+}
+
+impl CursorTypeSymbol {
+    pub fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    pub fn from_symbol_value(value: &Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn accepts_width_tail(self) -> bool {
+        matches!(self, Self::Box | Self::Bar | Self::Hbar)
+    }
+}
+
 pub const GNU_FRAME_PARAMS: [FrameParam; GNU_FRAME_PARAM_COUNT] = [
     FrameParam::AutoRaise,
     FrameParam::AutoLower,
@@ -269,5 +353,44 @@ mod tests {
             assert_eq!(FrameParam::from_name(param.name()), Some(param));
         }
         assert_eq!(FrameParam::from_gnu_index(GNU_FRAME_PARAM_COUNT), None);
+    }
+
+    #[test]
+    fn frame_value_domains_match_gnu_symbols() {
+        assert_eq!(
+            FrameFullscreen::from_symbol_value(&Value::symbol("fullboth")),
+            Some(FrameFullscreen::Fullboth)
+        );
+        assert_eq!(
+            FrameFullscreen::from_symbol_value(&Value::symbol("fullscreen")),
+            Some(FrameFullscreen::Fullscreen)
+        );
+        assert_eq!(
+            FrameFullscreen::from_symbol_value(&Value::symbol("maximized")),
+            Some(FrameFullscreen::Maximized)
+        );
+        assert_eq!(
+            FrameFullscreen::from_symbol_value(&Value::symbol("full")),
+            None
+        );
+
+        assert_eq!(
+            FrameToolBarPosition::from_symbol_value(&Value::symbol("left")),
+            Some(FrameToolBarPosition::Left)
+        );
+        assert_eq!(
+            FrameToolBarPosition::from_symbol_value(&Value::symbol("bottom")),
+            Some(FrameToolBarPosition::Bottom)
+        );
+        assert_eq!(
+            FrameZGroup::from_symbol_value(&Value::symbol("above-suspended")),
+            Some(FrameZGroup::AboveSuspended)
+        );
+        assert_eq!(
+            CursorTypeSymbol::from_symbol_value(&Value::symbol("hbar")),
+            Some(CursorTypeSymbol::Hbar)
+        );
+        assert!(CursorTypeSymbol::Box.accepts_width_tail());
+        assert!(!CursorTypeSymbol::Hollow.accepts_width_tail());
     }
 }

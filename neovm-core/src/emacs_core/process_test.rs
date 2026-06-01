@@ -32,6 +32,50 @@ fn eval_with_process_shims() -> Context {
 }
 
 #[test]
+fn process_finite_domains_match_gnu_symbols() {
+    assert_eq!(ProcessKind::Real.name(), "real");
+    assert_eq!(ProcessKind::Network.name(), "network");
+    assert_eq!(ProcessKind::Pipe.name(), "pipe");
+    assert_eq!(ProcessKind::Serial.name(), "serial");
+
+    assert_eq!(
+        NetworkAddressFamily::from_symbol_value(&Value::symbol("ipv4")),
+        Some(NetworkAddressFamily::Ipv4)
+    );
+    assert_eq!(
+        NetworkAddressFamily::from_symbol_value(&Value::symbol("ipv6")),
+        Some(NetworkAddressFamily::Ipv6)
+    );
+    assert_eq!(
+        NetworkAddressFamily::from_symbol_value(&Value::symbol("ip")),
+        None
+    );
+    assert_eq!(NetworkAddressFamily::Ipv4.name(), "ipv4");
+
+    assert_eq!(
+        ProcessConnectionType::from_symbol_value(&Value::symbol("pipe")),
+        Some(ProcessConnectionType::Pipe)
+    );
+    assert_eq!(
+        ProcessConnectionType::from_symbol_value(&Value::symbol("pty")),
+        Some(ProcessConnectionType::Pty)
+    );
+    assert_eq!(
+        resolve_process_connection_type_use_pty(None, true).unwrap(),
+        true
+    );
+    assert_eq!(
+        resolve_process_connection_type_use_pty(Some(&Value::NIL), true).unwrap(),
+        true
+    );
+    assert_eq!(
+        resolve_process_connection_type_use_pty(Some(&Value::symbol("pipe")), true).unwrap(),
+        false
+    );
+    assert!(resolve_process_connection_type_use_pty(Some(&Value::T), true).is_err());
+}
+
+#[test]
 fn sequence_value_to_env_string_preserves_nonunicode_char_codes() {
     crate::test_utils::init_test_tracing();
     let code = 0x3F_FF80i64;

@@ -17,6 +17,7 @@ use super::intern::resolve_sym;
 use super::value::*;
 use crate::emacs_core::eval::{Context, ImageResolveRequest, ImageResolveSource};
 use crate::window::FRAME_ID_BASE;
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -130,44 +131,80 @@ fn plist_get(plist: &Value, key: &Value) -> Value {
     }
 }
 
-/// Check whether a symbol name represents a supported image type.
-pub(crate) fn is_supported_image_type(name: &str) -> bool {
-    matches!(
-        name,
-        "png" | "jpeg" | "gif" | "svg" | "webp" | "xpm" | "xbm" | "pbm" | "tiff"
-    )
+/// GNU image types available in this build.
+///
+/// GNU keeps these in `image_types[]` in `src/image.c`; optional entries are
+/// present only when their backing decoder is built.  Neomacs currently ships
+/// the portable decoder set below and deliberately leaves optional GNU entries
+/// such as `postscript`, `imagemagick`, and `native-image` unavailable until
+/// their loaders are implemented.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum ImageType {
+    Svg,
+    Webp,
+    Png,
+    Gif,
+    Tiff,
+    Jpeg,
+    Xpm,
+    Xbm,
+    Pbm,
+}
+
+impl ImageType {
+    const AVAILABLE_IN_GNU_LIST_ORDER: [Self; 9] = [
+        Self::Svg,
+        Self::Webp,
+        Self::Png,
+        Self::Gif,
+        Self::Tiff,
+        Self::Jpeg,
+        Self::Xpm,
+        Self::Xbm,
+        Self::Pbm,
+    ];
+
+    pub(crate) fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 pub(crate) fn supported_image_types_value() -> Value {
-    Value::list(vec![
-        Value::symbol("svg"),
-        Value::symbol("webp"),
-        Value::symbol("png"),
-        Value::symbol("gif"),
-        Value::symbol("tiff"),
-        Value::symbol("jpeg"),
-        Value::symbol("xpm"),
-        Value::symbol("xbm"),
-        Value::symbol("pbm"),
-    ])
+    Value::list(
+        ImageType::AVAILABLE_IN_GNU_LIST_ORDER
+            .iter()
+            .copied()
+            .map(|image_type| Value::symbol(image_type.name()))
+            .collect(),
+    )
+}
+
+/// Check whether a symbol name represents a supported image type.
+pub(crate) fn is_supported_image_type(name: &str) -> bool {
+    ImageType::from_symbol_name(name).is_some()
 }
 
 fn normalize_image_type_name(name: &str) -> Option<&'static str> {
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
-        "jpg" => Some("jpeg"),
-        "jpeg" => Some("jpeg"),
-        "png" => Some("png"),
-        "gif" => Some("gif"),
-        "svg" => Some("svg"),
-        "webp" => Some("webp"),
-        "xpm" => Some("xpm"),
-        "xbm" => Some("xbm"),
-        "pbm" => Some("pbm"),
-        "tif" | "tiff" => Some("tiff"),
-        "bmp" => Some("bmp"),
-        "neomacs" => Some("neomacs"),
-        _ => None,
+        "jpg" => Some(ImageType::Jpeg.name()),
+        "tif" => Some(ImageType::Tiff.name()),
+        name => ImageType::from_symbol_name(name)
+            .map(ImageType::name)
+            .or_else(|| match name {
+                // Kept as recognized-but-unavailable extension names.  GNU on
+                // non-native-image Linux builds reports these unavailable.
+                // Inference may still produce the symbol for caller diagnostics.
+                // They must not make `image-type-available-p` return t.
+                "bmp" => Some("bmp"),
+                "neomacs" => Some("neomacs"),
+                _ => None,
+            }),
     }
 }
 

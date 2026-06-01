@@ -2,6 +2,7 @@ use super::*;
 use ::regex::Regex;
 use libloading::Library;
 use std::path::{Path, PathBuf};
+use strum::{EnumString, IntoStaticStr};
 use tree_sitter::{
     LANGUAGE_VERSION, Language, MIN_COMPATIBLE_LANGUAGE_VERSION, Parser, Point, Query, QueryCursor,
     Range as TSRange, StreamingIterator,
@@ -18,6 +19,119 @@ use crate::emacs_core::treesit::{
     QUERY_SLOT_LANGUAGE, QUERY_SLOT_SOURCE,
 };
 use crate::heap_types::LispString;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum TreesitNodeProperty {
+    Named,
+    Missing,
+    Extra,
+    Outdated,
+    HasError,
+    Live,
+}
+
+impl TreesitNodeProperty {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum TreesitBuiltinPredicate {
+    Named,
+    Anonymous,
+}
+
+impl TreesitBuiltinPredicate {
+    fn from_symbol_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn matches_node(self, node: tree_sitter::Node<'_>) -> bool {
+        match self {
+            Self::Named => node.is_named(),
+            Self::Anonymous => !node.is_named(),
+        }
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum TreesitBooleanPredicate {
+    Not,
+    Or,
+    And,
+}
+
+impl TreesitBooleanPredicate {
+    fn from_symbol_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+enum TreesitPatternKeyword {
+    #[strum(serialize = ":anchor")]
+    Anchor,
+    #[strum(serialize = ":?")]
+    Question,
+    #[strum(serialize = ":*")]
+    Star,
+    #[strum(serialize = ":+")]
+    Plus,
+    #[strum(serialize = ":equal")]
+    Equal,
+    #[strum(serialize = ":eq?")]
+    EqQuestion,
+    #[strum(serialize = ":match")]
+    Match,
+    #[strum(serialize = ":match?")]
+    MatchQuestion,
+    #[strum(serialize = ":pred")]
+    Pred,
+    #[strum(serialize = ":pred?")]
+    PredQuestion,
+}
+
+impl TreesitPatternKeyword {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn expansion(self) -> &'static str {
+        match self {
+            Self::Anchor => ".",
+            Self::Question => "?",
+            Self::Star => "*",
+            Self::Plus => "+",
+            Self::Equal | Self::EqQuestion => "#eq?",
+            Self::Match | Self::MatchQuestion => "#match?",
+            Self::Pred | Self::PredQuestion => "#pred?",
+        }
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
 
 fn default_dynamic_library_suffixes() -> &'static [&'static str] {
     #[cfg(target_os = "windows")]
@@ -622,16 +736,7 @@ fn expand_query_string(source: &str) -> String {
 }
 
 fn pattern_keyword_expansion(name: &str) -> Option<&'static str> {
-    match name {
-        ":anchor" => Some("."),
-        ":?" => Some("?"),
-        ":*" => Some("*"),
-        ":+" => Some("+"),
-        ":equal" | ":eq?" => Some("#eq?"),
-        ":match" | ":match?" => Some("#match?"),
-        ":pred" | ":pred?" => Some("#pred?"),
-        _ => None,
-    }
+    TreesitPatternKeyword::from_symbol_name(name).map(TreesitPatternKeyword::expansion)
 }
 
 fn expand_pattern_value(pattern: Value) -> Result<String, Flow> {
@@ -951,11 +1056,8 @@ fn predicate_matches_node(
         return Ok(regex.is_match(node.kind()));
     }
 
-    if predicate.as_symbol_name() == Some("named") {
-        return Ok(node.is_named());
-    }
-    if predicate.as_symbol_name() == Some("anonymous") {
-        return Ok(!node.is_named());
+    if let Some(builtin) = TreesitBuiltinPredicate::from_symbol_value(predicate) {
+        return Ok(builtin.matches_node(node));
     }
 
     if let Some(definition) = lookup_thing_definition(
@@ -995,59 +1097,78 @@ fn predicate_matches_node(
 
     let head = predicate.cons_car();
     let tail = predicate.cons_cdr();
-    if head.as_symbol_name() == Some("not") {
-        let args = crate::emacs_core::value::list_to_vec(&tail)
-            .ok_or_else(|| treesit_invalid_predicate("`not' expects one predicate", predicate))?;
-        if args.len() != 1 {
-            return Err(treesit_invalid_predicate(
-                "`not' expects one predicate",
-                predicate,
-            ));
-        }
-        return Ok(!predicate_matches_node(
-            eval,
-            parser_id,
-            parser_value,
-            node,
-            args[0],
-            named_only,
-            ignore_missing,
-        )?);
-    }
-    if head.as_symbol_name() == Some("or") || head.as_symbol_name() == Some("and") {
-        let args = crate::emacs_core::value::list_to_vec(&tail).ok_or_else(|| {
-            treesit_invalid_predicate("Malformed boolean tree-sitter predicate", predicate)
-        })?;
-        if head.as_symbol_name() == Some("or") {
-            for item in args {
-                if predicate_matches_node(
+    if let Some(boolean_predicate) = TreesitBooleanPredicate::from_symbol_value(head) {
+        return match boolean_predicate {
+            TreesitBooleanPredicate::Not => {
+                let args = crate::emacs_core::value::list_to_vec(&tail).ok_or_else(|| {
+                    treesit_invalid_predicate("`not' expects one predicate", predicate)
+                })?;
+                if args.len() != 1 {
+                    return Err(treesit_invalid_predicate(
+                        "`not' expects one predicate",
+                        predicate,
+                    ));
+                }
+                Ok(!predicate_matches_node(
                     eval,
                     parser_id,
                     parser_value,
                     node,
-                    item,
+                    args[0],
                     named_only,
                     ignore_missing,
-                )? {
-                    return Ok(true);
+                )?)
+            }
+            TreesitBooleanPredicate::Or | TreesitBooleanPredicate::And => {
+                let args = crate::emacs_core::value::list_to_vec(&tail).ok_or_else(|| {
+                    treesit_invalid_predicate(
+                        "`or' or `and' must have a list of patterns as arguments ",
+                        predicate,
+                    )
+                })?;
+                if args.is_empty() {
+                    return Err(treesit_invalid_predicate(
+                        "`or' or `and' must have a list of patterns as arguments ",
+                        predicate,
+                    ));
+                }
+                match boolean_predicate {
+                    TreesitBooleanPredicate::Or => {
+                        for item in args {
+                            if predicate_matches_node(
+                                eval,
+                                parser_id,
+                                parser_value,
+                                node,
+                                item,
+                                named_only,
+                                ignore_missing,
+                            )? {
+                                return Ok(true);
+                            }
+                        }
+                        Ok(false)
+                    }
+                    TreesitBooleanPredicate::And => {
+                        for item in args {
+                            if !predicate_matches_node(
+                                eval,
+                                parser_id,
+                                parser_value,
+                                node,
+                                item,
+                                named_only,
+                                ignore_missing,
+                            )? {
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
+                    }
+                    TreesitBooleanPredicate::Not => unreachable!(),
                 }
             }
-            return Ok(false);
-        }
-        for item in args {
-            if !predicate_matches_node(
-                eval,
-                parser_id,
-                parser_value,
-                node,
-                item,
-                named_only,
-                ignore_missing,
-            )? {
-                return Ok(false);
-            }
-        }
-        return Ok(true);
+        };
     }
 
     if let Some(pattern) = head.as_str_owned() {
@@ -1382,7 +1503,7 @@ pub(crate) fn builtin_treesit_node_check(
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
-    let property = args[1].as_symbol_name().ok_or_else(|| {
+    let property_name = args[1].as_symbol_name().ok_or_else(|| {
         signal(
             "wrong-type-argument",
             vec![
@@ -1392,6 +1513,17 @@ pub(crate) fn builtin_treesit_node_check(
             ],
         )
     })?;
+    let Some(property) = TreesitNodeProperty::from_symbol_name(property_name) else {
+        return Err(signal(
+            "error",
+            vec![
+                Value::string(
+                    "Expecting `named', `missing', `extra', `outdated', `has-error', or `live'",
+                ),
+                args[1],
+            ],
+        ));
+    };
 
     let handle = expect_node_handle(eval, "treesit-node-check", args[0])?;
     let parser = eval
@@ -1399,7 +1531,7 @@ pub(crate) fn builtin_treesit_node_check(
         .parser(handle.parser_id)
         .ok_or_else(|| node_outdated_error(args[0]))?;
 
-    if property == "outdated" {
+    if property == TreesitNodeProperty::Outdated {
         return Ok(if parser.generation == handle.generation {
             Value::NIL
         } else {
@@ -1410,22 +1542,12 @@ pub(crate) fn builtin_treesit_node_check(
     let node = ensure_current_node(eval, "treesit-node-check", args[0])?;
     let ts_node = unsafe { tree_sitter::Node::from_raw(node.raw) };
     let result = match property {
-        "named" => ts_node.is_named(),
-        "missing" => ts_node.is_missing(),
-        "extra" => ts_node.is_extra(),
-        "has-error" => ts_node.has_error(),
-        "live" => parser_live_p(eval, handle.parser_id),
-        _ => {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string(
-                        "Expecting `named', `missing', `extra', `outdated', `has-error', or `live'",
-                    ),
-                    args[1],
-                ],
-            ));
-        }
+        TreesitNodeProperty::Named => ts_node.is_named(),
+        TreesitNodeProperty::Missing => ts_node.is_missing(),
+        TreesitNodeProperty::Extra => ts_node.is_extra(),
+        TreesitNodeProperty::HasError => ts_node.has_error(),
+        TreesitNodeProperty::Live => parser_live_p(eval, handle.parser_id),
+        TreesitNodeProperty::Outdated => unreachable!(),
     };
     Ok(if result { Value::T } else { Value::NIL })
 }
@@ -2667,4 +2789,95 @@ pub(crate) fn builtin_treesit_linecol_cache(
         Value::keyword(":bytepos"),
         Value::fixnum(cache.bytepos as i64),
     ]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn treesit_node_property_domain_matches_gnu_symbols() {
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("named"),
+            Some(TreesitNodeProperty::Named)
+        );
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("missing"),
+            Some(TreesitNodeProperty::Missing)
+        );
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("extra"),
+            Some(TreesitNodeProperty::Extra)
+        );
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("outdated"),
+            Some(TreesitNodeProperty::Outdated)
+        );
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("has-error"),
+            Some(TreesitNodeProperty::HasError)
+        );
+        assert_eq!(
+            TreesitNodeProperty::from_symbol_name("live"),
+            Some(TreesitNodeProperty::Live)
+        );
+        assert_eq!(TreesitNodeProperty::from_symbol_name("anonymous"), None);
+        assert_eq!(TreesitNodeProperty::HasError.name(), "has-error");
+    }
+
+    #[test]
+    fn treesit_predicate_domain_matches_gnu_symbols() {
+        assert_eq!(
+            TreesitBuiltinPredicate::from_symbol_value(Value::symbol("named")),
+            Some(TreesitBuiltinPredicate::Named)
+        );
+        assert_eq!(
+            TreesitBuiltinPredicate::from_symbol_value(Value::symbol("anonymous")),
+            Some(TreesitBuiltinPredicate::Anonymous)
+        );
+        assert_eq!(
+            TreesitBuiltinPredicate::from_symbol_value(Value::symbol("missing")),
+            None
+        );
+        assert_eq!(TreesitBuiltinPredicate::Anonymous.name(), "anonymous");
+
+        assert_eq!(
+            TreesitBooleanPredicate::from_symbol_value(Value::symbol("not")),
+            Some(TreesitBooleanPredicate::Not)
+        );
+        assert_eq!(
+            TreesitBooleanPredicate::from_symbol_value(Value::symbol("or")),
+            Some(TreesitBooleanPredicate::Or)
+        );
+        assert_eq!(
+            TreesitBooleanPredicate::from_symbol_value(Value::symbol("and")),
+            Some(TreesitBooleanPredicate::And)
+        );
+        assert_eq!(
+            TreesitBooleanPredicate::from_symbol_value(Value::symbol("named")),
+            None
+        );
+        assert_eq!(TreesitBooleanPredicate::And.name(), "and");
+    }
+
+    #[test]
+    fn treesit_pattern_keyword_domain_matches_gnu_symbols() {
+        assert_eq!(pattern_keyword_expansion(":anchor"), Some("."));
+        assert_eq!(pattern_keyword_expansion(":?"), Some("?"));
+        assert_eq!(pattern_keyword_expansion(":*"), Some("*"));
+        assert_eq!(pattern_keyword_expansion(":+"), Some("+"));
+        assert_eq!(pattern_keyword_expansion(":equal"), Some("#eq?"));
+        assert_eq!(pattern_keyword_expansion(":eq?"), Some("#eq?"));
+        assert_eq!(pattern_keyword_expansion(":match"), Some("#match?"));
+        assert_eq!(pattern_keyword_expansion(":match?"), Some("#match?"));
+        assert_eq!(pattern_keyword_expansion(":pred"), Some("#pred?"));
+        assert_eq!(pattern_keyword_expansion(":pred?"), Some("#pred?"));
+        assert_eq!(pattern_keyword_expansion(":capture"), None);
+
+        assert_eq!(
+            TreesitPatternKeyword::from_symbol_name(":match?"),
+            Some(TreesitPatternKeyword::MatchQuestion)
+        );
+        assert_eq!(TreesitPatternKeyword::EqQuestion.name(), ":eq?");
+    }
 }

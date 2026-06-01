@@ -50,6 +50,26 @@ impl DisplayHost for RecordingImageDisplayHost {
 // -----------------------------------------------------------------------
 
 #[test]
+fn image_type_domain_matches_gnu_available_symbols() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(ImageType::from_symbol_name("svg"), Some(ImageType::Svg));
+    assert_eq!(ImageType::from_symbol_name("webp"), Some(ImageType::Webp));
+    assert_eq!(ImageType::from_symbol_name("png"), Some(ImageType::Png));
+    assert_eq!(ImageType::from_symbol_name("gif"), Some(ImageType::Gif));
+    assert_eq!(ImageType::from_symbol_name("tiff"), Some(ImageType::Tiff));
+    assert_eq!(ImageType::from_symbol_name("jpeg"), Some(ImageType::Jpeg));
+    assert_eq!(ImageType::from_symbol_name("xpm"), Some(ImageType::Xpm));
+    assert_eq!(ImageType::from_symbol_name("xbm"), Some(ImageType::Xbm));
+    assert_eq!(ImageType::from_symbol_name("pbm"), Some(ImageType::Pbm));
+    assert_eq!(ImageType::from_symbol_name("jpg"), None);
+    assert_eq!(ImageType::from_symbol_name("bmp"), None);
+
+    assert_eq!(normalize_image_type_name("JPG"), Some("jpeg"));
+    assert_eq!(normalize_image_type_name("TIF"), Some("tiff"));
+    assert_eq!(normalize_image_type_name("PNG"), Some("png"));
+}
+
+#[test]
 fn type_available_png() {
     crate::test_utils::init_test_tracing();
     let result = builtin_image_type_available_p(vec![Value::symbol("png")]);
