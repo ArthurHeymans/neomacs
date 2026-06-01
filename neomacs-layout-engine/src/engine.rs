@@ -76,13 +76,12 @@ struct CapturedCursorInfo {
 
 #[derive(Clone, Copy, Debug)]
 struct ResolvedCursorGeometry {
+    slot_id: DisplaySlotId,
     x: f32,
     y: f32,
     width: f32,
     height: f32,
     ascent: f32,
-    row: usize,
-    col: usize,
     style: CursorStyle,
     color: Color,
     cursor_fg: Color,
@@ -90,6 +89,7 @@ struct ResolvedCursorGeometry {
 
 #[derive(Clone, Copy, Debug)]
 struct CursorGeometrySource {
+    slot_id: DisplaySlotId,
     x: f32,
     y: f32,
     slot_width: f32,
@@ -98,11 +98,23 @@ struct CursorGeometrySource {
     row_height: f32,
     row_ascent: f32,
     default_line_height: f32,
-    row: usize,
-    col: usize,
     stretch_like: bool,
     ends_at_visible_eob: bool,
     cursor_fg: Color,
+}
+
+impl ResolvedCursorGeometry {
+    fn window_id(&self) -> i64 {
+        self.slot_id.window_id
+    }
+
+    fn row(&self) -> usize {
+        self.slot_id.row as usize
+    }
+
+    fn col(&self) -> u16 {
+        self.slot_id.col
+    }
 }
 
 fn window_cursor_kind(style: CursorStyle) -> WindowCursorKind {
@@ -540,13 +552,12 @@ fn resolve_cursor_geometry(
     );
 
     ResolvedCursorGeometry {
+        slot_id: source.slot_id,
         x: source.x,
         y,
         width,
         height,
         ascent,
-        row: source.row,
-        col: source.col,
         style,
         color,
         cursor_fg: source.cursor_fg,
@@ -1236,11 +1247,17 @@ fn cursor_style_for_visual(spec: &VisualCursorSpec) -> Option<CursorStyle> {
 
 fn visual_cursor_source_from_point(
     point: &DisplayPointSnapshot,
+    window_id: i64,
     text_area_left: f32,
     window_top: f32,
 ) -> CursorGeometrySource {
     let point_h = (point.height as f32).max(1.0);
     CursorGeometrySource {
+        slot_id: DisplaySlotId {
+            window_id,
+            row: point.row.max(0) as u32,
+            col: point.col.max(0) as u16,
+        },
         x: text_area_left + point.x as f32,
         y: window_top + point.y as f32,
         slot_width: (point.width as f32).max(1.0),
@@ -1249,8 +1266,6 @@ fn visual_cursor_source_from_point(
         row_height: point_h,
         row_ascent: point_h,
         default_line_height: point_h,
-        row: point.row.max(0) as usize,
-        col: point.col.max(0) as usize,
         stretch_like: false,
         ends_at_visible_eob: false,
         cursor_fg: Color::BLACK,
@@ -6163,6 +6178,11 @@ impl LayoutEngine {
                         .max(1.0)
                     };
                     let source = CursorGeometrySource {
+                        slot_id: DisplaySlotId {
+                            window_id: params.window_id,
+                            row: (text_matrix_row_base + cursor.matrix_row) as u32,
+                            col: cursor.col as u16,
+                        },
                         x: cursor.x,
                         y: cursor.y,
                         slot_width: computed_slot_width,
@@ -6171,8 +6191,6 @@ impl LayoutEngine {
                         row_height: row_metric.height,
                         row_ascent: row_metric.ascent,
                         default_line_height: char_h,
-                        row: text_matrix_row_base + cursor.matrix_row,
-                        col: cursor.col,
                         stretch_like: cursor.stretch_like,
                         ends_at_visible_eob: point_is_visible_eob,
                         cursor_fg: cursor.bg,
@@ -6188,12 +6206,8 @@ impl LayoutEngine {
                         && resolved_cursor.y + resolved_cursor.height <= text_y + text_height
                     {
                         self.matrix_builder.push_cursor(
-                            params.window_id,
-                            DisplaySlotId {
-                                window_id: params.window_id,
-                                row: resolved_cursor.row as u32,
-                                col: resolved_cursor.col as u16,
-                            },
+                            resolved_cursor.window_id(),
+                            resolved_cursor.slot_id,
                             resolved_cursor.x,
                             resolved_cursor.y,
                             resolved_cursor.width,
@@ -6202,8 +6216,8 @@ impl LayoutEngine {
                             resolved_cursor.color,
                         );
                         self.matrix_builder.set_cursor_at_row(
-                            resolved_cursor.row,
-                            resolved_cursor.col as u16,
+                            resolved_cursor.row(),
+                            resolved_cursor.col(),
                             resolved_cursor.style,
                         );
                         output_emitter.set_phys_cursor(WindowCursorSnapshot {
@@ -6213,20 +6227,16 @@ impl LayoutEngine {
                             width: resolved_cursor.width.round() as i64,
                             height: resolved_cursor.height.round() as i64,
                             ascent: resolved_cursor.ascent.round() as i64,
-                            row: resolved_cursor.row as i64,
-                            col: resolved_cursor.col as i64,
+                            row: resolved_cursor.row() as i64,
+                            col: i64::from(resolved_cursor.col()),
                         });
                         if params.selected {
                             self.matrix_builder.set_phys_cursor(PhysCursor {
-                                window_id: params.window_id,
+                                window_id: resolved_cursor.window_id(),
                                 charpos: params.point.max(0) as usize,
-                                row: resolved_cursor.row,
-                                col: resolved_cursor.col as u16,
-                                slot_id: DisplaySlotId {
-                                    window_id: params.window_id,
-                                    row: resolved_cursor.row as u32,
-                                    col: resolved_cursor.col as u16,
-                                },
+                                row: resolved_cursor.row(),
+                                col: resolved_cursor.col(),
+                                slot_id: resolved_cursor.slot_id,
                                 x: resolved_cursor.x,
                                 y: resolved_cursor.y,
                                 width: resolved_cursor.width,
@@ -6289,7 +6299,8 @@ impl LayoutEngine {
             else {
                 continue;
             };
-            let source = visual_cursor_source_from_point(point, text_area_left, window_top);
+            let source =
+                visual_cursor_source_from_point(point, spec.id as i64, text_area_left, window_top);
             let resolved_cursor = resolve_cursor_geometry(
                 style,
                 source,
@@ -6307,12 +6318,8 @@ impl LayoutEngine {
                     .set_window_cursor_effects(spec.id as i64, effects);
             }
             self.matrix_builder.push_cursor(
-                spec.id as i64,
-                DisplaySlotId {
-                    window_id: spec.id as i64,
-                    row: resolved_cursor.row as u32,
-                    col: resolved_cursor.col as u16,
-                },
+                resolved_cursor.window_id(),
+                resolved_cursor.slot_id,
                 resolved_cursor.x,
                 resolved_cursor.y,
                 resolved_cursor.width,
