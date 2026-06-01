@@ -23,7 +23,7 @@ use std::ffi::CStr;
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::Read as IoRead;
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
@@ -3459,6 +3459,68 @@ fn parse_network_service_port(value: &Value, server: bool) -> Result<u16, Flow> 
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum NetworkAddressSpec {
+    Inet(SocketAddr),
+    #[cfg(unix)]
+    Local(String),
+}
+
+fn parse_network_address_spec(value: &Value) -> Result<NetworkAddressSpec, Flow> {
+    #[cfg(unix)]
+    if matches!(value.kind(), ValueKind::String) {
+        return Ok(NetworkAddressSpec::Local(process_owned_runtime_string(
+            *value,
+        )));
+    }
+
+    let Some(items) = value.as_vector_data() else {
+        return Err(signal("error", vec![Value::string("Malformed :address")]));
+    };
+
+    match items.len() {
+        5 => {
+            let a = parse_lisp_sockaddr_part(items[0], 255)?;
+            let b = parse_lisp_sockaddr_part(items[1], 255)?;
+            let c = parse_lisp_sockaddr_part(items[2], 255)?;
+            let d = parse_lisp_sockaddr_part(items[3], 255)?;
+            let port = parse_lisp_sockaddr_part(items[4], u16::MAX as i64)?;
+            Ok(NetworkAddressSpec::Inet(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(a as u8, b as u8, c as u8, d as u8)),
+                port as u16,
+            )))
+        }
+        9 => {
+            let mut segments = [0_u16; 8];
+            for (idx, segment) in segments.iter_mut().enumerate() {
+                *segment = parse_lisp_sockaddr_part(items[idx], u16::MAX as i64)? as u16;
+            }
+            let port = parse_lisp_sockaddr_part(items[8], u16::MAX as i64)?;
+            Ok(NetworkAddressSpec::Inet(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(
+                    segments[0],
+                    segments[1],
+                    segments[2],
+                    segments[3],
+                    segments[4],
+                    segments[5],
+                    segments[6],
+                    segments[7],
+                )),
+                port as u16,
+            )))
+        }
+        _ => Err(signal("error", vec![Value::string("Malformed :address")])),
+    }
+}
+
+fn parse_lisp_sockaddr_part(value: Value, max: i64) -> Result<i64, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(n) if (0..=max).contains(&n) => Ok(n),
+        _ => Err(signal("error", vec![Value::string("Malformed :address")])),
+    }
+}
+
 fn socket_addr_to_lisp_value(addr: SocketAddr) -> Value {
     match addr {
         SocketAddr::V4(v4) => {
@@ -4966,7 +5028,9 @@ pub(crate) fn builtin_make_network_process(
     let mut host_value = Value::NIL;
     let mut service: Option<Value> = None;
     let mut server = false;
-    let mut family = None;
+    let mut family_value = Value::NIL;
+    let mut local_address_value = Value::NIL;
+    let mut remote_address_value = Value::NIL;
     let mut nowait = false;
     let mut contact = Value::list(args.clone());
     let mut filter_val = Value::NIL;
@@ -4989,10 +5053,7 @@ pub(crate) fn builtin_make_network_process(
             ProcessKeyword::Host => host_value = value,
             ProcessKeyword::Service => service = Some(value),
             ProcessKeyword::Server => server = value.is_truthy(),
-            ProcessKeyword::Family => {
-                validate_network_process_family(&value)?;
-                family = NetworkProcessFamilySymbol::from_symbol_value(&value);
-            }
+            ProcessKeyword::Family => family_value = value,
             ProcessKeyword::Type => validate_network_socket_type(&value)?,
             ProcessKeyword::Nowait => nowait = value.is_truthy(),
             ProcessKeyword::Filter => filter_val = value,
@@ -5001,12 +5062,12 @@ pub(crate) fn builtin_make_network_process(
             ProcessKeyword::Buffer => buffer_val = value,
             ProcessKeyword::Coding => _coding_val = value,
             ProcessKeyword::Noquery => noquery = value.is_truthy(),
+            ProcessKeyword::Local => local_address_value = value,
+            ProcessKeyword::Remote => remote_address_value = value,
             _ => {}
         }
         i += 2;
     }
-
-    let host = parse_network_host(&host_value, family)?;
 
     let Some(name) = name else {
         return Err(signal(
@@ -5022,17 +5083,354 @@ pub(crate) fn builtin_make_network_process(
         ));
     }
 
-    let service = service.unwrap_or(Value::NIL);
-    if service.is_nil() {
-        return Err(signal_wrong_type_string(Value::NIL));
-    }
-
     // Resolve :buffer to a buffer name (creating buffer if needed).
     let buffer = if !buffer_val.is_nil() {
         parse_make_process_buffer(eval, &buffer_val)?
     } else {
         Value::NIL
     };
+
+    let explicit_address = if server {
+        local_address_value
+    } else {
+        remote_address_value
+    };
+    if !explicit_address.is_nil() {
+        let address = parse_network_address_spec(&explicit_address)?;
+        match address {
+            NetworkAddressSpec::Inet(addr) => {
+                if server {
+                    let listener = TcpListener::bind(addr).map_err(|e| {
+                        signal(
+                            "file-error",
+                            vec![
+                                Value::string("Cannot bind server socket"),
+                                Value::string(e.to_string()),
+                            ],
+                        )
+                    })?;
+                    listener.set_nonblocking(true).map_err(|e| {
+                        signal(
+                            "file-error",
+                            vec![Value::string(format!("set_nonblocking: {}", e))],
+                        )
+                    })?;
+                    let local_addr = listener.local_addr().map_err(|e| {
+                        signal(
+                            "file-error",
+                            vec![Value::string(format!("getsockname: {}", e))],
+                        )
+                    })?;
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Service.value(),
+                        Value::fixnum(local_addr.port() as i64),
+                    )?;
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Local.value(),
+                        socket_addr_to_lisp_value(local_addr),
+                    )?;
+
+                    let id = eval.processes.create_process_with_kind_lisp(
+                        name,
+                        buffer,
+                        LispString::from_utf8("network"),
+                        Vec::new(),
+                        ProcessKind::Network,
+                    );
+                    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                    if let Some(proc) = eval.processes.get_mut(id) {
+                        proc.childp = contact;
+                        proc.thread = current_thread_handle(&eval.threads);
+                        proc.network_socket = Some(NetworkSocket::TcpListener(listener));
+                        if !filter_val.is_nil() {
+                            proc.filter = filter_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Filter.value(),
+                                proc.filter,
+                            )?;
+                        }
+                        if !sentinel_val.is_nil() {
+                            proc.sentinel = sentinel_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Sentinel.value(),
+                                proc.sentinel,
+                            )?;
+                        }
+                        if !log_val.is_nil() {
+                            proc.log = log_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Log.value(),
+                                proc.log,
+                            )?;
+                        }
+                        if !buffer.is_nil() {
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Buffer.value(),
+                                buffer,
+                            )?;
+                        }
+                        if noquery {
+                            proc.query_on_exit_flag = false;
+                        }
+                    }
+                    eval.processes.register_socket_fd(id).ok();
+                    return Ok(Value::fixnum(id as i64));
+                }
+
+                let stream = TcpStream::connect(addr).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![
+                            Value::string("make client process failed"),
+                            Value::string(format!("{}", e)),
+                        ],
+                    )
+                })?;
+                stream.set_nonblocking(true).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![Value::string(format!("set_nonblocking: {}", e))],
+                    )
+                })?;
+                let remote_addr = stream.peer_addr().ok();
+                let local_addr = stream.local_addr().ok();
+
+                let id = eval.processes.create_process_with_kind_lisp(
+                    name,
+                    buffer,
+                    LispString::from_utf8("network"),
+                    Vec::new(),
+                    ProcessKind::Network,
+                );
+                eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                if let Some(addr) = remote_addr {
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Remote.value(),
+                        socket_addr_to_lisp_value(addr),
+                    )?;
+                }
+                if let Some(addr) = local_addr {
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Local.value(),
+                        socket_addr_to_lisp_value(addr),
+                    )?;
+                }
+                if let Some(proc) = eval.processes.get_mut(id) {
+                    proc.network_socket = Some(NetworkSocket::TcpStream(stream));
+                    proc.status = process_status_run_value();
+                    proc.childp = contact;
+                    proc.thread = current_thread_handle(&eval.threads);
+                    if !filter_val.is_nil() {
+                        proc.filter = filter_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Filter.value(),
+                            proc.filter,
+                        )?;
+                    }
+                    if !sentinel_val.is_nil() {
+                        proc.sentinel = sentinel_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Sentinel.value(),
+                            proc.sentinel,
+                        )?;
+                    }
+                    if !buffer.is_nil() {
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Buffer.value(),
+                            buffer,
+                        )?;
+                    }
+                    if noquery {
+                        proc.query_on_exit_flag = false;
+                    }
+                }
+                eval.processes.register_socket_fd(id).ok();
+                let sentinel = eval
+                    .processes
+                    .get(id)
+                    .map(|p| p.sentinel)
+                    .unwrap_or(Value::NIL);
+                eval.run_process_sentinel_callback(id, sentinel, "open\n");
+                return Ok(Value::fixnum(id as i64));
+            }
+            #[cfg(unix)]
+            NetworkAddressSpec::Local(path) => {
+                if server {
+                    let listener = UnixListener::bind(Path::new(&path)).map_err(|e| {
+                        signal(
+                            "file-error",
+                            vec![
+                                Value::string("Cannot bind server socket"),
+                                Value::string(e.to_string()),
+                            ],
+                        )
+                    })?;
+                    listener.set_nonblocking(true).map_err(|e| {
+                        signal(
+                            "file-error",
+                            vec![Value::string(format!("set_nonblocking: {}", e))],
+                        )
+                    })?;
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Local.value(),
+                        Value::string(&path),
+                    )?;
+
+                    let id = eval.processes.create_process_with_kind_lisp(
+                        name,
+                        buffer,
+                        LispString::from_utf8("network"),
+                        Vec::new(),
+                        ProcessKind::Network,
+                    );
+                    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                    if let Some(proc) = eval.processes.get_mut(id) {
+                        proc.childp = contact;
+                        proc.thread = current_thread_handle(&eval.threads);
+                        proc.network_socket = Some(NetworkSocket::UnixListener(listener));
+                        if !filter_val.is_nil() {
+                            proc.filter = filter_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Filter.value(),
+                                proc.filter,
+                            )?;
+                        }
+                        if !sentinel_val.is_nil() {
+                            proc.sentinel = sentinel_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Sentinel.value(),
+                                proc.sentinel,
+                            )?;
+                        }
+                        if !log_val.is_nil() {
+                            proc.log = log_val;
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Log.value(),
+                                proc.log,
+                            )?;
+                        }
+                        if !buffer.is_nil() {
+                            proc.childp = process_contact_plist_put(
+                                proc.childp,
+                                ProcessKeyword::Buffer.value(),
+                                buffer,
+                            )?;
+                        }
+                        if noquery {
+                            proc.query_on_exit_flag = false;
+                        }
+                    }
+                    eval.processes.register_socket_fd(id).ok();
+                    return Ok(Value::fixnum(id as i64));
+                }
+
+                let stream = UnixStream::connect(Path::new(&path)).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![
+                            Value::string("make client process failed"),
+                            Value::string(e.to_string()),
+                            Value::string(&path),
+                        ],
+                    )
+                })?;
+                stream.set_nonblocking(true).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![Value::string(format!("set_nonblocking: {}", e))],
+                    )
+                })?;
+                contact = process_contact_plist_put(
+                    contact,
+                    ProcessKeyword::Remote.value(),
+                    Value::string(&path),
+                )?;
+                contact = process_contact_plist_put(
+                    contact,
+                    ProcessKeyword::Local.value(),
+                    Value::string(""),
+                )?;
+
+                let id = eval.processes.create_process_with_kind_lisp(
+                    name,
+                    buffer,
+                    LispString::from_utf8("network"),
+                    Vec::new(),
+                    ProcessKind::Network,
+                );
+                eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                if let Some(proc) = eval.processes.get_mut(id) {
+                    proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+                    proc.status = process_status_run_value();
+                    proc.childp = contact;
+                    proc.thread = current_thread_handle(&eval.threads);
+                    if !filter_val.is_nil() {
+                        proc.filter = filter_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Filter.value(),
+                            proc.filter,
+                        )?;
+                    }
+                    if !sentinel_val.is_nil() {
+                        proc.sentinel = sentinel_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Sentinel.value(),
+                            proc.sentinel,
+                        )?;
+                    }
+                    if !buffer.is_nil() {
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Buffer.value(),
+                            buffer,
+                        )?;
+                    }
+                    if noquery {
+                        proc.query_on_exit_flag = false;
+                    }
+                }
+
+                eval.processes.register_socket_fd(id).ok();
+
+                let sentinel = eval
+                    .processes
+                    .get(id)
+                    .map(|p| p.sentinel)
+                    .unwrap_or(Value::NIL);
+                eval.run_process_sentinel_callback(id, sentinel, "open\n");
+
+                return Ok(Value::fixnum(id as i64));
+            }
+        }
+    }
+
+    if !family_value.is_nil() {
+        validate_network_process_family(&family_value)?;
+    }
+    let family = NetworkProcessFamilySymbol::from_symbol_value(&family_value);
+    let host = parse_network_host(&host_value, family)?;
+
+    let service = service.unwrap_or(Value::NIL);
+    if service.is_nil() {
+        return Err(signal_wrong_type_string(Value::NIL));
+    }
 
     if family == Some(NetworkProcessFamilySymbol::Local) {
         #[cfg(not(unix))]

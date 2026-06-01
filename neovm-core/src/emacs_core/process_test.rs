@@ -3287,6 +3287,46 @@ fn make_network_process_stream_server_accepts_client_like_gnu() {
     assert_eq!(results[0], "OK (listen t t open 1)");
 }
 
+#[test]
+fn make_network_process_explicit_inet_address_skips_host_service_family_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((srv nil)
+                 (cli nil))
+             (condition-case err
+                 (unwind-protect
+                     (progn
+                       (setq srv (make-network-process
+                                  :name "srv" :server t
+                                  :local [127 0 0 1 0]
+                                  :host 42
+                                  :service 1
+                                  :family 'bogus))
+                       (setq cli (make-network-process
+                                  :name "cli"
+                                  :remote (process-contact srv :local)
+                                  :host 42))
+                       (accept-process-output nil 0.2)
+                       (list (process-status srv)
+                             (vectorp (process-contact srv :local))
+                             (integerp (process-contact srv :service))
+                             (= (aref (process-contact srv :local) 4)
+                                (process-contact srv :service))
+                             (process-contact srv :host)
+                             (process-contact srv :family)
+                             (process-status cli)
+                             (vectorp (process-contact cli :remote))
+                             (vectorp (process-contact cli :local))
+                             (process-contact cli :host)
+                             (process-contact cli :service)))
+                   (when cli (delete-process cli))
+                   (when srv (delete-process srv)))
+               (error err)))"#,
+    );
+
+    assert_eq!(results[0], "OK (listen t t t 42 bogus open t t 42 nil)");
+}
+
 #[cfg(unix)]
 #[test]
 fn make_network_process_local_stream_server_accepts_client_like_gnu() {
@@ -3329,6 +3369,50 @@ fn make_network_process_local_stream_server_accepts_client_like_gnu() {
     );
 
     assert_eq!(results[0], "OK (listen t t open t t 1 t t t t)");
+}
+
+#[cfg(unix)]
+#[test]
+fn make_network_process_explicit_local_address_skips_family_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((path (make-temp-file "neomacs-local-address-"))
+                 (srv nil)
+                 (cli nil))
+             (delete-file path)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (setq srv (make-network-process
+                                  :name "srv" :server t
+                                  :local path
+                                  :host "ignored"
+                                  :service 1))
+                       (setq cli (make-network-process
+                                  :name "cli"
+                                  :remote (process-contact srv :local)
+                                  :host "bad.invalid"
+                                  :service 1))
+                       (accept-process-output nil 0.2)
+                       (list (process-status srv)
+                             (equal (process-contact srv :local) path)
+                             (process-contact srv :host)
+                             (process-contact srv :service)
+                             (process-status cli)
+                             (equal (process-contact cli :remote) path)
+                             (equal (process-contact cli :local) "")
+                             (process-contact cli :host)
+                             (process-contact cli :service)))
+                   (error err))
+               (when cli (delete-process cli))
+               (when srv (delete-process srv))
+               (ignore-errors (delete-file path))))"#,
+    );
+
+    assert_eq!(
+        results[0],
+        "OK (listen t \"ignored\" 1 open t t \"bad.invalid\" 1)"
+    );
 }
 
 #[test]
