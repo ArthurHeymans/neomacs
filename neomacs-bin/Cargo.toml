@@ -32,6 +32,7 @@ neomacs-layout-engine.workspace = true
 neovm-core.workspace = true
 
 # Utilities
+arboard.workspace = true
 tracing.workspace = true
 crossbeam-channel.workspace = true
 libc.workspace = true

@@ -88,6 +88,21 @@ fn test_window_params() -> WindowParams {
     }
 }
 
+fn realize_test_gui_frame(eval: &mut Context, frame_id: neovm_core::window::FrameId) {
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval
+        .eval_str_each("(internal-set-lisp-face-attribute 'default :height 100 (selected-frame))");
+    assert!(
+        results.iter().all(Result::is_ok),
+        "test GUI frame should have a realized default face height, got {results:?}"
+    );
+}
+
 #[derive(Default)]
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
@@ -520,12 +535,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("layout-face-advance", 800, 160, buf_id);
-    {
-        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.set_window_system(Some(Value::symbol("neo")));
-        frame.install_gnu_gui_default_parameters();
-    }
-    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -688,12 +698,7 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         400,
         buf_id,
     );
-    {
-        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.set_window_system(Some(Value::symbol("neo")));
-        frame.install_gnu_gui_default_parameters();
-    }
-    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -771,12 +776,7 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("layout-cursor-eol", 640, 240, buf_id);
-    {
-        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.set_window_system(Some(Value::symbol("neo")));
-        frame.install_gnu_gui_default_parameters();
-    }
-    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -1229,12 +1229,7 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("layout-display-cursor", 800, 400, buf_id);
-    {
-        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.set_window_system(Some(Value::symbol("neo")));
-        frame.install_gnu_gui_default_parameters();
-    }
-    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -2367,6 +2362,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("layout-face-mid-line", 1400, 160, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -2501,6 +2497,7 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-truncated-multibyte-face", 128, 160, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -2664,6 +2661,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-sequential-window-point", 1400, 256, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -2893,6 +2891,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-family-switches", 1400, 1600, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -4670,19 +4669,23 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
     eval.obarray_mut()
         .set_symbol_value("max-mini-window-height", Value::fixnum(10));
 
-    let buf_id = eval
+    let root_buf_id = eval
         .buffer_manager()
         .current_buffer()
         .expect("current buffer")
         .id;
+    let minibuf_id = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
     {
-        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let buf = eval
+            .buffer_manager_mut()
+            .get_mut(minibuf_id)
+            .expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
         let eob = buf.point_max_byte();
         let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
             serial: 0,
             plist: Value::NIL,
-            buffer: Some(buf_id),
+            buffer: Some(minibuf_id),
             start: eob,
             end: eob,
             front_advance: false,
@@ -4697,18 +4700,26 @@ fn layout_frame_rust_does_not_grow_minibuffer_for_eob_before_string_like_gnu() {
         buf.goto_byte(eob);
     }
 
-    let frame_id =
-        eval.frame_manager_mut()
-            .create_frame("layout-mini-eob-before-overlay", 120, 40, buf_id);
-    let minibuffer_window_id = {
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-mini-eob-before-overlay",
+        120,
+        40,
+        root_buf_id,
+    );
+    {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
         frame.char_width = 1.0;
         frame.char_height = 1.0;
         frame.shrink_mini_window();
-        let mini_id = frame.minibuffer_leaf.as_ref().expect("minibuffer").id();
-        frame.selected_window = mini_id;
-        mini_id
-    };
+    }
+    let minibuffer_window_id = eval
+        .activate_minibuffer_window_for_buffer(
+            minibuf_id,
+            LispString::from_utf8("Find file: "),
+            Some(LispString::from_utf8("~/.config/doom/")),
+        )
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
 
     let mut engine = LayoutEngine::new_without_font_metrics();
     engine.layout_frame_rust(&mut eval, frame_id);

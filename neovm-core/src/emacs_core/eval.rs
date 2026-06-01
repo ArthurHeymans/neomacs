@@ -46,7 +46,7 @@ use crate::buffer::{BufferId, BufferManager};
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
-use crate::window::FrameManager;
+use crate::window::{FrameManager, WindowId};
 
 const EVAL_STACK_RED_ZONE: usize = 128 * 1024;
 const EVAL_STACK_SEGMENT: usize = 2 * 1024 * 1024;
@@ -1257,6 +1257,13 @@ pub struct ResolvedFrameFont {
     pub slant: FontSlant,
     pub width: FontWidth,
     pub postscript_name: Option<crate::heap_types::LispString>,
+    /// GNU Lisp face height in 1/10 pt for this realized font.
+    ///
+    /// GNU `set_lface_from_font` stores
+    /// `PIXEL_TO_POINT(font->pixel_size * 10, FRAME_RES(f))` in
+    /// `LFACE_HEIGHT_INDEX`; keep the point-height value beside the pixel
+    /// metrics so core code never has to guess a frame DPI from pixels.
+    pub height_tenths: i32,
     pub font_size_px: f32,
     pub char_width: f32,
     pub line_height: f32,
@@ -1343,6 +1350,18 @@ pub enum CursorEffectArg {
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
+    fn set_clipboard_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Ok(())
+    }
+    fn clipboard_text(&mut self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn set_primary_selection_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Ok(())
+    }
+    fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
     fn set_gui_frame_geometry_hints(
         &mut self,
         _frame_id: crate::window::FrameId,
@@ -7275,6 +7294,74 @@ impl Context {
 
     pub fn minibuffer_is_active(&self) -> bool {
         self.minibuffers.is_active()
+    }
+
+    pub fn active_minibuffer_window_id(&self) -> Option<WindowId> {
+        if let Some(wid) = self.active_minibuffer_window {
+            return Some(wid);
+        }
+        let state = self.minibuffers.current()?;
+
+        for frame_id in self.frames.frame_list() {
+            let Some(frame) = self.frames.get(frame_id) else {
+                continue;
+            };
+            if let Some(minibuffer_wid) = frame.minibuffer_window
+                && let Some(window) = frame.find_window(minibuffer_wid)
+                && window.buffer_id() == Some(state.buffer_id)
+            {
+                return Some(minibuffer_wid);
+            }
+        }
+        None
+    }
+
+    pub fn minibuffer_window_is_active(&self, window_id: WindowId) -> bool {
+        self.active_minibuffer_window_id() == Some(window_id)
+    }
+
+    pub fn activate_minibuffer_window_for_buffer(
+        &mut self,
+        minibuf_id: BufferId,
+        prompt: crate::heap_types::LispString,
+        initial_input: Option<crate::heap_types::LispString>,
+    ) -> Result<Option<WindowId>, Flow> {
+        self.minibuffers.read_from_minibuffer_lisp(
+            minibuf_id,
+            &prompt,
+            initial_input.as_ref(),
+            None,
+        )?;
+
+        let frame_id = super::window_cmds::ensure_selected_frame_id_in_state(
+            &mut self.frames,
+            &mut self.buffers,
+        );
+        let Some(frame) = self.frames.get(frame_id) else {
+            self.buffers.switch_current(minibuf_id);
+            return Ok(None);
+        };
+        let Some(minibuffer_window_id) = frame.minibuffer_window else {
+            self.buffers.switch_current(minibuf_id);
+            return Ok(None);
+        };
+        let previous_selected_window = frame.selected_window;
+
+        if let Some(frame) = self.frames.get_mut(frame_id) {
+            if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
+                window.set_buffer(minibuf_id);
+                crate::window::window_markers::create_window_markers(
+                    &mut self.buffers,
+                    window,
+                    minibuf_id,
+                );
+            }
+            let _ = frame.select_window(minibuffer_window_id);
+        }
+        self.buffers.switch_current(minibuf_id);
+        self.minibuffer_selected_window = Some(previous_selected_window);
+        self.active_minibuffer_window = Some(minibuffer_window_id);
+        Ok(Some(minibuffer_window_id))
     }
 
     pub fn current_message_value(&self) -> Option<Value> {

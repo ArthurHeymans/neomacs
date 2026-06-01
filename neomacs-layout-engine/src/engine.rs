@@ -944,10 +944,10 @@ fn plain_echo_display_rows(
 
 fn minibuffer_echo_message_for_window(
     is_minibuffer_window: bool,
-    minibuffer_active: bool,
+    active_minibuffer_window: bool,
     current_message: Option<String>,
 ) -> Option<String> {
-    if !is_minibuffer_window || minibuffer_active {
+    if !is_minibuffer_window || active_minibuffer_window {
         return None;
     }
     current_message.filter(|message| !message.is_empty())
@@ -2991,10 +2991,11 @@ impl LayoutEngine {
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
-        let minibuffer_active = evaluator.minibuffer_is_active();
+        let active_minibuffer_window =
+            evaluator.minibuffer_window_is_active(WindowId(params.window_id as u64));
         let echo_message = minibuffer_echo_message_for_window(
             params.is_minibuffer,
-            minibuffer_active,
+            active_minibuffer_window,
             evaluator.current_message_text(),
         );
 
@@ -3478,7 +3479,7 @@ impl LayoutEngine {
             return;
         }
 
-        if params.is_minibuffer && !minibuffer_active {
+        if params.is_minibuffer && !active_minibuffer_window {
             // GNU `display_echo_area` temporarily displays an echo-area
             // buffer in the minibuffer window.  With no current message that
             // buffer is empty; the inactive minibuffer must not redisplay the

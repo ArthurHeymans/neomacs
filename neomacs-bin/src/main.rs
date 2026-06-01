@@ -24,6 +24,10 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_os = "linux"))]
+use arboard::Clipboard;
+#[cfg(target_os = "linux")]
+use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
 use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo,
@@ -920,6 +924,60 @@ impl PrimaryWindowDisplayHost {
     }
 }
 
+fn set_system_clipboard_text(text: Option<&str>) -> Result<(), String> {
+    let Some(text) = text else {
+        return Ok(());
+    };
+    Clipboard::new()
+        .and_then(|mut clipboard| clipboard.set_text(text.to_owned()))
+        .map_err(|err| err.to_string())
+}
+
+fn get_system_clipboard_text() -> Result<Option<String>, String> {
+    Clipboard::new()
+        .and_then(|mut clipboard| clipboard.get_text())
+        .map(Some)
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn set_system_primary_selection_text(text: Option<&str>) -> Result<(), String> {
+    let Some(text) = text else {
+        return Ok(());
+    };
+    Clipboard::new()
+        .and_then(|mut clipboard| {
+            clipboard
+                .set()
+                .clipboard(LinuxClipboardKind::Primary)
+                .text(text.to_owned())
+        })
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn set_system_primary_selection_text(_text: Option<&str>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn get_system_primary_selection_text() -> Result<Option<String>, String> {
+    Clipboard::new()
+        .and_then(|mut clipboard| {
+            clipboard
+                .get()
+                .clipboard(LinuxClipboardKind::Primary)
+                .text()
+        })
+        .map(Some)
+        .map_err(|err| err.to_string())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_system_primary_selection_text() -> Result<Option<String>, String> {
+    Ok(None)
+}
+
 fn render_cursor_effect_arg(arg: CursorEffectArg) -> RenderCursorEffectArg {
     match arg {
         CursorEffectArg::Nil => RenderCursorEffectArg::Nil,
@@ -997,6 +1055,22 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .map_err(|err| format!("failed to cache GUI frame title: {err}"))?
             .insert(request.frame_id, request.title);
         Ok(())
+    }
+
+    fn set_clipboard_text(&mut self, text: Option<&str>) -> Result<(), String> {
+        set_system_clipboard_text(text)
+    }
+
+    fn clipboard_text(&mut self) -> Result<Option<String>, String> {
+        get_system_clipboard_text()
+    }
+
+    fn set_primary_selection_text(&mut self, text: Option<&str>) -> Result<(), String> {
+        set_system_primary_selection_text(text)
+    }
+
+    fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
+        get_system_primary_selection_text()
     }
 
     fn opening_gui_frame_pending(&self) -> bool {
@@ -1284,6 +1358,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             slant: font.slant,
             width: font.width,
             postscript_name: font.postscript_name.map(|s| LispString::from_utf8(&s)),
+            height_tenths: font_height_tenths_for_face(&face),
             font_size_px: font_size,
             char_width: metrics.char_width.max(1.0),
             line_height: metrics.line_height.max(1.0),
@@ -1780,6 +1855,14 @@ fn font_size_px_for_face(face: &neovm_core::face::Face) -> f32 {
         Some(FaceHeight::Absolute(tenths)) => face_height_to_pixels(*tenths),
         Some(FaceHeight::Relative(scale)) => default_font_size * (*scale as f32),
         None => default_font_size,
+    }
+}
+
+fn font_height_tenths_for_face(face: &neovm_core::face::Face) -> i32 {
+    match &face.height {
+        Some(FaceHeight::Absolute(tenths)) => *tenths,
+        Some(FaceHeight::Relative(scale)) => (100.0 * *scale as f32).round().max(1.0) as i32,
+        None => 100,
     }
 }
 

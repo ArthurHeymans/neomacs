@@ -1532,24 +1532,7 @@ pub(crate) fn builtin_active_minibuffer_window(
 }
 
 fn active_minibuffer_window_id(eval: &super::eval::Context) -> Option<WindowId> {
-    if let Some(wid) = eval.active_minibuffer_window {
-        return Some(wid);
-    }
-    let state = eval.minibuffers.current()?;
-
-    for frame_id in eval.frames.frame_list() {
-        let Some(frame) = eval.frames.get(frame_id) else {
-            continue;
-        };
-        if let Some(minibuffer_wid) = frame.minibuffer_window
-            && let Some(window) = frame.find_window(minibuffer_wid)
-            && window.buffer_id() == Some(state.buffer_id)
-        {
-            return Some(minibuffer_wid);
-        }
-    }
-
-    None
+    eval.active_minibuffer_window_id()
 }
 /// `(window-frame &optional WINDOW)` -> frame of WINDOW.
 pub(crate) fn builtin_window_frame(

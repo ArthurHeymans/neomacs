@@ -6817,25 +6817,25 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "neomacs-clipboard-set",
-        |_ctx, args| builtin_neomacs_clipboard_set(args),
+        builtin_neomacs_clipboard_set,
         0,
         None,
     );
     ctx.defsubr(
         "neomacs-clipboard-get",
-        |_ctx, args| builtin_neomacs_clipboard_get(args),
+        builtin_neomacs_clipboard_get,
         0,
         None,
     );
     ctx.defsubr(
         "neomacs-primary-selection-set",
-        |_ctx, args| builtin_neomacs_primary_selection_set(args),
+        builtin_neomacs_primary_selection_set,
         0,
         None,
     );
     ctx.defsubr(
         "neomacs-primary-selection-get",
-        |_ctx, args| builtin_neomacs_primary_selection_get(args),
+        builtin_neomacs_primary_selection_get,
         0,
         None,
     );

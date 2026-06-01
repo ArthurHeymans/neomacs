@@ -380,9 +380,7 @@ fn build_frame_font_object_from_resolution(
     selected.height = match requested_face.height {
         Some(FaceHeight::Absolute(height)) => Some(FaceHeight::Absolute(height)),
         Some(FaceHeight::Relative(scale)) => Some(FaceHeight::Relative(scale)),
-        None => Some(FaceHeight::Absolute(
-            (resolved.font_size_px * 10.0).round() as i32
-        )),
+        None => Some(FaceHeight::Absolute(resolved.height_tenths)),
     };
 
     build_font_object(&selected)
@@ -2632,7 +2630,6 @@ fn realize_default_lisp_face_for_frame(eval: &mut super::eval::Context, frame_id
         return;
     };
     let window_system = frame.effective_window_system();
-    let font_pixel_size = frame.font_pixel_size;
 
     if window_system.is_none() {
         set_lisp_face_vector_attr(vector, LFaceAttr::Family, Value::string("default"));
@@ -2666,10 +2663,7 @@ fn realize_default_lisp_face_for_frame(eval: &mut super::eval::Context, frame_id
             if default_face_has_explicit_font_attr(attr) {
                 continue;
             }
-            let fallback = live_frame_font_attribute_fallback(eval, frame_id, attr).or_else(|| {
-                (attr == LFaceAttr::Height)
-                    .then(|| Value::fixnum((font_pixel_size.max(1.0) * 10.0).round() as i64))
-            });
+            let fallback = live_frame_font_attribute_fallback(eval, frame_id, attr);
             if let Some(value) = fallback {
                 set_lisp_face_vector_attr(vector, attr, value);
             }

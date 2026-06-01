@@ -4,10 +4,6 @@ use crate::emacs_core::display;
 use crate::emacs_core::fontset;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::window::{FrameManager, WindowId};
-#[cfg(not(target_os = "linux"))]
-use arboard::Clipboard;
-#[cfg(target_os = "linux")]
-use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
 
 // =========================================================================
 // fontset.c gap-fill stubs
@@ -327,51 +323,6 @@ fn set_cached_primary_selection_text(text: Option<String>) {
 
 fn cached_primary_selection_text() -> Option<String> {
     NEOMACS_PRIMARY_SELECTION_TEXT.with(|slot| slot.borrow().clone())
-}
-
-fn set_system_clipboard_text(text: &str) -> bool {
-    Clipboard::new()
-        .and_then(|mut clipboard| clipboard.set_text(text.to_owned()))
-        .is_ok()
-}
-
-fn get_system_clipboard_text() -> Option<String> {
-    Clipboard::new()
-        .ok()
-        .and_then(|mut clipboard| clipboard.get_text().ok())
-}
-
-#[cfg(target_os = "linux")]
-fn set_system_primary_selection_text(text: &str) -> bool {
-    Clipboard::new()
-        .and_then(|mut clipboard| {
-            clipboard
-                .set()
-                .clipboard(LinuxClipboardKind::Primary)
-                .text(text.to_owned())
-        })
-        .is_ok()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn set_system_primary_selection_text(_text: &str) -> bool {
-    false
-}
-
-#[cfg(target_os = "linux")]
-fn get_system_primary_selection_text() -> Option<String> {
-    Clipboard::new().ok().and_then(|mut clipboard| {
-        clipboard
-            .get()
-            .clipboard(LinuxClipboardKind::Primary)
-            .text()
-            .ok()
-    })
-}
-
-#[cfg(not(target_os = "linux"))]
-fn get_system_primary_selection_text() -> Option<String> {
-    None
 }
 
 fn monitor_geometry_value(monitor: &NeomacsMonitorInfo) -> Value {
@@ -831,7 +782,10 @@ pub(crate) fn builtin_x_scroll_bar_background(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_neomacs_clipboard_set(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_neomacs_clipboard_set(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("neomacs-clipboard-set", &args, 1)?;
     let text = match args[0].kind() {
         ValueKind::Nil => None,
@@ -843,21 +797,34 @@ pub(crate) fn builtin_neomacs_clipboard_set(args: Vec<Value>) -> EvalResult {
         _ => Some(format!("{}", args[0])),
     };
     set_cached_clipboard_text(text.clone());
-    if let Some(text) = text {
-        let _ = set_system_clipboard_text(&text);
+    if let Some(host) = ctx.display_host.as_mut() {
+        let _ = host.set_clipboard_text(text.as_deref());
     }
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_neomacs_clipboard_get(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_neomacs_clipboard_get(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("neomacs-clipboard-get", &args, 0)?;
-    Ok(get_system_clipboard_text()
+    let host_text = ctx
+        .display_host
+        .as_mut()
+        .and_then(|host| host.clipboard_text().ok().flatten());
+    if let Some(text) = host_text.as_ref() {
+        set_cached_clipboard_text(Some(text.clone()));
+    }
+    Ok(host_text
         .or_else(cached_clipboard_text)
         .map(Value::string)
         .unwrap_or(Value::NIL))
 }
 
-pub(crate) fn builtin_neomacs_primary_selection_set(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_neomacs_primary_selection_set(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("neomacs-primary-selection-set", &args, 1)?;
     let text = match args[0].kind() {
         ValueKind::Nil => None,
@@ -869,15 +836,25 @@ pub(crate) fn builtin_neomacs_primary_selection_set(args: Vec<Value>) -> EvalRes
         _ => Some(format!("{}", args[0])),
     };
     set_cached_primary_selection_text(text.clone());
-    if let Some(text) = text {
-        let _ = set_system_primary_selection_text(&text);
+    if let Some(host) = ctx.display_host.as_mut() {
+        let _ = host.set_primary_selection_text(text.as_deref());
     }
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_neomacs_primary_selection_get(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_neomacs_primary_selection_get(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("neomacs-primary-selection-get", &args, 0)?;
-    Ok(get_system_primary_selection_text()
+    let host_text = ctx
+        .display_host
+        .as_mut()
+        .and_then(|host| host.primary_selection_text().ok().flatten());
+    if let Some(text) = host_text.as_ref() {
+        set_cached_primary_selection_text(Some(text.clone()));
+    }
+    Ok(host_text
         .or_else(cached_primary_selection_text)
         .map(Value::string)
         .unwrap_or(Value::NIL))

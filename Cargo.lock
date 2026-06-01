@@ -2876,6 +2876,7 @@ dependencies = [
 name = "neomacs"
 version = "0.0.2"
 dependencies = [
+ "arboard",
  "crossbeam-channel",
  "crossterm",
  "libc",
@@ -3024,7 +3025,6 @@ dependencies = [
 name = "neovm-core"
 version = "0.0.2"
 dependencies = [
- "arboard",
  "bytemuck",
  "crossbeam-channel",
  "dns-lookup",
