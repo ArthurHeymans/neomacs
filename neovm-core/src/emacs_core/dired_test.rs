@@ -219,6 +219,39 @@ fn test_directory_files_and_attributes_count_and_id_format() {
 }
 
 #[test]
+fn file_id_format_domain_matches_gnu_dired() {
+    let integer_name: &'static str = FileIdFormat::Integer.into();
+    let string_name: &'static str = FileIdFormat::String.into();
+
+    assert_eq!(integer_name, "integer");
+    assert_eq!(string_name, "string");
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(None),
+        FileIdFormat::Integer
+    );
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(Some(&Value::NIL)),
+        FileIdFormat::Integer
+    );
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(Some(&Value::symbol("integer"))),
+        FileIdFormat::Integer
+    );
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(Some(&Value::symbol("string"))),
+        FileIdFormat::String
+    );
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(Some(&Value::symbol("other"))),
+        FileIdFormat::String
+    );
+    assert_eq!(
+        FileIdFormat::from_id_format_arg(Some(&Value::string("integer"))),
+        FileIdFormat::String
+    );
+}
+
+#[test]
 fn test_directory_files_and_attributes_eval_respects_default_directory() {
     crate::test_utils::init_test_tracing();
     let base = std::env::temp_dir().join("neovm_dfa_eval_builtin");
@@ -770,11 +803,23 @@ fn test_file_attributes_id_format_string() {
     create_file(&dir, "idtest.txt", "x");
 
     let result =
+        call_file_attributes(vec![Value::string(&path_str), Value::symbol("integer")]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert!(items[2].is_fixnum());
+    assert!(items[3].is_fixnum());
+
+    let result =
         call_file_attributes(vec![Value::string(&path_str), Value::symbol("string")]).unwrap();
     let items = list_to_vec(&result).unwrap();
     // UID (index 2) should be a string.
     assert!(items[2].is_string());
     // GID (index 3) should be a string.
+    assert!(items[3].is_string());
+
+    let result =
+        call_file_attributes(vec![Value::string(&path_str), Value::symbol("other")]).unwrap();
+    let items = list_to_vec(&result).unwrap();
+    assert!(items[2].is_string());
     assert!(items[3].is_string());
 
     let _ = fs::remove_dir_all(&dir);

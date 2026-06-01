@@ -17,6 +17,33 @@ use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::ErrorKind;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
+enum FileIdFormat {
+    #[strum(serialize = "integer")]
+    Integer,
+    #[strum(serialize = "string")]
+    String,
+}
+
+impl FileIdFormat {
+    fn from_id_format_arg(arg: Option<&Value>) -> Self {
+        let Some(value) = arg else {
+            return Self::Integer;
+        };
+        if value.is_nil() {
+            return Self::Integer;
+        }
+        value
+            .as_symbol_name()
+            .and_then(|name| name.parse::<Self>().ok())
+            .unwrap_or(Self::String)
+    }
+
+    fn ids_as_strings(self) -> bool {
+        matches!(self, Self::String)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -221,8 +248,8 @@ fn gid_to_name(gid: u32) -> Option<String> {
 ///   string   for a symlink (the link target)
 ///
 /// Times are in Emacs (HIGH LOW) format.
-/// If ID-FORMAT is 'string, UID/GID are returned as strings; otherwise integers.
-fn build_file_attributes(filename: &str, id_format_string: bool) -> Option<Value> {
+/// If ID-FORMAT is non-nil and not 'integer, UID/GID are returned as strings.
+fn build_file_attributes(filename: &str, id_format: FileIdFormat) -> Option<Value> {
     // Use symlink_metadata first to detect symlinks.
     let sym_meta = fs::symlink_metadata(filename).ok()?;
 
@@ -261,7 +288,7 @@ fn build_file_attributes(filename: &str, id_format_string: bool) -> Option<Value
         use std::os::unix::fs::MetadataExt;
         let uid = sym_meta.uid();
         let gid = sym_meta.gid();
-        if id_format_string {
+        if id_format.ids_as_strings() {
             (
                 Value::string(uid_to_name(uid).unwrap_or_else(|| uid.to_string())),
                 Value::string(gid_to_name(gid).unwrap_or_else(|| gid.to_string())),
@@ -271,7 +298,7 @@ fn build_file_attributes(filename: &str, id_format_string: bool) -> Option<Value
         }
     };
     #[cfg(not(unix))]
-    let (uid_val, gid_val) = if id_format_string {
+    let (uid_val, gid_val) = if id_format.ids_as_strings() {
         (Value::string("0"), Value::string("0"))
     } else {
         (Value::fixnum(0), Value::fixnum(0))
@@ -456,9 +483,7 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
     };
     let nosort = args.get(3).is_some_and(|v| v.is_truthy());
     // GNU Emacs: return string names unless ID-FORMAT is nil or 'integer.
-    let id_format_string = args
-        .get(4)
-        .is_some_and(|v| v.is_truthy() && v.as_symbol_name().map_or(true, |s| s != "integer"));
+    let id_format = FileIdFormat::from_id_format_arg(args.get(4));
     let count = parse_wholenump_count(args.get(5))?;
     if count == Some(0) {
         return Ok(Value::NIL);
@@ -516,7 +541,7 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: String) -> EvalR
     let result: Vec<Value> = items
         .into_iter()
         .map(|(display_name, full_path)| {
-            let attrs = build_file_attributes(&full_path, id_format_string).unwrap_or(Value::NIL);
+            let attrs = build_file_attributes(&full_path, id_format).unwrap_or(Value::NIL);
             Value::cons(runtime_file_name_value(&display_name), attrs)
         })
         .collect();
@@ -1190,11 +1215,9 @@ pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> E
     }
 
     // GNU Emacs: return string names unless ID-FORMAT is nil or 'integer.
-    let id_format_string = args
-        .get(1)
-        .is_some_and(|v| v.is_truthy() && v.as_symbol_name().map_or(true, |s| s != "integer"));
+    let id_format = FileIdFormat::from_id_format_arg(args.get(1));
 
-    match build_file_attributes(&filename, id_format_string) {
+    match build_file_attributes(&filename, id_format) {
         Some(attrs) => Ok(attrs),
         None => Ok(Value::NIL),
     }
