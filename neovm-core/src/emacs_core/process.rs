@@ -3057,6 +3057,24 @@ fn ai_numerichost_flag() -> i32 {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+enum NumProcessorsQuery {
+    All,
+    Current,
+}
+
+impl NumProcessorsQuery {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 enum ProcessConnectionType {
     Pipe,
     Pty,
@@ -4263,10 +4281,103 @@ pub(crate) fn builtin_num_processors_impl(args: Vec<Value>) -> EvalResult {
             ],
         ));
     }
-    let count = std::thread::available_parallelism()
-        .map(|n| n.get() as i64)
-        .unwrap_or(1);
-    Ok(Value::fixnum(count))
+    let query = args.first().and_then(NumProcessorsQuery::from_symbol_value);
+    Ok(Value::fixnum(num_processors_count(query) as i64))
+}
+
+fn num_processors_count(query: Option<NumProcessorsQuery>) -> u64 {
+    match query {
+        Some(NumProcessorsQuery::All) => all_processors_count(),
+        Some(NumProcessorsQuery::Current) => current_processors_count(),
+        None => current_processors_count_overridable(),
+    }
+}
+
+#[cfg(unix)]
+fn current_processors_count_overridable() -> u64 {
+    let omp_threads = std::env::var_os("OMP_NUM_THREADS");
+    let omp_limit = std::env::var_os("OMP_THREAD_LIMIT");
+    current_processors_count_overridable_with_env(
+        omp_threads.as_deref().map(OsStrExt::as_bytes),
+        omp_limit.as_deref().map(OsStrExt::as_bytes),
+        current_processors_count(),
+    )
+}
+
+#[cfg(not(unix))]
+fn current_processors_count_overridable() -> u64 {
+    let omp_threads = std::env::var("OMP_NUM_THREADS").ok();
+    let omp_limit = std::env::var("OMP_THREAD_LIMIT").ok();
+    current_processors_count_overridable_with_env(
+        omp_threads.as_deref().map(str::as_bytes),
+        omp_limit.as_deref().map(str::as_bytes),
+        current_processors_count(),
+    )
+}
+
+fn current_processors_count_overridable_with_env(
+    omp_threads: Option<&[u8]>,
+    omp_limit: Option<&[u8]>,
+    current_count: u64,
+) -> u64 {
+    let omp_threads = omp_threads.and_then(parse_openmp_threads).unwrap_or(0);
+    let mut omp_limit = omp_limit.and_then(parse_openmp_threads).unwrap_or(u64::MAX);
+    if omp_limit == 0 {
+        omp_limit = u64::MAX;
+    }
+
+    if omp_threads != 0 {
+        return omp_threads.min(omp_limit);
+    }
+
+    current_count.min(omp_limit).max(1)
+}
+
+fn parse_openmp_threads(bytes: &[u8]) -> Option<u64> {
+    let mut idx = 0;
+    while idx < bytes.len() && bytes[idx].is_ascii_whitespace() {
+        idx += 1;
+    }
+    if idx == bytes.len() || !bytes[idx].is_ascii_digit() {
+        return None;
+    }
+
+    let start = idx;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    let value = std::str::from_utf8(&bytes[start..idx])
+        .ok()?
+        .parse::<u64>()
+        .ok()?;
+
+    while idx < bytes.len() && bytes[idx].is_ascii_whitespace() {
+        idx += 1;
+    }
+
+    if idx == bytes.len() || bytes[idx] == b',' {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn current_processors_count() -> u64 {
+    std::thread::available_parallelism()
+        .map(|n| n.get() as u64)
+        .unwrap_or(1)
+        .max(1)
+}
+
+fn all_processors_count() -> u64 {
+    let mut system = sysinfo::System::new();
+    system.refresh_cpu_list(sysinfo::CpuRefreshKind::nothing());
+    let count = system.cpus().len() as u64;
+    if count == 0 {
+        current_processors_count()
+    } else {
+        count
+    }
 }
 
 /// (list-processes &optional QUERY-ONLY BUFFER) -> nil

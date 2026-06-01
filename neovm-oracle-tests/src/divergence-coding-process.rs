@@ -1,7 +1,7 @@
 //! Divergence tests: coding systems, encoding/decoding, process stubs.
 
-use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use super::common::{assert_oracle_parity, assert_oracle_parity_with_env};
 
 #[test]
 fn divergence_coding_system_list() {
@@ -115,6 +115,38 @@ fn divergence_make_network_process_params() {
   (featurep 'make-network-process)
   (fboundp 'make-network-process)
   (fboundp 'make-serial-process))"#,
+    );
+}
+
+#[test]
+fn divergence_num_processors_openmp_environment() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(list
+  (integerp (num-processors))
+  (> (num-processors) 0)
+  (integerp (num-processors 'current))
+  (> (num-processors 'current) 0)
+  (integerp (num-processors 'all))
+  (> (num-processors 'all) 0)
+  (equal (num-processors 'bogus) (num-processors t)))"#,
+    );
+    assert_oracle_parity_with_env(
+        r#"(num-processors)"#,
+        &[("OMP_NUM_THREADS", "3"), ("OMP_THREAD_LIMIT", "0")],
+    );
+    assert_oracle_parity_with_env(
+        r#"(num-processors)"#,
+        &[("OMP_NUM_THREADS", "3"), ("OMP_THREAD_LIMIT", "2")],
+    );
+    assert_oracle_parity_with_env(
+        r#"(num-processors)"#,
+        &[("OMP_NUM_THREADS", " 4,8"), ("OMP_THREAD_LIMIT", "0")],
+    );
+    assert_oracle_parity_with_env(
+        r#"(num-processors)"#,
+        &[("OMP_NUM_THREADS", "0"), ("OMP_THREAD_LIMIT", "1")],
     );
 }
 

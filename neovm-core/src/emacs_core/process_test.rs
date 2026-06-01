@@ -128,6 +128,19 @@ fn process_finite_domains_match_gnu_symbols() {
         NetworkLookupHint::from_symbol_value(&Value::symbol("canonical")),
         None
     );
+    assert_eq!(
+        NumProcessorsQuery::from_symbol_value(&Value::symbol("all")),
+        Some(NumProcessorsQuery::All)
+    );
+    assert_eq!(
+        NumProcessorsQuery::from_symbol_value(&Value::symbol("current")),
+        Some(NumProcessorsQuery::Current)
+    );
+    assert_eq!(NumProcessorsQuery::All.name(), "all");
+    assert_eq!(
+        NumProcessorsQuery::from_symbol_value(&Value::symbol("default")),
+        None
+    );
 
     assert_eq!(
         ProcessConnectionType::from_symbol_value(&Value::symbol("pipe")),
@@ -3196,6 +3209,38 @@ fn process_list_network_serial_runtime_surface() {
     assert_eq!(
         results[2],
         "OK (nil (wrong-type-argument stringp nil) (error \":name value not a string\") (error \"Missing :name keyword parameter\") t nil t (error \":name value not a string\") nil (wrong-type-argument stringp t) (wrong-type-argument stringp 1) (error \"No port specified\") (error \":speed not specified\") error error wrong-number-of-arguments (wrong-type-argument processp 1) (error \"Process is not a network process\") (error \"Unknown or unsupported option\"))"
+    );
+}
+
+#[test]
+fn num_processors_openmp_parser_matches_gnu_rules() {
+    assert_eq!(parse_openmp_threads(b"3"), Some(3));
+    assert_eq!(parse_openmp_threads(b" 4,8"), Some(4));
+    assert_eq!(parse_openmp_threads(b"5 "), Some(5));
+    assert_eq!(parse_openmp_threads(b"0"), Some(0));
+    assert_eq!(parse_openmp_threads(b""), None);
+    assert_eq!(parse_openmp_threads(b"threads=4"), None);
+    assert_eq!(parse_openmp_threads(b"4x"), None);
+
+    assert_eq!(
+        current_processors_count_overridable_with_env(Some(b"3"), None, 32),
+        3
+    );
+    assert_eq!(
+        current_processors_count_overridable_with_env(Some(b"3"), Some(b"2"), 32),
+        2
+    );
+    assert_eq!(
+        current_processors_count_overridable_with_env(Some(b" 4,8"), Some(b"0"), 32),
+        4
+    );
+    assert_eq!(
+        current_processors_count_overridable_with_env(None, Some(b"1"), 32),
+        1
+    );
+    assert_eq!(
+        current_processors_count_overridable_with_env(Some(b"0"), Some(b"5"), 32),
+        5
     );
 }
 

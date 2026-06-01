@@ -110,6 +110,12 @@ fn write_oracle_form_file(form: &str) -> Result<tempfile::TempPath, String> {
     write_temp_elisp_file("neovm-oracle-form-", ".el", form)
 }
 
+fn apply_extra_env(cmd: &mut Command, extra_env: &[(&str, &str)]) {
+    for (name, value) in extra_env {
+        cmd.env(name, value);
+    }
+}
+
 fn project_lisp_dir() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest.parent().expect("project root").join("lisp")
@@ -263,6 +269,7 @@ fn run_oracle_eval_inner_with_tmpdir(
     form: &str,
     load_files: &[&str],
     shared_tmpdir: Option<&Path>,
+    extra_env: &[(&str, &str)],
 ) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
     let oracle_bin = oracle_emacs_path();
@@ -290,6 +297,7 @@ fn run_oracle_eval_inner_with_tmpdir(
     if let Some(dir) = shared_tmpdir {
         cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
     }
+    apply_extra_env(&mut cmd, extra_env);
 
     unsafe {
         cmd.pre_exec(move || {
@@ -321,7 +329,7 @@ fn run_oracle_eval_inner_with_tmpdir(
 }
 
 fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_oracle_eval_inner_with_tmpdir(form, load_files, None)
+    run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[])
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -401,6 +409,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     form: &str,
     load_files: &[&str],
     shared_tmpdir: Option<&Path>,
+    extra_env: &[(&str, &str)],
 ) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
     let lisp_dir = project_lisp_dir();
@@ -419,6 +428,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     if let Some(dir) = shared_tmpdir {
         cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
     }
+    apply_extra_env(&mut cmd, extra_env);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         unsafe {
@@ -452,7 +462,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
 }
 
 fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None)
+    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[])
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -573,9 +583,18 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
         .prefix("neovm-oracle-case-")
         .tempdir()
         .expect("shared oracle tempdir should be created");
-    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()))
+    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
         .expect("neomacs binary eval should run");
-    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()))
+    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
+        .expect("oracle eval should run");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
+}
+
+pub(crate) fn assert_oracle_parity_with_env(form: &str, extra_env: &[(&str, &str)]) {
+    ensure_nonempty_form(form).expect("form should not be empty");
+    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env)
+        .expect("neomacs binary eval should run");
+    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env)
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
