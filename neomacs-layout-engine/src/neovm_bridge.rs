@@ -14,7 +14,7 @@ use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::{
-    Color as NeoColor, Face as NeoFace, FaceHeight, FaceTable, FontWeight,
+    BoxStyle as NeoBoxStyle, Color as NeoColor, Face as NeoFace, FaceHeight, FaceTable, FontWeight,
     UnderlineStyle as NeoUnderlineStyle,
 };
 use neovm_core::window::{
@@ -1997,7 +1997,7 @@ impl FaceResolver {
         }
         // Box
         if let Some(bb) = &neo_default.box_border {
-            df.box_type = 1;
+            df.box_type = box_style_to_u8(&bb.style);
             df.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(0);
             df.box_line_width = bb.width;
         }
@@ -2134,7 +2134,7 @@ impl FaceResolver {
             rf.strike_through_color = color_to_pixel(color);
         }
         if let Some(box_border) = &face.box_border {
-            rf.box_type = 1;
+            rf.box_type = box_style_to_u8(&box_border.style);
             rf.box_color = box_border
                 .color
                 .as_ref()
@@ -2665,7 +2665,7 @@ impl FaceResolver {
         }
         // Box border
         if let Some(bb) = &face.box_border {
-            rf.box_type = 1;
+            rf.box_type = box_style_to_u8(&bb.style);
             rf.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(rf.fg);
             rf.box_line_width = bb.width;
         }
@@ -2701,6 +2701,10 @@ impl FaceResolver {
 }
 
 fn underline_style_to_u8(style: &NeoUnderlineStyle) -> u8 {
+    style.gnu_code()
+}
+
+fn box_style_to_u8(style: &NeoBoxStyle) -> u8 {
     style.gnu_code()
 }
 

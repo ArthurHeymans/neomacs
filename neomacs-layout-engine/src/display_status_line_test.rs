@@ -564,6 +564,24 @@ fn status_line_row_height_for_face_uses_realized_line_height_and_box() {
 }
 
 #[test]
+fn status_line_face_preserves_gnu_box_type_codes() {
+    let mut resolved = ResolvedFace::default();
+    let boxes = [
+        (0, BoxType::None),
+        (1, BoxType::Line),
+        (2, BoxType::Raised3D),
+        (3, BoxType::Sunken3D),
+    ];
+
+    for (code, box_type) in boxes {
+        resolved.box_type = code;
+        let status_face = StatusLineFace::from_resolved(1, &resolved);
+        assert_eq!(status_face.box_type, box_type);
+        assert_eq!(status_face.render_face().box_type, box_type);
+    }
+}
+
+#[test]
 fn build_rust_status_line_spec_preserves_display_space_align_entries() {
     let _eval = neovm_core::emacs_core::Context::new();
     let mut engine = LayoutEngine::new();

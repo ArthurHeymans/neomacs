@@ -76,6 +76,20 @@ fn underline_style_codes_match_gnu_face_underline_type() {
 }
 
 #[test]
+fn box_style_codes_match_gnu_face_box_type() {
+    crate::test_utils::init_test_tracing();
+    let styles = [
+        (BoxStyle::Flat, 1),
+        (BoxStyle::Raised, 2),
+        (BoxStyle::Pressed, 3),
+    ];
+
+    for (style, code) in styles {
+        assert_eq!(style.gnu_code(), code);
+    }
+}
+
+#[test]
 fn face_merge() {
     crate::test_utils::init_test_tracing();
     let base = Face {

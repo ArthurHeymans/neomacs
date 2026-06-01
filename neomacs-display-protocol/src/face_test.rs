@@ -61,6 +61,23 @@ fn underline_style_codes_match_gnu_face_underline_type() {
 }
 
 #[test]
+fn box_type_codes_match_gnu_face_box_type() {
+    let boxes = [
+        (BoxType::None, 0),
+        (BoxType::Line, 1),
+        (BoxType::Raised3D, 2),
+        (BoxType::Sunken3D, 3),
+    ];
+
+    for (box_type, code) in boxes {
+        assert_eq!(box_type.gnu_code(), code);
+        assert_eq!(BoxType::from_gnu_code(code), Some(box_type));
+    }
+
+    assert_eq!(BoxType::from_gnu_code(4), None);
+}
+
+#[test]
 fn basic_face_id_accepts_fringe_aliases() {
     assert_eq!(BasicFaceId::from_name("fringe"), Some(BasicFaceId::Fringe));
     assert_eq!(
@@ -312,6 +329,26 @@ fn test_box_attribute_and_types() {
     // Sunken3D box
     face.box_type = BoxType::Sunken3D;
     assert_eq!(face.box_type, BoxType::Sunken3D);
+}
+
+#[test]
+fn ffi_face_data_preserves_gnu_box_type_codes() {
+    let boxes = [
+        (1, BoxType::Line),
+        (2, BoxType::Raised3D),
+        (3, BoxType::Sunken3D),
+    ];
+
+    for (code, box_type) in boxes {
+        let ffi = FaceDataFFI {
+            box_type: code,
+            box_line_width: 1,
+            ..Default::default()
+        };
+        let face = unsafe { ffi.to_face() };
+        assert_eq!(face.box_type, box_type);
+        assert!(face.attributes.contains(FaceAttributes::BOX));
+    }
 }
 
 #[test]

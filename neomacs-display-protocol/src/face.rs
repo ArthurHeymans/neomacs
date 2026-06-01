@@ -49,14 +49,24 @@ impl UnderlineStyle {
 }
 
 /// Box type for face
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, IntoPrimitive, TryFromPrimitive)]
 pub enum BoxType {
     #[default]
-    None,
-    Line,
-    Raised3D,
-    Sunken3D,
+    None = 0,
+    Line = 1,
+    Raised3D = 2,
+    Sunken3D = 3,
+}
+
+impl BoxType {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Basic face IDs — fixed cache slots matching GNU's `enum face_id`.
@@ -314,7 +324,7 @@ pub struct FaceDataFFI {
     pub overline: c_int,
     /// Overline color
     pub overline_color: u32,
-    /// Box type (0=none, 1=line)
+    /// Box type (0=none, 1=line, 2=raised, 3=sunken)
     pub box_type: c_int,
     /// Box color
     pub box_color: u32,
@@ -412,11 +422,8 @@ impl FaceDataFFI {
         if overline {
             attrs |= FaceAttributes::OVERLINE;
         }
-        let box_type = if self.box_type == 1 {
-            BoxType::Line
-        } else {
-            BoxType::None
-        };
+        let box_type =
+            BoxType::from_gnu_code(u8::try_from(self.box_type).unwrap_or(0)).unwrap_or_default();
         if !matches!(box_type, BoxType::None) {
             attrs |= FaceAttributes::BOX;
         }
@@ -431,7 +438,7 @@ impl FaceDataFFI {
             overline_color: overline.then(|| Color::from_pixel(self.overline_color)),
             strike_through_color: strike_through
                 .then(|| Color::from_pixel(self.strike_through_color)),
-            box_color: (self.box_type > 0).then(|| Color::from_pixel(self.box_color)),
+            box_color: (box_type != BoxType::None).then(|| Color::from_pixel(self.box_color)),
             font_family,
             font_size: self.font_size.max(0) as f32,
             font_weight,

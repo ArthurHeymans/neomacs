@@ -222,15 +222,16 @@ pub struct BoxBorder {
     pub style: BoxStyle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive)]
+#[repr(u8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BoxStyle {
     #[strum(to_string = "flat-button")]
-    Flat,
+    Flat = 1,
     #[strum(to_string = "released-button")]
-    Raised,
+    Raised = 2,
     #[strum(to_string = "pressed-button")]
-    Pressed,
+    Pressed = 3,
 }
 
 impl BoxStyle {
@@ -239,6 +240,10 @@ impl BoxStyle {
     }
 
     pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn gnu_code(self) -> u8 {
         self.into()
     }
 }

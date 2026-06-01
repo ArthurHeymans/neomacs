@@ -105,6 +105,7 @@ impl StatusLineFace {
         } else {
             0
         };
+        let box_type = BoxType::from_gnu_code(face.box_type).unwrap_or_default();
         Self {
             face_id,
             foreground: Color::from_pixel(face.fg),
@@ -131,12 +132,8 @@ impl StatusLineFace {
             overline_color: face
                 .overline
                 .then(|| Color::from_pixel(face.overline_color)),
-            box_type: if face.box_type != 0 {
-                BoxType::Line
-            } else {
-                BoxType::None
-            },
-            box_color: (face.box_type != 0 && face.box_color != 0)
+            box_type,
+            box_color: (box_type != BoxType::None && face.box_color != 0)
                 .then(|| Color::from_pixel(face.box_color)),
             box_line_width: face.box_line_width,
             box_corner_radius: 0,
