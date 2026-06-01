@@ -13,7 +13,6 @@
 //! Image specs are property lists: (:type png :file "foo.png" :width 100 ...)
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
 use super::value::*;
 use crate::emacs_core::eval::{Context, ImageResolveRequest, ImageResolveSource};
 use crate::window::FRAME_ID_BASE;
@@ -78,16 +77,6 @@ fn expect_frame_designator(_name: &str, value: &Value) -> Result<(), Flow> {
             "wrong-type-argument",
             vec![Value::symbol("frame-live-p"), *value],
         )),
-    }
-}
-
-fn normalized_keyword_name(value: &Value) -> Option<&str> {
-    match value.kind() {
-        ValueKind::Symbol(id) => {
-            let s = resolve_sym(id);
-            Some(s.strip_prefix(':').unwrap_or(s))
-        }
-        _ => None,
     }
 }
 
@@ -174,6 +163,41 @@ impl ImageType {
     }
 }
 
+/// Exact image specification plist keys.
+///
+/// GNU `src/image.c:valid_image_p` and `image_spec_value` compare plist keys
+/// with the keyword symbols such as `:type`, not with bare symbols like
+/// `type`.  Keep this parser exact so invalid image specs don't become valid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+pub enum ImageSpecKey {
+    #[strum(to_string = ":type")]
+    Type,
+    #[strum(to_string = ":file")]
+    File,
+    #[strum(to_string = ":data")]
+    Data,
+    #[strum(to_string = ":width")]
+    Width,
+    #[strum(to_string = ":max-width")]
+    MaxWidth,
+    #[strum(to_string = ":height")]
+    Height,
+    #[strum(to_string = ":max-height")]
+    MaxHeight,
+    #[strum(to_string = ":scale")]
+    Scale,
+    #[strum(to_string = ":foreground")]
+    Foreground,
+    #[strum(to_string = ":background")]
+    Background,
+}
+
+impl ImageSpecKey {
+    pub fn from_lisp_value(value: Value) -> Option<Self> {
+        value.as_symbol_name().and_then(|name| name.parse().ok())
+    }
+}
+
 pub(crate) fn supported_image_types_value() -> Value {
     Value::list(
         ImageType::AVAILABLE_IN_GNU_LIST_ORDER
@@ -234,22 +258,22 @@ fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> 
     let mut i = 1usize;
     while i + 1 < items.len() {
         let value = items[i + 1];
-        match normalized_keyword_name(&items[i]) {
-            Some("file") => {
+        match ImageSpecKey::from_lisp_value(items[i]) {
+            Some(ImageSpecKey::File) => {
                 source = value
                     .as_lisp_string()
                     .cloned()
                     .map(ImageResolveSource::File);
             }
-            Some("data") => {
+            Some(ImageSpecKey::Data) => {
                 source = value
                     .as_lisp_string()
                     .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
             }
-            Some("width") | Some("max-width") => {
+            Some(ImageSpecKey::Width | ImageSpecKey::MaxWidth) => {
                 max_width = parse_image_dimension(value).unwrap_or(max_width);
             }
-            Some("height") | Some("max-height") => {
+            Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
                 max_height = parse_image_dimension(value).unwrap_or(max_height);
             }
             _ => {}
@@ -291,18 +315,18 @@ fn is_image_spec(value: &Value) -> bool {
 
     let mut i = 1usize;
     while i + 1 < items.len() {
-        if let Some(key) = normalized_keyword_name(&items[i]) {
+        if let Some(key) = ImageSpecKey::from_lisp_value(items[i]) {
             let val = &items[i + 1];
             match key {
-                "type" if !type_seen => {
+                ImageSpecKey::Type if !type_seen => {
                     type_seen = true;
                     type_ok = val.as_symbol_name().is_some_and(is_supported_image_type);
                 }
-                "file" if !file_seen => {
+                ImageSpecKey::File if !file_seen => {
                     file_seen = true;
                     file_ok = val.is_string();
                 }
-                "data" if !data_seen => {
+                ImageSpecKey::Data if !data_seen => {
                     data_seen = true;
                     data_ok = val.is_string();
                 }

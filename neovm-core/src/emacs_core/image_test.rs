@@ -734,6 +734,18 @@ fn imagep_matches_image_spec_shape() {
         .unwrap()
         .is_nil()
     );
+    assert!(
+        builtin_imagep(vec![Value::list(vec![
+            Value::symbol("image"),
+            Value::symbol("type"),
+            Value::symbol("png"),
+            Value::symbol("file"),
+            Value::string("x.png"),
+        ])])
+        .unwrap()
+        .is_nil(),
+        "GNU valid_image_p requires exact keyword symbols such as :type and :file"
+    );
 }
 
 #[test]
@@ -914,6 +926,19 @@ fn is_image_spec_valid() {
         Value::string("test.png"),
     ]);
     assert!(is_image_spec(&spec));
+}
+
+#[test]
+fn is_image_spec_rejects_bare_property_names_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::symbol("type"),
+        Value::symbol("png"),
+        Value::symbol("file"),
+        Value::string("test.png"),
+    ]);
+    assert!(!is_image_spec(&spec));
 }
 
 #[test]
