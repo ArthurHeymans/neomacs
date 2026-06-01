@@ -38,6 +38,32 @@ fn process_finite_domains_match_gnu_symbols() {
     assert_eq!(ProcessKind::Pipe.name(), "pipe");
     assert_eq!(ProcessKind::Serial.name(), "serial");
 
+    let status_names: Vec<&str> = ProcessStatusSymbol::gnu_public_domain()
+        .iter()
+        .map(|status| status.name())
+        .collect();
+    assert_eq!(
+        status_names,
+        vec![
+            "run", "stop", "exit", "signal", "open", "listen", "closed", "connect", "failed"
+        ]
+    );
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(Value::symbol("run")),
+        Some(ProcessStatusSymbol::Run)
+    );
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(Value::list(vec![
+            Value::symbol("exit"),
+            Value::fixnum(7)
+        ])),
+        Some(ProcessStatusSymbol::Exit)
+    );
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(Value::symbol("bogus")),
+        None
+    );
+
     assert_eq!(
         NetworkAddressFamily::from_symbol_value(&Value::symbol("ipv4")),
         Some(NetworkAddressFamily::Ipv4)
@@ -373,6 +399,16 @@ fn process_type_and_contact_use_stored_lisp_fields() {
     assert_eq!(
         process_public_status_symbol(pm.get(network).unwrap()),
         Value::symbol("listen")
+    );
+    pm.get_mut(network).expect("network process").status = Value::symbol("open");
+    assert_eq!(
+        process_public_status_symbol(pm.get(network).unwrap()),
+        Value::symbol("open")
+    );
+    pm.get_mut(network).expect("network process").status = Value::symbol("closed");
+    assert_eq!(
+        process_public_status_symbol(pm.get(network).unwrap()),
+        Value::symbol("closed")
     );
 }
 

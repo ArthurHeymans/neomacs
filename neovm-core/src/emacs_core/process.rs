@@ -71,6 +71,53 @@ impl ProcessKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ProcessStatusSymbol {
+    Run,
+    Stop,
+    Exit,
+    Signal,
+    Open,
+    Listen,
+    Closed,
+    Connect,
+    Failed,
+}
+
+impl ProcessStatusSymbol {
+    fn from_symbol_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn from_status_value(status: Value) -> Option<Self> {
+        Self::from_symbol_value(process_status_symbol_value(status))
+    }
+
+    fn value(self) -> Value {
+        Value::symbol(self.name())
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+
+    #[cfg(test)]
+    fn gnu_public_domain() -> [Self; 9] {
+        [
+            Self::Run,
+            Self::Stop,
+            Self::Exit,
+            Self::Signal,
+            Self::Open,
+            Self::Listen,
+            Self::Closed,
+            Self::Connect,
+            Self::Failed,
+        ]
+    }
+}
+
 /// A tracked process record.
 pub struct Process {
     pub id: ProcessId,
@@ -570,13 +617,13 @@ fn process_status_code_value(status: Value) -> i64 {
 }
 
 fn process_status_is_run(status: &Value) -> bool {
-    process_status_symbol_value(*status) == Value::symbol("run")
+    ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Run)
 }
 
 fn process_uses_contact_plist(proc: &Process) -> bool {
     matches!(
-        proc.proc_type.as_symbol_name(),
-        Some("network") | Some("pipe") | Some("serial")
+        proc.kind,
+        ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
     )
 }
 
@@ -1703,25 +1750,20 @@ impl super::eval::Context {
                 let exit_msg = self
                     .processes
                     .get(pid)
-                    .map(
-                        |p| match process_status_symbol_value(p.status).as_symbol_name() {
-                            Some("exit") => {
-                                let code = process_status_code_value(p.status);
-                                if code == 0 {
-                                    "finished\n".to_string()
-                                } else {
-                                    format!("exited abnormally with code {}\n", code)
-                                }
+                    .map(|p| match ProcessStatusSymbol::from_status_value(p.status) {
+                        Some(ProcessStatusSymbol::Exit) => {
+                            let code = process_status_code_value(p.status);
+                            if code == 0 {
+                                "finished\n".to_string()
+                            } else {
+                                format!("exited abnormally with code {}\n", code)
                             }
-                            Some("signal") => {
-                                format!(
-                                    "killed by signal {}\n",
-                                    process_status_code_value(p.status)
-                                )
-                            }
-                            _ => "finished\n".to_string(),
-                        },
-                    )
+                        }
+                        Some(ProcessStatusSymbol::Signal) => {
+                            format!("killed by signal {}\n", process_status_code_value(p.status))
+                        }
+                        _ => "finished\n".to_string(),
+                    })
                     .unwrap_or_else(|| "finished\n".to_string());
                 self.run_process_sentinel_callback(pid, sentinel, &exit_msg);
             }
@@ -2027,13 +2069,13 @@ fn signal_process_not_active_in_manager(processes: &ProcessManager, id: ProcessI
 }
 
 fn stale_process_not_running_reason(status: &Value) -> &'static str {
-    match process_status_symbol_value(*status).as_symbol_name() {
-        Some("signal") => "killed",
-        Some("exit") => "finished",
-        Some("stop") => "stopped",
-        Some("run") => "inactive",
-        Some("connect") => "connect",
-        Some("failed") => "failed",
+    match ProcessStatusSymbol::from_status_value(*status) {
+        Some(ProcessStatusSymbol::Signal) => "killed",
+        Some(ProcessStatusSymbol::Exit) => "finished",
+        Some(ProcessStatusSymbol::Stop) => "stopped",
+        Some(ProcessStatusSymbol::Run) => "inactive",
+        Some(ProcessStatusSymbol::Connect) => "connect",
+        Some(ProcessStatusSymbol::Failed) => "failed",
         _ => "inactive",
     }
 }
@@ -2317,8 +2359,8 @@ fn resolve_optional_process_or_current_buffer_in_state(
 }
 
 fn process_live_status_value(status: &Value, kind: &ProcessKind) -> Value {
-    match process_status_symbol_value(*status).as_symbol_name() {
-        Some("run") => match kind {
+    match ProcessStatusSymbol::from_status_value(*status) {
+        Some(ProcessStatusSymbol::Run) => match kind {
             ProcessKind::Network => Value::list(vec![
                 Value::symbol("listen"),
                 Value::symbol("connect"),
@@ -2338,15 +2380,15 @@ fn process_live_status_value(status: &Value, kind: &ProcessKind) -> Value {
                 Value::symbol("stop"),
             ]),
         },
-        Some("stop") => Value::list(vec![Value::symbol("stop")]),
-        Some("connect") => Value::list(vec![Value::symbol("connect")]),
+        Some(ProcessStatusSymbol::Stop) => Value::list(vec![Value::symbol("stop")]),
+        Some(ProcessStatusSymbol::Connect) => Value::list(vec![Value::symbol("connect")]),
         _ => Value::NIL,
     }
 }
 
 pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
-    match process_status_symbol_value(process.status).as_symbol_name() {
-        Some("run") => match process.kind {
+    match ProcessStatusSymbol::from_status_value(process.status) {
+        Some(ProcessStatusSymbol::Run) => match process.kind {
             ProcessKind::Network => {
                 if process_contact_server_p(process) {
                     Value::symbol("listen")
@@ -2357,14 +2399,17 @@ pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
             ProcessKind::Pipe => Value::symbol("open"),
             _ => Value::symbol("run"),
         },
-        Some("stop") => Value::symbol("stop"),
-        Some("exit") => Value::symbol("exit"),
-        Some("signal") => match process.kind {
+        Some(ProcessStatusSymbol::Stop) => ProcessStatusSymbol::Stop.value(),
+        Some(ProcessStatusSymbol::Exit) => ProcessStatusSymbol::Exit.value(),
+        Some(ProcessStatusSymbol::Signal) => match process.kind {
             ProcessKind::Real => Value::symbol("signal"),
             _ => Value::symbol("closed"),
         },
-        Some("connect") => Value::symbol("connect"),
-        Some("failed") => Value::symbol("failed"),
+        Some(ProcessStatusSymbol::Open) => ProcessStatusSymbol::Open.value(),
+        Some(ProcessStatusSymbol::Listen) => ProcessStatusSymbol::Listen.value(),
+        Some(ProcessStatusSymbol::Closed) => ProcessStatusSymbol::Closed.value(),
+        Some(ProcessStatusSymbol::Connect) => ProcessStatusSymbol::Connect.value(),
+        Some(ProcessStatusSymbol::Failed) => ProcessStatusSymbol::Failed.value(),
         _ => Value::NIL,
     }
 }
@@ -3537,12 +3582,12 @@ pub(crate) fn builtin_internal_default_process_sentinel(
             proc.buffer,
             proc.mark,
             process_name_runtime(proc.name),
-            process_status_symbol_value(proc.status),
+            ProcessStatusSymbol::from_status_value(proc.status),
         ),
         None => return Err(signal_wrong_type_processp(args[0])),
     };
 
-    if status_symbol.as_symbol_name() == Some("run") {
+    if status_symbol == Some(ProcessStatusSymbol::Run) {
         return Ok(Value::NIL);
     }
 
@@ -5712,9 +5757,11 @@ pub(crate) fn builtin_process_exit_status_impl(
     let proc = processes
         .get_any(id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
-    match process_status_symbol_value(proc.status).as_symbol_name() {
-        Some("exit") => Ok(Value::fixnum(process_status_code_value(proc.status))),
-        Some("signal") => {
+    match ProcessStatusSymbol::from_status_value(proc.status) {
+        Some(ProcessStatusSymbol::Exit) => {
+            Ok(Value::fixnum(process_status_code_value(proc.status)))
+        }
+        Some(ProcessStatusSymbol::Signal) => {
             if proc.kind == ProcessKind::Real {
                 Ok(Value::fixnum(process_status_code_value(proc.status)))
             } else {
