@@ -30,6 +30,7 @@ use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot, WindowId,
 };
+use strum::{EnumString, IntoStaticStr};
 
 /// Maximum number of characters in a ligature run before forced flush.
 const MAX_LIGATURE_RUN_LEN: usize = 64;
@@ -43,6 +44,43 @@ struct ScrollBarMetrics {
     whole: i64,
     thumb_start: f32,
     thumb_size: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+enum ResizeMiniWindowsMode {
+    #[strum(to_string = "nil")]
+    Disabled,
+    #[strum(to_string = "grow-only")]
+    GrowOnly,
+    #[strum(to_string = "t")]
+    Exact,
+}
+
+impl ResizeMiniWindowsMode {
+    fn from_lisp_value(value: Option<&Value>) -> Self {
+        let Some(value) = value else {
+            return Self::Exact;
+        };
+        if value.is_nil() {
+            return Self::Disabled;
+        }
+        value
+            .as_symbol_name()
+            .and_then(|name| name.parse().ok())
+            .unwrap_or(Self::Exact)
+    }
+
+    fn should_grow(self) -> bool {
+        !matches!(self, Self::Disabled)
+    }
+
+    fn should_shrink(self, visible_region_empty: bool) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::GrowOnly => visible_region_empty,
+            Self::Exact => true,
+        }
+    }
 }
 
 /// Buffer for accumulating same-face text runs for ligature shaping.
@@ -2720,22 +2758,18 @@ impl LayoutEngine {
                                 (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
                             let frame_rows = frame_params.height / char_h;
                             let max_mini_lines = max_mini_window_lines(evaluator, frame_rows);
+                            let resize_policy = evaluator
+                                .obarray()
+                                .symbol_value("resize-mini-windows")
+                                .copied();
+                            let resize_mode =
+                                ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
 
                             if mini_rows_used > allocated_rows {
                                 // --- Grow ---
                                 let delta = (mini_rows_used as i32) - (allocated_rows as i32);
 
-                                // Check resize-mini-windows variable
-                                let resize_policy = evaluator
-                                    .obarray()
-                                    .symbol_value("resize-mini-windows")
-                                    .copied();
-                                let should_resize = match resize_policy {
-                                    Some(v) if v.is_nil() => false,
-                                    _ => true, // grow-only or t
-                                };
-
-                                if should_resize {
+                                if resize_mode.should_grow() {
                                     tracing::debug!(
                                         "minibuffer auto-resize: grow by {} rows \
                                          (used={}, allocated={})",
@@ -2754,22 +2788,9 @@ impl LayoutEngine {
                                 }
                             } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
                                 // --- Shrink ---
-                                let resize_policy = evaluator
-                                    .obarray()
-                                    .symbol_value("resize-mini-windows")
-                                    .copied();
-                                let should_shrink = match resize_policy {
-                                    Some(v) if v.is_symbol_named("grow-only") => {
-                                        // GNU xdisp.c:13283: with grow-only,
-                                        // shrink when BEGV == ZV (buffer
-                                        // visible region empty). Approximate
-                                        // with mini_rows_used <= 1: if the
-                                        // content fits in 1 row, shrink.
-                                        mini_rows_used <= 1
-                                    }
-                                    Some(v) if v.is_nil() => false,
-                                    _ => true,
-                                };
+                                let visible_region_empty =
+                                    mini_params.buffer_begv >= mini_params.buffer_size;
+                                let should_shrink = resize_mode.should_shrink(visible_region_empty);
 
                                 if should_shrink {
                                     tracing::debug!(

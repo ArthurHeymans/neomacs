@@ -2955,6 +2955,7 @@ dependencies = [
  "neomacs-display-protocol",
  "neovm-core",
  "once_cell",
+ "strum",
  "tracing",
  "ttf-parser",
  "unicode-script",

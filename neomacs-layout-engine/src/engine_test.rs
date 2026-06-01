@@ -29,6 +29,36 @@ fn echo_area_display_rows_count_newlines_and_wide_chars() {
     assert_eq!(plain_echo_display_rows("你你你", 4.0, 1.0, false, false), 2);
 }
 
+#[test]
+fn resize_mini_windows_mode_parses_gnu_values() {
+    assert_eq!(
+        ResizeMiniWindowsMode::from_lisp_value(Some(&Value::NIL)),
+        ResizeMiniWindowsMode::Disabled
+    );
+    assert_eq!(
+        ResizeMiniWindowsMode::from_lisp_value(Some(&Value::symbol("grow-only"))),
+        ResizeMiniWindowsMode::GrowOnly
+    );
+    assert_eq!(
+        ResizeMiniWindowsMode::from_lisp_value(Some(&Value::T)),
+        ResizeMiniWindowsMode::Exact
+    );
+    assert_eq!(
+        ResizeMiniWindowsMode::from_lisp_value(Some(&Value::symbol("anything-else"))),
+        ResizeMiniWindowsMode::Exact
+    );
+}
+
+#[test]
+fn grow_only_minibuffer_shrinks_only_when_visible_region_is_empty() {
+    assert!(ResizeMiniWindowsMode::GrowOnly.should_grow());
+    assert!(!ResizeMiniWindowsMode::Disabled.should_grow());
+    assert!(ResizeMiniWindowsMode::Exact.should_shrink(false));
+    assert!(!ResizeMiniWindowsMode::Disabled.should_shrink(true));
+    assert!(!ResizeMiniWindowsMode::GrowOnly.should_shrink(false));
+    assert!(ResizeMiniWindowsMode::GrowOnly.should_shrink(true));
+}
+
 fn test_window_params() -> WindowParams {
     WindowParams {
         window_id: 1,
