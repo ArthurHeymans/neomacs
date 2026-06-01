@@ -23,9 +23,11 @@ use std::ffi::CStr;
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::Read as IoRead;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(unix)]
+use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -34,8 +36,45 @@ use strum::{EnumString, IntoStaticStr};
 
 /// A TLS-wrapped TCP stream using rustls.
 /// The underlying `TcpStream` is owned by `StreamOwned`, so when TLS is active
-/// the `Process.socket` field is `None`.
-pub type TlsStream = rustls::StreamOwned<rustls::ClientConnection, std::net::TcpStream>;
+/// the `Process.network_socket` field is `None`.
+pub type TlsStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+
+/// OS socket owned by a network process.
+///
+/// GNU Emacs keeps the concrete socket type in the process record
+/// (`socktype`, `is_server`, and fd slots).  Keep the Rust side explicit as
+/// well, so listener-only operations and stream I/O cannot be confused.
+#[derive(Debug)]
+pub enum NetworkSocket {
+    TcpStream(TcpStream),
+    TcpListener(TcpListener),
+    #[cfg(unix)]
+    UnixStream(UnixStream),
+    #[cfg(unix)]
+    UnixListener(UnixListener),
+}
+
+impl NetworkSocket {
+    fn kind_name(&self) -> &'static str {
+        match self {
+            Self::TcpStream(_) => "tcp-stream",
+            Self::TcpListener(_) => "tcp-listener",
+            #[cfg(unix)]
+            Self::UnixStream(_) => "unix-stream",
+            #[cfg(unix)]
+            Self::UnixListener(_) => "unix-listener",
+        }
+    }
+
+    fn is_listener(&self) -> bool {
+        match self {
+            Self::TcpListener(_) => true,
+            #[cfg(unix)]
+            Self::UnixListener(_) => true,
+            _ => false,
+        }
+    }
+}
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
@@ -236,7 +275,7 @@ pub struct Process {
     pub pty_reader: Option<Box<dyn IoRead + Send>>,
     /// PTY writer for sending input to the master side.
     pub pty_writer: Option<Box<dyn std::io::Write + Send>>,
-    pub socket: Option<std::net::TcpStream>,
+    pub network_socket: Option<NetworkSocket>,
     /// TLS-wrapped stream for encrypted network connections.
     /// When `Some`, reads/writes go through this instead of `socket`.
     pub tls_stream: Option<TlsStream>,
@@ -259,6 +298,10 @@ impl std::fmt::Debug for Process {
             .field("pty_child", &self.pty_child.is_some())
             .field("pty_reader", &self.pty_reader.as_ref().map(|_| ".."))
             .field("pty_writer", &self.pty_writer.as_ref().map(|_| ".."))
+            .field(
+                "network_socket",
+                &self.network_socket.as_ref().map(NetworkSocket::kind_name),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -275,6 +318,22 @@ pub struct ProcessManager {
     env_overrides: HashMap<LispString, Option<LispString>>,
     /// I/O multiplexer for child process stdout/stderr pipes.
     poller: Option<polling::Poller>,
+}
+
+struct AcceptedNetworkConnection {
+    server_id: ProcessId,
+    client_id: ProcessId,
+    log: Value,
+    sentinel: Value,
+    log_message: String,
+    sentinel_message: String,
+}
+
+fn accepted_network_process_name(server_name: &str, addr: SocketAddr) -> String {
+    match addr {
+        SocketAddr::V4(v4) => format!("{} <{}:{}>", server_name, v4.ip(), v4.port()),
+        SocketAddr::V6(v6) => format!("{} <[{}]:{}>", server_name, v6.ip(), v6.port()),
+    }
 }
 
 impl std::fmt::Debug for ProcessManager {
@@ -843,7 +902,7 @@ impl ProcessManager {
             pty_child: None,
             pty_reader: None,
             pty_writer: None,
-            socket: None,
+            network_socket: None,
             tls_stream: None,
             mark: super::marker::make_marker_value(None, None, false),
         };
@@ -1266,7 +1325,7 @@ impl ProcessManager {
                 let _ = pty_child.kill();
             }
             proc.tls_stream.take();
-            proc.socket.take();
+            proc.network_socket.take();
             proc.status = process_status_signal_value(9);
             true
         } else {
@@ -1284,7 +1343,7 @@ impl ProcessManager {
                 let _ = pty_child.kill();
             }
             proc.tls_stream.take();
-            proc.socket.take();
+            proc.network_socket.take();
             proc.status = process_status_signal_value(9);
             self.deleted_processes.insert(id, proc);
             true
@@ -1388,7 +1447,7 @@ impl ProcessManager {
                 if p.child.is_some() || p.pty_child.is_some() {
                     return true;
                 }
-                if p.socket.is_some() || p.tls_stream.is_some() {
+                if p.network_socket.is_some() || p.tls_stream.is_some() {
                     return true;
                 }
                 false
@@ -1443,7 +1502,13 @@ impl ProcessManager {
                 use std::io::Write;
                 let _ = tls.write_all(input_bytes);
                 let _ = tls.flush();
-            } else if let Some(ref mut socket) = proc.socket {
+            } else if let Some(NetworkSocket::TcpStream(socket)) = proc.network_socket.as_mut() {
+                use std::io::Write;
+                let _ = socket.write_all(input_bytes);
+                let _ = socket.flush();
+            }
+            #[cfg(unix)]
+            if let Some(NetworkSocket::UnixStream(socket)) = proc.network_socket.as_mut() {
                 use std::io::Write;
                 let _ = socket.write_all(input_bytes);
                 let _ = socket.flush();
@@ -1458,19 +1523,267 @@ impl ProcessManager {
     /// `wait_for_output` wakes up when data arrives.
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
-        let socket = proc.socket.as_ref().ok_or("No socket")?;
+        let socket = proc.network_socket.as_ref().ok_or("No socket")?;
         if let Some(ref poller) = self.poller {
-            unsafe {
-                poller
-                    .add_with_mode(
-                        socket,
-                        polling::Event::readable(id as usize),
-                        polling::PollMode::Level,
-                    )
-                    .map_err(|e| format!("Failed to register socket: {}", e))?;
+            match socket {
+                NetworkSocket::TcpStream(stream) => unsafe {
+                    poller
+                        .add_with_mode(
+                            stream,
+                            polling::Event::readable(id as usize),
+                            polling::PollMode::Level,
+                        )
+                        .map_err(|e| format!("Failed to register socket: {}", e))?;
+                },
+                NetworkSocket::TcpListener(listener) => unsafe {
+                    poller
+                        .add_with_mode(
+                            listener,
+                            polling::Event::readable(id as usize),
+                            polling::PollMode::Level,
+                        )
+                        .map_err(|e| format!("Failed to register socket: {}", e))?;
+                },
+                #[cfg(unix)]
+                NetworkSocket::UnixStream(stream) => unsafe {
+                    poller
+                        .add_with_mode(
+                            stream,
+                            polling::Event::readable(id as usize),
+                            polling::PollMode::Level,
+                        )
+                        .map_err(|e| format!("Failed to register socket: {}", e))?;
+                },
+                #[cfg(unix)]
+                NetworkSocket::UnixListener(listener) => unsafe {
+                    poller
+                        .add_with_mode(
+                            listener,
+                            polling::Event::readable(id as usize),
+                            polling::PollMode::Level,
+                        )
+                        .map_err(|e| format!("Failed to register socket: {}", e))?;
+                },
             }
         }
         Ok(())
+    }
+
+    fn accept_network_server_connections(
+        &mut self,
+        id: ProcessId,
+    ) -> Vec<AcceptedNetworkConnection> {
+        enum AcceptedSocket {
+            Tcp {
+                stream: TcpStream,
+                remote_addr: SocketAddr,
+                local_addr: Option<SocketAddr>,
+            },
+            #[cfg(unix)]
+            Unix {
+                stream: UnixStream,
+                remote_name: String,
+                local_name: String,
+            },
+        }
+
+        let mut accepted = Vec::new();
+
+        loop {
+            let accepted_socket = {
+                let Some(server) = self.processes.get(&id) else {
+                    return accepted;
+                };
+                match server.network_socket.as_ref() {
+                    Some(NetworkSocket::TcpListener(listener)) => match listener.accept() {
+                        Ok((stream, remote_addr)) => Ok(Some(AcceptedSocket::Tcp {
+                            local_addr: stream.local_addr().ok(),
+                            stream,
+                            remote_addr,
+                        })),
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+                        Err(_) => Ok(None),
+                    },
+                    #[cfg(unix)]
+                    Some(NetworkSocket::UnixListener(listener)) => match listener.accept() {
+                        Ok((stream, _)) => Ok(Some(AcceptedSocket::Unix {
+                            remote_name: unix_socket_addr_to_runtime_string(
+                                stream.peer_addr().ok(),
+                            ),
+                            local_name: unix_socket_addr_to_runtime_string(
+                                stream.local_addr().ok(),
+                            ),
+                            stream,
+                        })),
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+                        Err(_) => Ok(None),
+                    },
+                    _ => Err(()),
+                }
+            };
+            let accepted_socket = match accepted_socket {
+                Ok(Some(socket)) => socket,
+                Ok(None) => break,
+                Err(()) => return accepted,
+            };
+
+            let (
+                server_name,
+                server_contact,
+                server_buffer,
+                server_filter,
+                server_sentinel,
+                server_log,
+                server_plist,
+                coding_decode,
+                coding_encode,
+                inherit_coding_system_flag,
+                server_thread,
+                query_on_exit_flag,
+            ) = {
+                let Some(server) = self.processes.get(&id) else {
+                    return accepted;
+                };
+                (
+                    process_name_runtime(server.name),
+                    server.childp,
+                    server.buffer,
+                    server.filter,
+                    server.sentinel,
+                    server.log,
+                    server.plist,
+                    server.coding_decode,
+                    server.coding_encode,
+                    server.inherit_coding_system_flag,
+                    server.thread,
+                    server.query_on_exit_flag,
+                )
+            };
+
+            let mut contact = super::builtins::builtin_copy_sequence(vec![server_contact])
+                .unwrap_or(server_contact);
+            contact =
+                process_contact_plist_put(contact, ProcessKeyword::Server.value(), Value::NIL)
+                    .unwrap_or(contact);
+
+            let (client_name, socket, host_for_message) = match accepted_socket {
+                AcceptedSocket::Tcp {
+                    stream,
+                    remote_addr,
+                    local_addr,
+                } => {
+                    let _ = stream.set_nonblocking(true);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Host.value(),
+                        Value::string(remote_addr.ip().to_string()),
+                    )
+                    .unwrap_or(contact);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Service.value(),
+                        Value::fixnum(remote_addr.port() as i64),
+                    )
+                    .unwrap_or(contact);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Remote.value(),
+                        socket_addr_to_lisp_value(remote_addr),
+                    )
+                    .unwrap_or(contact);
+                    if let Some(local_addr) = local_addr {
+                        contact = process_contact_plist_put(
+                            contact,
+                            ProcessKeyword::Local.value(),
+                            socket_addr_to_lisp_value(local_addr),
+                        )
+                        .unwrap_or(contact);
+                    }
+                    (
+                        accepted_network_process_name(&server_name, remote_addr),
+                        NetworkSocket::TcpStream(stream),
+                        remote_addr.ip().to_string(),
+                    )
+                }
+                #[cfg(unix)]
+                AcceptedSocket::Unix {
+                    stream,
+                    remote_name,
+                    local_name,
+                } => {
+                    let _ = stream.set_nonblocking(true);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Host.value(),
+                        Value::NIL,
+                    )
+                    .unwrap_or(contact);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Remote.value(),
+                        Value::string(&remote_name),
+                    )
+                    .unwrap_or(contact);
+                    contact = process_contact_plist_put(
+                        contact,
+                        ProcessKeyword::Local.value(),
+                        Value::string(&local_name),
+                    )
+                    .unwrap_or(contact);
+
+                    let prefix = format!("{} <", server_name);
+                    let sequence = self
+                        .processes
+                        .values()
+                        .filter(|process| process_name_runtime(process.name).starts_with(&prefix))
+                        .count()
+                        + 1;
+                    let host_for_message = if remote_name.is_empty() {
+                        "-".to_string()
+                    } else {
+                        remote_name
+                    };
+                    (
+                        format!("{} <{}>", server_name, sequence),
+                        NetworkSocket::UnixStream(stream),
+                        host_for_message,
+                    )
+                }
+            };
+
+            let client_id = self.create_process_with_kind_lisp(
+                LispString::from_utf8(&client_name),
+                server_buffer,
+                LispString::from_utf8("network"),
+                Vec::new(),
+                ProcessKind::Network,
+            );
+            if let Some(client) = self.get_mut(client_id) {
+                client.network_socket = Some(socket);
+                client.status = process_status_run_value();
+                client.childp = contact;
+                client.filter = server_filter;
+                client.sentinel = server_sentinel;
+                client.plist = server_plist;
+                client.coding_decode = coding_decode;
+                client.coding_encode = coding_encode;
+                client.inherit_coding_system_flag = inherit_coding_system_flag;
+                client.thread = server_thread;
+                client.query_on_exit_flag = query_on_exit_flag;
+            }
+            self.register_socket_fd(client_id).ok();
+
+            accepted.push(AcceptedNetworkConnection {
+                server_id: id,
+                client_id,
+                log: server_log,
+                sentinel: server_sentinel,
+                log_message: format!("accept from {}\n", host_for_message),
+                sentinel_message: format!("open from {}\n", host_for_message),
+            });
+        }
+
+        accepted
     }
 
     /// Read available output from a process — child stdout or network socket.
@@ -1521,7 +1834,7 @@ impl ProcessManager {
                 }
             }
 
-            if let Some(ref mut socket) = proc.socket {
+            if let Some(NetworkSocket::TcpStream(socket)) = proc.network_socket.as_mut() {
                 use std::io::Read;
                 let mut buf = vec![0u8; 4096];
                 match socket.read(&mut buf) {
@@ -1536,6 +1849,32 @@ impl ProcessManager {
                     }
                     Err(_) => return None,
                 }
+            }
+
+            #[cfg(unix)]
+            if let Some(NetworkSocket::UnixStream(socket)) = proc.network_socket.as_mut() {
+                use std::io::Read;
+                let mut buf = vec![0u8; 4096];
+                match socket.read(&mut buf) {
+                    Ok(0) => return None,
+                    Ok(n) => {
+                        let s = decode_process_output_bytes(&buf[..n], proc.coding_decode);
+                        proc.stdout.push_str(&s);
+                        return Some(s);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        return Some(String::new());
+                    }
+                    Err(_) => return None,
+                }
+            }
+
+            if proc
+                .network_socket
+                .as_ref()
+                .is_some_and(NetworkSocket::is_listener)
+            {
+                return Some(String::new());
             }
         }
 
@@ -1716,6 +2055,28 @@ impl super::eval::Context {
         );
     }
 
+    fn run_process_log_callback(
+        &mut self,
+        log: Value,
+        server_id: ProcessId,
+        client_id: ProcessId,
+        message: &str,
+    ) {
+        if log.is_nil() {
+            return;
+        }
+
+        self.run_async_process_callback_preserving_state(
+            log,
+            vec![
+                Value::fixnum(server_id as i64),
+                Value::fixnum(client_id as i64),
+                Value::string(message),
+            ],
+            "process log",
+        );
+    }
+
     pub(crate) fn poll_process_output_with_wait_policy(
         &mut self,
         target_process: Option<ProcessId>,
@@ -1736,6 +2097,23 @@ impl super::eval::Context {
         for pid in proc_ids {
             let is_target = target_process.map_or(true, |target| target == pid);
             let mut exited = self.processes.check_child_exit(pid);
+            for event in self.processes.accept_network_server_connections(pid) {
+                outcome.any_process_activity = true;
+                if is_target {
+                    outcome.target_process_activity = true;
+                }
+                self.run_process_log_callback(
+                    event.log,
+                    event.server_id,
+                    event.client_id,
+                    &event.log_message,
+                );
+                self.run_process_sentinel_callback(
+                    event.client_id,
+                    event.sentinel,
+                    &event.sentinel_message,
+                );
+            }
 
             let read_result = self.processes.read_process_output(pid);
             let is_network = self
@@ -3041,6 +3419,79 @@ impl NetworkProcessFamilySymbol {
     }
 }
 
+fn network_loopback_host_for_family(family: Option<NetworkProcessFamilySymbol>) -> &'static str {
+    match family {
+        Some(NetworkProcessFamilySymbol::Ipv6) => "::1",
+        _ => "127.0.0.1",
+    }
+}
+
+fn parse_network_host(
+    value: &Value,
+    family: Option<NetworkProcessFamilySymbol>,
+) -> Result<Option<String>, Flow> {
+    if value.is_nil() {
+        return Ok(None);
+    }
+    if value.as_symbol_name() == Some("local") {
+        return Ok(Some(network_loopback_host_for_family(family).to_string()));
+    }
+    match value.kind() {
+        ValueKind::String => Ok(Some(process_owned_runtime_string(*value))),
+        _ => Err(signal_wrong_type_string(*value)),
+    }
+}
+
+fn parse_network_service_port(value: &Value, server: bool) -> Result<u16, Flow> {
+    match value.kind() {
+        ValueKind::T if server => Ok(0),
+        ValueKind::Fixnum(port) if (0..(1 << 16)).contains(&port) => Ok(port as u16),
+        ValueKind::String => {
+            let service = process_owned_runtime_string(*value);
+            service.parse::<u16>().map_err(|_| {
+                signal(
+                    "error",
+                    vec![Value::string(format!("Unknown service: {}", service))],
+                )
+            })
+        }
+        _ => Err(signal_wrong_type_string(*value)),
+    }
+}
+
+fn socket_addr_to_lisp_value(addr: SocketAddr) -> Value {
+    match addr {
+        SocketAddr::V4(v4) => {
+            let octets = v4.ip().octets();
+            int_vector(&[
+                octets[0] as i64,
+                octets[1] as i64,
+                octets[2] as i64,
+                octets[3] as i64,
+                v4.port() as i64,
+            ])
+        }
+        SocketAddr::V6(v6) => {
+            let segments = v6.ip().segments();
+            let mut vals = [0_i64; 9];
+            for (idx, &seg) in segments.iter().enumerate() {
+                vals[idx] = seg as i64;
+            }
+            vals[8] = v6.port() as i64;
+            int_vector(&vals)
+        }
+    }
+}
+
+#[cfg(unix)]
+fn unix_socket_addr_to_runtime_string(addr: Option<UnixSocketAddr>) -> String {
+    addr.and_then(|addr| {
+        addr.as_pathname()
+            .map(|path| path.as_os_str().to_string_lossy().into_owned())
+    })
+    .unwrap_or_default()
+}
+
 fn validate_network_process_family(value: &Value) -> Result<(), Flow> {
     if value.is_nil()
         || matches!(value.kind(), ValueKind::Fixnum(_))
@@ -3873,15 +4324,25 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
         ));
     }
 
-    // Take the plain TCP socket — it will be owned by the TLS stream.
-    let tcp_stream = proc.socket.take().ok_or_else(|| {
-        signal(
-            "error",
-            vec![Value::string(
-                "gnutls-boot: no socket (already TLS or closed)",
-            )],
-        )
-    })?;
+    // Take the plain TCP stream; it will be owned by the TLS stream.
+    let tcp_stream = match proc.network_socket.take() {
+        Some(NetworkSocket::TcpStream(stream)) => stream,
+        Some(other) => {
+            proc.network_socket = Some(other);
+            return Err(signal(
+                "error",
+                vec![Value::string("gnutls-boot: process is not a TCP stream")],
+            ));
+        }
+        None => {
+            return Err(signal(
+                "error",
+                vec![Value::string(
+                    "gnutls-boot: no socket (already TLS or closed)",
+                )],
+            ));
+        }
+    };
 
     let host = hostname.unwrap_or_else(|| "localhost".to_string());
 
@@ -4502,10 +4963,12 @@ pub(crate) fn builtin_make_network_process(
 
     // ---- Parse all keyword arguments ----
     let mut name: Option<LispString> = None;
-    let mut host: Option<String> = None;
+    let mut host_value = Value::NIL;
     let mut service: Option<Value> = None;
     let mut server = false;
+    let mut family = None;
     let mut nowait = false;
+    let mut contact = Value::list(args.clone());
     let mut filter_val = Value::NIL;
     let mut sentinel_val = Value::NIL;
     let mut log_val = Value::NIL;
@@ -4523,14 +4986,13 @@ pub(crate) fn builtin_make_network_process(
         };
         match keyword {
             ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
-            ProcessKeyword::Host => {
-                if !value.is_nil() {
-                    host = Some(expect_string(&value)?);
-                }
-            }
+            ProcessKeyword::Host => host_value = value,
             ProcessKeyword::Service => service = Some(value),
             ProcessKeyword::Server => server = value.is_truthy(),
-            ProcessKeyword::Family => validate_network_process_family(&value)?,
+            ProcessKeyword::Family => {
+                validate_network_process_family(&value)?;
+                family = NetworkProcessFamilySymbol::from_symbol_value(&value);
+            }
             ProcessKeyword::Type => validate_network_socket_type(&value)?,
             ProcessKeyword::Nowait => nowait = value.is_truthy(),
             ProcessKeyword::Filter => filter_val = value,
@@ -4543,6 +5005,8 @@ pub(crate) fn builtin_make_network_process(
         }
         i += 2;
     }
+
+    let host = parse_network_host(&host_value, family)?;
 
     let Some(name) = name else {
         return Err(signal(
@@ -4570,8 +5034,209 @@ pub(crate) fn builtin_make_network_process(
         Value::NIL
     };
 
+    if family == Some(NetworkProcessFamilySymbol::Local) {
+        #[cfg(not(unix))]
+        {
+            return Err(signal(
+                "error",
+                vec![Value::string("Unknown address family")],
+            ));
+        }
+
+        #[cfg(unix)]
+        {
+            let service_path = expect_string(&service)?;
+            if !host_value.is_nil() {
+                contact =
+                    process_contact_plist_put(contact, ProcessKeyword::Host.value(), Value::NIL)?;
+            }
+
+            if server {
+                let listener = UnixListener::bind(Path::new(&service_path)).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![
+                            Value::string("Cannot bind server socket"),
+                            Value::string(e.to_string()),
+                        ],
+                    )
+                })?;
+                listener.set_nonblocking(true).map_err(|e| {
+                    signal(
+                        "file-error",
+                        vec![Value::string(format!("set_nonblocking: {}", e))],
+                    )
+                })?;
+                contact = process_contact_plist_put(
+                    contact,
+                    ProcessKeyword::Local.value(),
+                    Value::string(&service_path),
+                )?;
+
+                let id = eval.processes.create_process_with_kind_lisp(
+                    name,
+                    buffer,
+                    LispString::from_utf8("network"),
+                    Vec::new(),
+                    ProcessKind::Network,
+                );
+                eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+                if let Some(proc) = eval.processes.get_mut(id) {
+                    proc.childp = contact;
+                    proc.thread = current_thread_handle(&eval.threads);
+                    proc.network_socket = Some(NetworkSocket::UnixListener(listener));
+                    if !filter_val.is_nil() {
+                        proc.filter = filter_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Filter.value(),
+                            proc.filter,
+                        )?;
+                    }
+                    if !sentinel_val.is_nil() {
+                        proc.sentinel = sentinel_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Sentinel.value(),
+                            proc.sentinel,
+                        )?;
+                    }
+                    if !log_val.is_nil() {
+                        proc.log = log_val;
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Log.value(),
+                            proc.log,
+                        )?;
+                    }
+                    if !buffer.is_nil() {
+                        proc.childp = process_contact_plist_put(
+                            proc.childp,
+                            ProcessKeyword::Buffer.value(),
+                            buffer,
+                        )?;
+                    }
+                    if noquery {
+                        proc.query_on_exit_flag = false;
+                    }
+                }
+                eval.processes.register_socket_fd(id).ok();
+                return Ok(Value::fixnum(id as i64));
+            }
+
+            let stream = UnixStream::connect(Path::new(&service_path)).map_err(|e| {
+                signal(
+                    "file-error",
+                    vec![
+                        Value::string("make client process failed"),
+                        Value::string(e.to_string()),
+                        Value::string(&service_path),
+                    ],
+                )
+            })?;
+            stream.set_nonblocking(true).map_err(|e| {
+                signal(
+                    "file-error",
+                    vec![Value::string(format!("set_nonblocking: {}", e))],
+                )
+            })?;
+            contact = process_contact_plist_put(
+                contact,
+                ProcessKeyword::Remote.value(),
+                Value::string(&service_path),
+            )?;
+            contact = process_contact_plist_put(
+                contact,
+                ProcessKeyword::Local.value(),
+                Value::string(""),
+            )?;
+
+            let id = eval.processes.create_process_with_kind_lisp(
+                name,
+                buffer,
+                LispString::from_utf8("network"),
+                Vec::new(),
+                ProcessKind::Network,
+            );
+            eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+            if let Some(proc) = eval.processes.get_mut(id) {
+                proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+                proc.status = process_status_run_value();
+                proc.childp = contact;
+                proc.thread = current_thread_handle(&eval.threads);
+                if !filter_val.is_nil() {
+                    proc.filter = filter_val;
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Filter.value(),
+                        proc.filter,
+                    )?;
+                }
+                if !sentinel_val.is_nil() {
+                    proc.sentinel = sentinel_val;
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Sentinel.value(),
+                        proc.sentinel,
+                    )?;
+                }
+                if !buffer.is_nil() {
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Buffer.value(),
+                        buffer,
+                    )?;
+                }
+                if noquery {
+                    proc.query_on_exit_flag = false;
+                }
+            }
+
+            eval.processes.register_socket_fd(id).ok();
+
+            let sentinel = eval
+                .processes
+                .get(id)
+                .map(|p| p.sentinel)
+                .unwrap_or(Value::NIL);
+            eval.run_process_sentinel_callback(id, sentinel, "open\n");
+
+            return Ok(Value::fixnum(id as i64));
+        }
+    }
+
     if server {
-        // ---- Server mode: create record, no actual listener yet ----
+        let port = parse_network_service_port(&service, true)?;
+        let host_str = host
+            .clone()
+            .unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
+        let listener = TcpListener::bind((host_str.as_str(), port)).map_err(|e| {
+            signal(
+                "file-error",
+                vec![
+                    Value::string("Cannot bind server socket"),
+                    Value::string(e.to_string()),
+                ],
+            )
+        })?;
+        listener.set_nonblocking(true).map_err(|e| {
+            signal(
+                "file-error",
+                vec![Value::string(format!("set_nonblocking: {}", e))],
+            )
+        })?;
+        let local_addr = listener.local_addr().map_err(|e| {
+            signal(
+                "file-error",
+                vec![Value::string(format!("getsockname: {}", e))],
+            )
+        })?;
+        let local = socket_addr_to_lisp_value(local_addr);
+        let actual_service = Value::fixnum(local_addr.port() as i64);
+        contact =
+            process_contact_plist_put(contact, ProcessKeyword::Service.value(), actual_service)?;
+        contact = process_contact_plist_put(contact, ProcessKeyword::Local.value(), local)?;
+
         let id = eval.processes.create_process_with_kind_lisp(
             name,
             buffer,
@@ -4580,26 +5245,10 @@ pub(crate) fn builtin_make_network_process(
             ProcessKind::Network,
         );
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-        let port = 40000_i64 + (id % 20000) as i64;
-        let local = Value::vector(vec![
-            Value::fixnum(127),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(1),
-            Value::fixnum(port),
-        ]);
         if let Some(proc) = eval.processes.get_mut(id) {
-            proc.childp = Value::list(vec![
-                ProcessKeyword::Name.value(),
-                proc.name,
-                ProcessKeyword::Server.value(),
-                Value::T,
-                ProcessKeyword::Service.value(),
-                Value::fixnum(port),
-                ProcessKeyword::Local.value(),
-                local,
-            ]);
+            proc.childp = contact;
             proc.thread = current_thread_handle(&eval.threads);
+            proc.network_socket = Some(NetworkSocket::TcpListener(listener));
             if !filter_val.is_nil() {
                 proc.filter = filter_val;
                 proc.childp = process_contact_plist_put(
@@ -4629,24 +5278,15 @@ pub(crate) fn builtin_make_network_process(
                 proc.query_on_exit_flag = false;
             }
         }
+        eval.processes.register_socket_fd(id).ok();
         return Ok(Value::fixnum(id as i64));
     }
 
     // ---- Client mode: establish TCP connection ----
-    let host_str = host.unwrap_or_else(|| "localhost".to_string());
-    let port: u16 = match service.kind() {
-        ValueKind::Fixnum(n) => n as u16,
-        _ => {
-            let s = expect_string(&service)?;
-            s.parse::<u16>().unwrap_or(0)
-        }
-    };
-    if port == 0 {
-        return Err(signal("error", vec![Value::string("Invalid service/port")]));
-    }
+    let host_str = host.unwrap_or_else(|| network_loopback_host_for_family(family).to_string());
+    let port = parse_network_service_port(&service, false)?;
 
-    let addr = format!("{}:{}", host_str, port);
-    let stream = std::net::TcpStream::connect(&addr).map_err(|e| {
+    let stream = TcpStream::connect((host_str.as_str(), port)).map_err(|e| {
         signal(
             "file-error",
             vec![
@@ -4663,6 +5303,8 @@ pub(crate) fn builtin_make_network_process(
             vec![Value::string(format!("set_nonblocking: {}", e))],
         )
     })?;
+    let remote_addr = stream.peer_addr().ok();
+    let local_addr = stream.local_addr().ok();
 
     let id = eval.processes.create_process_with_kind_lisp(
         name,
@@ -4672,19 +5314,24 @@ pub(crate) fn builtin_make_network_process(
         ProcessKind::Network,
     );
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+    if let Some(addr) = remote_addr {
+        contact = process_contact_plist_put(
+            contact,
+            ProcessKeyword::Remote.value(),
+            socket_addr_to_lisp_value(addr),
+        )?;
+    }
+    if let Some(addr) = local_addr {
+        contact = process_contact_plist_put(
+            contact,
+            ProcessKeyword::Local.value(),
+            socket_addr_to_lisp_value(addr),
+        )?;
+    }
     if let Some(proc) = eval.processes.get_mut(id) {
-        proc.socket = Some(stream);
+        proc.network_socket = Some(NetworkSocket::TcpStream(stream));
         proc.status = process_status_run_value();
-        proc.childp = Value::list(vec![
-            ProcessKeyword::Name.value(),
-            proc.name,
-            ProcessKeyword::Host.value(),
-            Value::heap_string(super::builtins::runtime_string_to_lisp_string(
-                &host_str, true,
-            )),
-            ProcessKeyword::Service.value(),
-            service,
-        ]);
+        proc.childp = contact;
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;

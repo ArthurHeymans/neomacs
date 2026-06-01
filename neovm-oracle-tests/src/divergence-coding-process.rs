@@ -138,6 +138,75 @@ fn divergence_make_network_process_invalid_keyword_domains() {
 }
 
 #[test]
+fn divergence_make_network_process_stream_server_accepts_client() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(let ((events nil))
+  (condition-case err
+      (let* ((srv (make-network-process
+                   :name "srv" :server t :service t :host 'local
+                   :log (lambda (server client msg)
+                          (push (list (process-name client) msg) events))))
+             (port (process-contact srv :service))
+             (cli (make-network-process :name "cli" :host 'local :service port)))
+        (accept-process-output nil 0.2)
+        (prog1
+            (list (process-status srv)
+                  (integerp port)
+                  (> port 0)
+                  (process-status cli)
+                  (length events))
+          (delete-process cli)
+          (delete-process srv)))
+    (error err)))"#,
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn divergence_make_network_process_local_stream_server_accepts_client() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(let ((path (make-temp-file "neomacs-local-sock-"))
+       (events nil))
+  (delete-file path)
+  (unwind-protect
+      (condition-case err
+          (let* ((srv (make-network-process
+                       :name "srv" :server t :family 'local :service path
+                       :log (lambda (server client msg)
+                              (push (list (process-name client)
+                                          msg
+                                          (process-contact client :remote)
+                                          (process-contact client :local))
+                                    events))))
+                 (cli (make-network-process
+                       :name "cli" :family 'local :service path)))
+            (accept-process-output nil 0.2)
+            (prog1
+                (list (process-status srv)
+                      (equal (process-contact srv :local) path)
+                      (equal (process-contact srv :service) path)
+                      (process-status cli)
+                      (equal (process-contact cli :remote) path)
+                      (equal (process-contact cli :local) "")
+                      (length events)
+                      (and events
+                           (not (null (string-match-p "^srv <[0-9]+>$"
+                                                      (caar events)))))
+                      (and events (equal (cadar events) "accept from -\n"))
+                      (and events (equal (nth 2 (car events)) ""))
+                      (and events (equal (nth 3 (car events)) path)))
+              (delete-process cli)
+              (delete-process srv)))
+        (error err))
+    (ignore-errors (delete-file path))))"#,
+    );
+}
+
+#[test]
 fn divergence_num_processors_openmp_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
