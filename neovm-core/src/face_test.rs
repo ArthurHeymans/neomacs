@@ -451,30 +451,30 @@ fn font_weight_from_symbol_all_names() {
 #[test]
 fn font_slant_from_symbol_all() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(FontSlant::from_symbol("normal"), Some(FontSlant::Normal));
-    assert_eq!(FontSlant::from_symbol("roman"), Some(FontSlant::Normal));
-    assert_eq!(FontSlant::from_symbol("r"), Some(FontSlant::Normal));
+    let cases = [
+        ("normal", FontSlant::Normal, 100),
+        ("roman", FontSlant::Normal, 100),
+        ("r", FontSlant::Normal, 100),
+        ("unspecified", FontSlant::Normal, 100),
+        ("italic", FontSlant::Italic, 200),
+        ("i", FontSlant::Italic, 200),
+        ("ot", FontSlant::Italic, 200),
+        ("oblique", FontSlant::Oblique, 210),
+        ("o", FontSlant::Oblique, 210),
+        ("reverse-italic", FontSlant::ReverseItalic, 10),
+        ("ri", FontSlant::ReverseItalic, 10),
+        ("reverse-oblique", FontSlant::ReverseOblique, 0),
+        ("ro", FontSlant::ReverseOblique, 0),
+    ];
+    for (name, slant, gnu_numeric) in cases {
+        assert_eq!(FontSlant::from_symbol(name), Some(slant));
+        assert_eq!(slant.gnu_numeric(), gnu_numeric);
+        assert_eq!(FontSlant::from_gnu_numeric(gnu_numeric), Some(slant));
+    }
     assert_eq!(
-        FontSlant::from_symbol("unspecified"),
-        Some(FontSlant::Normal)
-    );
-    assert_eq!(FontSlant::from_symbol("italic"), Some(FontSlant::Italic));
-    assert_eq!(FontSlant::from_symbol("i"), Some(FontSlant::Italic));
-    assert_eq!(FontSlant::from_symbol("ot"), Some(FontSlant::Italic));
-    assert_eq!(FontSlant::from_symbol("oblique"), Some(FontSlant::Oblique));
-    assert_eq!(FontSlant::from_symbol("o"), Some(FontSlant::Oblique));
-    assert_eq!(
-        FontSlant::from_symbol("reverse-italic"),
-        Some(FontSlant::ReverseItalic)
-    );
-    assert_eq!(FontSlant::from_symbol("ri"), Some(FontSlant::ReverseItalic));
-    assert_eq!(
-        FontSlant::from_symbol("reverse-oblique"),
-        Some(FontSlant::ReverseOblique)
-    );
-    assert_eq!(
-        FontSlant::from_symbol("ro"),
-        Some(FontSlant::ReverseOblique)
+        FontSlant::from_gnu_numeric(205),
+        None,
+        "GNU slant table has no 205 entry"
     );
     assert_eq!(FontSlant::from_symbol("unknown"), None);
     assert!(FontSlant::Italic.is_italic());
@@ -487,85 +487,40 @@ fn font_slant_from_symbol_all() {
 #[test]
 fn font_width_from_symbol_all() {
     crate::test_utils::init_test_tracing();
+    let cases = [
+        ("ultra-condensed", FontWidth::UltraCondensed, 50),
+        ("ultracondensed", FontWidth::UltraCondensed, 50),
+        ("extra-condensed", FontWidth::ExtraCondensed, 63),
+        ("extracondensed", FontWidth::ExtraCondensed, 63),
+        ("condensed", FontWidth::Condensed, 75),
+        ("compressed", FontWidth::Condensed, 75),
+        ("narrow", FontWidth::Condensed, 75),
+        ("semi-condensed", FontWidth::SemiCondensed, 87),
+        ("semicondensed", FontWidth::SemiCondensed, 87),
+        ("demicondensed", FontWidth::SemiCondensed, 87),
+        ("normal", FontWidth::Normal, 100),
+        ("medium", FontWidth::Normal, 100),
+        ("regular", FontWidth::Normal, 100),
+        ("unspecified", FontWidth::Normal, 100),
+        ("semi-expanded", FontWidth::SemiExpanded, 113),
+        ("semiexpanded", FontWidth::SemiExpanded, 113),
+        ("demiexpanded", FontWidth::SemiExpanded, 113),
+        ("expanded", FontWidth::Expanded, 125),
+        ("extra-expanded", FontWidth::ExtraExpanded, 150),
+        ("extraexpanded", FontWidth::ExtraExpanded, 150),
+        ("ultra-expanded", FontWidth::UltraExpanded, 200),
+        ("ultraexpanded", FontWidth::UltraExpanded, 200),
+        ("wide", FontWidth::UltraExpanded, 200),
+    ];
+    for (name, width, gnu_numeric) in cases {
+        assert_eq!(FontWidth::from_symbol(name), Some(width), "parse {name}");
+        assert_eq!(width.gnu_numeric(), gnu_numeric);
+        assert_eq!(FontWidth::from_gnu_numeric(gnu_numeric), Some(width));
+    }
     assert_eq!(
-        FontWidth::from_symbol("ultra-condensed"),
-        Some(FontWidth::UltraCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("ultracondensed"),
-        Some(FontWidth::UltraCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("extra-condensed"),
-        Some(FontWidth::ExtraCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("extracondensed"),
-        Some(FontWidth::ExtraCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("condensed"),
-        Some(FontWidth::Condensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("compressed"),
-        Some(FontWidth::Condensed)
-    );
-    assert_eq!(FontWidth::from_symbol("narrow"), Some(FontWidth::Condensed));
-    assert_eq!(
-        FontWidth::from_symbol("semi-condensed"),
-        Some(FontWidth::SemiCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("semicondensed"),
-        Some(FontWidth::SemiCondensed)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("demicondensed"),
-        Some(FontWidth::SemiCondensed)
-    );
-    assert_eq!(FontWidth::from_symbol("normal"), Some(FontWidth::Normal));
-    assert_eq!(FontWidth::from_symbol("medium"), Some(FontWidth::Normal));
-    assert_eq!(FontWidth::from_symbol("regular"), Some(FontWidth::Normal));
-    assert_eq!(
-        FontWidth::from_symbol("unspecified"),
-        Some(FontWidth::Normal)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("semi-expanded"),
-        Some(FontWidth::SemiExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("semiexpanded"),
-        Some(FontWidth::SemiExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("demiexpanded"),
-        Some(FontWidth::SemiExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("expanded"),
-        Some(FontWidth::Expanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("extra-expanded"),
-        Some(FontWidth::ExtraExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("extraexpanded"),
-        Some(FontWidth::ExtraExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("ultra-expanded"),
-        Some(FontWidth::UltraExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("ultraexpanded"),
-        Some(FontWidth::UltraExpanded)
-    );
-    assert_eq!(
-        FontWidth::from_symbol("wide"),
-        Some(FontWidth::UltraExpanded)
+        FontWidth::from_gnu_numeric(101),
+        None,
+        "GNU width table has no 101 entry"
     );
     assert_eq!(FontWidth::from_symbol("unknown"), None);
     assert_eq!(FontWidth::Condensed.symbol_name(), "condensed");

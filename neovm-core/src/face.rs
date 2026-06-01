@@ -13,7 +13,7 @@
 use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::value::{Value, ValueKind, next_float_id};
 use crate::gc_trace::GcTrace;
-use num_enum::IntoPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
 
@@ -511,7 +511,10 @@ impl FontWeight {
 }
 
 /// Font slant.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
+#[repr(u16)]
 #[strum(serialize_all = "kebab-case")]
 pub enum FontSlant {
     #[strum(
@@ -520,15 +523,15 @@ pub enum FontSlant {
         serialize = "r",
         serialize = "unspecified"
     )]
-    Normal,
+    Normal = 100,
     #[strum(to_string = "italic", serialize = "i", serialize = "ot")]
-    Italic,
+    Italic = 200,
     #[strum(to_string = "oblique", serialize = "o")]
-    Oblique,
+    Oblique = 210,
     #[strum(to_string = "reverse-italic", serialize = "ri")]
-    ReverseItalic,
+    ReverseItalic = 10,
     #[strum(to_string = "reverse-oblique", serialize = "ro")]
-    ReverseOblique,
+    ReverseOblique = 0,
 }
 
 impl FontSlant {
@@ -540,53 +543,64 @@ impl FontSlant {
         self.into()
     }
 
+    pub fn gnu_numeric(self) -> u16 {
+        self.into()
+    }
+
+    pub fn from_gnu_numeric(value: u16) -> Option<Self> {
+        Self::try_from(value).ok()
+    }
+
     pub fn is_italic(&self) -> bool {
         matches!(self, Self::Italic | Self::Oblique)
     }
 }
 
 /// Font width (condensed, normal, expanded).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
+#[repr(u16)]
 #[strum(serialize_all = "kebab-case")]
 pub enum FontWidth {
     #[strum(to_string = "ultra-condensed", serialize = "ultracondensed")]
-    UltraCondensed,
+    UltraCondensed = 50,
     #[strum(to_string = "extra-condensed", serialize = "extracondensed")]
-    ExtraCondensed,
+    ExtraCondensed = 63,
     #[strum(
         to_string = "condensed",
         serialize = "compressed",
         serialize = "narrow"
     )]
-    Condensed,
+    Condensed = 75,
     #[strum(
         to_string = "semi-condensed",
         serialize = "semicondensed",
         serialize = "demicondensed"
     )]
-    SemiCondensed,
+    SemiCondensed = 87,
     #[strum(
         to_string = "normal",
         serialize = "medium",
         serialize = "regular",
         serialize = "unspecified"
     )]
-    Normal,
+    Normal = 100,
     #[strum(
         to_string = "semi-expanded",
         serialize = "semiexpanded",
         serialize = "demiexpanded"
     )]
-    SemiExpanded,
-    Expanded,
+    SemiExpanded = 113,
+    Expanded = 125,
     #[strum(to_string = "extra-expanded", serialize = "extraexpanded")]
-    ExtraExpanded,
+    ExtraExpanded = 150,
     #[strum(
         to_string = "ultra-expanded",
         serialize = "ultraexpanded",
         serialize = "wide"
     )]
-    UltraExpanded,
+    UltraExpanded = 200,
 }
 
 impl FontWidth {
@@ -596,6 +610,14 @@ impl FontWidth {
 
     pub fn symbol_name(self) -> &'static str {
         self.into()
+    }
+
+    pub fn gnu_numeric(self) -> u16 {
+        self.into()
+    }
+
+    pub fn from_gnu_numeric(value: u16) -> Option<Self> {
+        Self::try_from(value).ok()
     }
 }
 
