@@ -25,16 +25,58 @@ pub struct MenuBarItem {
     pub key: String,
 }
 
+/// Image backing for a toolbar item.
+///
+/// GNU Emacs keeps the parsed `:image` property as an image specification.
+/// The display protocol mirrors that shape by transporting the resolved image
+/// source, instead of replacing it with a frontend-private icon name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ToolBarImageSource {
+    File { path: String },
+}
+
+impl ToolBarImageSource {
+    pub fn cache_key(&self) -> String {
+        match self {
+            Self::File { path } => format!("file:{path}"),
+        }
+    }
+
+    pub fn file_path(&self) -> Option<&str> {
+        match self {
+            Self::File { path } => Some(path),
+        }
+    }
+}
+
+/// GNU toolbar item type.  The C redisplay path stores this in
+/// `TOOL_BAR_ITEM_TYPE`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ToolBarItemType {
+    Button,
+    Separator,
+    Radio,
+    Toggle,
+    Wrap,
+}
+
 /// A single toolbar item.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ToolBarItem {
     pub index: u32,
-    pub icon_name: String,
+    pub key: String,
+    pub image: Option<ToolBarImageSource>,
     pub label: String,
     pub help: String,
     pub enabled: bool,
     pub selected: bool,
-    pub is_separator: bool,
+    pub item_type: ToolBarItemType,
+}
+
+impl ToolBarItem {
+    pub fn is_separator(&self) -> bool {
+        self.item_type == ToolBarItemType::Separator
+    }
 }
 
 /// A single tab bar item.

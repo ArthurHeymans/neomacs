@@ -16,8 +16,8 @@ pub type WakeupFd = RawHandle;
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 pub use neomacs_display_protocol::{
-    CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarItem,
-    TransitionPolicy,
+    CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource,
+    ToolBarItem, ToolBarItemType, TransitionPolicy,
 };
 use neovm_core::window::GuiFrameGeometryHints;
 

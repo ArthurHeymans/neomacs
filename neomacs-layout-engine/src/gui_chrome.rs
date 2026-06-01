@@ -3,7 +3,9 @@
 //! Mirrors the existing TTY menu-bar walk, but produces GUI overlay
 //! payloads for the render thread from the active Lisp keymaps.
 
-use neomacs_display_protocol::{MenuBarItem, ToolBarItem};
+use std::path::{Path, PathBuf};
+
+use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::list_keymap_for_each_binding;
 use neovm_core::emacs_core::{Context, Value};
@@ -43,9 +45,9 @@ pub fn collect_gui_menu_bar_items_for_frame(eval: &Context, frame_id: FrameId) -
         .collect()
 }
 
-pub fn collect_gui_tool_bar_items(eval: &Context) -> Vec<ToolBarItem> {
+pub fn collect_gui_tool_bar_items(eval: &mut Context) -> Vec<ToolBarItem> {
     let raw_map = current_tool_bar_map(eval);
-    let Some(keymap) = resolve_keymap(eval, &raw_map) else {
+    let Some(keymap) = current_tool_bar_keymap(eval, &raw_map) else {
         return Vec::new();
     };
 
@@ -53,7 +55,7 @@ pub fn collect_gui_tool_bar_items(eval: &Context) -> Vec<ToolBarItem> {
     list_keymap_for_each_binding(&keymap, |key, def| {
         let key_name = key_symbol_name(&key);
         let def = normalize_binding_def(&def);
-        let Some(item) = parse_tool_bar_item(&key_name, &def, items.len() as u32) else {
+        let Some(item) = parse_tool_bar_item(eval, &key_name, &def, items.len() as u32) else {
             return;
         };
         items.push(item);
@@ -80,47 +82,89 @@ fn current_tool_bar_map(eval: &Context) -> Value {
         .unwrap_or(Value::NIL)
 }
 
-fn parse_tool_bar_item(key_name: &str, def: &Value, index: u32) -> Option<ToolBarItem> {
+fn current_tool_bar_keymap(eval: &mut Context, raw_map: &Value) -> Option<Value> {
+    if display_images_p(eval)
+        && eval.obarray().fboundp("tool-bar-make-keymap")
+        && let Ok(value) = eval.eval_form(Value::list(vec![Value::symbol("tool-bar-make-keymap")]))
+        && let Some(keymap) = resolve_keymap(eval, &value)
+    {
+        return Some(keymap);
+    }
+    resolve_keymap(eval, raw_map)
+}
+
+fn display_images_p(eval: &mut Context) -> bool {
+    eval.eval_form(Value::list(vec![Value::symbol("display-images-p")]))
+        .map(|value| value.is_truthy())
+        .unwrap_or(false)
+}
+
+fn parse_tool_bar_item(
+    eval: &mut Context,
+    key_name: &str,
+    def: &Value,
+    index: u32,
+) -> Option<ToolBarItem> {
     if key_name.starts_with("separator") || def.as_symbol_name() == Some("menu-bar-separator") {
         return Some(ToolBarItem {
             index,
-            icon_name: String::new(),
+            key: key_name.to_string(),
+            image: None,
             label: String::new(),
             help: String::new(),
             enabled: false,
             selected: false,
-            is_separator: true,
+            item_type: ToolBarItemType::Separator,
         });
     }
 
-    let (mut label, plist) = extract_menu_item_label_and_plist(def)?;
+    let (mut label, plist) = extract_menu_item_label_and_plist(eval, def)?;
+    if let Some(visible) = plist_lookup(&plist, ":visible")
+        && !eval_menu_property(eval, visible).is_truthy()
+    {
+        return None;
+    }
     if label.is_empty() {
         label = plist_lookup(&plist, ":label")
             .and_then(|value| value.as_runtime_string_owned())
             .unwrap_or_default();
     }
-    let icon_name = plist_lookup(&plist, ":image")
-        .and_then(|image| first_image_file_stem(&image))
-        .unwrap_or_default();
+    let image = plist_lookup(&plist, ":image").and_then(|image| tool_bar_image_source(&image));
     let help = plist_lookup(&plist, ":help")
         .and_then(|value| value.as_runtime_string_owned())
         .unwrap_or_default();
     let enabled = plist_lookup(&plist, ":enable")
-        .map(|value| !value.is_nil())
+        .map(|value| eval_menu_property(eval, value).is_truthy())
         .unwrap_or(true);
+    let (item_type, selected) = plist_lookup(&plist, ":button")
+        .and_then(|value| button_state(eval, value))
+        .unwrap_or((ToolBarItemType::Button, false));
+    let item_type = if plist_lookup(&plist, ":wrap")
+        .map(|value| eval_menu_property(eval, value).is_truthy())
+        .unwrap_or(false)
+    {
+        ToolBarItemType::Wrap
+    } else {
+        item_type
+    };
 
     Some(ToolBarItem {
         index,
-        icon_name,
+        key: key_name.to_string(),
+        image,
         label,
         help,
-        enabled,
-        selected: false,
-        is_separator: false,
+        enabled: if item_type == ToolBarItemType::Wrap {
+            false
+        } else {
+            enabled
+        },
+        selected,
+        item_type,
     })
 }
 
-fn extract_menu_item_label_and_plist(def: &Value) -> Option<(String, Value)> {
+fn extract_menu_item_label_and_plist(eval: &mut Context, def: &Value) -> Option<(String, Value)> {
     if !def.is_cons() {
         return None;
     }
@@ -128,7 +172,7 @@ fn extract_menu_item_label_and_plist(def: &Value) -> Option<(String, Value)> {
     let cdr = def.cons_cdr();
 
     if car.as_symbol_name() == Some("menu-item") && cdr.is_cons() {
-        let label = cdr.cons_car().as_runtime_string_owned().unwrap_or_default();
+        let label = menu_caption_string(eval, cdr.cons_car())?;
         let mut rest = cdr.cons_cdr();
         if !rest.is_cons() {
             return None;
@@ -137,8 +181,32 @@ fn extract_menu_item_label_and_plist(def: &Value) -> Option<(String, Value)> {
         return Some((label, rest));
     }
 
-    let label = car.as_runtime_string_owned()?;
+    let label = menu_caption_string(eval, car)?;
     Some((label, cdr))
+}
+
+fn menu_caption_string(eval: &mut Context, value: Value) -> Option<String> {
+    if let Some(string) = value.as_runtime_string_owned() {
+        return Some(string);
+    }
+    eval.eval_form(value).ok()?.as_runtime_string_owned()
+}
+
+fn eval_menu_property(eval: &mut Context, value: Value) -> Value {
+    eval.eval_form(value).unwrap_or(Value::NIL)
+}
+
+fn button_state(eval: &mut Context, value: Value) -> Option<(ToolBarItemType, bool)> {
+    if !value.is_cons() {
+        return None;
+    }
+    let item_type = match value.cons_car().as_symbol_name()? {
+        ":radio" => ToolBarItemType::Radio,
+        ":toggle" => ToolBarItemType::Toggle,
+        _ => return None,
+    };
+    let selected = eval_menu_property(eval, value.cons_cdr()).is_truthy();
+    Some((item_type, selected))
 }
 
 fn plist_lookup(plist: &Value, wanted: &str) -> Option<Value> {
@@ -158,29 +226,106 @@ fn plist_lookup(plist: &Value, wanted: &str) -> Option<Value> {
     None
 }
 
-fn first_image_file_stem(value: &Value) -> Option<String> {
-    if let Some(path) = value.as_runtime_string_owned()
-        && let Some(stem) = icon_stem_from_path(&path)
-    {
-        return Some(stem);
-    }
-    if value.is_cons() {
-        if let Some(stem) = first_image_file_stem(&value.cons_car()) {
-            return Some(stem);
-        }
-        return first_image_file_stem(&value.cons_cdr());
-    }
-    None
+fn tool_bar_image_source(value: &Value) -> Option<ToolBarImageSource> {
+    image_file_from_spec(value)
+        .or_else(|| best_image_file_from_expression(value))
+        .map(|path| ToolBarImageSource::File {
+            path: resolve_tool_bar_image_path(&path),
+        })
 }
 
-fn icon_stem_from_path(path: &str) -> Option<String> {
-    let filename = path.rsplit('/').next()?;
-    let (stem, _) = filename.rsplit_once('.').unwrap_or((filename, ""));
-    if stem.is_empty() {
-        None
+fn image_file_from_spec(value: &Value) -> Option<String> {
+    let plist = if value.is_cons() && value.cons_car().as_symbol_name() == Some("image") {
+        value.cons_cdr()
     } else {
-        Some(stem.to_string())
+        *value
+    };
+    plist_lookup(&plist, ":file").and_then(|file| file.as_runtime_string_owned())
+}
+
+fn best_image_file_from_expression(value: &Value) -> Option<String> {
+    let mut files = Vec::new();
+    collect_image_file_candidates(value, &mut files);
+    files
+        .into_iter()
+        .min_by_key(|file| toolbar_image_score(file))
+}
+
+fn collect_image_file_candidates(value: &Value, files: &mut Vec<String>) {
+    if let Some(path) = value.as_runtime_string_owned() {
+        if is_supported_toolbar_image_file(&path) {
+            files.push(path);
+        }
+        return;
     }
+    if value.is_cons() {
+        collect_image_file_candidates(&value.cons_car(), files);
+        collect_image_file_candidates(&value.cons_cdr(), files);
+    } else if let Some(values) = value.as_vector_data() {
+        for item in values.iter() {
+            collect_image_file_candidates(item, files);
+        }
+    }
+}
+
+fn is_supported_toolbar_image_file(path: &str) -> bool {
+    let Some(extension) = Path::new(path).extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+    matches!(extension, "xpm" | "pbm" | "xbm" | "png" | "svg")
+}
+
+fn toolbar_image_score(path: &str) -> (u8, u8) {
+    let path = Path::new(path);
+    let low_color_penalty = path
+        .components()
+        .any(|component| component.as_os_str() == "low-color") as u8;
+    let extension_rank = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("xpm") => 0,
+        Some("pbm") => 1,
+        Some("xbm") => 2,
+        Some("png") => 3,
+        Some("svg") => 4,
+        _ => 5,
+    };
+    (low_color_penalty, extension_rank)
+}
+
+fn resolve_tool_bar_image_path(path: &str) -> String {
+    let original = Path::new(path);
+    if original.is_absolute() && original.exists() {
+        return original.to_string_lossy().into_owned();
+    }
+
+    for candidate in tool_bar_image_load_candidates(original) {
+        if candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+
+    path.to_string()
+}
+
+fn tool_bar_image_load_candidates(path: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if path.is_absolute() {
+        candidates.push(path.to_path_buf());
+        return candidates;
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join(path));
+        candidates.push(cwd.join("etc/images").join(path));
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        candidates.push(exe_dir.join(path));
+        candidates.push(exe_dir.join("etc/images").join(path));
+        candidates.push(exe_dir.join("../share/neomacs/etc/images").join(path));
+        candidates.push(exe_dir.join("../Resources/etc/images").join(path));
+    }
+    candidates
 }
 
 fn resolve_keymap(eval: &Context, value: &Value) -> Option<Value> {

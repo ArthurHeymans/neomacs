@@ -2,6 +2,7 @@
 
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
+use neomacs_display_protocol::ToolBarImageSource;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 
 const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
@@ -42,24 +43,31 @@ impl RenderApp {
 
     pub(super) fn ensure_toolbar_icon_textures(&mut self, items: &[ToolBarItem]) {
         for item in items {
-            if !item.is_separator
-                && !item.icon_name.is_empty()
-                && !self.toolbar.icon_textures.contains_key(&item.icon_name)
-                && let Some(svg_data) =
-                    crate::backend::wgpu::toolbar_icons::get_icon_svg(&item.icon_name)
-                && let Some(renderer) = self.renderer.as_mut()
-            {
-                let icon_size = self.toolbar.icon_size;
-                let id = renderer.load_image_data(svg_data, icon_size, icon_size, 0, 0);
-                self.toolbar
-                    .icon_textures
-                    .insert(item.icon_name.clone(), id);
-                tracing::debug!(
-                    "Loaded toolbar icon '{}' as image_id={}",
-                    item.icon_name,
-                    id
-                );
+            if item.is_separator() {
+                continue;
             }
+            let Some(image) = item.image.as_ref() else {
+                continue;
+            };
+            if self.toolbar.icon_textures.contains_key(image) {
+                continue;
+            }
+            let Some(renderer) = self.renderer.as_mut() else {
+                continue;
+            };
+
+            let icon_size = self.toolbar.icon_size;
+            let id = match image {
+                ToolBarImageSource::File { path } => {
+                    renderer.load_image_file(path, icon_size, icon_size, 0, 0)
+                }
+            };
+            self.toolbar.icon_textures.insert(image.clone(), id);
+            tracing::debug!(
+                "Loaded toolbar image '{}' as image_id={}",
+                image.cache_key(),
+                id
+            );
         }
     }
 

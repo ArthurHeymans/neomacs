@@ -48,7 +48,7 @@ pub(super) fn toolbar_hit_test_items(
     let item_spacing = 2.0_f32;
     let mut item_x = padding;
     for item in items {
-        if item.is_separator {
+        if item.is_separator() {
             item_x += separator_width;
             continue;
         }

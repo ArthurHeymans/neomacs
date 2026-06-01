@@ -21,7 +21,7 @@ fn parse_tool_bar_item_preserves_raw_unibyte_label_and_help() {
         raw,
     ]);
 
-    let item = parse_tool_bar_item("raw-item", &def, 0).expect("tool-bar item");
+    let item = parse_tool_bar_item(&mut eval, "raw-item", &def, 0).expect("tool-bar item");
     assert_eq!(item.label, expected);
     assert_eq!(item.help, expected);
 }
@@ -42,10 +42,14 @@ fn collect_gui_tool_bar_items_after_setup_has_search_item_and_separator() {
         create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
     eval.eval_str("(tool-bar-setup)")
         .expect("run GNU tool-bar setup");
-    let items = collect_gui_tool_bar_items(&eval);
+    let items = collect_gui_tool_bar_items(&mut eval);
     assert!(
-        items.iter().any(|item| item.icon_name == "search"),
+        items.iter().any(|item| item
+            .image
+            .as_ref()
+            .and_then(|image| image.file_path())
+            .is_some_and(|path| path.ends_with("/search.xpm") || path == "search.xpm")),
         "tool-bar items: {items:#?}"
     );
-    assert!(items.iter().any(|item| item.is_separator));
+    assert!(items.iter().any(|item| item.is_separator()));
 }

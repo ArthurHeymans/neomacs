@@ -13,7 +13,7 @@ use crate::thread_comm::RenderComms;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-use neomacs_display_protocol::{EffectsConfig, TransitionPolicy};
+use neomacs_display_protocol::{EffectsConfig, ToolBarImageSource, TransitionPolicy};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
 
 use super::child_frames::ChildFrameManager;
@@ -283,7 +283,7 @@ impl Default for ChildFrameStyle {
 }
 
 pub(super) struct ToolbarResources {
-    pub(super) icon_textures: HashMap<String, u32>,
+    pub(super) icon_textures: HashMap<ToolBarImageSource, u32>,
     pub(super) icon_size: u32,
     pub(super) padding: u32,
 }

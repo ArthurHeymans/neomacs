@@ -10,7 +10,7 @@ use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::Color;
-use neomacs_display_protocol::{MenuBarItem, ToolBarItem};
+use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem};
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
@@ -2305,7 +2305,7 @@ impl WgpuRenderer {
         menu_bg: (f32, f32, f32),
         tool_fg: (f32, f32, f32),
         _tool_bg: (f32, f32, f32),
-        icon_textures: &HashMap<String, u32>,
+        icon_textures: &HashMap<ToolBarImageSource, u32>,
         menu_hovered: Option<u32>,
         menu_active: Option<u32>,
         tool_hovered: Option<u32>,
@@ -2380,7 +2380,7 @@ impl WgpuRenderer {
 
         let mut item_x = tool_x_origin + pad;
         for item in tool_items {
-            if item.is_separator {
+            if item.is_separator() {
                 let sep_x = item_x + separator_width / 2.0 - 0.5;
                 let sep_y = pad;
                 let sep_h = compact_bar_height - pad * 2.0;
@@ -2506,15 +2506,17 @@ impl WgpuRenderer {
         {
             let mut item_x = tool_x_origin + pad;
             for item in tool_items {
-                if item.is_separator {
+                if item.is_separator() {
                     item_x += separator_width;
                     continue;
                 }
                 let icon_x = item_x + pad;
                 let icon_y = (compact_bar_height - icon_sz) / 2.0;
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
-                let tint = [tool_fg.0, tool_fg.1, tool_fg.2, alpha];
-                if let Some(&image_id) = icon_textures.get(&item.icon_name) {
+                let tint = [1.0, 1.0, 1.0, alpha];
+                if let Some(image) = item.image.as_ref()
+                    && let Some(&image_id) = icon_textures.get(image)
+                {
                     if let Some(cached) = self.image_cache.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [
@@ -2619,7 +2621,7 @@ impl WgpuRenderer {
         toolbar_height: f32,
         fg: (f32, f32, f32),
         bg: (f32, f32, f32),
-        icon_textures: &HashMap<String, u32>,
+        icon_textures: &HashMap<ToolBarImageSource, u32>,
         hovered: Option<u32>,
         pressed: Option<u32>,
         icon_size: u32,
@@ -2661,7 +2663,7 @@ impl WgpuRenderer {
         // Item backgrounds (hover/pressed states)
         let mut item_x = pad;
         for item in items {
-            if item.is_separator {
+            if item.is_separator() {
                 // Draw separator line
                 let sep_x = item_x + separator_width / 2.0 - 0.5;
                 let sep_y = toolbar_y + pad;
@@ -2767,15 +2769,17 @@ impl WgpuRenderer {
         {
             let mut item_x = pad;
             for item in items {
-                if item.is_separator {
+                if item.is_separator() {
                     item_x += separator_width;
                     continue;
                 }
                 let icon_x = item_x + pad;
                 let icon_y = toolbar_y + (toolbar_height - icon_sz) / 2.0;
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
-                let tint = [fg.0, fg.1, fg.2, alpha];
-                if let Some(&image_id) = icon_textures.get(&item.icon_name) {
+                let tint = [1.0, 1.0, 1.0, alpha];
+                if let Some(image) = item.image.as_ref()
+                    && let Some(&image_id) = icon_textures.get(image)
+                {
                     if let Some(cached) = self.image_cache.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [

@@ -2,7 +2,9 @@ use super::RenderApp;
 use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::thread_comm::FrameRef;
-use crate::thread_comm::{ThreadComms, ToolBarItem, UiCommand, WindowCommand};
+use crate::thread_comm::{
+    ThreadComms, ToolBarImageSource, ToolBarItem, ToolBarItemType, UiCommand, WindowCommand,
+};
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
 use neovm_core::window::GuiFrameGeometryHints;
@@ -359,12 +361,15 @@ fn primary_toolbar_command_marks_render_state_dirty() {
     app.handle_ui(UiCommand::SetToolBar {
         items: vec![ToolBarItem {
             index: 7,
-            icon_name: "open".to_string(),
+            key: "open".to_string(),
+            image: Some(ToolBarImageSource::File {
+                path: "etc/images/open.xpm".to_string(),
+            }),
             label: String::new(),
             help: String::new(),
             enabled: true,
             selected: false,
-            is_separator: false,
+            item_type: ToolBarItemType::Button,
         }],
         height: 34.0,
         fg_r: 1.0,

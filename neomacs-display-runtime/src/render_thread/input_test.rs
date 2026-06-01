@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
-use crate::thread_comm::{MenuBarItem, ToolBarItem};
+use crate::thread_comm::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 use winit::keyboard::{Key, NamedKey, SmolStr};
@@ -90,12 +90,15 @@ fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState>
 fn toolbar_item(index: u32) -> ToolBarItem {
     ToolBarItem {
         index,
-        icon_name: "open".to_string(),
+        key: "open".to_string(),
+        image: Some(ToolBarImageSource::File {
+            path: "etc/images/open.xpm".to_string(),
+        }),
         label: String::new(),
         help: String::new(),
         enabled: true,
         selected: false,
-        is_separator: false,
+        item_type: ToolBarItemType::Button,
     }
 }
 
