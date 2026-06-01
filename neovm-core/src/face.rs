@@ -199,7 +199,9 @@ impl Color {
 // Underline style
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoPrimitive, IntoStaticStr, TryFromPrimitive,
+)]
 #[repr(u8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum UnderlineStyle {
@@ -222,6 +224,10 @@ impl UnderlineStyle {
     pub fn gnu_code(self) -> u8 {
         self.into()
     }
+
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -242,7 +248,9 @@ pub struct BoxBorder {
     pub style: BoxStyle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoPrimitive, IntoStaticStr, TryFromPrimitive,
+)]
 #[repr(u8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BoxStyle {
@@ -265,6 +273,10 @@ impl BoxStyle {
 
     pub fn gnu_code(self) -> u8 {
         self.into()
+    }
+
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
     }
 }
 

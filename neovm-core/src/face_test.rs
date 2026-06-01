@@ -75,7 +75,11 @@ fn underline_style_codes_match_gnu_face_underline_type() {
 
     for (style, code) in styles {
         assert_eq!(style.gnu_code(), code);
+        assert_eq!(UnderlineStyle::from_gnu_code(code), Some(style));
     }
+
+    assert_eq!(UnderlineStyle::from_gnu_code(0), None);
+    assert_eq!(UnderlineStyle::from_gnu_code(6), None);
 }
 
 #[test]
@@ -89,7 +93,11 @@ fn box_style_codes_match_gnu_face_box_type() {
 
     for (style, code) in styles {
         assert_eq!(style.gnu_code(), code);
+        assert_eq!(BoxStyle::from_gnu_code(code), Some(style));
     }
+
+    assert_eq!(BoxStyle::from_gnu_code(0), None);
+    assert_eq!(BoxStyle::from_gnu_code(4), None);
 }
 
 #[test]
