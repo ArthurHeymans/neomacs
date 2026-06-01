@@ -1135,6 +1135,114 @@ enum CommandInvocationKind {
     CommandExecute,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumIter)]
+enum InteractiveControlLetter {
+    FunctionName,
+    ExistingBuffer,
+    Buffer,
+    Character,
+    Command,
+    Point,
+    DirectoryName,
+    InvokingEvent,
+    ExistingFile,
+    File,
+    FileWithDirectoryDefault,
+    Ignore,
+    KeySequence,
+    KeySequenceVector,
+    UpEvent,
+    Mark,
+    StringWithInputMethod,
+    NumberOrPrefix,
+    Number,
+    RawPrefix,
+    NumericPrefix,
+    ActiveRegion,
+    Region,
+    String,
+    Symbol,
+    Variable,
+    Expression,
+    EvalExpression,
+    CodingSystemWithPrefix,
+    CodingSystem,
+}
+
+impl InteractiveControlLetter {
+    fn from_char(letter: char) -> Option<Self> {
+        Some(match letter {
+            'a' => Self::FunctionName,
+            'b' => Self::ExistingBuffer,
+            'B' => Self::Buffer,
+            'c' => Self::Character,
+            'C' => Self::Command,
+            'd' => Self::Point,
+            'D' => Self::DirectoryName,
+            'e' => Self::InvokingEvent,
+            'f' => Self::ExistingFile,
+            'F' => Self::File,
+            'G' => Self::FileWithDirectoryDefault,
+            'i' => Self::Ignore,
+            'k' => Self::KeySequence,
+            'K' => Self::KeySequenceVector,
+            'U' => Self::UpEvent,
+            'm' => Self::Mark,
+            'M' => Self::StringWithInputMethod,
+            'N' => Self::NumberOrPrefix,
+            'n' => Self::Number,
+            'P' => Self::RawPrefix,
+            'p' => Self::NumericPrefix,
+            'R' => Self::ActiveRegion,
+            'r' => Self::Region,
+            's' => Self::String,
+            'S' => Self::Symbol,
+            'v' => Self::Variable,
+            'x' => Self::Expression,
+            'X' => Self::EvalExpression,
+            'Z' => Self::CodingSystemWithPrefix,
+            'z' => Self::CodingSystem,
+            _ => return None,
+        })
+    }
+
+    #[cfg(test)]
+    fn letter(self) -> char {
+        match self {
+            Self::FunctionName => 'a',
+            Self::ExistingBuffer => 'b',
+            Self::Buffer => 'B',
+            Self::Character => 'c',
+            Self::Command => 'C',
+            Self::Point => 'd',
+            Self::DirectoryName => 'D',
+            Self::InvokingEvent => 'e',
+            Self::ExistingFile => 'f',
+            Self::File => 'F',
+            Self::FileWithDirectoryDefault => 'G',
+            Self::Ignore => 'i',
+            Self::KeySequence => 'k',
+            Self::KeySequenceVector => 'K',
+            Self::UpEvent => 'U',
+            Self::Mark => 'm',
+            Self::StringWithInputMethod => 'M',
+            Self::NumberOrPrefix => 'N',
+            Self::Number => 'n',
+            Self::RawPrefix => 'P',
+            Self::NumericPrefix => 'p',
+            Self::ActiveRegion => 'R',
+            Self::Region => 'r',
+            Self::String => 's',
+            Self::Symbol => 'S',
+            Self::Variable => 'v',
+            Self::Expression => 'x',
+            Self::EvalExpression => 'X',
+            Self::CodingSystemWithPrefix => 'Z',
+            Self::CodingSystem => 'z',
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 enum ParsedInteractiveSpec {
     NoArgs,
@@ -1493,9 +1601,14 @@ fn interactive_args_from_string_code_in_state(
 
     let mut args = Vec::new();
     for (letter, _prompt) in parsed.entries {
-        match letter {
-            'd' => args.push(interactive_point_arg_in_buffers(buffers)?),
-            'e' => {
+        let Some(control) = InteractiveControlLetter::from_char(letter) else {
+            return Ok(None);
+        };
+        match control {
+            InteractiveControlLetter::Point => {
+                args.push(interactive_point_arg_in_buffers(buffers)?)
+            }
+            InteractiveControlLetter::InvokingEvent => {
                 if let Some(event) =
                     interactive_next_event_with_parameters_in_state(obarray, dynamic, context)
                 {
@@ -1509,28 +1622,28 @@ fn interactive_args_from_string_code_in_state(
                     ));
                 }
             }
-            'i' => args.push(Value::NIL),
-            'm' => args.push(interactive_mark_arg_in_buffers(buffers)?),
-            'N' => {
+            InteractiveControlLetter::Ignore => args.push(Value::NIL),
+            InteractiveControlLetter::Mark => args.push(interactive_mark_arg_in_buffers(buffers)?),
+            InteractiveControlLetter::NumberOrPrefix => {
                 let raw = interactive_prefix_raw_arg_in_state(obarray, dynamic.as_slice(), kind);
                 if raw.is_nil() {
                     return Ok(None);
                 }
                 args.push(Value::fixnum(prefix_numeric_value(&raw)));
             }
-            'p' => args.push(interactive_prefix_numeric_arg_in_state(
+            InteractiveControlLetter::NumericPrefix => args.push(
+                interactive_prefix_numeric_arg_in_state(obarray, dynamic.as_slice(), kind),
+            ),
+            InteractiveControlLetter::RawPrefix => args.push(interactive_prefix_raw_arg_in_state(
                 obarray,
                 dynamic.as_slice(),
                 kind,
             )),
-            'P' => args.push(interactive_prefix_raw_arg_in_state(
-                obarray,
-                dynamic.as_slice(),
-                kind,
-            )),
-            'r' => args.extend(interactive_region_args_in_buffers(buffers, "error")?),
-            'U' => args.push(Value::NIL),
-            'Z' => {
+            InteractiveControlLetter::Region => {
+                args.extend(interactive_region_args_in_buffers(buffers, "error")?)
+            }
+            InteractiveControlLetter::UpEvent => args.push(Value::NIL),
+            InteractiveControlLetter::CodingSystemWithPrefix => {
                 let raw = interactive_prefix_raw_arg_in_state(obarray, dynamic.as_slice(), kind);
                 if raw.is_nil() {
                     args.push(Value::NIL);
@@ -1564,8 +1677,11 @@ fn interactive_args_from_string_code_in_vm_runtime(
         for (letter, prompt) in parsed.entries {
             let prompt = interactive_prompt_with_visible_args(shared, &prompt, &visible_args)?;
             let args_before = args.len();
-            match letter {
-                'a' | 'C' => {
+            let Some(control) = InteractiveControlLetter::from_char(letter) else {
+                return Ok(None);
+            };
+            match control {
+                InteractiveControlLetter::FunctionName | InteractiveControlLetter::Command => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     super::minibuffer::builtin_read_command_in_runtime(shared, &letter_args)?;
                     args.push(super::minibuffer::finish_read_command_with_minibuffer(
@@ -1578,7 +1694,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         },
                     )?);
                 }
-                'b' => {
+                InteractiveControlLetter::ExistingBuffer => {
                     let default = interactive_current_buffer_default(&shared.buffers);
                     let letter_args = [Value::heap_string(prompt.clone()), default, Value::T];
                     super::minibuffer::builtin_read_buffer_in_runtime(shared, &letter_args)?;
@@ -1594,7 +1710,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         &completing_args,
                     )?);
                 }
-                'B' => {
+                InteractiveControlLetter::Buffer => {
                     let default = interactive_other_buffer_default(&mut shared.buffers);
                     let letter_args = [Value::heap_string(prompt.clone()), default, Value::NIL];
                     super::minibuffer::builtin_read_buffer_in_runtime(shared, &letter_args)?;
@@ -1610,7 +1726,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         &completing_args,
                     )?);
                 }
-                'c' => {
+                InteractiveControlLetter::Character => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     let arg = if let Some(arg) =
                         super::reader::builtin_read_char_in_runtime(shared, &letter_args)?
@@ -1624,15 +1740,17 @@ fn interactive_args_from_string_code_in_vm_runtime(
                     };
                     args.push(arg);
                 }
-                'd' => args.push(interactive_point_arg_in_buffers(&shared.buffers)?),
-                'D' => {
+                InteractiveControlLetter::Point => {
+                    args.push(interactive_point_arg_in_buffers(&shared.buffers)?)
+                }
+                InteractiveControlLetter::DirectoryName => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     args.push(super::minibuffer::finish_read_directory_name_in_vm_runtime(
                         shared,
                         &letter_args,
                     )?);
                 }
-                'e' => {
+                InteractiveControlLetter::InvokingEvent => {
                     if let Some(event) = interactive_next_event_with_parameters_in_state(
                         &mut shared.obarray,
                         &[],
@@ -1648,7 +1766,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         ));
                     }
                 }
-                'f' => {
+                InteractiveControlLetter::ExistingFile => {
                     let letter_args = [
                         Value::heap_string(prompt.clone()),
                         Value::NIL,
@@ -1660,15 +1778,16 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         &letter_args,
                     )?);
                 }
-                'F' | 'G' => {
+                InteractiveControlLetter::File
+                | InteractiveControlLetter::FileWithDirectoryDefault => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     args.push(super::minibuffer::finish_read_file_name_in_vm_runtime(
                         shared,
                         &letter_args,
                     )?);
                 }
-                'i' => args.push(Value::NIL),
-                'k' => {
+                InteractiveControlLetter::Ignore => args.push(Value::NIL),
+                InteractiveControlLetter::KeySequence => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     let arg = if let Some(arg) =
                         super::reader::builtin_read_key_sequence_in_runtime(shared, &letter_args)?
@@ -1683,7 +1802,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                     interactive_capture_up_event_in_vm_batch_runtime(shared, &arg, context)?;
                     args.push(arg);
                 }
-                'K' => {
+                InteractiveControlLetter::KeySequenceVector => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     let arg = if let Some(arg) =
                         super::reader::builtin_read_key_sequence_vector_in_runtime(
@@ -1700,7 +1819,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                     interactive_capture_up_event_in_vm_batch_runtime(shared, &arg, context)?;
                     args.push(arg);
                 }
-                'M' => {
+                InteractiveControlLetter::StringWithInputMethod => {
                     let letter_args = [
                         Value::heap_string(prompt.clone()),
                         Value::NIL,
@@ -1719,8 +1838,10 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         },
                     )?);
                 }
-                'm' => args.push(interactive_mark_arg_in_buffers(&shared.buffers)?),
-                'N' => {
+                InteractiveControlLetter::Mark => {
+                    args.push(interactive_mark_arg_in_buffers(&shared.buffers)?)
+                }
+                InteractiveControlLetter::NumberOrPrefix => {
                     let raw = interactive_prefix_raw_arg_in_state(&shared.obarray, &[], kind);
                     if raw.is_nil() {
                         let letter_args = [Value::heap_string(prompt.clone())];
@@ -1732,21 +1853,16 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         args.push(Value::fixnum(prefix_numeric_value(&raw)));
                     }
                 }
-                'p' => args.push(interactive_prefix_numeric_arg_in_state(
-                    &shared.obarray,
-                    &[],
-                    kind,
-                )),
-                'P' => args.push(interactive_prefix_raw_arg_in_state(
-                    &shared.obarray,
-                    &[],
-                    kind,
-                )),
-                'r' => args.extend(interactive_region_args_in_buffers(
-                    &shared.buffers,
-                    "error",
-                )?),
-                'R' => {
+                InteractiveControlLetter::NumericPrefix => args.push(
+                    interactive_prefix_numeric_arg_in_state(&shared.obarray, &[], kind),
+                ),
+                InteractiveControlLetter::RawPrefix => args.push(
+                    interactive_prefix_raw_arg_in_state(&shared.obarray, &[], kind),
+                ),
+                InteractiveControlLetter::Region => args.extend(
+                    interactive_region_args_in_buffers(&shared.buffers, "error")?,
+                ),
+                InteractiveControlLetter::ActiveRegion => {
                     if interactive_use_region_p_in_vm_runtime(shared)? {
                         args.extend(interactive_region_args_in_buffers(
                             &shared.buffers,
@@ -1757,14 +1873,14 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         args.push(Value::NIL);
                     }
                 }
-                'n' => {
+                InteractiveControlLetter::Number => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     args.push(super::reader::finish_read_number_in_vm_runtime(
                         shared,
                         &letter_args,
                     )?);
                 }
-                's' => {
+                InteractiveControlLetter::String => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     super::reader::builtin_read_string_in_runtime(shared, &letter_args)?;
                     args.push(super::reader::finish_read_string_with_minibuffer(
@@ -1777,7 +1893,7 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         },
                     )?);
                 }
-                'S' => {
+                InteractiveControlLetter::Symbol => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     super::reader::builtin_read_string_in_runtime(shared, &letter_args)?;
                     let sym_name = super::reader::finish_read_string_with_minibuffer(
@@ -1795,14 +1911,14 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         return Ok(None);
                     }
                 }
-                'x' => args.push(interactive_read_expression_arg_in_vm_runtime(
-                    shared, prompt,
-                )?),
-                'X' => args.push(interactive_eval_expression_arg_in_vm_runtime(
-                    shared, prompt,
-                )?),
-                'U' => args.push(interactive_u_arg(context)),
-                'v' => {
+                InteractiveControlLetter::Expression => args.push(
+                    interactive_read_expression_arg_in_vm_runtime(shared, prompt)?,
+                ),
+                InteractiveControlLetter::EvalExpression => args.push(
+                    interactive_eval_expression_arg_in_vm_runtime(shared, prompt)?,
+                ),
+                InteractiveControlLetter::UpEvent => args.push(interactive_u_arg(context)),
+                InteractiveControlLetter::Variable => {
                     let letter_args = [Value::heap_string(prompt.clone())];
                     super::minibuffer::builtin_read_variable_in_runtime(shared, &letter_args)?;
                     args.push(super::minibuffer::finish_read_variable_with_minibuffer(
@@ -1815,10 +1931,12 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         },
                     )?);
                 }
-                'z' => args.push(super::lread::builtin_read_coding_system(vec![
-                    Value::heap_string(prompt.clone()),
-                ])?),
-                'Z' => {
+                InteractiveControlLetter::CodingSystem => {
+                    args.push(super::lread::builtin_read_coding_system(vec![
+                        Value::heap_string(prompt.clone()),
+                    ])?)
+                }
+                InteractiveControlLetter::CodingSystemWithPrefix => {
                     let raw = interactive_prefix_raw_arg_in_state(&shared.obarray, &[], kind);
                     if raw.is_nil() {
                         args.push(Value::NIL);
@@ -1826,7 +1944,6 @@ fn interactive_args_from_string_code_in_vm_runtime(
                         args.push(interactive_read_coding_system_optional_arg(prompt)?);
                     }
                 }
-                _ => return Ok(None),
             }
             root_new_interactive_args(shared, &args, &mut visible_args, args_before);
         }
@@ -2452,40 +2569,50 @@ fn interactive_args_from_string_code(
         for (letter, prompt) in parsed.entries {
             let prompt = interactive_prompt_with_visible_args(eval, &prompt, &visible_args)?;
             let args_before = args.len();
-            match letter {
-                'a' => args.push(super::minibuffer::builtin_read_command(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'b' => args.push(super::minibuffer::builtin_read_buffer(
-                    eval,
-                    vec![
-                        Value::heap_string(prompt),
-                        interactive_current_buffer_default(&eval.buffers),
-                        Value::T,
-                    ],
-                )?),
-                'B' => {
+            let control = InteractiveControlLetter::from_char(letter)
+                .ok_or_else(|| invalid_interactive_control_letter_error(letter))?;
+            match control {
+                InteractiveControlLetter::FunctionName => {
+                    args.push(super::minibuffer::builtin_read_command(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::ExistingBuffer => {
+                    args.push(super::minibuffer::builtin_read_buffer(
+                        eval,
+                        vec![
+                            Value::heap_string(prompt),
+                            interactive_current_buffer_default(&eval.buffers),
+                            Value::T,
+                        ],
+                    )?)
+                }
+                InteractiveControlLetter::Buffer => {
                     let default = interactive_other_buffer_default(&mut eval.buffers);
                     args.push(super::minibuffer::builtin_read_buffer(
                         eval,
                         vec![Value::heap_string(prompt), default, Value::NIL],
                     )?)
                 }
-                'c' => args.push(super::reader::builtin_read_char(
+                InteractiveControlLetter::Character => args.push(super::reader::builtin_read_char(
                     eval,
                     vec![Value::heap_string(prompt)],
                 )?),
-                'C' => args.push(super::minibuffer::builtin_read_command(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'd' => args.push(interactive_point_arg(eval)?),
-                'D' => args.push(super::minibuffer::builtin_read_directory_name(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'e' => {
+                InteractiveControlLetter::Command => {
+                    args.push(super::minibuffer::builtin_read_command(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::Point => args.push(interactive_point_arg(eval)?),
+                InteractiveControlLetter::DirectoryName => {
+                    args.push(super::minibuffer::builtin_read_directory_name(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::InvokingEvent => {
                     if let Some(event) = interactive_next_event_with_parameters(eval, context) {
                         args.push(event);
                     } else {
@@ -2497,20 +2624,26 @@ fn interactive_args_from_string_code(
                         ));
                     }
                 }
-                'f' => args.push(super::minibuffer::builtin_read_file_name(
-                    eval,
-                    vec![Value::heap_string(prompt), Value::NIL, Value::NIL, Value::T],
-                )?),
-                'F' => args.push(super::minibuffer::builtin_read_file_name(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'G' => args.push(super::minibuffer::builtin_read_file_name(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'i' => args.push(Value::NIL),
-                'k' => {
+                InteractiveControlLetter::ExistingFile => {
+                    args.push(super::minibuffer::builtin_read_file_name(
+                        eval,
+                        vec![Value::heap_string(prompt), Value::NIL, Value::NIL, Value::T],
+                    )?)
+                }
+                InteractiveControlLetter::File => {
+                    args.push(super::minibuffer::builtin_read_file_name(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::FileWithDirectoryDefault => {
+                    args.push(super::minibuffer::builtin_read_file_name(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::Ignore => args.push(Value::NIL),
+                InteractiveControlLetter::KeySequence => {
                     let arg = super::reader::builtin_read_key_sequence(
                         eval,
                         vec![Value::heap_string(prompt)],
@@ -2518,7 +2651,7 @@ fn interactive_args_from_string_code(
                     interactive_capture_up_event_in_eval(eval, &arg, context)?;
                     args.push(arg);
                 }
-                'K' => {
+                InteractiveControlLetter::KeySequenceVector => {
                     let arg = super::reader::builtin_read_key_sequence_vector(
                         eval,
                         vec![Value::heap_string(prompt)],
@@ -2526,12 +2659,11 @@ fn interactive_args_from_string_code(
                     interactive_capture_up_event_in_eval(eval, &arg, context)?;
                     args.push(arg);
                 }
-                'M' => args.push(super::reader::builtin_read_string(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'm' => args.push(interactive_mark_arg(eval)?),
-                'N' => {
+                InteractiveControlLetter::StringWithInputMethod => args.push(
+                    super::reader::builtin_read_string(eval, vec![Value::heap_string(prompt)])?,
+                ),
+                InteractiveControlLetter::Mark => args.push(interactive_mark_arg(eval)?),
+                InteractiveControlLetter::NumberOrPrefix => {
                     let raw = interactive_prefix_raw_arg(eval, kind);
                     if raw.is_nil() {
                         args.push(super::reader::builtin_read_number(
@@ -2542,10 +2674,16 @@ fn interactive_args_from_string_code(
                         args.push(Value::fixnum(prefix_numeric_value(&raw)));
                     }
                 }
-                'p' => args.push(interactive_prefix_numeric_arg(eval, kind)),
-                'P' => args.push(interactive_prefix_raw_arg(eval, kind)),
-                'r' => args.extend(interactive_region_args(eval, "error")?),
-                'R' => {
+                InteractiveControlLetter::NumericPrefix => {
+                    args.push(interactive_prefix_numeric_arg(eval, kind))
+                }
+                InteractiveControlLetter::RawPrefix => {
+                    args.push(interactive_prefix_raw_arg(eval, kind))
+                }
+                InteractiveControlLetter::Region => {
+                    args.extend(interactive_region_args(eval, "error")?)
+                }
+                InteractiveControlLetter::ActiveRegion => {
                     let use_region = eval
                         .apply(Value::symbol("use-region-p"), vec![])?
                         .is_truthy();
@@ -2556,7 +2694,7 @@ fn interactive_args_from_string_code(
                         args.push(Value::NIL);
                     }
                 }
-                'S' => {
+                InteractiveControlLetter::Symbol => {
                     let sym_name =
                         super::reader::builtin_read_string(eval, vec![Value::heap_string(prompt)])?;
                     if let Some(name) = sym_name.as_utf8_str() {
@@ -2565,28 +2703,34 @@ fn interactive_args_from_string_code(
                         return Ok(None);
                     }
                 }
-                's' => args.push(super::reader::builtin_read_string(
+                InteractiveControlLetter::String => args.push(super::reader::builtin_read_string(
                     eval,
                     vec![Value::heap_string(prompt)],
                 )?),
-                'n' => args.push(super::reader::builtin_read_number(
+                InteractiveControlLetter::Number => args.push(super::reader::builtin_read_number(
                     eval,
                     vec![Value::heap_string(prompt)],
                 )?),
-                'x' => args.push(interactive_read_expression_arg(eval, prompt)?),
-                'X' => {
+                InteractiveControlLetter::Expression => {
+                    args.push(interactive_read_expression_arg(eval, prompt)?)
+                }
+                InteractiveControlLetter::EvalExpression => {
                     let expr_value = interactive_read_expression_arg(eval, prompt)?;
                     args.push(eval.eval_value(&expr_value)?);
                 }
-                'U' => args.push(interactive_u_arg(context)),
-                'v' => args.push(super::minibuffer::builtin_read_variable(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
-                'z' => args.push(super::lread::builtin_read_coding_system(vec![
-                    Value::heap_string(prompt),
-                ])?),
-                'Z' => {
+                InteractiveControlLetter::UpEvent => args.push(interactive_u_arg(context)),
+                InteractiveControlLetter::Variable => {
+                    args.push(super::minibuffer::builtin_read_variable(
+                        eval,
+                        vec![Value::heap_string(prompt)],
+                    )?)
+                }
+                InteractiveControlLetter::CodingSystem => {
+                    args.push(super::lread::builtin_read_coding_system(vec![
+                        Value::heap_string(prompt),
+                    ])?)
+                }
+                InteractiveControlLetter::CodingSystemWithPrefix => {
                     let raw = interactive_prefix_raw_arg(eval, kind);
                     if raw.is_nil() {
                         args.push(Value::NIL);
@@ -2594,7 +2738,6 @@ fn interactive_args_from_string_code(
                         args.push(interactive_read_coding_system_optional_arg(prompt)?);
                     }
                 }
-                _ => return Err(invalid_interactive_control_letter_error(letter)),
             }
             root_new_interactive_args(eval, &args, &mut visible_args, args_before);
         }

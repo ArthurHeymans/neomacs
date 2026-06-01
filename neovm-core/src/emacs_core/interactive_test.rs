@@ -10,8 +10,10 @@ use crate::emacs_core::load::{
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use strum::IntoEnumIterator;
 
 /// Create evaluator with minimal Elisp shims for interactive testing.
 fn eval_with_interactive_shims() -> Context {
@@ -57,6 +59,28 @@ fn parse_interactive_code_entries_preserves_raw_unibyte_prompt_bytes() {
     assert_eq!(parsed.entries[0].0, 'a');
     assert_eq!(parsed.entries[0].1.as_bytes(), &[0xFF, b':', b' ']);
     assert!(!parsed.entries[0].1.is_multibyte());
+}
+
+#[test]
+fn interactive_control_letter_domain_matches_gnu_callint() {
+    let expected = [
+        'a', 'b', 'B', 'c', 'C', 'd', 'D', 'e', 'f', 'F', 'G', 'i', 'k', 'K', 'U', 'm', 'M', 'N',
+        'n', 'P', 'p', 'R', 'r', 's', 'S', 'v', 'x', 'X', 'Z', 'z',
+    ];
+    let expected_set: HashSet<char> = expected.into_iter().collect();
+    let actual_set: HashSet<char> = InteractiveControlLetter::iter()
+        .map(InteractiveControlLetter::letter)
+        .collect();
+
+    assert_eq!(actual_set, expected_set);
+    for letter in expected {
+        assert_eq!(
+            InteractiveControlLetter::from_char(letter).map(InteractiveControlLetter::letter),
+            Some(letter)
+        );
+    }
+    assert_eq!(InteractiveControlLetter::from_char('+'), None);
+    assert_eq!(InteractiveControlLetter::from_char('q'), None);
 }
 
 fn eval_all_with(ev: &mut Context, src: &str) -> Vec<String> {
