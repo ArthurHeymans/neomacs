@@ -195,6 +195,28 @@ fn divergence_font_spec_creation() {
 }
 
 #[test]
+fn divergence_font_spec_spacing_gnu_codes() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(list
+  (font-get (font-spec :spacing 'p) :spacing)
+  (font-get (font-spec :spacing 'd) :spacing)
+  (font-get (font-spec :spacing 'm) :spacing)
+  (font-get (font-spec :spacing 'c) :spacing)
+  (font-get (font-spec :spacing 'P) :spacing)
+  (font-get (font-spec :spacing 'D) :spacing)
+  (font-get (font-spec :spacing 'M) :spacing)
+  (font-get (font-spec :spacing 'C) :spacing)
+  (font-get (font-spec :spacing 1) :spacing)
+  (font-get (font-spec :spacing 109) :spacing)
+  (condition-case err
+      (font-spec :spacing 111)
+    (error (list 'error (car err))))) "#,
+    );
+}
+
+#[test]
 fn divergence_face_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
