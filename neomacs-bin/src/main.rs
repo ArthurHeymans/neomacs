@@ -2711,8 +2711,7 @@ fn bootstrap_buffers(
         frame.visible = true;
         if let Some(window_system) = display.window_system_symbol() {
             frame.set_window_system(Some(Value::symbol(window_system)));
-            frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("black"));
-            frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("white"));
+            frame.install_gnu_gui_default_parameters();
         } else {
             frame.set_window_system(None);
         }

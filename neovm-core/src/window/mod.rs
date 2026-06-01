@@ -1757,6 +1757,17 @@ impl Frame {
             .unwrap_or_else(|| self.internal_border_width())
     }
 
+    pub fn install_gnu_gui_default_parameters(&mut self) {
+        // GNU GUI ports seed these through gui_default_parameter before the
+        // frame's Lisp face defaults are realized.
+        self.set_known_parameter(FrameParam::ForegroundColor, Value::string("black"));
+        self.set_known_parameter(FrameParam::BackgroundColor, Value::string("white"));
+        self.set_known_parameter(FrameParam::MouseColor, Value::string("black"));
+        self.set_known_parameter(FrameParam::CursorColor, Value::string("black"));
+        self.set_known_parameter(FrameParam::BorderColor, Value::string("black"));
+        self.set_known_parameter(FrameParam::CursorType, Value::symbol("box"));
+    }
+
     pub fn parameter(&self, key: &str) -> Option<Value> {
         self.parameters.get(&Value::symbol(key)).copied()
     }

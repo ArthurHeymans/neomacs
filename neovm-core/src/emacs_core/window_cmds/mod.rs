@@ -7016,8 +7016,7 @@ pub(crate) fn x_create_frame_impl(
         )));
         frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
         frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
-        frame.set_known_parameter(FrameParam::ForegroundColor, Value::string("black"));
-        frame.set_known_parameter(FrameParam::BackgroundColor, Value::string("white"));
+        frame.install_gnu_gui_default_parameters();
         for (key, value) in parsed.all {
             frame.set_parameter_key(FrameParamKey::from_symbol_id(key), value);
         }

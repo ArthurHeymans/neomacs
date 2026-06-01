@@ -37,7 +37,9 @@ use neovm_core::emacs_core::terminal::pure::TerminalHost;
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::face::FaceHeight;
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{FrameId, GuiFrameGeometryHints, default_gui_tool_bar_line_height};
+use neovm_core::window::{
+    FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
+};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -93,6 +95,39 @@ fn runtime_mode_dump_image_kinds_match_pipeline_roles() {
 #[test]
 fn bootstrap_gui_display_defaults_to_gnu_light_background_mode() {
     assert_eq!(gui_display().background_mode, "light");
+}
+
+#[test]
+fn bootstrap_gui_frame_uses_gnu_cursor_and_pointer_color_defaults() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("bootstrap evaluator");
+    let frame_id = bootstrap_runtime_gui_startup(&mut eval);
+    let frame = eval.frame_manager().get(frame_id).expect("live frame");
+
+    assert_eq!(
+        frame.known_parameter(FrameParam::ForegroundColor),
+        Some(Value::string("black"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::BackgroundColor),
+        Some(Value::string("white"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::CursorColor),
+        Some(Value::string("black"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::MouseColor),
+        Some(Value::string("black"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::BorderColor),
+        Some(Value::string("black"))
+    );
+    assert_eq!(
+        frame.known_parameter(FrameParam::CursorType),
+        Some(Value::symbol("box"))
+    );
 }
 
 fn gui_startup() -> StartupOptions {
