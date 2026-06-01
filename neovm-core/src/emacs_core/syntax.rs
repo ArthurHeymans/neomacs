@@ -7,6 +7,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
@@ -127,7 +129,7 @@ pub fn init_syntax_vars(
 /// Discriminant values match the GNU numbering (0–15) so the enum can be
 /// cast to `u8` and used directly in bytecode (e.g. the regex engine's
 /// `SyntaxSpec` / `NotSyntaxSpec` opcodes).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum SyntaxClass {
     /// ' ' — Whitespace (Swhitespace = 0)
@@ -165,6 +167,9 @@ pub enum SyntaxClass {
 }
 
 const SYNTAX_CLASS_COUNT: usize = 16;
+const SYNTAX_CLASS_DESIGNATORS: [char; SYNTAX_CLASS_COUNT] = [
+    ' ', '.', 'w', '_', '(', ')', '\'', '"', '$', '\\', '/', '<', '>', '@', '!', '|',
+];
 
 impl SyntaxClass {
     /// Parse a syntax class from its single-character designator.
@@ -191,55 +196,37 @@ impl SyntaxClass {
     }
 
     /// Return the canonical single-character designator for this class.
+    #[inline]
     pub fn to_char(self) -> char {
-        match self {
-            SyntaxClass::Whitespace => ' ',
-            SyntaxClass::Word => 'w',
-            SyntaxClass::Symbol => '_',
-            SyntaxClass::Punctuation => '.',
-            SyntaxClass::Open => '(',
-            SyntaxClass::Close => ')',
-            SyntaxClass::Quote => '\'',
-            SyntaxClass::StringDelim => '"',
-            SyntaxClass::Math => '$',
-            SyntaxClass::Escape => '\\',
-            SyntaxClass::CharQuote => '/',
-            SyntaxClass::Comment => '<',
-            SyntaxClass::EndComment => '>',
-            SyntaxClass::InheritStd => '@',
-            SyntaxClass::CommentFence => '!',
-            SyntaxClass::StringFence => '|',
-        }
+        SYNTAX_CLASS_DESIGNATORS[usize::from(u8::from(self))]
     }
 
     /// Return the integer code Emacs uses for this syntax class
     /// (used in the cons cell returned by `string-to-syntax`).
     #[inline]
     pub fn code(self) -> i64 {
-        self as i64
+        i64::from(u8::from(self))
     }
 
-    /// Parse a syntax class from its integer code (inverse of `code()`).
+    #[inline]
+    fn from_gnu_discriminant(code: u8) -> Option<SyntaxClass> {
+        SyntaxClass::try_from(code).ok()
+    }
+
+    /// Parse a syntax class from a syntax table entry code.
+    ///
+    /// GNU syntax table entries store flags above the low 8 bits; the class is
+    /// extracted with `code & 0377`.
     pub fn from_code(n: i64) -> Option<SyntaxClass> {
-        match n & 0xFF {
-            0 => Some(SyntaxClass::Whitespace),
-            1 => Some(SyntaxClass::Punctuation),
-            2 => Some(SyntaxClass::Word),
-            3 => Some(SyntaxClass::Symbol),
-            4 => Some(SyntaxClass::Open),
-            5 => Some(SyntaxClass::Close),
-            6 => Some(SyntaxClass::Quote),
-            7 => Some(SyntaxClass::StringDelim),
-            8 => Some(SyntaxClass::Math),
-            9 => Some(SyntaxClass::Escape),
-            10 => Some(SyntaxClass::CharQuote),
-            11 => Some(SyntaxClass::Comment),
-            12 => Some(SyntaxClass::EndComment),
-            13 => Some(SyntaxClass::InheritStd),
-            14 => Some(SyntaxClass::CommentFence),
-            15 => Some(SyntaxClass::StringFence),
-            _ => None,
-        }
+        SyntaxClass::from_gnu_discriminant((n & 0xFF) as u8)
+    }
+
+    /// Parse a public syntax class integer, as accepted by
+    /// `syntax-class-to-char`.  Unlike syntax table entries, GNU rejects raw
+    /// integers outside 0..Smax here instead of masking flag bits.
+    fn from_plain_code(n: i64) -> Option<SyntaxClass> {
+        let code = u8::try_from(n).ok()?;
+        SyntaxClass::from_gnu_discriminant(code)
     }
 }
 
@@ -2026,32 +2013,14 @@ pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
         }
     };
 
-    let ch = match class {
-        0 => ' ',
-        1 => '.',
-        2 => 'w',
-        3 => '_',
-        4 => '(',
-        5 => ')',
-        6 => '\'',
-        7 => '"',
-        8 => '$',
-        9 => '\\',
-        10 => '/',
-        11 => '<',
-        12 => '>',
-        13 => '@',
-        14 => '!',
-        15 => '|',
-        _ => {
-            return Err(signal(
-                "args-out-of-range",
-                vec![Value::fixnum(15), Value::fixnum(class)],
-            ));
-        }
+    let Some(class) = SyntaxClass::from_plain_code(class) else {
+        return Err(signal(
+            "args-out-of-range",
+            vec![Value::fixnum(15), Value::fixnum(class)],
+        ));
     };
 
-    Ok(Value::char(ch))
+    Ok(Value::char(class.to_char()))
 }
 
 /// `(matching-paren CHAR)` — return matching paren for bracket chars.

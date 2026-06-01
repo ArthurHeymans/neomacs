@@ -35,11 +35,43 @@ fn syntax_class_roundtrip() {
         ('>', SyntaxClass::EndComment),
         ('@', SyntaxClass::InheritStd),
         ('!', SyntaxClass::CommentFence),
+        ('|', SyntaxClass::StringFence),
     ];
     for (ch, class) in &classes {
         assert_eq!(SyntaxClass::from_char(*ch), Some(*class));
         assert_eq!(class.to_char(), *ch);
     }
+}
+
+#[test]
+fn syntax_class_codes_match_gnu_syntaxcode() {
+    crate::test_utils::init_test_tracing();
+    let classes = [
+        (SyntaxClass::Whitespace, 0, ' '),
+        (SyntaxClass::Punctuation, 1, '.'),
+        (SyntaxClass::Word, 2, 'w'),
+        (SyntaxClass::Symbol, 3, '_'),
+        (SyntaxClass::Open, 4, '('),
+        (SyntaxClass::Close, 5, ')'),
+        (SyntaxClass::Quote, 6, '\''),
+        (SyntaxClass::StringDelim, 7, '"'),
+        (SyntaxClass::Math, 8, '$'),
+        (SyntaxClass::Escape, 9, '\\'),
+        (SyntaxClass::CharQuote, 10, '/'),
+        (SyntaxClass::Comment, 11, '<'),
+        (SyntaxClass::EndComment, 12, '>'),
+        (SyntaxClass::InheritStd, 13, '@'),
+        (SyntaxClass::CommentFence, 14, '!'),
+        (SyntaxClass::StringFence, 15, '|'),
+    ];
+
+    for (class, code, syntax_char) in classes {
+        assert_eq!(class.code(), code);
+        assert_eq!(class.to_char(), syntax_char);
+        assert_eq!(SyntaxClass::from_code(code), Some(class));
+        assert_eq!(SyntaxClass::from_code(code | (0x5a << 16)), Some(class));
+    }
+    assert_eq!(SyntaxClass::from_code(16), None);
 }
 
 #[test]
@@ -717,6 +749,14 @@ fn syntax_class_to_char_basics_and_errors() {
         Err(crate::emacs_core::error::Flow::Signal(sig)) => {
             assert_eq!(sig.symbol_name(), "args-out-of-range");
             assert_eq!(sig.data, vec![Value::fixnum(15), Value::fixnum(-1)]);
+        }
+        other => panic!("expected args-out-of-range signal, got {other:?}"),
+    }
+
+    match builtin_syntax_class_to_char(vec![Value::fixnum(0x1_0002)]) {
+        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data, vec![Value::fixnum(15), Value::fixnum(0x1_0002)]);
         }
         other => panic!("expected args-out-of-range signal, got {other:?}"),
     }
