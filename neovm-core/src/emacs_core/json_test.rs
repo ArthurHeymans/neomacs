@@ -2,6 +2,34 @@ use super::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::heap_types::LispString;
 
+#[test]
+fn json_option_domains_match_gnu_symbols() {
+    assert_eq!(
+        ObjectType::from_symbol_value(&Value::symbol("hash-table")),
+        Some(ObjectType::HashTable)
+    );
+    assert_eq!(
+        ObjectType::from_symbol_value(&Value::symbol("alist")),
+        Some(ObjectType::Alist)
+    );
+    assert_eq!(
+        ObjectType::from_symbol_value(&Value::symbol("plist")),
+        Some(ObjectType::Plist)
+    );
+    assert_eq!(
+        ArrayType::from_symbol_value(&Value::symbol("array")),
+        Some(ArrayType::Vector)
+    );
+    assert_eq!(
+        ArrayType::from_symbol_value(&Value::symbol("list")),
+        Some(ArrayType::List)
+    );
+
+    assert_eq!(ObjectType::HashTable.symbol_name(), "hash-table");
+    assert_eq!(ArrayType::Vector.symbol_name(), "array");
+    assert_eq!(ArrayType::from_symbol_value(&Value::symbol("vector")), None);
+}
+
 // -----------------------------------------------------------------------
 // Serializer tests
 // -----------------------------------------------------------------------

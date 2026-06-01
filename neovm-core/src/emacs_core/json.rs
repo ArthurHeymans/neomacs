@@ -22,6 +22,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
 use crate::buffer::BufferManager;
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -84,17 +85,42 @@ impl Default for ParseOpts {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 enum ObjectType {
     HashTable,
     Alist,
     Plist,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl ObjectType {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 enum ArrayType {
+    #[strum(serialize = "array")]
     Vector,
+    #[strum(serialize = "list")]
     List,
+}
+
+impl ArrayType {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn symbol_name(self) -> &'static str {
+        self.into()
+    }
 }
 
 /// Parse keyword arguments from the &rest tail (starting at `start_index`).
@@ -113,17 +139,10 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
         let key = &rest[i];
         let value = &rest[i + 1];
         match key.kind() {
-            ValueKind::Symbol(k) if resolve_sym(k) == ":object-type" => match value.kind() {
-                ValueKind::Symbol(id) if resolve_sym(id) == "hash-table" => {
-                    opts.object_type = ObjectType::HashTable
-                }
-                ValueKind::Symbol(id) if resolve_sym(id) == "alist" => {
-                    opts.object_type = ObjectType::Alist
-                }
-                ValueKind::Symbol(id) if resolve_sym(id) == "plist" => {
-                    opts.object_type = ObjectType::Plist
-                }
-                _ => {
+            ValueKind::Symbol(k) if resolve_sym(k) == ":object-type" => {
+                if let Some(object_type) = ObjectType::from_symbol_value(value) {
+                    opts.object_type = object_type;
+                } else {
                     return Err(signal(
                         "error",
                         vec![
@@ -132,15 +151,11 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
                         ],
                     ));
                 }
-            },
-            ValueKind::Symbol(k) if resolve_sym(k) == ":array-type" => match value.kind() {
-                ValueKind::Symbol(id) if resolve_sym(id) == "array" => {
-                    opts.array_type = ArrayType::Vector
-                }
-                ValueKind::Symbol(id) if resolve_sym(id) == "list" => {
-                    opts.array_type = ArrayType::List
-                }
-                _ => {
+            }
+            ValueKind::Symbol(k) if resolve_sym(k) == ":array-type" => {
+                if let Some(array_type) = ArrayType::from_symbol_value(value) {
+                    opts.array_type = array_type;
+                } else {
                     return Err(signal(
                         "error",
                         vec![
@@ -149,7 +164,7 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
                         ],
                     ));
                 }
-            },
+            }
             ValueKind::Symbol(k) if resolve_sym(k) == ":null-object" => {
                 opts.null_object = *value;
             }
