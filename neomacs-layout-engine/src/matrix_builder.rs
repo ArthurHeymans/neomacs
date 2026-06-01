@@ -156,17 +156,17 @@ impl GlyphMatrixBuilder {
         // glyph as one column advance — matching the TTY
         // RIF's `col += 1` in rasterize.
         let current_total = |row: &GlyphRow| -> usize {
-            row.glyphs[GlyphArea::LeftMargin as usize].len()
-                + row.glyphs[GlyphArea::Text as usize].len()
-                + row.glyphs[GlyphArea::RightMargin as usize].len()
+            row.glyphs[GlyphArea::LeftMargin.index()].len()
+                + row.glyphs[GlyphArea::Text.index()].len()
+                + row.glyphs[GlyphArea::RightMargin.index()].len()
         };
 
         let preserve_trailing_truncation_marker = matches!(area, GlyphArea::RightMargin)
-            && row.glyphs[GlyphArea::Text as usize]
+            && row.glyphs[GlyphArea::Text.index()]
                 .last()
                 .is_some_and(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '$' }));
         let preserved_trailing = if preserve_trailing_truncation_marker {
-            row.glyphs[GlyphArea::Text as usize].pop()
+            row.glyphs[GlyphArea::Text.index()].pop()
         } else {
             None
         };
@@ -178,7 +178,7 @@ impl GlyphMatrixBuilder {
         // touch the text area.
         let before_final_cols = target_col.saturating_sub(preserved_cols);
         while current_total(row) > before_final_cols {
-            let text_area = &mut row.glyphs[GlyphArea::Text as usize];
+            let text_area = &mut row.glyphs[GlyphArea::Text.index()];
             if text_area.is_empty() {
                 break;
             }
@@ -188,15 +188,15 @@ impl GlyphMatrixBuilder {
         // Pad the text area with spaces until the combined
         // count reaches `target_col`.
         while current_total(row) < before_final_cols {
-            row.glyphs[GlyphArea::Text as usize].push(Glyph::char(' ', face_id, 0));
+            row.glyphs[GlyphArea::Text.index()].push(Glyph::char(' ', face_id, 0));
         }
 
         if let Some(glyph) = preserved_trailing {
-            row.glyphs[GlyphArea::Text as usize].push(glyph);
+            row.glyphs[GlyphArea::Text.index()].push(glyph);
         }
 
         while current_total(row) < target_col {
-            row.glyphs[GlyphArea::Text as usize].push(Glyph::char(' ', face_id, 0));
+            row.glyphs[GlyphArea::Text.index()].push(Glyph::char(' ', face_id, 0));
         }
 
         // Push the replacement glyph as the final glyph so it lands
@@ -408,7 +408,7 @@ impl GlyphMatrixBuilder {
             if self.current_row < matrix.rows.len() {
                 let row = &mut matrix.rows[self.current_row];
                 row.displays_text = !glyphs.is_empty();
-                row.glyphs[GlyphArea::Text as usize] = glyphs;
+                row.glyphs[GlyphArea::Text.index()] = glyphs;
             }
         }
     }
@@ -416,7 +416,7 @@ impl GlyphMatrixBuilder {
     pub fn push_left_margin_char(&mut self, ch: char, face_id: u32) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin as usize]
+                matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin.index()]
                     .push(Glyph::char(ch, face_id, 0));
             }
         }
@@ -425,7 +425,7 @@ impl GlyphMatrixBuilder {
     pub fn push_left_margin_stretch(&mut self, width_cols: u16, face_id: u32) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin as usize]
+                matrix.rows[self.current_row].glyphs[GlyphArea::LeftMargin.index()]
                     .push(Glyph::stretch(width_cols, face_id));
             }
         }
@@ -444,7 +444,7 @@ impl GlyphMatrixBuilder {
     ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize];
+                let area = &mut matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()];
                 if crate::unicode::is_cluster_extender(ch)
                     && merge_extender_into_last_glyph(area, ch)
                 {
@@ -476,7 +476,7 @@ impl GlyphMatrixBuilder {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
                 let row = &mut matrix.rows[self.current_row];
-                let area = &mut row.glyphs[GlyphArea::Text as usize];
+                let area = &mut row.glyphs[GlyphArea::Text.index()];
                 if crate::unicode::is_cluster_extender(ch)
                     && merge_extender_into_last_glyph(area, ch)
                 {
@@ -524,7 +524,7 @@ impl GlyphMatrixBuilder {
                     pixel_height,
                     pixel_ascent,
                 );
-                matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);
+                matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()].push(glyph);
             }
         }
     }
@@ -543,7 +543,7 @@ impl GlyphMatrixBuilder {
                     pixel_ascent: 0.0,
                     padding: false,
                 };
-                matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);
+                matrix.rows[self.current_row].glyphs[GlyphArea::Text.index()].push(glyph);
                 matrix.rows[self.current_row].displays_text = true;
             }
         }
@@ -736,7 +736,7 @@ impl GlyphMatrixBuilder {
             && cursor.row < matrix.rows.len()
         {
             let row = &matrix.rows[cursor.row];
-            let text = &row.glyphs[GlyphArea::Text as usize];
+            let text = &row.glyphs[GlyphArea::Text.index()];
             visual_col = text
                 .iter()
                 .position(|glyph| !glyph.padding && glyph.charpos == cursor.charpos)
@@ -917,7 +917,7 @@ impl GlyphMatrixBuilder {
         if self.current_row < matrix.rows.len() {
             let row = &mut matrix.rows[self.current_row];
             row.displays_text = !glyphs.is_empty();
-            row.glyphs[GlyphArea::Text as usize] = glyphs;
+            row.glyphs[GlyphArea::Text.index()] = glyphs;
             let _ = Self::reorder_row_bidi(row, None);
         }
     }
@@ -928,7 +928,7 @@ impl GlyphMatrixBuilder {
     /// produced before any leaf window exists but still need the same bidi
     /// reordering and row bookkeeping as status-line rows.
     pub fn normalize_external_row(row: &mut GlyphRow) {
-        row.displays_text = !row.glyphs[GlyphArea::Text as usize].is_empty();
+        row.displays_text = !row.glyphs[GlyphArea::Text.index()].is_empty();
         let _ = Self::reorder_row_bidi(row, None);
     }
 
@@ -1192,7 +1192,7 @@ impl GlyphMatrixBuilder {
             next_col += unit_len;
         }
 
-        row.glyphs[GlyphArea::Text as usize] = reordered;
+        row.glyphs[GlyphArea::Text.index()] = reordered;
         if let Some(col) = visual_cursor_col {
             row.cursor_col = Some(col);
         }
@@ -1200,7 +1200,7 @@ impl GlyphMatrixBuilder {
     }
 
     fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>) -> Option<u16> {
-        let original_text = row.glyphs[GlyphArea::Text as usize].clone();
+        let original_text = row.glyphs[GlyphArea::Text.index()].clone();
         if original_text.is_empty() {
             return None;
         }
