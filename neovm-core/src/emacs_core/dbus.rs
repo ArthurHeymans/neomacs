@@ -8,6 +8,37 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind};
+use strum::{EnumString, IntoStaticStr};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+enum DbusBusName {
+    #[strum(serialize = ":system")]
+    System,
+    #[strum(serialize = ":session")]
+    Session,
+    #[strum(serialize = ":system-private")]
+    SystemPrivate,
+    #[strum(serialize = ":session-private")]
+    SessionPrivate,
+}
+
+impl DbusBusName {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn unique_name(self) -> &'static str {
+        match self {
+            Self::System | Self::SystemPrivate => ":1.0",
+            Self::Session | Self::SessionPrivate => ":1.1",
+        }
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
@@ -64,8 +95,8 @@ fn dbus_error(msg: &str, details: Value) -> Flow {
     signal("dbus-error", vec![Value::string(msg), details])
 }
 
-fn recognized_bus_name(name: &str) -> bool {
-    matches!(name, ":system" | ":session")
+fn recognized_bus_name(name: &str) -> Option<DbusBusName> {
+    DbusBusName::from_symbol_name(name)
 }
 
 /// `(dbus--init-bus BUS &optional PRIVATE)` -- initialize BUS and return
@@ -73,7 +104,7 @@ fn recognized_bus_name(name: &str) -> bool {
 pub(crate) fn builtin_dbus_init_bus(args: Vec<Value>) -> EvalResult {
     expect_range_args("dbus--init-bus", &args, 1, Some(2))?;
     let bus = expect_symbolp(&args[0])?;
-    if recognized_bus_name(&bus) {
+    if recognized_bus_name(&bus).is_some() {
         Ok(Value::fixnum(2))
     } else {
         Err(dbus_error("Wrong bus name", Value::symbol(bus)))
@@ -84,12 +115,8 @@ pub(crate) fn builtin_dbus_init_bus(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_dbus_get_unique_name(args: Vec<Value>) -> EvalResult {
     expect_args("dbus-get-unique-name", &args, 1)?;
     let bus = expect_symbolp(&args[0])?;
-    if recognized_bus_name(&bus) {
-        Ok(Value::string(match bus.as_str() {
-            ":system" => ":1.0",
-            ":session" => ":1.1",
-            _ => ":1.2",
-        }))
+    if let Some(bus_name) = recognized_bus_name(&bus) {
+        Ok(Value::string(bus_name.unique_name()))
     } else {
         Err(dbus_error("Wrong bus name", Value::symbol(bus)))
     }
