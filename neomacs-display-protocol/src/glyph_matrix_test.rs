@@ -3,6 +3,45 @@ use crate::face::Face;
 use crate::frame_glyphs::{DisplaySlotId, PhysCursor};
 
 #[test]
+fn glyph_type_kind_codes_match_gnu_glyph_type() {
+    let cases = [
+        (GlyphTypeKind::Char, 0),
+        (GlyphTypeKind::Composite, 1),
+        (GlyphTypeKind::Glyphless, 2),
+        (GlyphTypeKind::Image, 3),
+        (GlyphTypeKind::Stretch, 4),
+        (GlyphTypeKind::Xwidget, 5),
+    ];
+
+    for (kind, code) in cases {
+        assert_eq!(kind.gnu_code(), code);
+        assert_eq!(GlyphTypeKind::from_gnu_code(code), Some(kind));
+    }
+
+    assert_eq!(GlyphTypeKind::from_gnu_code(6), None);
+    assert_eq!(
+        Glyph::char('x', 0, 0).glyph_type.gnu_kind(),
+        GlyphTypeKind::Char
+    );
+    assert_eq!(
+        GlyphType::Composite { text: "xy".into() }.gnu_kind(),
+        GlyphTypeKind::Composite
+    );
+    assert_eq!(
+        GlyphType::Glyphless { ch: '\u{fffd}' }.gnu_kind(),
+        GlyphTypeKind::Glyphless
+    );
+    assert_eq!(
+        GlyphType::Image { image_id: 7 }.gnu_kind(),
+        GlyphTypeKind::Image
+    );
+    assert_eq!(
+        Glyph::stretch(2, 0).glyph_type.gnu_kind(),
+        GlyphTypeKind::Stretch
+    );
+}
+
+#[test]
 fn glyph_area_codes_match_gnu_glyph_row_area() {
     let cases = [
         (GlyphArea::LeftMargin, 0),

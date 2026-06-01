@@ -36,6 +36,43 @@ pub enum GlyphType {
     Glyphless { ch: char },
 }
 
+/// GNU `enum glyph_type` discriminants.
+///
+/// `Xwidget` is part of GNU's glyph domain even though Neomacs does not yet
+/// have a `GlyphType` payload variant for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum GlyphTypeKind {
+    Char = 0,
+    Composite = 1,
+    Glyphless = 2,
+    Image = 3,
+    Stretch = 4,
+    Xwidget = 5,
+}
+
+impl GlyphTypeKind {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+}
+
+impl GlyphType {
+    pub fn gnu_kind(&self) -> GlyphTypeKind {
+        match self {
+            GlyphType::Char { .. } => GlyphTypeKind::Char,
+            GlyphType::Composite { .. } => GlyphTypeKind::Composite,
+            GlyphType::Glyphless { .. } => GlyphTypeKind::Glyphless,
+            GlyphType::Image { .. } => GlyphTypeKind::Image,
+            GlyphType::Stretch { .. } => GlyphTypeKind::Stretch,
+        }
+    }
+}
+
 /// Three areas within a glyph row, matching GNU's `enum glyph_row_area`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
