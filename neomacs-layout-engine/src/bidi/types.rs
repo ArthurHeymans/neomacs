@@ -125,17 +125,28 @@ impl BidiClass {
 }
 
 /// Paragraph/base direction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum BidiDir {
     /// Left-to-right.
-    LTR,
+    LTR = 1,
     /// Right-to-left.
-    RTL,
+    RTL = 2,
     /// Auto-detect from first strong character.
-    Auto,
+    Auto = 0,
 }
 
 impl BidiDir {
+    /// GNU `bidi_dir_t` code for this direction.
+    pub fn gnu_dir_code(self) -> u8 {
+        self.into()
+    }
+
+    /// Convert from GNU `bidi_dir_t` (`NEUTRAL_DIR`, `L2R`, `R2L`).
+    pub fn from_gnu_dir_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
     /// Base embedding level for this direction.
     pub fn base_level(self) -> u8 {
         match self {
@@ -154,11 +165,24 @@ pub enum BracketType {
 }
 
 /// Override status for level stack entries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum Override {
-    Neutral,
-    LTR,
-    RTL,
+    Neutral = 0,
+    LTR = 1,
+    RTL = 2,
+}
+
+impl Override {
+    /// GNU `bidi_dir_t` code used for overrides on the directional stack.
+    pub fn gnu_dir_code(self) -> u8 {
+        self.into()
+    }
+
+    /// Convert from GNU `bidi_dir_t` override code.
+    pub fn from_gnu_dir_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
 }
 
 /// Entry on the directional status stack (X1-X8).

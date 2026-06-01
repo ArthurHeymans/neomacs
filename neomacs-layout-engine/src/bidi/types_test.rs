@@ -408,6 +408,16 @@ fn bidi_dir_base_level_auto_is_0() {
     assert_eq!(BidiDir::Auto.base_level(), 0);
 }
 
+#[test]
+fn bidi_dir_codes_match_gnu_bidi_dir_t() {
+    let directions = [(BidiDir::Auto, 0), (BidiDir::LTR, 1), (BidiDir::RTL, 2)];
+    for (direction, code) in directions {
+        assert_eq!(direction.gnu_dir_code(), code);
+        assert_eq!(BidiDir::from_gnu_dir_code(code), Some(direction));
+    }
+    assert_eq!(BidiDir::from_gnu_dir_code(3), None);
+}
+
 // ===================================================================
 // BracketType
 // ===================================================================
@@ -445,6 +455,20 @@ fn override_variants_are_distinct() {
     assert_ne!(Override::Neutral, Override::LTR);
     assert_ne!(Override::Neutral, Override::RTL);
     assert_ne!(Override::LTR, Override::RTL);
+}
+
+#[test]
+fn override_codes_match_gnu_bidi_dir_t() {
+    let overrides = [
+        (Override::Neutral, 0),
+        (Override::LTR, 1),
+        (Override::RTL, 2),
+    ];
+    for (override_status, code) in overrides {
+        assert_eq!(override_status.gnu_dir_code(), code);
+        assert_eq!(Override::from_gnu_dir_code(code), Some(override_status));
+    }
+    assert_eq!(Override::from_gnu_dir_code(3), None);
 }
 
 // ===================================================================
