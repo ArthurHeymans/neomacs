@@ -17,6 +17,7 @@ use super::frame_glyphs::{
 };
 use super::types::{Color, Rect};
 use super::ui_types::{MenuBarItem, ToolBarItem};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
 /// What kind of content this glyph represents.
@@ -36,11 +37,26 @@ pub enum GlyphType {
 }
 
 /// Three areas within a glyph row, matching GNU's `enum glyph_row_area`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
 pub enum GlyphArea {
     LeftMargin = 0,
     Text = 1,
     RightMargin = 2,
+}
+
+impl GlyphArea {
+    pub fn index(self) -> usize {
+        usize::from(u8::from(self))
+    }
+
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// One character cell on screen.
@@ -291,7 +307,7 @@ impl GlyphRow {
     }
 
     pub fn used(&self, area: GlyphArea) -> usize {
-        self.glyphs[area as usize].len()
+        self.glyphs[area.index()].len()
     }
 
     pub fn total_glyphs(&self) -> usize {

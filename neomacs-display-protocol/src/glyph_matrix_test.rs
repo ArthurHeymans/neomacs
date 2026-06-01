@@ -3,6 +3,23 @@ use crate::face::Face;
 use crate::frame_glyphs::{DisplaySlotId, PhysCursor};
 
 #[test]
+fn glyph_area_codes_match_gnu_glyph_row_area() {
+    let cases = [
+        (GlyphArea::LeftMargin, 0),
+        (GlyphArea::Text, 1),
+        (GlyphArea::RightMargin, 2),
+    ];
+
+    for (area, code) in cases {
+        assert_eq!(area.gnu_code(), code);
+        assert_eq!(area.index(), usize::from(code));
+        assert_eq!(GlyphArea::from_gnu_code(code), Some(area));
+    }
+
+    assert_eq!(GlyphArea::from_gnu_code(3), None);
+}
+
+#[test]
 fn empty_row_has_zero_hash() {
     let row = GlyphRow::new(GlyphRowRole::Text);
     assert_eq!(row.compute_hash(), 0);
