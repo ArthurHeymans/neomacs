@@ -28,6 +28,70 @@
 
 use neovm_core::emacs_core::Value;
 use std::collections::HashMap;
+use strum::{EnumString, IntoStaticStr};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum PixelCalcUnit {
+    #[strum(serialize = "in")]
+    Inch,
+    Mm,
+    Cm,
+}
+
+impl PixelCalcUnit {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn pixels_per_unit(self) -> f64 {
+        match self {
+            Self::Inch => 1.0,
+            Self::Mm => 25.4,
+            Self::Cm => 2.54,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum PixelCalcSymbol {
+    Height,
+    Width,
+    Text,
+    Left,
+    Right,
+    Center,
+    LeftFringe,
+    RightFringe,
+    LeftMargin,
+    RightMargin,
+    ScrollBar,
+}
+
+impl PixelCalcSymbol {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+enum PixelCalcConsHead {
+    #[strum(serialize = "image")]
+    Image,
+    #[strum(serialize = "xwidget")]
+    Xwidget,
+    #[strum(serialize = "+")]
+    Plus,
+    #[strum(serialize = "-")]
+    Minus,
+}
+
+impl PixelCalcConsHead {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+}
 
 /// Context equivalent to the fields of GNU's `struct it` that
 /// `calc_pixel_width_or_height` reads.
@@ -242,39 +306,31 @@ fn calc_symbol(
     let name = prop.as_symbol_name()?;
 
     // GNU xdisp.c:30133 — two-character unit symbols (in, mm, cm).
-    if name.len() == 2 {
-        let bytes = name.as_bytes();
-        let pixels_per_unit = match (bytes[0], bytes[1]) {
-            (b'i', b'n') => 1.0,  // 1 inch
-            (b'm', b'm') => 25.4, // 1 inch = 25.4 mm
-            (b'c', b'm') => 2.54, // 1 inch = 2.54 cm
-            _ => -1.0,
+    if let Some(unit) = PixelCalcUnit::from_symbol_name(name) {
+        // GNU xdisp.c:30147: `ppi / pixels`
+        let ppi = if width_p {
+            ctx.frame_res_x
+        } else {
+            ctx.frame_res_y
         };
-        if pixels_per_unit > 0.0 {
-            // GNU xdisp.c:30147: `ppi / pixels`
-            let ppi = if width_p {
-                ctx.frame_res_x
-            } else {
-                ctx.frame_res_y
-            };
-            if ppi > 0.0 {
-                return Some(ppi / pixels_per_unit);
-            }
-            return None;
+        if ppi > 0.0 {
+            return Some(ppi / unit.pixels_per_unit());
         }
-        // fall through for two-char symbols that aren't units (e.g., "my")
+        return None;
     }
 
+    let gnu_symbol = PixelCalcSymbol::from_symbol_name(name);
+
     // GNU xdisp.c:30158 — `height` symbol
-    if name == "height" {
+    if gnu_symbol == Some(PixelCalcSymbol::Height) {
         return Some(ctx.face_font_height);
     }
     // GNU xdisp.c:30164 — `width` symbol
-    if name == "width" {
+    if gnu_symbol == Some(PixelCalcSymbol::Width) {
         return Some(ctx.face_font_width);
     }
     // GNU xdisp.c:30175 — `text` symbol (text-area width)
-    if name == "text" {
+    if gnu_symbol == Some(PixelCalcSymbol::Text) {
         return Some(ctx.text_area_width - ctx.line_number_pixel_width);
     }
 
@@ -284,118 +340,115 @@ fn calc_symbol(
     let in_first_align_to = matches!(align_to.as_deref(), Some(v) if *v < 0);
 
     if in_first_align_to {
-        // GNU xdisp.c:30188 — `left`
-        if name == "left" {
-            let pos = ctx.text_area_left + ctx.line_number_pixel_width;
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
+        match gnu_symbol {
+            // GNU xdisp.c:30188 — `left`
+            Some(PixelCalcSymbol::Left) => {
+                let pos = ctx.text_area_left + ctx.line_number_pixel_width;
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0); // GNU sets `*res = 0` here
             }
-            return Some(0.0); // GNU sets `*res = 0` here
-        }
-        // GNU xdisp.c:30192 — `right` (right edge of text area)
-        if name == "right" {
-            let pos = ctx.text_area_right;
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
+            // GNU xdisp.c:30192 — `right` (right edge of text area)
+            Some(PixelCalcSymbol::Right) => {
+                let pos = ctx.text_area_right;
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
             }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30196 — `center`
-        if name == "center" {
-            let pos = ctx.text_area_left + ctx.line_number_pixel_width + ctx.text_area_width / 2.0;
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
+            // GNU xdisp.c:30196 — `center`
+            Some(PixelCalcSymbol::Center) => {
+                let pos =
+                    ctx.text_area_left + ctx.line_number_pixel_width + ctx.text_area_width / 2.0;
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
             }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30201 — `left-fringe`
-        if name == "left-fringe" {
-            let pos = if ctx.fringes_outside_margins {
-                // scroll-bar area width when scroll bar is on left
-                if ctx.scroll_bar_on_left {
-                    ctx.scroll_bar_width
+            // GNU xdisp.c:30201 — `left-fringe`
+            Some(PixelCalcSymbol::LeftFringe) => {
+                let pos = if ctx.fringes_outside_margins {
+                    // scroll-bar area width when scroll bar is on left
+                    if ctx.scroll_bar_on_left {
+                        ctx.scroll_bar_width
+                    } else {
+                        0.0
+                    }
                 } else {
+                    // window_box_right_offset(LEFT_MARGIN_AREA) — i.e., left
+                    // margin's right edge. With left_margin_left and
+                    // left_margin_width we get this directly.
+                    ctx.left_margin_left + ctx.left_margin_width
+                };
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
+            }
+            // GNU xdisp.c:30206 — `right-fringe`
+            Some(PixelCalcSymbol::RightFringe) => {
+                let pos = if ctx.fringes_outside_margins {
+                    // window_box_right_offset(RIGHT_MARGIN_AREA)
+                    ctx.right_margin_left + ctx.right_margin_width
+                } else {
+                    // window_box_right_offset(TEXT_AREA)
+                    ctx.text_area_right
+                };
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
+            }
+            // GNU xdisp.c:30211 — `left-margin`
+            Some(PixelCalcSymbol::LeftMargin) => {
+                let pos = ctx.left_margin_left;
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
+            }
+            // GNU xdisp.c:30214 — `right-margin`
+            Some(PixelCalcSymbol::RightMargin) => {
+                let pos = ctx.right_margin_left;
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
+                }
+                return Some(0.0);
+            }
+            // GNU xdisp.c:30217 — `scroll-bar`
+            Some(PixelCalcSymbol::ScrollBar) => {
+                let pos = if ctx.scroll_bar_on_left {
                     0.0
-                }
-            } else {
-                // window_box_right_offset(LEFT_MARGIN_AREA) — i.e., left
-                // margin's right edge. With left_margin_left and
-                // left_margin_width we get this directly.
-                ctx.left_margin_left + ctx.left_margin_width
-            };
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
-            }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30206 — `right-fringe`
-        if name == "right-fringe" {
-            let pos = if ctx.fringes_outside_margins {
-                // window_box_right_offset(RIGHT_MARGIN_AREA)
-                ctx.right_margin_left + ctx.right_margin_width
-            } else {
-                // window_box_right_offset(TEXT_AREA)
-                ctx.text_area_right
-            };
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
-            }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30211 — `left-margin`
-        if name == "left-margin" {
-            let pos = ctx.left_margin_left;
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
-            }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30214 — `right-margin`
-        if name == "right-margin" {
-            let pos = ctx.right_margin_left;
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
-            }
-            return Some(0.0);
-        }
-        // GNU xdisp.c:30217 — `scroll-bar`
-        if name == "scroll-bar" {
-            let pos = if ctx.scroll_bar_on_left {
-                0.0
-            } else {
-                // RHS scroll bar: right edge of right margin + right fringe (if
-                // outside margins)
-                let right_margin_right = ctx.right_margin_left + ctx.right_margin_width;
-                if ctx.fringes_outside_margins {
-                    right_margin_right + ctx.right_fringe_width
                 } else {
-                    right_margin_right
+                    // RHS scroll bar: right edge of right margin + right fringe
+                    // when fringes are outside margins.
+                    let right_margin_right = ctx.right_margin_left + ctx.right_margin_width;
+                    if ctx.fringes_outside_margins {
+                        right_margin_right + ctx.right_fringe_width
+                    } else {
+                        right_margin_right
+                    }
+                };
+                if let Some(a) = align_to.as_deref_mut() {
+                    *a = pos as i32;
                 }
-            };
-            if let Some(a) = align_to.as_deref_mut() {
-                *a = pos as i32;
+                return Some(0.0);
             }
-            return Some(0.0);
+            _ => {}
         }
     } else {
         // GNU xdisp.c:30223 — `else` branch: same symbols interpreted as
         // WIDTHS, not positions. Used when we're inside a recursive
         // `(+ ...)`/`(- ...)` after an align-to base has already been
         // resolved, OR when `align_to` is None (width mode).
-        if name == "left-fringe" {
-            return Some(ctx.left_fringe_width);
-        }
-        if name == "right-fringe" {
-            return Some(ctx.right_fringe_width);
-        }
-        if name == "left-margin" {
-            return Some(ctx.left_margin_width);
-        }
-        if name == "right-margin" {
-            return Some(ctx.right_margin_width);
-        }
-        if name == "scroll-bar" {
-            return Some(ctx.scroll_bar_width);
+        match gnu_symbol {
+            Some(PixelCalcSymbol::LeftFringe) => return Some(ctx.left_fringe_width),
+            Some(PixelCalcSymbol::RightFringe) => return Some(ctx.right_fringe_width),
+            Some(PixelCalcSymbol::LeftMargin) => return Some(ctx.left_margin_width),
+            Some(PixelCalcSymbol::RightMargin) => return Some(ctx.right_margin_width),
+            Some(PixelCalcSymbol::ScrollBar) => return Some(ctx.scroll_bar_width),
+            _ => {}
         }
     }
 
@@ -457,20 +510,24 @@ fn calc_cons(
     let cdr_raw = prop.cons_cdr();
 
     // GNU xdisp.c:30254 — `SYMBOLP (car)` branch
-    if let Some(head) = car.as_symbol_name() {
+    if let Some(head_name) = car.as_symbol_name() {
+        let head = PixelCalcConsHead::from_symbol_name(head_name);
         // GNU xdisp.c:30261 — `(image PROPS...)`. Requires image
         // infrastructure; return placeholder width.
-        if head == "image" {
+        if head == Some(PixelCalcConsHead::Image) {
             // TODO(verify): actually look up image dimensions.
             return Some(100.0);
         }
         // GNU xdisp.c:30269 — `(xwidget PROPS...)`. Same placeholder.
-        if head == "xwidget" {
+        if head == Some(PixelCalcConsHead::Xwidget) {
             return Some(100.0);
         }
 
         // GNU xdisp.c:30278 — `(+ E...)` or `(- E...)`
-        if head == "+" || head == "-" {
+        if matches!(
+            head,
+            Some(PixelCalcConsHead::Plus | PixelCalcConsHead::Minus)
+        ) {
             let mut pixels = 0.0_f64;
             let mut first = true;
             // Walk the cdr list directly. cdr_raw is the tail after the
@@ -482,7 +539,11 @@ fn calc_cons(
                 let sub_align_ref: Option<&mut i32> = local_align.as_mut();
                 let px = calc_pixel_width_or_height(ctx, &arg, width_p, sub_align_ref)?;
                 if first {
-                    pixels = if head == "+" { px } else { -px };
+                    pixels = if head == Some(PixelCalcConsHead::Plus) {
+                        px
+                    } else {
+                        -px
+                    };
                     first = false;
                 } else {
                     pixels += px;
@@ -546,7 +607,7 @@ fn calc_cons(
             //
             // Actually I think I'm misreading. Let me check once more
             // by reading the C directly:
-            if head == "-" {
+            if head == Some(PixelCalcConsHead::Minus) {
                 pixels = -pixels;
             }
             // Sync the local_align back to the caller.

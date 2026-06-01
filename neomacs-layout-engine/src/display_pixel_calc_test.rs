@@ -42,6 +42,53 @@ fn parse(src: &str) -> (Context, Value) {
     (ctx, v)
 }
 
+#[test]
+fn pixel_calc_domains_match_gnu_symbols() {
+    assert_eq!(
+        PixelCalcUnit::from_symbol_name("in"),
+        Some(PixelCalcUnit::Inch)
+    );
+    assert_eq!(
+        PixelCalcUnit::from_symbol_name("mm"),
+        Some(PixelCalcUnit::Mm)
+    );
+    assert_eq!(
+        PixelCalcUnit::from_symbol_name("cm"),
+        Some(PixelCalcUnit::Cm)
+    );
+    assert_eq!(PixelCalcUnit::from_symbol_name("pt"), None);
+    assert_eq!(<&'static str>::from(PixelCalcUnit::Inch), "in");
+
+    assert_eq!(
+        PixelCalcSymbol::from_symbol_name("left-fringe"),
+        Some(PixelCalcSymbol::LeftFringe)
+    );
+    assert_eq!(
+        PixelCalcSymbol::from_symbol_name("scroll-bar"),
+        Some(PixelCalcSymbol::ScrollBar)
+    );
+    assert_eq!(PixelCalcSymbol::from_symbol_name("image"), None);
+    assert_eq!(
+        <&'static str>::from(PixelCalcSymbol::RightMargin),
+        "right-margin"
+    );
+
+    assert_eq!(
+        PixelCalcConsHead::from_symbol_name("image"),
+        Some(PixelCalcConsHead::Image)
+    );
+    assert_eq!(
+        PixelCalcConsHead::from_symbol_name("+"),
+        Some(PixelCalcConsHead::Plus)
+    );
+    assert_eq!(
+        PixelCalcConsHead::from_symbol_name("-"),
+        Some(PixelCalcConsHead::Minus)
+    );
+    assert_eq!(PixelCalcConsHead::from_symbol_name("plus"), None);
+    assert_eq!(<&'static str>::from(PixelCalcConsHead::Xwidget), "xwidget");
+}
+
 // ------------------------------------------------------------------
 // Nil
 // ------------------------------------------------------------------
