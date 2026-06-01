@@ -7183,7 +7183,7 @@ impl LayoutEngine {
         row.pixel_y = 0.0;
         row.height_px = tab_bar_height.max(1.0);
         row.ascent_px = sl_face.font_ascent.max(0.0).min(row.height_px);
-        row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text as usize] = glyphs;
+        row.glyphs[neomacs_display_protocol::glyph_matrix::GlyphArea::Text.index()] = glyphs;
         crate::matrix_builder::GlyphMatrixBuilder::normalize_external_row(&mut row);
 
         let chrome_before_tab = frame_params.menu_bar_height
