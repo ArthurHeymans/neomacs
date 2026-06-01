@@ -4580,7 +4580,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "current-time",
-        |_ctx, args| super::timefns::builtin_current_time(args),
+        |ctx, args| super::timefns::builtin_current_time_in_context(ctx, args),
         0,
         Some(0),
     );
@@ -8177,7 +8177,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "time-convert",
-        |_ctx, args| super::timefns::builtin_time_convert(args),
+        |ctx, args| super::timefns::builtin_time_convert_in_context(ctx, args),
         1,
         Some(2),
     );

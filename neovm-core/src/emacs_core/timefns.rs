@@ -7,7 +7,8 @@
 //! Uses `std::time::SystemTime`/`UNIX_EPOCH` for time operations.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
+use super::eval::Context;
+use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::conversion::traits::RoundingFrom;
@@ -17,6 +18,22 @@ use std::cell::RefCell;
 use std::ffi::{CStr, OsString};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
+enum TimeConvertSymbolForm {
+    #[strum(serialize = "integer")]
+    Integer,
+    #[strum(serialize = "list")]
+    List,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum TimeConvertForm {
+    Integer,
+    List,
+    InputHz,
+    ExplicitHz(Integer),
+}
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -180,10 +197,16 @@ impl TimeMicros {
     }
 
     fn to_ticks_hz(&self, hz: i64) -> Value {
-        let ticks = self.secs as i128 * hz as i128
-            + self.usecs as i128 * hz as i128 / 1_000_000
-            + self.psecs as i128 * hz as i128 / 1_000_000_000_000;
-        Value::cons(Value::make_int(ticks as i64), Value::fixnum(hz))
+        self.to_ticks_hz_integer(&Integer::from(hz))
+    }
+
+    fn to_ticks_hz_integer(&self, hz: &Integer) -> Value {
+        let trillion = Integer::from(1_000_000_000_000i64);
+        let total_psecs = Integer::from(self.secs) * &trillion
+            + Integer::from(self.usecs) * Integer::from(1_000_000i64)
+            + Integer::from(self.psecs);
+        let ticks = integer_div_floor(&(total_psecs * hz), &trillion);
+        Value::cons(Value::make_integer(ticks), Value::make_integer(hz.clone()))
     }
 
     fn less_than(self, other: TimeMicros) -> bool {
@@ -924,10 +947,65 @@ fn encode_time_zone_offset(zone: &Value, approx_epoch_secs: i64) -> Result<i64, 
 // Pure builtins
 // ---------------------------------------------------------------------------
 
-/// `(current-time)` -> `(HIGH LOW USEC PSEC)`
+fn invalid_time_frequency_error() -> Flow {
+    signal("error", vec![Value::string("Invalid time frequency")])
+}
+
+fn current_time_list_enabled(eval: &Context) -> Result<bool, Flow> {
+    eval.eval_symbol_by_id(intern("current-time-list"))
+        .map(|value| value.is_truthy())
+}
+
+fn parse_time_convert_form(form: &Value, current_time_list: bool) -> Result<TimeConvertForm, Flow> {
+    match form.kind() {
+        ValueKind::Nil => {
+            if current_time_list {
+                Ok(TimeConvertForm::List)
+            } else {
+                Ok(TimeConvertForm::InputHz)
+            }
+        }
+        ValueKind::T => Ok(TimeConvertForm::InputHz),
+        ValueKind::Fixnum(hz) if hz > 0 => Ok(TimeConvertForm::ExplicitHz(Integer::from(hz))),
+        ValueKind::Fixnum(_) => Err(invalid_time_frequency_error()),
+        ValueKind::Veclike(VecLikeType::Bignum) => {
+            let hz = form
+                .as_bignum()
+                .expect("ValueKind::Bignum must carry Integer payload")
+                .clone();
+            if hz > Integer::from(0) {
+                Ok(TimeConvertForm::ExplicitHz(hz))
+            } else {
+                Err(invalid_time_frequency_error())
+            }
+        }
+        ValueKind::Symbol(id) => match resolve_sym(id).parse::<TimeConvertSymbolForm>().ok() {
+            Some(TimeConvertSymbolForm::List) => Ok(TimeConvertForm::List),
+            Some(TimeConvertSymbolForm::Integer) => Ok(TimeConvertForm::Integer),
+            None => Err(invalid_time_frequency_error()),
+        },
+        _ => Err(invalid_time_frequency_error()),
+    }
+}
+
+fn current_time_value(current_time_list: bool) -> Value {
+    let now = TimeMicros::now();
+    if current_time_list {
+        now.to_list()
+    } else {
+        now.to_ticks_hz(1_000_000_000)
+    }
+}
+
+/// `(current-time)` -> `(HIGH LOW USEC PSEC)` or `(TICKS . HZ)`.
 pub(crate) fn builtin_current_time(args: Vec<Value>) -> EvalResult {
     expect_args("current-time", &args, 0)?;
-    Ok(TimeMicros::now().to_list())
+    Ok(current_time_value(true))
+}
+
+pub(crate) fn builtin_current_time_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_args("current-time", &args, 0)?;
+    Ok(current_time_value(current_time_list_enabled(eval)?))
 }
 
 /// `(float-time &optional TIME)` -> float seconds since epoch.
@@ -1110,11 +1188,23 @@ pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
 /// `(time-convert TIME &optional FORM)`
 ///
 /// FORM controls the output format:
-///   - nil or `list`   -> `(HIGH LOW USEC PSEC)`
+///   - nil             -> `current-time-list` dependent default
+///   - `list`          -> `(HIGH LOW USEC PSEC)`
 ///   - `integer`       -> integer seconds
 ///   - `t`             -> `(TICKS . HZ)` (highest precision cons cell)
-///   - `float`         -> float seconds
 pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
+    builtin_time_convert_with_current_time_list(args, true)
+}
+
+pub(crate) fn builtin_time_convert_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    let current_time_list = current_time_list_enabled(eval)?;
+    builtin_time_convert_with_current_time_list(args, current_time_list)
+}
+
+fn builtin_time_convert_with_current_time_list(
+    args: Vec<Value>,
+    current_time_list: bool,
+) -> EvalResult {
     expect_min_max_args("time-convert", &args, 1, 2)?;
     let parsed = parse_time_detailed(&args[0])?;
     let tm = parsed.time;
@@ -1125,9 +1215,10 @@ pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
         &Value::NIL
     };
 
-    match form.kind() {
-        ValueKind::Nil => Ok(tm.to_list()),
-        ValueKind::T => {
+    match parse_time_convert_form(form, current_time_list)? {
+        TimeConvertForm::List => Ok(tm.to_list()),
+        TimeConvertForm::Integer => Ok(Value::fixnum(tm.secs)),
+        TimeConvertForm::InputHz => {
             // GNU's default timestamp representation is (TICKS . HZ).
             let hz = parsed.hz;
             if let Some((ticks, exact_hz)) = parsed.exact_ticks_hz {
@@ -1139,21 +1230,7 @@ pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
                 Ok(tm.to_ticks_hz(hz))
             }
         }
-        ValueKind::Fixnum(hz) if hz > 0 => {
-            // GNU accepts a positive integer FORM as an explicit HZ.
-            Ok(tm.to_ticks_hz(hz))
-        }
-        ValueKind::Symbol(id) => match resolve_sym(id) {
-            "list" => Ok(tm.to_list()),
-            "integer" => Ok(Value::fixnum(tm.secs)),
-            "float" => Ok(Value::make_float(tm.to_float())),
-            _ => Ok(tm.to_list()),
-        },
-        ValueKind::Fixnum(_) => Err(signal(
-            "error",
-            vec![Value::string("Invalid timestamp resolution")],
-        )),
-        _ => Ok(tm.to_list()),
+        TimeConvertForm::ExplicitHz(hz) => Ok(tm.to_ticks_hz_integer(&hz)),
     }
 }
 

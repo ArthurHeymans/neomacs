@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::Context;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -18,6 +19,19 @@ fn reset_tz_rule() {
 
 fn bootstrap_eval(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
+}
+
+fn assert_invalid_time_frequency(flow: Flow) {
+    match flow {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|value| value.as_utf8_str()),
+                Some("Invalid time frequency")
+            );
+        }
+        other => panic!("expected signal, got {other:?}"),
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -728,16 +742,11 @@ fn builtin_time_convert_to_integer() {
 }
 
 #[test]
-fn builtin_time_convert_to_float() {
+fn builtin_time_convert_rejects_float_output_form_like_gnu() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_time_convert(vec![Value::fixnum(1000), Value::symbol("float")]).unwrap();
-    match result.kind() {
-        ValueKind::Float => {
-            let f = result.as_float().unwrap();
-            assert!((f - 1000.0).abs() < 1e-9);
-        }
-        _ => panic!("expected float"),
-    }
+    let err = builtin_time_convert(vec![Value::fixnum(1000), Value::symbol("float")])
+        .expect_err("GNU rejects `float' as a time-convert output form");
+    assert_invalid_time_frequency(err);
 }
 
 #[test]
@@ -754,6 +763,38 @@ fn builtin_time_convert_with_t() {
         }
         _ => panic!("expected cons, got {:?}", result),
     }
+}
+
+#[test]
+fn builtin_time_convert_rejects_unknown_frequency_forms_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    for form in [
+        Value::symbol("other"),
+        Value::string("integer"),
+        Value::fixnum(0),
+        Value::fixnum(-1),
+    ] {
+        let err = builtin_time_convert(vec![Value::fixnum(1), form])
+            .expect_err("invalid FORM should signal");
+        assert_invalid_time_frequency(err);
+    }
+}
+
+#[test]
+fn current_time_and_time_convert_respect_current_time_list() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.set_variable("current-time-list", Value::NIL);
+
+    let current = builtin_current_time_in_context(&mut eval, vec![]).unwrap();
+    assert!(current.is_cons());
+    assert_eq!(current.cons_cdr().as_int(), Some(1_000_000_000));
+
+    let converted =
+        builtin_time_convert_in_context(&mut eval, vec![Value::fixnum(1), Value::NIL]).unwrap();
+    assert!(converted.is_cons());
+    assert_eq!(converted.cons_car().as_int(), Some(1));
+    assert_eq!(converted.cons_cdr().as_int(), Some(1));
 }
 
 #[test]
