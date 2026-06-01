@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rustc_hash::{FxHashMap, FxHashSet};
 use strum::{EnumString, IntoStaticStr};
 
@@ -574,15 +575,28 @@ pub struct LispHashTable {
     pub free_slots: Vec<usize>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+/// Standard hash-table tests. The numeric codes mirror GNU
+/// `hash_table_std_test_t` (`src/lisp.h`): `eql=0`, `eq=1`, `equal=2`.
+#[repr(u8)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum HashTableTest {
-    Eq,
-    Eql,
-    Equal,
+    Eq = 1,
+    Eql = 0,
+    Equal = 2,
 }
 
 impl HashTableTest {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+
     pub fn from_symbol_name(name: &str) -> Option<Self> {
         name.parse().ok()
     }
@@ -596,16 +610,38 @@ impl HashTableTest {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+/// Weak hash-table modes. GNU `Weak_None=0` is represented by
+/// `Option<HashTableWeakness>::None`; the enum covers the non-nil Lisp
+/// weakness symbols.
+#[repr(u8)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum HashTableWeakness {
-    Key,
-    Value,
-    KeyOrValue,
-    KeyAndValue,
+    Key = 1,
+    Value = 2,
+    KeyOrValue = 3,
+    KeyAndValue = 4,
 }
 
 impl HashTableWeakness {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn option_from_gnu_code(code: u8) -> Option<Option<Self>> {
+        if code == 0 {
+            Some(None)
+        } else {
+            Self::from_gnu_code(code).map(Some)
+        }
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+
     pub fn from_symbol_name(name: &str) -> Option<Self> {
         name.parse().ok()
     }

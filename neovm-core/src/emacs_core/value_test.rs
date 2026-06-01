@@ -33,6 +33,13 @@ fn hash_table_domains_match_gnu_symbols() {
         None
     );
     assert_eq!(HashTableTest::Equal.name(), "equal");
+    assert_eq!(HashTableTest::Eql.gnu_code(), 0);
+    assert_eq!(HashTableTest::Eq.gnu_code(), 1);
+    assert_eq!(HashTableTest::Equal.gnu_code(), 2);
+    assert_eq!(HashTableTest::from_gnu_code(0), Some(HashTableTest::Eql));
+    assert_eq!(HashTableTest::from_gnu_code(1), Some(HashTableTest::Eq));
+    assert_eq!(HashTableTest::from_gnu_code(2), Some(HashTableTest::Equal));
+    assert_eq!(HashTableTest::from_gnu_code(3), None);
 
     assert_eq!(
         HashTableWeakness::from_symbol_value(&Value::symbol("key")),
@@ -52,6 +59,21 @@ fn hash_table_domains_match_gnu_symbols() {
     );
     assert_eq!(HashTableWeakness::from_symbol_name("weak"), None);
     assert_eq!(HashTableWeakness::KeyOrValue.name(), "key-or-value");
+    assert_eq!(HashTableWeakness::from_gnu_code(0), None);
+    assert_eq!(HashTableWeakness::option_from_gnu_code(0), Some(None));
+    assert_eq!(HashTableWeakness::Key.gnu_code(), 1);
+    assert_eq!(HashTableWeakness::Value.gnu_code(), 2);
+    assert_eq!(HashTableWeakness::KeyOrValue.gnu_code(), 3);
+    assert_eq!(HashTableWeakness::KeyAndValue.gnu_code(), 4);
+    assert_eq!(
+        HashTableWeakness::option_from_gnu_code(1),
+        Some(Some(HashTableWeakness::Key))
+    );
+    assert_eq!(
+        HashTableWeakness::option_from_gnu_code(4),
+        Some(Some(HashTableWeakness::KeyAndValue))
+    );
+    assert_eq!(HashTableWeakness::option_from_gnu_code(5), None);
 
     assert_eq!(
         HashTableMakeKeyword::from_symbol_value(&Value::keyword(":test")),
