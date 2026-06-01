@@ -2037,67 +2037,17 @@ impl SetFaceAttr {
     }
 }
 
-const VALID_FACE_WEIGHTS: &[&str] = &[
-    "thin",
-    "ultra-light",
-    "ultralight",
-    "extra-light",
-    "extralight",
-    "light",
-    "semi-light",
-    "semilight",
-    "demilight",
-    "regular",
-    "normal",
-    "unspecified",
-    "book",
-    "medium",
-    "semi-bold",
-    "semibold",
-    "demibold",
-    "demi-bold",
-    "demi",
-    "bold",
-    "extra-bold",
-    "extrabold",
-    "ultra-bold",
-    "ultrabold",
-    "black",
-    "heavy",
-    "ultra-heavy",
-    "ultraheavy",
-];
-const VALID_FACE_SLANTS: &[&str] = &[
-    "normal",
-    "italic",
-    "oblique",
-    "reverse-italic",
-    "reverse-oblique",
-];
-const VALID_FACE_WIDTHS: &[&str] = &[
-    "ultra-condensed",
-    "ultracondensed",
-    "extra-condensed",
-    "extracondensed",
-    "condensed",
-    "compressed",
-    "narrow",
-    "semi-condensed",
-    "semicondensed",
-    "demicondensed",
-    "normal",
-    "medium",
-    "regular",
-    "unspecified",
-    "semi-expanded",
-    "semiexpanded",
-    "demiexpanded",
-    "expanded",
-    "extra-expanded",
-    "extraexpanded",
-    "ultra-expanded",
-    "ultraexpanded",
-];
+fn valid_face_weight_symbol(name: &str) -> bool {
+    FontWeight::from_symbol(name).is_some()
+}
+
+fn valid_face_slant_symbol(name: &str) -> bool {
+    FontSlant::from_symbol(name).is_some()
+}
+
+fn valid_face_width_symbol(name: &str) -> bool {
+    FontWidth::from_symbol(name).is_some()
+}
 
 fn non_empty_lisp_string(value: Value) -> bool {
     value
@@ -3436,7 +3386,7 @@ fn normalize_face_attr_for_set_with_eval(
         ":weight" => {
             if !is_reset_like {
                 let sym = symbol_name_or_type_error(&normalized)?;
-                if !VALID_FACE_WEIGHTS.contains(&sym.as_str()) {
+                if !valid_face_weight_symbol(&sym) {
                     return Err(signal(
                         "error",
                         vec![Value::string("Invalid face weight"), normalized],
@@ -3447,7 +3397,7 @@ fn normalize_face_attr_for_set_with_eval(
         ":slant" => {
             if !is_reset_like {
                 let sym = symbol_name_or_type_error(&normalized)?;
-                if !VALID_FACE_SLANTS.contains(&sym.as_str()) {
+                if !valid_face_slant_symbol(&sym) {
                     return Err(signal(
                         "error",
                         vec![Value::string("Invalid face slant"), normalized],
@@ -3458,7 +3408,7 @@ fn normalize_face_attr_for_set_with_eval(
         ":width" => {
             if !is_reset_like {
                 let sym = symbol_name_or_type_error(&normalized)?;
-                if !VALID_FACE_WIDTHS.contains(&sym.as_str()) {
+                if !valid_face_width_symbol(&sym) {
                     return Err(signal(
                         "error",
                         vec![Value::string("Invalid face width"), normalized],

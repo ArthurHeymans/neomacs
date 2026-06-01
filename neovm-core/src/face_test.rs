@@ -426,14 +426,27 @@ fn font_slant_from_symbol_all() {
     crate::test_utils::init_test_tracing();
     assert_eq!(FontSlant::from_symbol("normal"), Some(FontSlant::Normal));
     assert_eq!(FontSlant::from_symbol("roman"), Some(FontSlant::Normal));
+    assert_eq!(FontSlant::from_symbol("r"), Some(FontSlant::Normal));
+    assert_eq!(
+        FontSlant::from_symbol("unspecified"),
+        Some(FontSlant::Normal)
+    );
     assert_eq!(FontSlant::from_symbol("italic"), Some(FontSlant::Italic));
+    assert_eq!(FontSlant::from_symbol("i"), Some(FontSlant::Italic));
+    assert_eq!(FontSlant::from_symbol("ot"), Some(FontSlant::Italic));
     assert_eq!(FontSlant::from_symbol("oblique"), Some(FontSlant::Oblique));
+    assert_eq!(FontSlant::from_symbol("o"), Some(FontSlant::Oblique));
     assert_eq!(
         FontSlant::from_symbol("reverse-italic"),
         Some(FontSlant::ReverseItalic)
     );
+    assert_eq!(FontSlant::from_symbol("ri"), Some(FontSlant::ReverseItalic));
     assert_eq!(
         FontSlant::from_symbol("reverse-oblique"),
+        Some(FontSlant::ReverseOblique)
+    );
+    assert_eq!(
+        FontSlant::from_symbol("ro"),
         Some(FontSlant::ReverseOblique)
     );
     assert_eq!(FontSlant::from_symbol("unknown"), None);
@@ -452,7 +465,15 @@ fn font_width_from_symbol_all() {
         Some(FontWidth::UltraCondensed)
     );
     assert_eq!(
+        FontWidth::from_symbol("ultracondensed"),
+        Some(FontWidth::UltraCondensed)
+    );
+    assert_eq!(
         FontWidth::from_symbol("extra-condensed"),
+        Some(FontWidth::ExtraCondensed)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("extracondensed"),
         Some(FontWidth::ExtraCondensed)
     );
     assert_eq!(
@@ -468,11 +489,31 @@ fn font_width_from_symbol_all() {
         FontWidth::from_symbol("semi-condensed"),
         Some(FontWidth::SemiCondensed)
     );
+    assert_eq!(
+        FontWidth::from_symbol("semicondensed"),
+        Some(FontWidth::SemiCondensed)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("demicondensed"),
+        Some(FontWidth::SemiCondensed)
+    );
     assert_eq!(FontWidth::from_symbol("normal"), Some(FontWidth::Normal));
     assert_eq!(FontWidth::from_symbol("medium"), Some(FontWidth::Normal));
     assert_eq!(FontWidth::from_symbol("regular"), Some(FontWidth::Normal));
     assert_eq!(
+        FontWidth::from_symbol("unspecified"),
+        Some(FontWidth::Normal)
+    );
+    assert_eq!(
         FontWidth::from_symbol("semi-expanded"),
+        Some(FontWidth::SemiExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("semiexpanded"),
+        Some(FontWidth::SemiExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("demiexpanded"),
         Some(FontWidth::SemiExpanded)
     );
     assert_eq!(
@@ -484,7 +525,19 @@ fn font_width_from_symbol_all() {
         Some(FontWidth::ExtraExpanded)
     );
     assert_eq!(
+        FontWidth::from_symbol("extraexpanded"),
+        Some(FontWidth::ExtraExpanded)
+    );
+    assert_eq!(
         FontWidth::from_symbol("ultra-expanded"),
+        Some(FontWidth::UltraExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("ultraexpanded"),
+        Some(FontWidth::UltraExpanded)
+    );
+    assert_eq!(
+        FontWidth::from_symbol("wide"),
         Some(FontWidth::UltraExpanded)
     );
     assert_eq!(FontWidth::from_symbol("unknown"), None);

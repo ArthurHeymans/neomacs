@@ -266,7 +266,7 @@ impl FontWeight {
             "semi-bold" | "semibold" | "demi-bold" | "demibold" | "demi" => Some(Self::SEMI_BOLD),
             "bold" => Some(Self::BOLD),
             "extra-bold" | "extrabold" | "ultra-bold" | "ultrabold" => Some(Self::EXTRA_BOLD),
-            "black" | "heavy" | "ultra-heavy" | "ultraheavy" | "ultra" => Some(Self::BLACK),
+            "black" | "heavy" | "ultra-heavy" | "ultraheavy" => Some(Self::BLACK),
             _ => None,
         }
     }
@@ -280,11 +280,20 @@ impl FontWeight {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum FontSlant {
-    #[strum(to_string = "normal", serialize = "roman")]
+    #[strum(
+        to_string = "normal",
+        serialize = "roman",
+        serialize = "r",
+        serialize = "unspecified"
+    )]
     Normal,
+    #[strum(to_string = "italic", serialize = "i", serialize = "ot")]
     Italic,
+    #[strum(to_string = "oblique", serialize = "o")]
     Oblique,
+    #[strum(to_string = "reverse-italic", serialize = "ri")]
     ReverseItalic,
+    #[strum(to_string = "reverse-oblique", serialize = "ro")]
     ReverseOblique,
 }
 
@@ -306,7 +315,9 @@ impl FontSlant {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum FontWidth {
+    #[strum(to_string = "ultra-condensed", serialize = "ultracondensed")]
     UltraCondensed,
+    #[strum(to_string = "extra-condensed", serialize = "extracondensed")]
     ExtraCondensed,
     #[strum(
         to_string = "condensed",
@@ -314,12 +325,33 @@ pub enum FontWidth {
         serialize = "narrow"
     )]
     Condensed,
+    #[strum(
+        to_string = "semi-condensed",
+        serialize = "semicondensed",
+        serialize = "demicondensed"
+    )]
     SemiCondensed,
-    #[strum(to_string = "normal", serialize = "medium", serialize = "regular")]
+    #[strum(
+        to_string = "normal",
+        serialize = "medium",
+        serialize = "regular",
+        serialize = "unspecified"
+    )]
     Normal,
+    #[strum(
+        to_string = "semi-expanded",
+        serialize = "semiexpanded",
+        serialize = "demiexpanded"
+    )]
     SemiExpanded,
     Expanded,
+    #[strum(to_string = "extra-expanded", serialize = "extraexpanded")]
     ExtraExpanded,
+    #[strum(
+        to_string = "ultra-expanded",
+        serialize = "ultraexpanded",
+        serialize = "wide"
+    )]
     UltraExpanded,
 }
 

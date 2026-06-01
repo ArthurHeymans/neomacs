@@ -1075,6 +1075,39 @@ fn internal_lisp_face_p_without_frame_returns_global_lface_attributes() {
 }
 
 #[test]
+fn internal_set_lisp_face_attribute_accepts_gnu_font_style_aliases() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+
+    let face_name = "__neovm_lface_style_aliases_unit_test";
+    let mut eval = Context::new();
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+
+    for (attr, value) in [
+        (":weight", "ultra-heavy"),
+        (":slant", "ro"),
+        (":width", "wide"),
+    ] {
+        builtin_internal_set_lisp_face_attribute(
+            &mut eval,
+            vec![
+                Value::symbol(face_name),
+                Value::keyword(attr),
+                Value::symbol(value),
+                Value::fixnum(0),
+            ],
+        )
+        .unwrap();
+    }
+
+    let result = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+    let values = result.as_vector_data().expect("lface vector").clone();
+    assert_eq!(values[3].as_symbol_name(), Some("wide"));
+    assert_eq!(values[5].as_symbol_name(), Some("ultra-heavy"));
+    assert_eq!(values[6].as_symbol_name(), Some("ro"));
+}
+
+#[test]
 fn internal_set_lisp_face_attribute_mutates_live_global_lface_vector() {
     crate::test_utils::init_test_tracing();
     clear_font_cache_state();
