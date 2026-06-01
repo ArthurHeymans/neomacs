@@ -21,6 +21,7 @@ use neovm_core::window::{Frame, FrameId, Window, resolve_window_scroll_bar_geome
 
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
 use crate::fontconfig::face_height_to_pixels;
+use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::types::Rect;
@@ -503,18 +504,6 @@ pub(crate) fn buffer_selective_display<B: LayoutBufferView>(buffer: &B) -> i32 {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CursorSpec {
-    /// GNU `enum text_cursor_kinds` discriminant. Use the
-    /// `CursorKind` enum from `neomacs-display-protocol` rather
-    /// than the raw byte: the slot ordering matches GNU exactly
-    /// (FilledBox=0, HollowBox=1, Bar=2, Hbar=3, NoCursor=-1,
-    /// Default=-2). See cursor audit Finding 1 in
-    /// `drafts/cursor-audit.md`.
-    cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind,
-    bar_width: i32,
-}
-
 fn parse_color_pixel(value: &Value) -> Option<u32> {
     value
         .as_runtime_string_owned()
@@ -524,75 +513,46 @@ fn parse_color_pixel(value: &Value) -> Option<u32> {
 }
 
 fn parse_cursor_spec(value: &Value) -> Option<CursorSpec> {
-    use neomacs_display_protocol::frame_glyphs::CursorKind;
-
     if value.is_nil() {
-        return None;
+        return Some(CursorSpec::no_cursor());
     }
 
     if value.bits() == Value::T.bits() || value.is_symbol_named("box") {
-        return Some(CursorSpec {
-            cursor_kind: CursorKind::FilledBox,
-            bar_width: 1,
-        });
+        return Some(CursorSpec::filled_box());
     }
     if value.is_symbol_named("hollow") {
-        return Some(CursorSpec {
-            cursor_kind: CursorKind::HollowBox,
-            bar_width: 1,
-        });
+        return Some(CursorSpec::hollow_box());
     }
     if value.is_symbol_named("bar") {
-        return Some(CursorSpec {
-            cursor_kind: CursorKind::Bar,
-            bar_width: 2,
-        });
+        return Some(CursorSpec::bar(CursorBarWidth::TWO));
     }
     if value.is_symbol_named("hbar") {
-        return Some(CursorSpec {
-            cursor_kind: CursorKind::Hbar,
-            bar_width: 2,
-        });
+        return Some(CursorSpec::hbar(CursorBarWidth::TWO));
     }
     if value.is_cons() {
         let car = value.cons_car();
         let cdr = value.cons_cdr();
-        let bar_width = cdr.as_int().unwrap_or(1).max(0) as i32;
-        if car.is_symbol_named("box") {
-            return Some(CursorSpec {
-                cursor_kind: CursorKind::FilledBox,
-                bar_width,
-            });
-        }
-        if car.is_symbol_named("bar") {
-            return Some(CursorSpec {
-                cursor_kind: CursorKind::Bar,
-                bar_width,
-            });
-        }
-        if car.is_symbol_named("hbar") {
-            return Some(CursorSpec {
-                cursor_kind: CursorKind::Hbar,
-                bar_width,
-            });
+        if let Some(bar_width) = cdr.as_fixnum().and_then(CursorBarWidth::from_lisp_fixnum) {
+            if car.is_symbol_named("box") {
+                return Some(CursorSpec::new(CursorKind::FilledBox, bar_width));
+            }
+            if car.is_symbol_named("bar") {
+                return Some(CursorSpec::bar(bar_width));
+            }
+            if car.is_symbol_named("hbar") {
+                return Some(CursorSpec::hbar(bar_width));
+            }
         }
     }
 
-    Some(CursorSpec {
-        cursor_kind: CursorKind::HollowBox,
-        bar_width: 1,
-    })
+    Some(CursorSpec::hollow_box())
 }
 
 fn frame_cursor_spec(frame: &Frame) -> CursorSpec {
-    use neomacs_display_protocol::frame_glyphs::CursorKind;
     frame
         .parameter("cursor-type")
         .and_then(|value| parse_cursor_spec(&value))
-        .unwrap_or(CursorSpec {
-            cursor_kind: CursorKind::FilledBox,
-            bar_width: 1,
-        })
+        .unwrap_or(CursorSpec::filled_box())
 }
 
 fn default_cursor_color_pixel(face_table: &FaceTable) -> u32 {
@@ -788,8 +748,6 @@ fn effective_cursor_spec(
         return parse_cursor_spec(&value);
     }
 
-    use neomacs_display_protocol::frame_glyphs::CursorKind;
-
     // GNU `xdisp.c::get_window_cursor_type` applies the non-selected
     // fallback after resolving the base cursor kind: FilledBox becomes
     // HollowBox, explicit alternate cursor types win, and BAR cursors
@@ -797,8 +755,8 @@ fn effective_cursor_spec(
     let mut adjusted = base;
     if adjusted.cursor_kind == CursorKind::FilledBox {
         adjusted.cursor_kind = CursorKind::HollowBox;
-    } else if adjusted.cursor_kind == CursorKind::Bar && adjusted.bar_width > 1 {
-        adjusted.bar_width -= 1;
+    } else if adjusted.cursor_kind == CursorKind::Bar {
+        adjusted.bar_width = adjusted.bar_width.narrowed_for_non_selected_bar();
     }
     Some(adjusted)
 }
@@ -996,8 +954,8 @@ pub fn window_params_from_neovm(
         window_cursor_type,
     )
     .unwrap_or(CursorSpec {
-        cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::NoCursor,
-        bar_width: 1,
+        cursor_kind: CursorKind::NoCursor,
+        bar_width: CursorBarWidth::DEFAULT,
     });
     let cursor_color = frame_cursor_color_pixel(frame, face_table);
     let cursor_effects = parse_cursor_effect_profile(window_cursor_effect).or_else(|| {

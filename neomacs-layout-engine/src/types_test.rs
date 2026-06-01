@@ -1,4 +1,5 @@
 use super::*;
+use neomacs_display_protocol::cursor::CursorBarWidth;
 
 // --- Color and Rect helpers ---
 
@@ -385,7 +386,7 @@ fn window_params_construction() {
         header_line_height: 0.0,
         tab_line_height: 0.0,
         cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
-        cursor_bar_width: 2,
+        cursor_bar_width: CursorBarWidth::TWO,
         x_stretch_cursor: false,
         cursor_color: 0x00000000,
         cursor_effects: None,
@@ -455,7 +456,7 @@ fn window_params_minibuffer() {
         header_line_height: 0.0,
         tab_line_height: 0.0,
         cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
-        cursor_bar_width: 2,
+        cursor_bar_width: CursorBarWidth::TWO,
         x_stretch_cursor: false,
         cursor_color: 0x00000000,
         cursor_effects: None,
@@ -517,7 +518,7 @@ fn window_params_clone() {
         header_line_height: 20.0,
         tab_line_height: 20.0,
         cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::Bar,
-        cursor_bar_width: 3,
+        cursor_bar_width: CursorBarWidth::new(3),
         x_stretch_cursor: false,
         cursor_color: 0x00000000,
         cursor_effects: None,

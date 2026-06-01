@@ -1,5 +1,6 @@
 //! Shared protocol types between layout, renderer, and runtime crates.
 
+pub mod cursor;
 pub mod cursor_effect_command;
 pub mod effect_config;
 pub mod face;

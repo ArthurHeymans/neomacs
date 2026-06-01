@@ -1,4 +1,5 @@
 use super::*;
+use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind};
 use neovm_core::buffer::BufferManager;
 use neovm_core::emacs_core::value::Value;
 use neovm_core::window::{FrameManager, Rect as NeoRect, WindowId};
@@ -352,11 +353,34 @@ fn test_effective_cursor_spec_prefers_window_cursor_type() {
     )
     .unwrap();
 
-    assert_eq!(
-        spec.cursor_kind,
-        neomacs_display_protocol::frame_glyphs::CursorKind::Bar
-    );
-    assert_eq!(spec.bar_width, 5);
+    assert_eq!(spec.cursor_kind, CursorKind::Bar);
+    assert_eq!(spec.bar_width, CursorBarWidth::new(5));
+}
+
+#[test]
+fn test_parse_cursor_spec_nil_is_no_cursor_like_gnu() {
+    let spec = parse_cursor_spec(&Value::NIL).unwrap();
+
+    assert_eq!(spec.cursor_kind, CursorKind::NoCursor);
+    assert_eq!(spec.bar_width, CursorBarWidth::DEFAULT);
+}
+
+#[test]
+fn test_parse_cursor_spec_accepts_zero_width_cons_like_gnu() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let spec = parse_cursor_spec(&Value::cons(Value::symbol("bar"), Value::fixnum(0))).unwrap();
+
+    assert_eq!(spec.cursor_kind, CursorKind::Bar);
+    assert_eq!(spec.bar_width, CursorBarWidth::new(0));
+}
+
+#[test]
+fn test_parse_cursor_spec_invalid_cons_falls_back_hollow_like_gnu() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let spec = parse_cursor_spec(&Value::cons(Value::symbol("bar"), Value::fixnum(-1))).unwrap();
+
+    assert_eq!(spec.cursor_kind, CursorKind::HollowBox);
+    assert_eq!(spec.bar_width, CursorBarWidth::DEFAULT);
 }
 
 #[test]
@@ -371,10 +395,7 @@ fn test_effective_cursor_spec_nonselected_box_becomes_hollow() {
 
     let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
 
-    assert_eq!(
-        spec.cursor_kind,
-        neomacs_display_protocol::frame_glyphs::CursorKind::HollowBox
-    );
+    assert_eq!(spec.cursor_kind, CursorKind::HollowBox);
 }
 
 #[test]
@@ -397,11 +418,8 @@ fn test_effective_cursor_spec_nonselected_bar_narrows_under_t() {
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
     let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
 
-    assert_eq!(
-        spec.cursor_kind,
-        neomacs_display_protocol::frame_glyphs::CursorKind::Bar
-    );
-    assert_eq!(spec.bar_width, 4);
+    assert_eq!(spec.cursor_kind, CursorKind::Bar);
+    assert_eq!(spec.bar_width, CursorBarWidth::new(4));
 }
 
 #[test]
@@ -423,11 +441,8 @@ fn test_effective_cursor_spec_nonselected_explicit_bar_is_preserved() {
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
     let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
 
-    assert_eq!(
-        spec.cursor_kind,
-        neomacs_display_protocol::frame_glyphs::CursorKind::Bar
-    );
-    assert_eq!(spec.bar_width, 3);
+    assert_eq!(spec.cursor_kind, CursorKind::Bar);
+    assert_eq!(spec.bar_width, CursorBarWidth::new(3));
 }
 
 #[test]
@@ -444,9 +459,9 @@ fn test_effective_cursor_spec_nonselected_nil_disables_cursor() {
 
     let frame = evaluator.frame_manager().get(frame_id).unwrap();
     let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
-    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T);
+    let spec = effective_cursor_spec(frame, buffer, false, false, Value::T).unwrap();
 
-    assert!(spec.is_none());
+    assert_eq!(spec.cursor_kind, CursorKind::NoCursor);
 }
 
 #[test]
@@ -493,10 +508,7 @@ fn collect_layout_params_dims_windows_on_nonselected_frame() {
         .iter()
         .find(|window| !window.is_minibuffer)
         .expect("main window");
-    assert_eq!(
-        main_window.cursor_kind,
-        neomacs_display_protocol::frame_glyphs::CursorKind::HollowBox
-    );
+    assert_eq!(main_window.cursor_kind, CursorKind::HollowBox);
 }
 
 #[test]

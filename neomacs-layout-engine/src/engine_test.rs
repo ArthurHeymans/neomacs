@@ -1,5 +1,6 @@
 use super::*;
 use crate::neovm_bridge::RustBufferAccess;
+use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphType;
 use neovm_core::emacs_core::Context;
@@ -57,7 +58,7 @@ fn test_window_params() -> WindowParams {
         header_line_height: 0.0,
         tab_line_height: 0.0,
         cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind::FilledBox,
-        cursor_bar_width: 2,
+        cursor_bar_width: CursorBarWidth::TWO,
         x_stretch_cursor: false,
         cursor_color: 0xFFFFFF,
         cursor_effects: None,
@@ -5030,7 +5031,7 @@ fn test_cursor_style_for_nonselected_bar_uses_resolved_width() {
     let mut params = test_window_params();
     params.selected = false;
     params.cursor_kind = neomacs_display_protocol::frame_glyphs::CursorKind::Bar;
-    params.cursor_bar_width = 4;
+    params.cursor_bar_width = CursorBarWidth::new(4);
 
     assert_eq!(
         cursor_style_for_window(&params),

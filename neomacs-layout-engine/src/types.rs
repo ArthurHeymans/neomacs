@@ -4,6 +4,7 @@
 //! The layout engine produces LayoutOutput which is then converted to
 //! FrameGlyphBuffer for the existing renderer.
 
+use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::types::{Color, Rect};
 
 /// Complete layout output for one frame.
@@ -197,7 +198,7 @@ pub struct WindowParams {
     /// `u8` encoding as a silently re-numbered alias.
     pub cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind,
     /// Cursor bar width (for bar cursor)
-    pub cursor_bar_width: i32,
+    pub cursor_bar_width: CursorBarWidth,
     /// Whether stretch slots may use their full displayed width for box cursors.
     ///
     /// Mirrors GNU `x-stretch-cursor`.
@@ -267,7 +268,7 @@ pub struct VisualCursorSpec {
     /// 0-based buffer character position.
     pub charpos: i64,
     pub cursor_kind: neomacs_display_protocol::frame_glyphs::CursorKind,
-    pub cursor_bar_width: i32,
+    pub cursor_bar_width: CursorBarWidth,
     pub color: u32,
     pub effects: Option<neomacs_display_protocol::effect_config::EffectsConfig>,
 }
