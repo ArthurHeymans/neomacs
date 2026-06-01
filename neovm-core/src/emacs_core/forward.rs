@@ -36,12 +36,13 @@
 
 use super::intern::SymId;
 use super::value::Value;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 /// Discriminant for [`LispFwd`]. Mirrors GNU `enum Lisp_Fwd_Type`
 /// (`src/lisp.h:3046-3055`). Always read the first field of any `*Fwd`
 /// struct to determine its concrete type — exactly the GNU trick.
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive)]
 pub enum LispFwdType {
     /// `Lisp_Intfwd`: forward to a static `intmax_t`.
     Int = 0,
@@ -56,6 +57,16 @@ pub enum LispFwdType {
     /// `Lisp_Kboard_Objfwd`: forward to a slot inside the current
     /// keyboard's per-kboard storage.
     KboardObj = 4,
+}
+
+impl LispFwdType {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Common header. Every `Lisp_*Fwd` struct begins with this so the
@@ -161,4 +172,26 @@ pub fn alloc_buffer_objfwd(
         default,
     });
     Box::leak(fwd)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lisp_fwd_type_codes_match_gnu_lisp_fwd_type() {
+        let cases = [
+            (LispFwdType::Int, 0),
+            (LispFwdType::Bool, 1),
+            (LispFwdType::Obj, 2),
+            (LispFwdType::BufferObj, 3),
+            (LispFwdType::KboardObj, 4),
+        ];
+
+        for (ty, code) in cases {
+            assert_eq!(ty.gnu_code(), code);
+            assert_eq!(LispFwdType::from_gnu_code(code), Some(ty));
+        }
+        assert_eq!(LispFwdType::from_gnu_code(5), None);
+    }
 }
