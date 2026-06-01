@@ -8,12 +8,24 @@
 
 use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::value::Value;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
 
 pub const GNU_FRAME_PARAM_COUNT: usize = 54;
 
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    EnumString,
+    IntoStaticStr,
+    IntoPrimitive,
+    TryFromPrimitive,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum FrameParam {
     AutoRaise = 0,
@@ -215,11 +227,12 @@ pub const GNU_FRAME_PARAMS: [FrameParam; GNU_FRAME_PARAM_COUNT] = [
 
 impl FrameParam {
     pub fn gnu_index(self) -> usize {
-        self as usize
+        usize::from(u8::from(self))
     }
 
     pub fn from_gnu_index(index: usize) -> Option<Self> {
-        GNU_FRAME_PARAMS.get(index).copied()
+        let index = u8::try_from(index).ok()?;
+        Self::try_from(index).ok()
     }
 
     pub fn name(self) -> &'static str {
