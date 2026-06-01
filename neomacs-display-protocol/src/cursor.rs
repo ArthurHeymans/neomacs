@@ -5,6 +5,8 @@
 
 use std::fmt;
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 /// GNU Emacs `enum text_cursor_kinds` (`src/dispextern.h`).
 ///
 /// The discriminants match GNU exactly so constants copied from display code
@@ -18,7 +20,7 @@ use std::fmt;
 /// BAR_CURSOR        =  2
 /// HBAR_CURSOR       =  3
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(i8)]
 pub enum CursorKind {
     Default = -2,
@@ -34,20 +36,12 @@ impl CursorKind {
     /// representation. Returns `None` for any value outside the legal
     /// discriminants.
     pub fn from_gnu_code(code: i8) -> Option<Self> {
-        match code {
-            -2 => Some(Self::Default),
-            -1 => Some(Self::NoCursor),
-            0 => Some(Self::FilledBox),
-            1 => Some(Self::HollowBox),
-            2 => Some(Self::Bar),
-            3 => Some(Self::Hbar),
-            _ => None,
-        }
+        Self::try_from(code).ok()
     }
 
     /// GNU enum integer code (matches `enum text_cursor_kinds`).
     pub fn gnu_code(self) -> i8 {
-        self as i8
+        self.into()
     }
 }
 
@@ -196,6 +190,26 @@ impl CursorStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cursor_kind_matches_gnu_text_cursor_codes() {
+        let cases = [
+            (-2, CursorKind::Default),
+            (-1, CursorKind::NoCursor),
+            (0, CursorKind::FilledBox),
+            (1, CursorKind::HollowBox),
+            (2, CursorKind::Bar),
+            (3, CursorKind::Hbar),
+        ];
+
+        for (code, kind) in cases {
+            assert_eq!(CursorKind::from_gnu_code(code), Some(kind));
+            assert_eq!(kind.gnu_code(), code);
+        }
+
+        assert_eq!(CursorKind::from_gnu_code(i8::MIN), None);
+        assert_eq!(CursorKind::from_gnu_code(4), None);
+    }
 
     #[test]
     fn lisp_bar_width_accepts_gnu_nonnegative_int_range() {
