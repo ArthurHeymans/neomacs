@@ -13,6 +13,7 @@
 use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::value::{Value, ValueKind, next_float_id};
 use crate::gc_trace::GcTrace;
+use num_enum::IntoPrimitive;
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
 
@@ -178,14 +179,15 @@ impl Color {
 // Underline style
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive)]
+#[repr(u8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum UnderlineStyle {
-    Line,
-    Wave,
-    Dots,
-    Dashes,
-    DoubleLine,
+    Line = 1,
+    DoubleLine = 2,
+    Wave = 3,
+    Dots = 4,
+    Dashes = 5,
 }
 
 impl UnderlineStyle {
@@ -194,6 +196,10 @@ impl UnderlineStyle {
     }
 
     pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn gnu_code(self) -> u8 {
         self.into()
     }
 }

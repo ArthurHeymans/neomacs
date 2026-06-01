@@ -7,7 +7,7 @@
 //!
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
-use crate::face::{Face, FaceAttributes, UnderlineStyle};
+use crate::face::{Face, FaceAttributes};
 use crate::frame_glyphs::CursorStyle;
 use crate::glyph_matrix::*;
 use crate::types::Color;
@@ -560,14 +560,7 @@ impl TtyRif {
                 bg: (!face.use_default_background).then(|| color_to_rgb8(&face.background)),
                 bold: face.is_bold(),
                 italic: face.is_italic(),
-                underline: match face.underline_style {
-                    UnderlineStyle::None => 0,
-                    UnderlineStyle::Line => 1,
-                    UnderlineStyle::Wave => 2,
-                    UnderlineStyle::Double => 3,
-                    UnderlineStyle::Dotted => 4,
-                    UnderlineStyle::Dashed => 5,
-                },
+                underline: face.underline_style.gnu_code(),
                 strikethrough: face.attributes.contains(FaceAttributes::STRIKE_THROUGH),
                 inverse: face.attributes.contains(FaceAttributes::INVERSE),
             }
@@ -842,8 +835,8 @@ fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
     }
     match attrs.underline {
         1 => buf.extend_from_slice(b"\x1b[4m"),   // single underline
-        2 => buf.extend_from_slice(b"\x1b[4:3m"), // curly/wave underline
-        3 => buf.extend_from_slice(b"\x1b[21m"),  // double underline
+        2 => buf.extend_from_slice(b"\x1b[4:2m"), // double underline
+        3 => buf.extend_from_slice(b"\x1b[4:3m"), // curly/wave underline
         4 => buf.extend_from_slice(b"\x1b[4:4m"), // dotted underline
         5 => buf.extend_from_slice(b"\x1b[4:5m"), // dashed underline
         _ => {}

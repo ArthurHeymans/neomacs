@@ -60,6 +60,22 @@ fn lface_attr_keyword_mapping_matches_gnu_slots() {
 }
 
 #[test]
+fn underline_style_codes_match_gnu_face_underline_type() {
+    crate::test_utils::init_test_tracing();
+    let styles = [
+        (UnderlineStyle::Line, 1),
+        (UnderlineStyle::DoubleLine, 2),
+        (UnderlineStyle::Wave, 3),
+        (UnderlineStyle::Dots, 4),
+        (UnderlineStyle::Dashes, 5),
+    ];
+
+    for (style, code) in styles {
+        assert_eq!(style.gnu_code(), code);
+    }
+}
+
+#[test]
 fn face_merge() {
     crate::test_utils::init_test_tracing();
     let base = Face {

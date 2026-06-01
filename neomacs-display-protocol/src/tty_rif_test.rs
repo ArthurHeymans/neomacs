@@ -77,7 +77,7 @@ fn resolve_attrs_uses_face_table() {
     assert_eq!(attrs.bg, Some((0, 255, 0)));
     assert!(attrs.bold);
     assert!(attrs.italic);
-    assert_eq!(attrs.underline, 2); // Wave
+    assert_eq!(attrs.underline, 3); // Wave
     assert!(attrs.strikethrough);
 }
 
@@ -1225,6 +1225,28 @@ fn write_sgr_bold_italic_underline() {
     assert!(s.contains("\x1b[1m"), "Missing bold");
     assert!(s.contains("\x1b[3m"), "Missing italic");
     assert!(s.contains("\x1b[4m"), "Missing underline");
+}
+
+#[test]
+fn write_sgr_underline_styles_match_gnu_smulx_codes() {
+    let styles = [
+        (UnderlineStyle::Line, "\x1b[4m"),
+        (UnderlineStyle::Double, "\x1b[4:2m"),
+        (UnderlineStyle::Wave, "\x1b[4:3m"),
+        (UnderlineStyle::Dotted, "\x1b[4:4m"),
+        (UnderlineStyle::Dashed, "\x1b[4:5m"),
+    ];
+
+    for (style, escape) in styles {
+        let attrs = CellAttrs {
+            underline: style.gnu_code(),
+            ..CellAttrs::default()
+        };
+        let mut buf = Vec::new();
+        write_sgr(&mut buf, &attrs);
+        let s = String::from_utf8_lossy(&buf);
+        assert!(s.contains(escape), "{style:?} did not emit {escape:?}");
+    }
 }
 
 #[test]

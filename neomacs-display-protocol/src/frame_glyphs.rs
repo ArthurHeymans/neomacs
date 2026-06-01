@@ -626,7 +626,9 @@ impl FrameGlyphBuffer {
         if italic {
             attrs |= FaceAttributes::ITALIC;
         }
-        if underline > 0 {
+        let underline_style = UnderlineStyle::from_gnu_code(underline).unwrap_or_default();
+        let has_underline = underline_style != UnderlineStyle::None;
+        if has_underline {
             attrs |= FaceAttributes::UNDERLINE;
         }
         if strike_through > 0 {
@@ -636,22 +638,13 @@ impl FrameGlyphBuffer {
             attrs |= FaceAttributes::OVERLINE;
         }
 
-        let underline_style = match underline {
-            1 => UnderlineStyle::Line,
-            2 => UnderlineStyle::Wave,
-            3 => UnderlineStyle::Double,
-            4 => UnderlineStyle::Dotted,
-            5 => UnderlineStyle::Dashed,
-            _ => UnderlineStyle::None,
-        };
-
         Face {
             id: face_id,
             foreground: fg,
             background: bg.unwrap_or(Color::TRANSPARENT),
             use_default_foreground: false,
             use_default_background: false,
-            underline_color,
+            underline_color: has_underline.then_some(underline_color).flatten(),
             overline_color,
             strike_through_color,
             box_color: None,

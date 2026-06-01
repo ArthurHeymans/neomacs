@@ -42,6 +42,25 @@ fn basic_face_ids_preserve_gnu_slots_and_names() {
 }
 
 #[test]
+fn underline_style_codes_match_gnu_face_underline_type() {
+    let styles = [
+        (UnderlineStyle::None, 0),
+        (UnderlineStyle::Line, 1),
+        (UnderlineStyle::Double, 2),
+        (UnderlineStyle::Wave, 3),
+        (UnderlineStyle::Dotted, 4),
+        (UnderlineStyle::Dashed, 5),
+    ];
+
+    for (style, code) in styles {
+        assert_eq!(style.gnu_code(), code);
+        assert_eq!(UnderlineStyle::from_gnu_code(code), Some(style));
+    }
+
+    assert_eq!(UnderlineStyle::from_gnu_code(6), None);
+}
+
+#[test]
 fn basic_face_id_accepts_fringe_aliases() {
     assert_eq!(BasicFaceId::from_name("fringe"), Some(BasicFaceId::Fringe));
     assert_eq!(

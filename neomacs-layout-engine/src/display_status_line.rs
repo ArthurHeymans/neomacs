@@ -171,6 +171,7 @@ impl StatusLineFace {
     }
 
     pub(crate) fn render_face(&self) -> Face {
+        let underline_style = underline_style_from_code(self.underline_style);
         let mut attrs = FaceAttributes::empty();
         if self.font_weight >= 700 {
             attrs |= FaceAttributes::BOLD;
@@ -178,7 +179,7 @@ impl StatusLineFace {
         if self.italic {
             attrs |= FaceAttributes::ITALIC;
         }
-        if self.underline_style > 0 {
+        if underline_style != UnderlineStyle::None {
             attrs |= FaceAttributes::UNDERLINE;
         }
         if self.strike_through {
@@ -207,7 +208,7 @@ impl StatusLineFace {
             font_size: self.font_size,
             font_weight: self.font_weight,
             attributes: attrs,
-            underline_style: underline_style_from_code(self.underline_style),
+            underline_style,
             box_type: self.box_type,
             box_line_width: self.box_line_width,
             box_corner_radius: self.box_corner_radius,
@@ -384,14 +385,7 @@ fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
 }
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {
-    match code {
-        1 => UnderlineStyle::Line,
-        2 => UnderlineStyle::Wave,
-        3 => UnderlineStyle::Double,
-        4 => UnderlineStyle::Dotted,
-        5 => UnderlineStyle::Dashed,
-        _ => UnderlineStyle::None,
-    }
+    UnderlineStyle::from_gnu_code(code).unwrap_or_default()
 }
 
 impl LayoutEngine {

@@ -9,7 +9,7 @@
 //! glyph as one frame column.
 
 use super::effect_config::EffectsConfig;
-use super::face::{Face, FaceAttributes, UnderlineStyle};
+use super::face::{Face, FaceAttributes};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, GlyphRowRole,
     PhysCursor, StipplePattern, WindowCursorVisual, WindowEffectHint, WindowInfo,
@@ -1105,14 +1105,7 @@ impl FrameDisplayState {
     /// decoration flags needed by `FrameGlyph::Char` and `FrameGlyph::Stretch`.
     fn resolve_face_for_materialize(&self, face_id: u32) -> MaterializedFaceData {
         if let Some(face) = self.faces.get(&face_id) {
-            let underline = match face.underline_style {
-                UnderlineStyle::None => 0u8,
-                UnderlineStyle::Line => 1,
-                UnderlineStyle::Wave => 2,
-                UnderlineStyle::Double => 3,
-                UnderlineStyle::Dotted => 4,
-                UnderlineStyle::Dashed => 5,
-            };
+            let underline = face.underline_style.gnu_code();
             MaterializedFaceData {
                 fg: face.foreground,
                 bg: face.background,

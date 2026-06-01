@@ -2700,16 +2700,8 @@ impl FaceResolver {
     }
 }
 
-/// Map `NeoUnderlineStyle` to the numeric code used by the layout engine.
-/// Codes: 1=Line, 2=Wave, 3=Double, 4=Dotted, 5=Dashed
 fn underline_style_to_u8(style: &NeoUnderlineStyle) -> u8 {
-    match style {
-        NeoUnderlineStyle::Line => 1,
-        NeoUnderlineStyle::Wave => 2,
-        NeoUnderlineStyle::DoubleLine => 3,
-        NeoUnderlineStyle::Dots => 4,
-        NeoUnderlineStyle::Dashes => 5,
-    }
+    style.gnu_code()
 }
 
 #[cfg(test)]

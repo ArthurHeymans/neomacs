@@ -2,6 +2,7 @@
 
 use crate::types::Color;
 use bitflags::bitflags;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::os::raw::c_int;
@@ -21,17 +22,30 @@ bitflags! {
     }
 }
 
-/// Underline style
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Underline style.
+///
+/// The numeric values match GNU Emacs `enum face_underline_type` and the
+/// `Smulx` terminfo underline style parameter.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, IntoPrimitive, TryFromPrimitive)]
 pub enum UnderlineStyle {
     #[default]
-    None,
-    Line,
-    Wave,
-    Double,
-    Dotted,
-    Dashed,
+    None = 0,
+    Line = 1,
+    Double = 2,
+    Wave = 3,
+    Dotted = 4,
+    Dashed = 5,
+}
+
+impl UnderlineStyle {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
 }
 
 /// Box type for face
@@ -288,7 +302,7 @@ pub struct FaceDataFFI {
     pub italic: c_int,
     /// Font pixel size
     pub font_size: c_int,
-    /// Underline style (0=none, 1=single, 2=wave, 3=double, 4=dotted, 5=dashed)
+    /// Underline style (0=none, 1=single, 2=double, 3=wave, 4=dotted, 5=dashed)
     pub underline_style: c_int,
     /// Underline color (sRGB pixel)
     pub underline_color: u32,
@@ -374,7 +388,10 @@ impl FaceDataFFI {
             None
         };
 
-        let underline_style_code = self.underline_style.max(0) as u8;
+        let underline_style_code = u8::try_from(self.underline_style).unwrap_or(0);
+        let underline_style =
+            UnderlineStyle::from_gnu_code(underline_style_code).unwrap_or_default();
+        let has_underline = underline_style != UnderlineStyle::None;
         let strike_through = self.strike_through > 0;
         let overline = self.overline > 0;
         let font_weight = self.font_weight.max(0) as u16;
@@ -386,7 +403,7 @@ impl FaceDataFFI {
         if self.italic != 0 {
             attrs |= FaceAttributes::ITALIC;
         }
-        if underline_style_code > 0 {
+        if has_underline {
             attrs |= FaceAttributes::UNDERLINE;
         }
         if strike_through {
@@ -404,23 +421,13 @@ impl FaceDataFFI {
             attrs |= FaceAttributes::BOX;
         }
 
-        let underline_style = match underline_style_code {
-            1 => UnderlineStyle::Line,
-            2 => UnderlineStyle::Wave,
-            3 => UnderlineStyle::Double,
-            4 => UnderlineStyle::Dotted,
-            5 => UnderlineStyle::Dashed,
-            _ => UnderlineStyle::None,
-        };
-
         Face {
             id: self.face_id,
             foreground: Color::from_pixel(self.fg),
             background: Color::from_pixel(self.bg),
             use_default_foreground: false,
             use_default_background: false,
-            underline_color: (underline_style_code > 0)
-                .then(|| Color::from_pixel(self.underline_color)),
+            underline_color: has_underline.then(|| Color::from_pixel(self.underline_color)),
             overline_color: overline.then(|| Color::from_pixel(self.overline_color)),
             strike_through_color: strike_through
                 .then(|| Color::from_pixel(self.strike_through_color)),

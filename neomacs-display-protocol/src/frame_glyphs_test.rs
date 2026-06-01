@@ -211,7 +211,7 @@ fn set_face_with_font_registers_baseline_render_face() {
         700,
         true,
         18.0,
-        2,
+        3,
         Some(ul),
         1,
         None,
@@ -887,7 +887,7 @@ fn set_face_with_font_decoration_attributes() {
         400,
         false,
         14.0,
-        2,
+        3,
         Some(ul_color), // wave underline
         1,
         Some(st_color), // strike-through
@@ -907,7 +907,7 @@ fn set_face_with_font_decoration_attributes() {
             overline_color,
             ..
         } => {
-            assert_eq!(*underline, 2);
+            assert_eq!(*underline, 3);
             assert_eq!(*underline_color, Some(ul_color));
             assert_eq!(*strike_through, 1);
             assert_eq!(*strike_through_color, Some(st_color));

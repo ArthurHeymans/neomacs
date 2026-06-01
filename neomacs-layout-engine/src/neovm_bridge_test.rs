@@ -1448,6 +1448,44 @@ fn test_face_resolver_with_text_property() {
 }
 
 #[test]
+fn face_resolver_underline_styles_use_gnu_codes() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let mut table = FaceTable::new();
+    let styles: [(&str, NeoUnderlineStyle, u8); 5] = [
+        ("line-face", NeoUnderlineStyle::Line, 1),
+        ("double-face", NeoUnderlineStyle::DoubleLine, 2),
+        ("wave-face", NeoUnderlineStyle::Wave, 3),
+        ("dots-face", NeoUnderlineStyle::Dots, 4),
+        ("dashes-face", NeoUnderlineStyle::Dashes, 5),
+    ];
+
+    for (name, style, _) in styles {
+        let mut face = NeoFace::new(name);
+        face.underline = Some(neovm_core::face::Underline {
+            style,
+            color: None,
+            position: None,
+        });
+        table.define(name, face);
+    }
+
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+
+    for (name, _, code) in styles {
+        let mut buf = test_buffer(u64::from(code), "*underline*");
+        buf.text.insert_str(0, "x");
+        buf.zv_byte = buf.text.len();
+        buf.zv = buf.text.char_count();
+        buf.text
+            .text_props_put_property(0, 1, Value::symbol("face"), Value::symbol(name));
+
+        let mut next_check = buf.point_max_char();
+        let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
+        assert_eq!(resolved.underline_style, code, "{name}");
+    }
+}
+
+#[test]
 fn test_face_resolver_with_font_lock_face() {
     let _evaluator = neovm_core::emacs_core::Context::new();
     let table = FaceTable::new();
