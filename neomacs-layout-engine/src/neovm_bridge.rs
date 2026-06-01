@@ -18,7 +18,8 @@ use neovm_core::face::{
     UnderlineStyle as NeoUnderlineStyle,
 };
 use neovm_core::window::{
-    CursorTypeSymbol, Frame, FrameId, Window, resolve_window_scroll_bar_geometry,
+    CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window,
+    resolve_window_scroll_bar_geometry,
 };
 
 use super::types::{FrameParams, VisualCursorSpec, WindowParams};
@@ -27,6 +28,7 @@ use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::types::Rect;
+use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayLineNumbersMode {
@@ -36,7 +38,8 @@ pub(crate) enum DisplayLineNumbersMode {
     Visual,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 enum DisplayLineNumbersSymbol {
     Relative,
     Visual,
@@ -44,11 +47,12 @@ enum DisplayLineNumbersSymbol {
 
 impl DisplayLineNumbersSymbol {
     fn from_symbol_name(name: &str) -> Option<Self> {
-        match name {
-            "relative" => Some(Self::Relative),
-            "visual" => Some(Self::Visual),
-            _ => None,
-        }
+        name.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
     }
 }
 
@@ -973,11 +977,8 @@ pub fn window_params_from_neovm(
         .unwrap_or_default();
     let vertical_scroll_bar_side = scroll_bar_geometry
         .vertical_type
-        .and_then(|value| match value.as_symbol_name() {
-            Some("left") => Some("left".to_string()),
-            Some("right") => Some("right".to_string()),
-            _ => None,
-        });
+        .and_then(|value| VerticalScrollBarType::from_symbol_value(&value))
+        .map(|side| side.name().to_string());
     let left_sb = scroll_bar_geometry.left_area_width.max(0) as f32;
     let right_sb = scroll_bar_geometry.right_area_width.max(0) as f32;
     let scroll_bar_pixel_width = left_sb.max(right_sb);

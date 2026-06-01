@@ -237,6 +237,21 @@ fn layout_snapshot_buffer_local_value_falls_back_to_default_values() {
 }
 
 #[test]
+fn display_line_numbers_symbol_domain_matches_gnu() {
+    assert_eq!(
+        DisplayLineNumbersSymbol::from_symbol_name("relative"),
+        Some(DisplayLineNumbersSymbol::Relative)
+    );
+    assert_eq!(
+        DisplayLineNumbersSymbol::from_symbol_name("visual"),
+        Some(DisplayLineNumbersSymbol::Visual)
+    );
+    assert_eq!(DisplayLineNumbersSymbol::Relative.name(), "relative");
+    assert_eq!(DisplayLineNumbersSymbol::Visual.name(), "visual");
+    assert_eq!(DisplayLineNumbersSymbol::from_symbol_name("absolute"), None);
+}
+
+#[test]
 fn layout_snapshot_buffer_local_value_prefers_local_binding() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator
