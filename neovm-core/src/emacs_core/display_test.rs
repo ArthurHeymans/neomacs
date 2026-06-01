@@ -968,6 +968,49 @@ fn tty_menu_navigation_command_domain_matches_gnu_symbols() {
 }
 
 #[test]
+fn window_system_kind_domain_matches_gnu_and_neomacs_symbols() {
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("x"),
+        Some(WindowSystemKind::X)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("w32"),
+        Some(WindowSystemKind::W32)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("pc"),
+        Some(WindowSystemKind::Pc)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("ns"),
+        Some(WindowSystemKind::Ns)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("pgtk"),
+        Some(WindowSystemKind::Pgtk)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("haiku"),
+        Some(WindowSystemKind::Haiku)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name("android"),
+        Some(WindowSystemKind::Android)
+    );
+    assert_eq!(
+        WindowSystemKind::from_symbol_name(gui_window_system_symbol()),
+        Some(WindowSystemKind::Neo)
+    );
+    assert_eq!(WindowSystemKind::from_symbol_name("tty"), None);
+    assert_eq!(<&'static str>::from(WindowSystemKind::Pgtk), "pgtk");
+    assert!(WindowSystemKind::Neo.is_neomacs_gui_compatible());
+    assert!(WindowSystemKind::X.is_neomacs_gui_compatible());
+    assert!(!WindowSystemKind::W32.is_neomacs_gui_compatible());
+    assert!(WindowSystemKind::Android.supports_selections());
+    assert!(!WindowSystemKind::Pc.supports_selections());
+}
+
+#[test]
 fn x_display_pixel_size_errors_match_batch_shapes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();

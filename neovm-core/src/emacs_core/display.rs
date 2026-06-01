@@ -21,6 +21,40 @@ pub fn reset_display_thread_locals() {
     super::dispnew::pure::reset_dispnew_thread_locals();
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum WindowSystemKind {
+    X,
+    W32,
+    Pc,
+    Ns,
+    Pgtk,
+    Haiku,
+    Android,
+    Neo,
+}
+
+impl WindowSystemKind {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn from_symbol_value(value: Value) -> Option<Self> {
+        Self::from_symbol_name(value.as_symbol_name()?)
+    }
+
+    fn is_neomacs_gui_compatible(self) -> bool {
+        matches!(self, Self::Neo | Self::X)
+    }
+
+    fn supports_selections(self) -> bool {
+        matches!(
+            self,
+            Self::X | Self::W32 | Self::Ns | Self::Pgtk | Self::Haiku | Self::Android | Self::Neo
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -377,7 +411,8 @@ pub fn gui_window_system_symbol() -> &'static str {
 }
 
 pub(crate) fn gui_window_system_active_value(value: Value) -> bool {
-    value == Value::symbol(gui_window_system_symbol()) || value == Value::symbol("x")
+    WindowSystemKind::from_symbol_value(value)
+        .is_some_and(WindowSystemKind::is_neomacs_gui_compatible)
 }
 
 pub(crate) fn x_window_system_active(eval: &super::eval::Context) -> bool {
@@ -907,17 +942,11 @@ pub(crate) fn builtin_display_selections_p(
 ) -> EvalResult {
     expect_optional_display_designator_eval(eval, "display-selections-p", &args)?;
     let window_system = display_window_system_symbol_eval(eval, args.first())?;
-    Ok(Value::bool_val(matches!(
-        window_system,
-        Some(value)
-            if value.is_symbol_named("x")
-                || value.is_symbol_named("w32")
-                || value.is_symbol_named("ns")
-                || value.is_symbol_named("pgtk")
-                || value.is_symbol_named("haiku")
-                || value.is_symbol_named("android")
-                || value.is_symbol_named("neo")
-    )))
+    Ok(Value::bool_val(
+        window_system
+            .and_then(WindowSystemKind::from_symbol_value)
+            .is_some_and(WindowSystemKind::supports_selections),
+    ))
 }
 
 /// Context-aware variant of `window-system`.
