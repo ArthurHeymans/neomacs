@@ -125,44 +125,45 @@ pub struct FloatObj {
 
 /// Sub-type tag for vectorlike objects.
 /// Stored in the `VecLikeHeader`, distinguishes the many heap types
-/// that share the `011` pointer tag.
+/// that share the GNU `Lisp_Vectorlike` pointer tag.
+///
+/// Discriminants mirror GNU's `enum pvec_type` for every runtime object that
+/// has a GNU counterpart.  Neomacs-only transitional tags live after
+/// `PVEC_FONT`; those are explicit compatibility debt, not GNU semantics.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 pub enum VecLikeType {
     Vector = 0,
-    HashTable = 1,
-    Lambda = 2,
-    Macro = 3,
-    ByteCode = 4,
-    Record = 5,
-    Overlay = 6,
-    Marker = 7,
-    Buffer = 8,
-    Window = 9,
+    /// Arbitrary-precision integer (GNU `PVEC_BIGNUM`).
+    Bignum = 2,
+    Marker = 3,
+    Overlay = 4,
+    /// Symbol with source position (GNU `PVEC_SYMBOL_WITH_POS`).
+    SymbolWithPos = 6,
+    /// User pointer for dynamic module API (GNU `PVEC_USER_PTR`).
+    UserPtr = 8,
     Frame = 10,
-    Timer = 11,
+    Window = 11,
+    Buffer = 13,
+    HashTable = 14,
+    /// Obarray object (GNU `PVEC_OBARRAY`).
+    Obarray = 15,
     /// Built-in function (like GNU's PVEC_SUBR).
-    Subr = 12,
-    /// Arbitrary-precision integer (like GNU's PVEC_BIGNUM).
-    /// Mirrors `struct Lisp_Bignum` in `src/bignum.h`, which wraps an
-    /// `mpz_t`. NeoMacs wraps `malachite::Integer` (a pure-Rust bignum
-    /// derived from GMP/FLINT algorithms).
-    Bignum = 13,
-    /// Symbol with source position (like GNU's PVEC_SYMBOL_WITH_POS).
-    /// Wraps a bare symbol + byte offset for byte-compiler diagnostics.
-    SymbolWithPos = 14,
+    Subr = 18,
+    /// Dynamic module function (GNU `PVEC_MODULE_FUNCTION`).
+    ModuleFunction = 25,
     /// SQLite database or statement object (like GNU's PVEC_SQLITE).
-    Sqlite = 15,
-    /// User pointer for dynamic module API (like GNU's PVEC_USER_PTR).
-    UserPtr = 16,
-    /// Dynamic module function (like GNU's PVEC_MODULE_FUNCTION).
-    ModuleFunction = 17,
+    Sqlite = 30,
+    /// Lisp closures are GNU `PVEC_CLOSURE`.
+    Lambda = 31,
     /// Character table (like GNU's PVEC_CHAR_TABLE).
-    CharTable = 18,
+    CharTable = 32,
     /// Internal sub character table (like GNU's PVEC_SUB_CHAR_TABLE).
-    SubCharTable = 19,
-    /// Obarray object (like GNU's PVEC_OBARRAY).
-    Obarray = 20,
+    SubCharTable = 33,
+    Record = 34,
+    Macro = 36,
+    ByteCode = 37,
+    Timer = 38,
 }
 
 use std::sync::OnceLock;

@@ -88,6 +88,39 @@ fn gnu_low_tag_layout() {
 }
 
 #[test]
+fn gnu_pvec_type_layout_for_shared_vectorlikes() {
+    crate::test_utils::init_test_tracing();
+
+    let shared = [
+        (VecLikeType::Vector, 0),
+        (VecLikeType::Bignum, 2),
+        (VecLikeType::Marker, 3),
+        (VecLikeType::Overlay, 4),
+        (VecLikeType::SymbolWithPos, 6),
+        (VecLikeType::UserPtr, 8),
+        (VecLikeType::Frame, 10),
+        (VecLikeType::Window, 11),
+        (VecLikeType::Buffer, 13),
+        (VecLikeType::HashTable, 14),
+        (VecLikeType::Obarray, 15),
+        (VecLikeType::Subr, 18),
+        (VecLikeType::ModuleFunction, 25),
+        (VecLikeType::Sqlite, 30),
+        (VecLikeType::Lambda, 31),
+        (VecLikeType::CharTable, 32),
+        (VecLikeType::SubCharTable, 33),
+        (VecLikeType::Record, 34),
+    ];
+
+    for (kind, gnu_code) in shared {
+        assert_eq!(u8::from(kind), gnu_code);
+        assert_eq!(VecLikeType::try_from(gnu_code), Ok(kind));
+    }
+
+    assert!(VecLikeType::try_from(1).is_err());
+}
+
+#[test]
 fn q_unbound_is_not_user_interned_unbound_symbol() {
     crate::test_utils::init_test_tracing();
 
