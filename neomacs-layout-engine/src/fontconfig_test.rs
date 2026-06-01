@@ -240,7 +240,7 @@ fn constrained_fontset_specs_without_family_try_requested_family_first() {
         family: None,
         registry: None,
         lang: Some(font_sym("zh-cn")),
-        weight: Some(FontWeight(600)),
+        weight: Some(FontWeight::SEMI_BOLD),
         slant: None,
         width: None,
         repertory: None,

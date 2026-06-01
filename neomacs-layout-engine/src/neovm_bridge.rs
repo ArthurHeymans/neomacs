@@ -1902,8 +1902,8 @@ impl FaceResolver {
             .unwrap_or_default();
         df.font_weight = neo_default
             .weight
-            .map(|w| w.0)
-            .unwrap_or(FontWeight::NORMAL.0);
+            .map(FontWeight::css_weight)
+            .unwrap_or(FontWeight::NORMAL.css_weight());
         df.italic = neo_default.slant.map(|s| s.is_italic()).unwrap_or(false);
         df.font_size = match &neo_default.height {
             Some(FaceHeight::Absolute(tenths)) => face_height_to_pixels(*tenths),
@@ -2031,7 +2031,7 @@ impl FaceResolver {
             rf.font_family = family;
         }
         if let Some(weight) = face.weight {
-            rf.font_weight = weight.0;
+            rf.font_weight = weight.css_weight();
         }
         if let Some(slant) = face.slant {
             rf.italic = slant.is_italic();
@@ -2556,7 +2556,7 @@ impl FaceResolver {
         }
         // Font weight
         if let Some(w) = &face.weight {
-            rf.font_weight = w.0;
+            rf.font_weight = w.css_weight();
         }
         // Font slant
         if let Some(s) = &face.slant {

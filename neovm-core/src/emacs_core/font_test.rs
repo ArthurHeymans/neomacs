@@ -331,7 +331,7 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
         matched: Some(ResolvedFontSpecMatch {
             family: LispString::from_utf8("JetBrains Mono"),
             registry: Some(LispString::from_utf8("iso10646-1")),
-            weight: Some(FontWeight::EXTRA_LIGHT),
+            weight: Some(FontWeight::ULTRA_LIGHT),
             slant: Some(FontSlant::Normal),
             width: Some(crate::face::FontWidth::Normal),
             spacing: Some(100),
@@ -356,6 +356,21 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
 fn font_spec_odd_args_error() {
     crate::test_utils::init_test_tracing();
     let result = builtin_font_spec(vec![Value::keyword("family")]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn font_spec_rejects_numeric_weight_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let encoded_thin = builtin_font_spec(vec![Value::keyword("weight"), Value::fixnum(0)]).unwrap();
+    assert_eq!(
+        builtin_font_get(vec![encoded_thin, Value::keyword("weight")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("thin")
+    );
+
+    let result = builtin_font_spec(vec![Value::keyword("weight"), Value::fixnum(700)]);
     assert!(result.is_err());
 }
 
@@ -1105,6 +1120,27 @@ fn internal_set_lisp_face_attribute_accepts_gnu_font_style_aliases() {
     assert_eq!(values[3].as_symbol_name(), Some("wide"));
     assert_eq!(values[5].as_symbol_name(), Some("ultra-heavy"));
     assert_eq!(values[6].as_symbol_name(), Some("ro"));
+}
+
+#[test]
+fn internal_set_lisp_face_attribute_rejects_numeric_weight_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+
+    let face_name = "__neovm_lface_numeric_weight_unit_test";
+    let mut eval = Context::new();
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+
+    let result = builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":weight"),
+            Value::fixnum(700),
+            Value::fixnum(0),
+        ],
+    );
+    assert!(result.is_err());
 }
 
 #[test]

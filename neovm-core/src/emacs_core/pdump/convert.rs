@@ -3291,7 +3291,7 @@ fn dump_stored_font_spec(spec: StoredFontSpec) -> DumpStoredFontSpec {
         registry: None,
         lang_sym: spec.lang.map(dump_sym_id),
         lang: None,
-        weight: spec.weight.map(|weight| weight.0),
+        weight: spec.weight.map(FontWeight::dump_code),
         slant: spec.slant.map(|slant| dump_font_slant(&slant)),
         width: spec.width.map(|width| dump_font_width(&width)),
         repertory: spec.repertory.map(dump_font_repertory),
@@ -3406,7 +3406,7 @@ fn dump_face(encoder: &mut DumpEncoder, f: &Face) -> DumpFace {
         foundry_value: f.foundry.as_ref().map(|value| encoder.dump_value(value)),
         foundry: None,
         height: f.height.as_ref().map(dump_face_height),
-        weight: f.weight.map(|w| w.0),
+        weight: f.weight.map(FontWeight::dump_code),
         slant: f.slant.as_ref().map(dump_font_slant),
         underline: f.underline.as_ref().map(|u| DumpUnderline {
             style: dump_underline_style(&u.style),
@@ -5445,7 +5445,7 @@ fn load_font_spec_entry(entry: &DumpFontSpecEntry) -> FontSpecEntry {
                 .as_ref()
                 .map(load_sym_id)
                 .or_else(|| spec.lang.as_deref().map(crate::emacs_core::intern::intern)),
-            weight: spec.weight.map(FontWeight),
+            weight: spec.weight.map(FontWeight::from_dump_code),
             slant: spec.slant.as_ref().map(load_font_slant),
             width: spec.width.as_ref().map(load_font_width),
             repertory: spec.repertory.as_ref().map(load_font_repertory),
@@ -5572,7 +5572,7 @@ fn load_face(decoder: &mut LoadDecoder, df: &DumpFace) -> Face {
             DumpFaceHeight::Absolute(n) => FaceHeight::Absolute(*n),
             DumpFaceHeight::Relative(f) => FaceHeight::Relative(*f),
         }),
-        weight: df.weight.map(FontWeight),
+        weight: df.weight.map(FontWeight::from_dump_code),
         slant: df.slant.as_ref().map(load_font_slant),
         underline: df.underline.as_ref().map(|u| Underline {
             style: match u.style {

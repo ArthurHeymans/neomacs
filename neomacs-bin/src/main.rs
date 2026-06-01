@@ -1281,7 +1281,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     ) -> Result<Option<ResolvedFontMatch>, String> {
         let requested_family_storage = request.face.family_runtime_string_owned();
         let requested_family = requested_family_storage.as_deref().unwrap_or("Monospace");
-        let requested_weight = request.face.weight.unwrap_or(FontWeight::NORMAL).0;
+        let requested_weight = request
+            .face
+            .weight
+            .unwrap_or(FontWeight::NORMAL)
+            .css_weight();
         let requested_italic = request
             .face
             .slant
@@ -1326,7 +1330,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     ) -> Result<Option<ResolvedFrameFont>, String> {
         let requested_family_storage = face.family_runtime_string_owned();
         let requested_family = requested_family_storage.as_deref().unwrap_or("Monospace");
-        let requested_weight = face.weight.unwrap_or(FontWeight::NORMAL).0;
+        let requested_weight = face.weight.unwrap_or(FontWeight::NORMAL).css_weight();
         let requested_italic = face.slant.map(|slant| slant.is_italic()).unwrap_or(false);
         let font_size = font_size_px_for_face(&face);
         let selected = self
@@ -1347,7 +1351,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .get_or_insert_with(FontMetricsService::new)
             .font_metrics(
                 &font.family,
-                font.weight.0,
+                font.weight.css_weight(),
                 font.slant.is_italic(),
                 font_size,
             );
@@ -1373,13 +1377,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             request.family.as_ref().and_then(|ls| ls.as_utf8_str()),
             request.registry.as_ref().and_then(|ls| ls.as_utf8_str()),
             request.lang.as_ref().and_then(|ls| ls.as_utf8_str()),
-            request.weight.map(|weight| weight.0),
+            request.weight,
             request.slant,
         );
         Ok(matched.map(|font| ResolvedFontSpecMatch {
             family: LispString::from_utf8(&font.family),
             registry: Some(LispString::from_utf8("iso10646-1")),
-            weight: font.weight.map(FontWeight),
+            weight: font.weight.map(FontWeight::from_css_weight),
             slant: Some(font.slant),
             width: font.width,
             spacing: font.spacing,
@@ -2565,22 +2569,12 @@ struct BootstrapFrameMetrics {
 }
 
 fn font_weight_symbol(weight: FontWeight) -> &'static str {
-    match weight.0 {
-        0..=150 => "thin",
-        151..=250 => "extra-light",
-        251..=350 => "light",
-        351..=450 => "normal",
-        451..=550 => "medium",
-        551..=650 => "semi-bold",
-        651..=750 => "bold",
-        751..=850 => "extra-bold",
-        _ => "black",
-    }
+    weight.symbol_name()
 }
 
 fn startup_font_weight_symbol(weight: FontWeight) -> &'static str {
-    match weight.0 {
-        351..=450 => "regular",
+    match weight {
+        FontWeight::Normal => "regular",
         _ => font_weight_symbol(weight),
     }
 }

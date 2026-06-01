@@ -593,7 +593,7 @@ fn bootstrap_buffers_realize_default_face_from_frame_font_parameter() {
         default.family_runtime_string_owned().as_deref(),
         Some("Hack")
     );
-    assert_eq!(default.weight.map(|weight| weight.0), Some(400));
+    assert_eq!(default.weight.map(|weight| weight.css_weight()), Some(400));
     assert_eq!(default.height, Some(FaceHeight::Absolute(100)));
 }
 

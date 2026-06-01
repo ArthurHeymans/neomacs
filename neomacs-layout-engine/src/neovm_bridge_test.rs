@@ -1356,7 +1356,7 @@ fn test_face_resolver_default() {
     assert_eq!(df.bg, 0x00000000);
     assert!(df.use_default_foreground);
     assert!(df.use_default_background);
-    assert_eq!(df.font_weight, FontWeight::NORMAL.0); // 400
+    assert_eq!(df.font_weight, FontWeight::NORMAL.css_weight()); // 400
     assert!(!df.italic);
     assert!(!df.overstrike);
     assert!(!df.extend);
@@ -1385,14 +1385,14 @@ fn test_face_resolver_with_text_property() {
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
 
     // Bold face should have weight 700.
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     // next_check should be 5 (where the property changes).
     assert_eq!(next_check, 5);
 
     // Position 6 should have default weight.
     let mut nc2 = buf.point_max_char();
     let resolved2 = resolver.face_at_pos(&buf, 6, &mut nc2);
-    assert_eq!(resolved2.font_weight, FontWeight::NORMAL.0);
+    assert_eq!(resolved2.font_weight, FontWeight::NORMAL.css_weight());
 }
 
 #[test]
@@ -1443,7 +1443,7 @@ fn test_face_resolver_face_property_precedes_font_lock_face() {
     let mut next_check = buf.point_max_char();
     let resolved = resolver.face_at_pos(&buf, 3, &mut next_check);
 
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     assert!(!resolved.italic);
 }
 
@@ -1505,7 +1505,7 @@ fn test_face_resolver_overlay_face() {
         .expect("current buffer");
     let mut nc = buf.point_max_char();
     let resolved = resolver.face_at_pos(buf, 3, &mut nc);
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     // next_check should be at most 7 (end of overlay).
     assert!(nc <= 7);
 }
@@ -1633,7 +1633,7 @@ fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
 
     let mut next_check = buf.point_max_char();
     let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(255, 69, 0)));
 }
 
@@ -1703,7 +1703,7 @@ fn test_face_resolver_multibyte_text_property_uses_byte_offsets() {
     let mut next_check = buf.point_max_char();
     let resolved = resolver.face_at_pos(&buf, 2, &mut next_check);
 
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     assert_eq!(next_check, 3);
 }
 
@@ -1733,7 +1733,7 @@ fn test_face_resolver_multibyte_overlay_uses_byte_offsets() {
     let mut next_check = buf.point_max_char();
     let resolved = resolver.face_at_pos(buf, 2, &mut next_check);
 
-    assert_eq!(resolved.font_weight, FontWeight::BOLD.0);
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
     assert_eq!(next_check, 3);
 }
 
@@ -1805,7 +1805,7 @@ fn test_face_from_plist_realizes_relative_height_family_and_weight() {
     let realized = resolver.realize_face(&inline_face);
 
     assert_eq!(realized.font_family, "DejaVu Sans Mono");
-    assert_eq!(realized.font_weight, FontWeight::EXTRA_BOLD.0);
+    assert_eq!(realized.font_weight, FontWeight::EXTRA_BOLD.css_weight());
     assert!(
         (realized.font_size - (resolver.default_face().font_size * 1.6)).abs() < 0.1,
         "expected relative face height to scale from the default face size, got {}",

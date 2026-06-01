@@ -21,7 +21,7 @@ use neovm_core::emacs_core::fontset::{
     repertory_target_ranges,
 };
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
-use neovm_core::face::{FontSlant, FontWidth};
+use neovm_core::face::{FontSlant, FontWeight, FontWidth};
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
@@ -407,7 +407,7 @@ pub fn find_font_for_spec(
     family: Option<&str>,
     registry: Option<&str>,
     lang: Option<&str>,
-    weight: Option<u16>,
+    weight: Option<FontWeight>,
     slant: Option<FontSlant>,
 ) -> Option<SpecFontMatch> {
     let resolved_family = family
@@ -419,7 +419,7 @@ pub fn find_font_for_spec(
         family: resolved_family,
         registry: registry.map(|registry| intern(&registry.to_ascii_lowercase())),
         lang: lang.map(|lang| intern(&lang.to_ascii_lowercase())),
-        weight: weight.map(neovm_core::face::FontWeight),
+        weight,
         slant,
         width: None,
         repertory: None,
@@ -567,7 +567,7 @@ fn match_font_from_spec(
 ) -> Option<FontMatch> {
     let effective_weight = spec
         .weight
-        .map(|weight| weight.0)
+        .map(FontWeight::css_weight)
         .unwrap_or(requested_weight);
     let query_charset_ranges = query_charset_ranges(spec, ch);
     let registry_lang = spec
@@ -617,7 +617,7 @@ fn candidate_matches_find_font_spec(candidate: &ListedFont, spec: &StoredFontSpe
         && candidate
             .weight_css
             .or_else(|| style_weight(&candidate.style))
-            != Some(weight.0)
+            != Some(weight.css_weight())
     {
         return false;
     }

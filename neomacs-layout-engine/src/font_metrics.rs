@@ -318,7 +318,7 @@ impl FontMetricsService {
             // here even when shaping used a different requested instance.
             // Preserve the resolved CSS weight so `font-at` mirrors GNU Emacs'
             // realized face semantics.
-            weight: FontWeight(resolved.weight),
+            weight: FontWeight::from_css_weight(resolved.weight),
             slant: font_slant_from_fontdb(face.style),
             width: font_width_from_stretch_number(face.stretch.to_number()),
         })

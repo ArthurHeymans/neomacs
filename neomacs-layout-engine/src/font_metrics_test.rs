@@ -46,7 +46,7 @@ fn realized_face_info(
     Some(SelectedFontInfo {
         family: resolved.family.clone(),
         postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
-        weight: FontWeight(face.weight.0),
+        weight: FontWeight::from_css_weight(face.weight.0),
         slant: font_slant_from_fontdb(face.style),
         width: font_width_from_stretch_number(face.stretch.to_number()),
     })
@@ -728,7 +728,7 @@ fn select_font_for_char_preserves_resolved_weight_for_variable_family_reports() 
     let selected = svc
         .select_font_for_char('A', "Noto Sans Mono", 600, false, 24.0)
         .expect("selected font for variable family");
-    assert_eq!(selected.weight, FontWeight(600));
+    assert_eq!(selected.weight, FontWeight::SEMI_BOLD);
 }
 
 #[test]

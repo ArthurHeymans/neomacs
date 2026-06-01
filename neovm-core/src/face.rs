@@ -241,38 +241,261 @@ impl BoxStyle {
 // Font weight / slant / width
 // ---------------------------------------------------------------------------
 
-/// CSS-style numeric font weight (100-900).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct FontWeight(pub u16);
+/// GNU Emacs Lisp face weight domain.
+///
+/// GNU keeps face weights as symbols in a fixed ordered table
+/// (`src/font.c:weight_table`).  Display backends still need CSS-style
+/// numeric weights, so use [`FontWeight::css_weight`] at renderer boundaries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+pub enum FontWeight {
+    #[strum(to_string = "thin")]
+    Thin,
+    #[strum(to_string = "ultra-light")]
+    UltraLight,
+    #[strum(to_string = "ultralight")]
+    Ultralight,
+    #[strum(to_string = "extra-light")]
+    ExtraLight,
+    #[strum(to_string = "extralight")]
+    Extralight,
+    #[strum(to_string = "light")]
+    Light,
+    #[strum(to_string = "semi-light")]
+    SemiLight,
+    #[strum(to_string = "semilight")]
+    Semilight,
+    #[strum(to_string = "demilight")]
+    Demilight,
+    #[strum(to_string = "regular")]
+    Regular,
+    #[strum(to_string = "normal")]
+    Normal,
+    #[strum(to_string = "unspecified")]
+    Unspecified,
+    #[strum(to_string = "book")]
+    Book,
+    #[strum(to_string = "medium")]
+    Medium,
+    #[strum(to_string = "semi-bold")]
+    SemiBold,
+    #[strum(to_string = "semibold")]
+    Semibold,
+    #[strum(to_string = "demibold")]
+    Demibold,
+    #[strum(to_string = "demi-bold")]
+    DemiBold,
+    #[strum(to_string = "demi")]
+    Demi,
+    #[strum(to_string = "bold")]
+    Bold,
+    #[strum(to_string = "extra-bold")]
+    ExtraBold,
+    #[strum(to_string = "extrabold")]
+    Extrabold,
+    #[strum(to_string = "ultra-bold")]
+    UltraBold,
+    #[strum(to_string = "ultrabold")]
+    Ultrabold,
+    #[strum(to_string = "black")]
+    Black,
+    #[strum(to_string = "heavy")]
+    Heavy,
+    #[strum(to_string = "ultra-heavy")]
+    UltraHeavy,
+    #[strum(to_string = "ultraheavy")]
+    Ultraheavy,
+}
 
 impl FontWeight {
-    pub const THIN: Self = Self(100);
-    pub const EXTRA_LIGHT: Self = Self(200);
-    pub const LIGHT: Self = Self(300);
-    pub const NORMAL: Self = Self(400);
-    pub const MEDIUM: Self = Self(500);
-    pub const SEMI_BOLD: Self = Self(600);
-    pub const BOLD: Self = Self(700);
-    pub const EXTRA_BOLD: Self = Self(800);
-    pub const BLACK: Self = Self(900);
+    pub const THIN: Self = Self::Thin;
+    pub const ULTRA_LIGHT: Self = Self::UltraLight;
+    pub const EXTRA_LIGHT: Self = Self::ExtraLight;
+    pub const LIGHT: Self = Self::Light;
+    pub const SEMI_LIGHT: Self = Self::SemiLight;
+    pub const NORMAL: Self = Self::Normal;
+    pub const MEDIUM: Self = Self::Medium;
+    pub const SEMI_BOLD: Self = Self::SemiBold;
+    pub const BOLD: Self = Self::Bold;
+    pub const EXTRA_BOLD: Self = Self::ExtraBold;
+    pub const ULTRA_BOLD: Self = Self::UltraBold;
+    pub const BLACK: Self = Self::Black;
+    pub const ULTRA_HEAVY: Self = Self::UltraHeavy;
 
     pub fn from_symbol(name: &str) -> Option<Self> {
-        match name {
-            "thin" => Some(Self::THIN),
-            "ultra-light" | "ultralight" | "extra-light" | "extralight" => Some(Self::EXTRA_LIGHT),
-            "light" | "semi-light" | "semilight" | "demilight" => Some(Self::LIGHT),
-            "normal" | "regular" | "unspecified" | "book" => Some(Self::NORMAL),
-            "medium" => Some(Self::MEDIUM),
-            "semi-bold" | "semibold" | "demi-bold" | "demibold" | "demi" => Some(Self::SEMI_BOLD),
-            "bold" => Some(Self::BOLD),
-            "extra-bold" | "extrabold" | "ultra-bold" | "ultrabold" => Some(Self::EXTRA_BOLD),
-            "black" | "heavy" | "ultra-heavy" | "ultraheavy" => Some(Self::BLACK),
+        name.parse().ok()
+    }
+
+    pub fn from_css_weight(weight: u16) -> Self {
+        match weight {
+            0..=150 => Self::Thin,
+            151..=250 => Self::ExtraLight,
+            251..=325 => Self::Light,
+            326..=375 => Self::SemiLight,
+            376..=450 => Self::Normal,
+            451..=550 => Self::Medium,
+            551..=650 => Self::SemiBold,
+            651..=750 => Self::Bold,
+            751..=850 => Self::ExtraBold,
+            851..=925 => Self::Black,
+            _ => Self::UltraHeavy,
+        }
+    }
+
+    pub fn from_gnu_style_code(code: i64) -> Option<Self> {
+        let code = u16::try_from(code).ok()?;
+        let numeric = code >> 8;
+        let row = (code >> 4) & 0x0f;
+        let alias = code & 0x0f;
+        match (numeric, row, alias) {
+            (0, 0, 0) => Some(Self::Thin),
+            (40, 1, 0) => Some(Self::UltraLight),
+            (40, 1, 1) => Some(Self::Ultralight),
+            (40, 1, 2) => Some(Self::ExtraLight),
+            (40, 1, 3) => Some(Self::Extralight),
+            (50, 2, 0) => Some(Self::Light),
+            (55, 3, 0) => Some(Self::SemiLight),
+            (55, 3, 1) => Some(Self::Semilight),
+            (55, 3, 2) => Some(Self::Demilight),
+            (80, 4, 0) => Some(Self::Regular),
+            (80, 4, 1) => Some(Self::Normal),
+            (80, 4, 2) => Some(Self::Unspecified),
+            (80, 4, 3) => Some(Self::Book),
+            (100, 5, 0) => Some(Self::Medium),
+            (180, 6, 0) => Some(Self::SemiBold),
+            (180, 6, 1) => Some(Self::Semibold),
+            (180, 6, 2) => Some(Self::Demibold),
+            (180, 6, 3) => Some(Self::DemiBold),
+            (180, 6, 4) => Some(Self::Demi),
+            (200, 7, 0) => Some(Self::Bold),
+            (205, 8, 0) => Some(Self::ExtraBold),
+            (205, 8, 1) => Some(Self::Extrabold),
+            (205, 8, 2) => Some(Self::UltraBold),
+            (205, 8, 3) => Some(Self::Ultrabold),
+            (210, 9, 0) => Some(Self::Black),
+            (210, 9, 1) => Some(Self::Heavy),
+            (250, 10, 0) => Some(Self::UltraHeavy),
+            (250, 10, 1) => Some(Self::Ultraheavy),
             _ => None,
         }
     }
 
-    pub fn is_bold(&self) -> bool {
-        self.0 >= 700
+    pub fn from_dump_code(code: u16) -> Self {
+        match code {
+            100 => Self::Thin,
+            101 => Self::UltraLight,
+            102 => Self::Ultralight,
+            200 => Self::ExtraLight,
+            201 => Self::Extralight,
+            300 => Self::Light,
+            350 => Self::SemiLight,
+            351 => Self::Semilight,
+            352 => Self::Demilight,
+            401 => Self::Regular,
+            400 => Self::Normal,
+            402 => Self::Unspecified,
+            403 => Self::Book,
+            500 => Self::Medium,
+            600 => Self::SemiBold,
+            601 => Self::Semibold,
+            602 => Self::Demibold,
+            603 => Self::DemiBold,
+            604 => Self::Demi,
+            700 => Self::Bold,
+            800 => Self::ExtraBold,
+            801 => Self::Extrabold,
+            802 => Self::UltraBold,
+            803 => Self::Ultrabold,
+            900 => Self::Black,
+            901 => Self::Heavy,
+            950 => Self::UltraHeavy,
+            951 => Self::Ultraheavy,
+            other => Self::from_css_weight(other),
+        }
+    }
+
+    pub fn dump_code(self) -> u16 {
+        match self {
+            Self::Thin => 100,
+            Self::UltraLight => 101,
+            Self::Ultralight => 102,
+            Self::ExtraLight => 200,
+            Self::Extralight => 201,
+            Self::Light => 300,
+            Self::SemiLight => 350,
+            Self::Semilight => 351,
+            Self::Demilight => 352,
+            Self::Regular => 401,
+            Self::Normal => 400,
+            Self::Unspecified => 402,
+            Self::Book => 403,
+            Self::Medium => 500,
+            Self::SemiBold => 600,
+            Self::Semibold => 601,
+            Self::Demibold => 602,
+            Self::DemiBold => 603,
+            Self::Demi => 604,
+            Self::Bold => 700,
+            Self::ExtraBold => 800,
+            Self::Extrabold => 801,
+            Self::UltraBold => 802,
+            Self::Ultrabold => 803,
+            Self::Black => 900,
+            Self::Heavy => 901,
+            Self::UltraHeavy => 950,
+            Self::Ultraheavy => 951,
+        }
+    }
+
+    pub fn gnu_numeric(self) -> u16 {
+        match self {
+            Self::Thin => 0,
+            Self::UltraLight | Self::Ultralight | Self::ExtraLight | Self::Extralight => 40,
+            Self::Light => 50,
+            Self::SemiLight | Self::Semilight | Self::Demilight => 55,
+            Self::Regular | Self::Normal | Self::Unspecified | Self::Book => 80,
+            Self::Medium => 100,
+            Self::SemiBold | Self::Semibold | Self::Demibold | Self::DemiBold | Self::Demi => 180,
+            Self::Bold => 200,
+            Self::ExtraBold | Self::Extrabold | Self::UltraBold | Self::Ultrabold => 205,
+            Self::Black | Self::Heavy => 210,
+            Self::UltraHeavy | Self::Ultraheavy => 250,
+        }
+    }
+
+    pub fn css_weight(self) -> u16 {
+        match self {
+            Self::Thin => 100,
+            Self::UltraLight | Self::Ultralight | Self::ExtraLight | Self::Extralight => 200,
+            Self::Light => 300,
+            Self::SemiLight | Self::Semilight | Self::Demilight => 350,
+            Self::Regular | Self::Normal | Self::Unspecified | Self::Book => 400,
+            Self::Medium => 500,
+            Self::SemiBold | Self::Semibold | Self::Demibold | Self::DemiBold | Self::Demi => 600,
+            Self::Bold => 700,
+            Self::ExtraBold | Self::Extrabold | Self::UltraBold | Self::Ultrabold => 800,
+            Self::Black | Self::Heavy => 900,
+            Self::UltraHeavy | Self::Ultraheavy => 950,
+        }
+    }
+
+    pub fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+
+    pub fn is_bold(self) -> bool {
+        matches!(
+            self,
+            Self::SemiBold
+                | Self::Semibold
+                | Self::Demibold
+                | Self::DemiBold
+                | Self::Demi
+                | Self::Bold
+                | Self::ExtraBold
+                | Self::Extrabold
+                | Self::UltraBold
+                | Self::Ultrabold
+        )
     }
 }
 
@@ -659,7 +882,7 @@ impl Face {
         }
         if let Some(w) = &self.weight {
             items.push(Value::keyword("weight"));
-            items.push(Value::fixnum(w.0 as i64));
+            items.push(Value::symbol(w.symbol_name()));
         }
         if let Some(s) = &self.slant {
             items.push(Value::keyword("slant"));
@@ -706,8 +929,6 @@ impl Face {
                 "weight" => {
                     if let Some(s) = val.as_symbol_name() {
                         face.weight = FontWeight::from_symbol(s);
-                    } else if let Some(n) = val.as_int() {
-                        face.weight = Some(FontWeight(n as u16));
                     }
                 }
                 "slant" => {

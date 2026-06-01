@@ -378,46 +378,43 @@ fn color_from_name_full_palette() {
 #[test]
 fn font_weight_from_symbol_all_names() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(FontWeight::from_symbol("thin"), Some(FontWeight::THIN));
-    assert_eq!(
-        FontWeight::from_symbol("ultra-light"),
-        Some(FontWeight::EXTRA_LIGHT)
-    );
-    assert_eq!(
-        FontWeight::from_symbol("extra-light"),
-        Some(FontWeight::EXTRA_LIGHT)
-    );
-    assert_eq!(
-        FontWeight::from_symbol("semi-light"),
-        Some(FontWeight::LIGHT)
-    );
-    assert_eq!(
-        FontWeight::from_symbol("unspecified"),
-        Some(FontWeight::NORMAL)
-    );
-    assert_eq!(FontWeight::from_symbol("light"), Some(FontWeight::LIGHT));
-    assert_eq!(FontWeight::from_symbol("regular"), Some(FontWeight::NORMAL));
-    assert_eq!(FontWeight::from_symbol("book"), Some(FontWeight::NORMAL));
-    assert_eq!(FontWeight::from_symbol("medium"), Some(FontWeight::MEDIUM));
-    assert_eq!(
-        FontWeight::from_symbol("semi-bold"),
-        Some(FontWeight::SEMI_BOLD)
-    );
-    assert_eq!(FontWeight::from_symbol("demi"), Some(FontWeight::SEMI_BOLD));
-    assert_eq!(
-        FontWeight::from_symbol("demi-bold"),
-        Some(FontWeight::SEMI_BOLD)
-    );
-    assert_eq!(
-        FontWeight::from_symbol("extra-bold"),
-        Some(FontWeight::EXTRA_BOLD)
-    );
-    assert_eq!(FontWeight::from_symbol("black"), Some(FontWeight::BLACK));
-    assert_eq!(FontWeight::from_symbol("heavy"), Some(FontWeight::BLACK));
-    assert_eq!(
-        FontWeight::from_symbol("ultra-heavy"),
-        Some(FontWeight::BLACK)
-    );
+    let cases = [
+        ("thin", FontWeight::Thin, 0, 100),
+        ("ultra-light", FontWeight::UltraLight, 40, 200),
+        ("ultralight", FontWeight::Ultralight, 40, 200),
+        ("extra-light", FontWeight::ExtraLight, 40, 200),
+        ("extralight", FontWeight::Extralight, 40, 200),
+        ("light", FontWeight::Light, 50, 300),
+        ("semi-light", FontWeight::SemiLight, 55, 350),
+        ("semilight", FontWeight::Semilight, 55, 350),
+        ("demilight", FontWeight::Demilight, 55, 350),
+        ("regular", FontWeight::Regular, 80, 400),
+        ("normal", FontWeight::Normal, 80, 400),
+        ("unspecified", FontWeight::Unspecified, 80, 400),
+        ("book", FontWeight::Book, 80, 400),
+        ("medium", FontWeight::Medium, 100, 500),
+        ("semi-bold", FontWeight::SemiBold, 180, 600),
+        ("semibold", FontWeight::Semibold, 180, 600),
+        ("demibold", FontWeight::Demibold, 180, 600),
+        ("demi-bold", FontWeight::DemiBold, 180, 600),
+        ("demi", FontWeight::Demi, 180, 600),
+        ("bold", FontWeight::Bold, 200, 700),
+        ("extra-bold", FontWeight::ExtraBold, 205, 800),
+        ("extrabold", FontWeight::Extrabold, 205, 800),
+        ("ultra-bold", FontWeight::UltraBold, 205, 800),
+        ("ultrabold", FontWeight::Ultrabold, 205, 800),
+        ("black", FontWeight::Black, 210, 900),
+        ("heavy", FontWeight::Heavy, 210, 900),
+        ("ultra-heavy", FontWeight::UltraHeavy, 250, 950),
+        ("ultraheavy", FontWeight::Ultraheavy, 250, 950),
+    ];
+    for (name, weight, gnu_numeric, css_weight) in cases {
+        assert_eq!(FontWeight::from_symbol(name), Some(weight), "parse {name}");
+        assert_eq!(weight.symbol_name(), name);
+        assert_eq!(weight.gnu_numeric(), gnu_numeric);
+        assert_eq!(weight.css_weight(), css_weight);
+        assert_eq!(FontWeight::from_dump_code(weight.dump_code()), weight);
+    }
     assert_eq!(FontWeight::from_symbol("unknown"), None);
 }
 

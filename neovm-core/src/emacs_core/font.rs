@@ -890,35 +890,143 @@ fn xlfd_fields_from_font_vector(
 }
 
 /// Set (or add) a property in a font-spec in place.
-fn font_spec_put(vec_elems: &mut Vec<Value>, prop: &Value, val: &Value) {
-    let normalized = normalize_font_prop_value(prop, val);
+fn font_spec_put(vec_elems: &mut Vec<Value>, prop: &Value, val: &Value) -> EvalResult {
+    let normalized = normalize_font_prop_value(prop, val)?;
     let mut i = 1;
     while i + 1 < vec_elems.len() {
         if vec_elems[i] == *prop {
             vec_elems[i + 1] = normalized;
-            return;
+            return Ok(normalized);
         }
         i += 2;
     }
     vec_elems.push(*prop);
     vec_elems.push(normalized);
+    Ok(normalized)
 }
 
-fn normalize_font_prop_value(prop: &Value, val: &Value) -> Value {
+fn invalid_font_property(prop: &Value, val: &Value) -> Flow {
+    signal(
+        "error",
+        vec![
+            Value::string("invalid font property"),
+            Value::cons(*prop, *val),
+        ],
+    )
+}
+
+fn font_style_table_for_key(key: &str) -> Option<&'static [(i64, &'static [&'static str])]> {
+    match key {
+        "weight" => Some(FONT_WEIGHT_STYLE_TABLE),
+        "slant" => Some(FONT_SLANT_STYLE_TABLE),
+        "width" => Some(FONT_WIDTH_STYLE_TABLE),
+        _ => None,
+    }
+}
+
+fn font_style_symbol_from_gnu_code(
+    table: &'static [(i64, &'static [&'static str])],
+    code: i64,
+) -> Option<&'static str> {
+    let code = u16::try_from(code).ok()?;
+    let numeric = i64::from(code >> 8);
+    let row = usize::from((code >> 4) & 0x0f);
+    let alias = usize::from(code & 0x0f);
+    let (row_numeric, names) = table.get(row)?;
+    if *row_numeric == numeric {
+        names.get(alias).copied()
+    } else {
+        None
+    }
+}
+
+fn validate_font_style_prop(key: &str, prop: &Value, val: &Value) -> EvalResult {
+    if val.is_nil() {
+        return Ok(*val);
+    }
+    match val.kind() {
+        ValueKind::Symbol(id) => {
+            let name = resolve_sym(id);
+            let valid = match key {
+                "weight" => FontWeight::from_symbol(name).is_some(),
+                "slant" => FontSlant::from_symbol(name).is_some(),
+                "width" => FontWidth::from_symbol(name).is_some(),
+                _ => false,
+            };
+            if valid {
+                Ok(*val)
+            } else {
+                Err(invalid_font_property(prop, val))
+            }
+        }
+        ValueKind::Fixnum(n) => font_style_table_for_key(key)
+            .and_then(|table| font_style_symbol_from_gnu_code(table, n))
+            .map(Value::symbol)
+            .ok_or_else(|| invalid_font_property(prop, val)),
+        _ => Err(invalid_font_property(prop, val)),
+    }
+}
+
+fn validate_non_negative_font_prop(prop: &Value, val: &Value) -> EvalResult {
+    if val.is_nil()
+        || matches!(val.kind(), ValueKind::Fixnum(n) if n >= 0)
+        || matches!(val.kind(), ValueKind::Float if val.xfloat() >= 0.0)
+    {
+        Ok(*val)
+    } else {
+        Err(invalid_font_property(prop, val))
+    }
+}
+
+fn validate_spacing_font_prop(prop: &Value, val: &Value) -> EvalResult {
+    if val.is_nil() {
+        return Ok(*val);
+    }
+    match val.kind() {
+        ValueKind::Fixnum(n) if (0..=3).contains(&n) => Ok(*val),
+        ValueKind::Symbol(id) => match resolve_sym(id) {
+            "p" | "P" => Ok(Value::fixnum(0)),
+            "d" | "D" => Ok(Value::fixnum(1)),
+            "m" | "M" => Ok(Value::fixnum(2)),
+            "c" | "C" => Ok(Value::fixnum(3)),
+            _ => Err(invalid_font_property(prop, val)),
+        },
+        _ => Err(invalid_font_property(prop, val)),
+    }
+}
+
+fn normalize_font_prop_value(prop: &Value, val: &Value) -> EvalResult {
     let key = match prop.kind() {
         ValueKind::Symbol(id) => resolve_sym(id).trim_start_matches(':'),
-        _ => return *val,
+        _ => return Ok(*val),
     };
 
     match key {
-        "family" | "foundry" | "registry" | "lang" | "adstyle" => match val.kind() {
+        "family" | "foundry" | "lang" | "adstyle" | "type" | "script" => match val.kind() {
             ValueKind::String => font_string_text(val)
                 .map(|text| Value::from_sym_id(intern(&text)))
-                .unwrap_or(*val),
-            ValueKind::Symbol(_) | ValueKind::Nil => *val,
-            _ => *val,
+                .map(Ok)
+                .unwrap_or(Ok(*val)),
+            ValueKind::Symbol(_) | ValueKind::Nil => Ok(*val),
+            _ => Err(invalid_font_property(prop, val)),
         },
-        _ => *val,
+        "registry" => match val.kind() {
+            ValueKind::String => font_string_text(val)
+                .map(|text| Value::from_sym_id(intern(&text.to_ascii_lowercase())))
+                .map(Ok)
+                .unwrap_or(Ok(*val)),
+            ValueKind::Symbol(id) => Ok(Value::from_sym_id(intern(
+                &resolve_sym(id).to_ascii_lowercase(),
+            ))),
+            ValueKind::Nil => Ok(*val),
+            _ => Err(invalid_font_property(prop, val)),
+        },
+        "weight" | "slant" | "width" => validate_font_style_prop(key, prop, val),
+        "size" | "dpi" | "avgwidth" | "average-width" | "avg-width" => {
+            validate_non_negative_font_prop(prop, val)
+        }
+        "spacing" => validate_spacing_font_prop(prop, val),
+        _ => Ok(*val),
     }
 }
 
@@ -1000,7 +1108,7 @@ pub(crate) fn builtin_font_spec(args: Vec<Value>) -> EvalResult {
         }
 
         elems.push(*key);
-        elems.push(normalize_font_prop_value(key, value));
+        elems.push(normalize_font_prop_value(key, value)?);
     }
 
     Ok(Value::vector(elems))
@@ -1055,9 +1163,9 @@ pub(crate) fn builtin_font_put(args: Vec<Value>) -> EvalResult {
                 .as_vector_data()
                 .map(|items| items.to_vec())
                 .unwrap_or_default();
-            font_spec_put(&mut elems, &args[1], &args[2]);
+            let normalized = font_spec_put(&mut elems, &args[1], &args[2])?;
             let _ = args[0].replace_vector_data(elems);
-            Ok(normalize_font_prop_value(&args[1], &args[2]))
+            Ok(normalized)
         }
         _ => unreachable!("font-spec check above guarantees vector"),
     }
@@ -1081,9 +1189,6 @@ pub(crate) fn builtin_list_fonts(eval: &mut super::eval::Context, args: Vec<Valu
 
 fn font_weight_from_value(value: Value) -> Option<FontWeight> {
     match value.kind() {
-        ValueKind::Fixnum(weight) if (0..=u16::MAX as i64).contains(&weight) => {
-            Some(FontWeight(weight as u16))
-        }
         ValueKind::Symbol(id) => FontWeight::from_symbol(resolve_sym(id)),
         _ => None,
     }
@@ -1538,17 +1643,7 @@ fn face_height_to_font_value(height: &FaceHeight) -> Value {
 }
 
 fn font_weight_symbol(weight: FontWeight) -> &'static str {
-    match weight.0 {
-        0..=150 => "thin",
-        151..=250 => "ultra-light",
-        251..=350 => "light",
-        351..=450 => "normal",
-        451..=550 => "medium",
-        551..=650 => "semi-bold",
-        651..=750 => "bold",
-        751..=850 => "extra-bold",
-        _ => "black",
-    }
+    weight.symbol_name()
 }
 
 fn build_font_object(face: &RuntimeFace) -> Value {
@@ -4076,28 +4171,7 @@ fn runtime_color_to_lisp_value(color: &Color) -> Value {
 }
 
 fn runtime_weight_to_lisp_value(weight: FontWeight) -> Value {
-    let name = if weight == FontWeight::THIN {
-        "thin"
-    } else if weight == FontWeight::EXTRA_LIGHT {
-        "ultra-light"
-    } else if weight == FontWeight::LIGHT {
-        "light"
-    } else if weight == FontWeight::NORMAL {
-        "normal"
-    } else if weight == FontWeight::MEDIUM {
-        "medium"
-    } else if weight == FontWeight::SEMI_BOLD {
-        "semi-bold"
-    } else if weight == FontWeight::BOLD {
-        "bold"
-    } else if weight == FontWeight::EXTRA_BOLD {
-        "extra-bold"
-    } else if weight == FontWeight::BLACK {
-        "black"
-    } else {
-        "normal"
-    };
-    Value::symbol(name)
+    Value::symbol(weight.symbol_name())
 }
 
 fn runtime_slant_to_lisp_value(slant: FontSlant) -> Value {
