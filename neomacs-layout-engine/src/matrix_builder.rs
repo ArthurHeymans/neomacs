@@ -497,10 +497,19 @@ impl GlyphMatrixBuilder {
     }
 
     pub fn push_stretch(&mut self, width_cols: u16, face_id: u32) {
+        self.push_stretch_with_pixel_width(width_cols, face_id, 0.0);
+    }
+
+    pub fn push_stretch_with_pixel_width(
+        &mut self,
+        width_cols: u16,
+        face_id: u32,
+        pixel_width: f32,
+    ) {
         if let Some(ref mut matrix) = self.current_matrix {
             if self.current_row < matrix.rows.len() {
-                matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize]
-                    .push(Glyph::stretch(width_cols, face_id));
+                let glyph = Glyph::stretch(width_cols, face_id).with_pixel_width(pixel_width);
+                matrix.rows[self.current_row].glyphs[GlyphArea::Text as usize].push(glyph);
             }
         }
     }

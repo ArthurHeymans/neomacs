@@ -134,14 +134,9 @@ fn update_cursor_info_for_main_char(
     cursor.slot_width = Some(advance.max(1.0));
 }
 
-fn slot_char_width(ch: char, face_char_w: f32) -> f32 {
-    if is_cluster_extender(ch) {
-        0.0
-    } else if is_wide_char(ch) {
-        2.0 * face_char_w
-    } else {
-        face_char_w
-    }
+fn display_width_cols(pixel_width: f32, frame_column_width: f32) -> u16 {
+    let column_width = frame_column_width.max(1.0);
+    (pixel_width.max(0.0) / column_width).ceil().max(1.0) as u16
 }
 
 fn control_char_display_pair(ch: char, ctl_arrow: bool) -> Option<(char, char)> {
@@ -756,7 +751,7 @@ fn eval_display_space_as_width(
         frame_res_x: 96.0,
         frame_res_y: 96.0,
         face_font_height: params.char_height.max(1.0) as f64,
-        face_font_width: face_char_w as f64,
+        face_font_width: face_char_w.round().max(1.0) as f64,
         text_area_left: params.text_bounds.x as f64,
         text_area_right: (params.text_bounds.x + params.text_bounds.width) as f64,
         text_area_width: params.text_bounds.width as f64,
@@ -1506,7 +1501,7 @@ fn render_overlay_string(
                 let space_width =
                     eval_display_space_as_width(&display_prop, *x, content_x, face_char_w, params);
                 if space_width > 0.0 && *x < max_x {
-                    let width_cols = (space_width / face_char_w.max(1.0)).ceil().max(1.0) as u16;
+                    let width_cols = display_width_cols(space_width, params.char_width);
                     let face_id = overlay_string_face_id_at(
                         text_props.as_ref(),
                         char_idx,
@@ -1517,7 +1512,7 @@ fn render_overlay_string(
                         current_face_id,
                         builder,
                     );
-                    builder.push_stretch(width_cols, face_id);
+                    builder.push_stretch_with_pixel_width(width_cols, face_id, space_width);
                     let glyph_start_x = *x;
                     let glyph_start_col = *col;
                     capture_overlay_string_cursor(
@@ -2357,10 +2352,10 @@ impl LayoutEngine {
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
     ) {
-        // FontMetricsService is set up once at startup via
-        // `enable_cosmic_metrics()` (GUI mode) or left as `None`
-        // (TTY mode). No per-frame flag check; the backend choice
-        // is frame-invariant.
+        // The font service can exist on the engine even while laying out a
+        // terminal frame in tests. Match GNU's redisplay split: window-system
+        // frames use realized font pixels, terminal frames stay on cell
+        // metrics.
 
         evaluator.sync_runtime_faces_for_frame(frame_id);
 
@@ -2388,14 +2383,18 @@ impl LayoutEngine {
             window_system.clone(),
         );
         let default_resolved = face_resolver.default_face();
-        let default_metrics = self.font_metrics.as_mut().map(|svc| {
-            svc.font_metrics(
-                &default_resolved.font_family,
-                default_resolved.font_weight,
-                default_resolved.italic,
-                default_resolved.font_size,
-            )
-        });
+        let default_metrics = if window_system.is_some() {
+            self.font_metrics.as_mut().map(|svc| {
+                svc.font_metrics(
+                    &default_resolved.font_family,
+                    default_resolved.font_weight,
+                    default_resolved.italic,
+                    default_resolved.font_size,
+                )
+            })
+        } else {
+            None
+        };
 
         if let Some(metrics) = default_metrics {
             if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
@@ -2943,7 +2942,7 @@ impl LayoutEngine {
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
         params: &WindowParams,
-        _frame_params: &FrameParams,
+        frame_params: &FrameParams,
         face_resolver: &super::neovm_bridge::FaceResolver,
         reserve_right_border_col: bool,
         remaining_visibility_retries: usize,
@@ -3023,18 +3022,20 @@ impl LayoutEngine {
         let default_fg = Color::from_pixel(default_resolved.fg);
         let default_bg = Color::from_pixel(default_resolved.bg);
 
-        let (default_face_char_w, default_face_h, default_face_ascent) =
-            if let Some(ref mut svc) = self.font_metrics {
-                let m = svc.font_metrics(
-                    &default_resolved.font_family,
-                    default_resolved.font_weight,
-                    default_resolved.italic,
-                    default_resolved.font_size,
-                );
-                (m.char_width, m.line_height, m.ascent)
-            } else {
-                (char_w, char_h, font_ascent)
-            };
+        let (default_face_char_w, default_face_h, default_face_ascent) = if frame_params
+            .window_system
+            && let Some(ref mut svc) = self.font_metrics
+        {
+            let m = svc.font_metrics(
+                &default_resolved.font_family,
+                default_resolved.font_weight,
+                default_resolved.italic,
+                default_resolved.font_size,
+            );
+            (m.char_width, m.line_height, m.ascent)
+        } else {
+            (char_w, char_h, font_ascent)
+        };
 
         tracing::debug!(
             "layout font metrics: family={:?} weight={} italic={} size={} char_w={:.2} char_h={:.2} ascent={:.2} (window char_w={:.2} char_h={:.2})",
@@ -3200,7 +3201,7 @@ impl LayoutEngine {
                     text_lines + overlay_lines + 1
                 })
                 .unwrap_or(1);
-            let frame_rows = _frame_params.height / char_h;
+            let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil() as usize;
             content_lines.clamp(1, max_mini)
         } else {
@@ -3383,6 +3384,7 @@ impl LayoutEngine {
         self.resolved_family_face_id = 0;
         face_space_w = char_advance(
             &mut self.ascii_width_cache,
+            frame_params.window_system,
             &mut self.font_metrics,
             ' ',
             1,
@@ -3402,7 +3404,7 @@ impl LayoutEngine {
             // a long one-line message grows the echo area when
             // `message-truncate-lines' is nil.
             let reserve_right_special_col =
-                !_frame_params.window_system && params.right_fringe_width == 0.0;
+                !frame_params.window_system && params.right_fringe_width == 0.0;
             let truncate_echo_lines = message_truncate_lines(evaluator);
             let echo_lines = plain_echo_display_rows(
                 &echo_message,
@@ -3411,7 +3413,7 @@ impl LayoutEngine {
                 truncate_echo_lines,
                 reserve_right_special_col,
             );
-            let frame_rows = _frame_params.height / char_h;
+            let frame_rows = frame_params.height / char_h;
             let max_mini = max_mini_window_lines(evaluator, frame_rows).ceil().max(1.0) as usize;
             let max_rows_echo = echo_lines.clamp(1, max_mini);
             let cols_echo = (text_width / char_w).ceil().max(1.0) as usize;
@@ -3534,7 +3536,7 @@ impl LayoutEngine {
             0.0
         };
         let reserve_right_special_col =
-            !_frame_params.window_system && params.right_fringe_width == 0.0;
+            !frame_params.window_system && params.right_fringe_width == 0.0;
         let reserve_right_special_width = if reserve_right_special_col {
             char_w
         } else {
@@ -3623,14 +3625,18 @@ impl LayoutEngine {
                         face_resolver.face_at_pos(buffer, charpos as usize, &mut face_next_check);
                     let face_id = current_face_id;
 
-                    let metrics = self.font_metrics.as_mut().map(|svc| {
-                        svc.font_metrics(
-                            &resolved.font_family,
-                            resolved.font_weight,
-                            resolved.italic,
-                            resolved.font_size,
-                        )
-                    });
+                    let metrics = if frame_params.window_system {
+                        self.font_metrics.as_mut().map(|svc| {
+                            svc.font_metrics(
+                                &resolved.font_family,
+                                resolved.font_weight,
+                                resolved.italic,
+                                resolved.font_size,
+                            )
+                        })
+                    } else {
+                        None
+                    };
                     if let Some(m) = metrics {
                         // face_char_w is the canonical column width for the
                         // default face ('m' advance).  Per-character advance
@@ -3671,6 +3677,7 @@ impl LayoutEngine {
                     self.resolved_family_face_id = face_id;
                     face_space_w = char_advance(
                         &mut self.ascii_width_cache,
+                        frame_params.window_system,
                         &mut self.font_metrics,
                         ' ',
                         1,
@@ -3888,6 +3895,7 @@ impl LayoutEngine {
                             let dot_start_col = col;
                             let dot_advance = char_pixel_advance(
                                 &mut self.ascii_width_cache,
+                                frame_params.window_system,
                                 &mut self.font_metrics,
                                 '.',
                                 1,
@@ -4124,8 +4132,33 @@ impl LayoutEngine {
                             let slot_width = replacement
                                 .chars()
                                 .next()
-                                .map(|rch| slot_char_width(rch, face_char_w))
-                                .unwrap_or_else(|| face_char_w.max(1.0));
+                                .map(|rch| {
+                                    let rch_cols = if is_cluster_extender(rch) {
+                                        0
+                                    } else if is_wide_char(rch) {
+                                        2
+                                    } else {
+                                        1
+                                    };
+                                    if rch_cols == 0 {
+                                        0.0
+                                    } else {
+                                        char_pixel_advance(
+                                            &mut self.ascii_width_cache,
+                                            frame_params.window_system,
+                                            &mut self.font_metrics,
+                                            rch,
+                                            rch_cols,
+                                            char_w,
+                                            current_font_size_px,
+                                            face_char_w,
+                                            &self.current_resolved_family,
+                                            current_font_weight,
+                                            current_font_italic,
+                                        )
+                                    }
+                                })
+                                .unwrap_or_else(|| char_w.max(1.0));
                             capture_cursor_info(
                                 &mut cursor_info,
                                 CapturedCursorInfo {
@@ -4146,16 +4179,34 @@ impl LayoutEngine {
                         if !replacement.is_empty() {
                             let right_limit = content_x + (text_width - lnum_pixel_width);
                             for rch in replacement.chars() {
-                                let rch_is_wide = is_wide_char(rch);
-                                let rch_advance = if rch_is_wide {
-                                    2.0 * face_char_w
+                                let rch_cols = if is_cluster_extender(rch) {
+                                    0
+                                } else if is_wide_char(rch) {
+                                    2
                                 } else {
-                                    face_char_w
+                                    1
+                                };
+                                let rch_advance = if rch_cols == 0 {
+                                    0.0
+                                } else {
+                                    char_pixel_advance(
+                                        &mut self.ascii_width_cache,
+                                        frame_params.window_system,
+                                        &mut self.font_metrics,
+                                        rch,
+                                        rch_cols,
+                                        char_w,
+                                        current_font_size_px,
+                                        face_char_w,
+                                        &self.current_resolved_family,
+                                        current_font_weight,
+                                        current_font_italic,
+                                    )
                                 };
                                 if x + rch_advance > right_limit {
                                     break;
                                 }
-                                if rch_is_wide {
+                                if rch_cols == 2 {
                                     self.matrix_builder.push_wide_char_with_pixel_width(
                                         rch,
                                         current_text_face_id,
@@ -4171,7 +4222,7 @@ impl LayoutEngine {
                                     );
                                 }
                                 x += rch_advance;
-                                col += if rch_is_wide { 2 } else { 1 };
+                                col += rch_cols as usize;
                             }
                         }
 
@@ -4230,12 +4281,14 @@ impl LayoutEngine {
                         }
                         if space_width > 0.0 {
                             let _bg = Color::from_pixel(default_resolved.bg);
-                            self.matrix_builder.push_stretch(
-                                (space_width / face_char_w).ceil() as u16,
+                            let width_cols = display_width_cols(space_width, params.char_width);
+                            self.matrix_builder.push_stretch_with_pixel_width(
+                                width_cols,
                                 current_text_face_id,
+                                space_width,
                             );
                             x += space_width;
-                            col += (space_width / face_char_w).ceil() as usize;
+                            col += width_cols as usize;
                             output_emitter.emit_text_span(
                                 evaluator,
                                 charpos as i64 + 1,
@@ -4362,6 +4415,7 @@ impl LayoutEngine {
                                 }
                                 x += char_pixel_advance(
                                     &mut self.ascii_width_cache,
+                                    frame_params.window_system,
                                     &mut self.font_metrics,
                                     rch,
                                     1,
@@ -4688,6 +4742,7 @@ impl LayoutEngine {
                 for ech in ellipsis.chars() {
                     let adv = char_pixel_advance(
                         &mut self.ascii_width_cache,
+                        frame_params.window_system,
                         &mut self.font_metrics,
                         ech,
                         1,
@@ -5169,6 +5224,7 @@ impl LayoutEngine {
                 );
                 x += char_pixel_advance(
                     &mut self.ascii_width_cache,
+                    frame_params.window_system,
                     &mut self.font_metrics,
                     '^',
                     1,
@@ -5181,6 +5237,7 @@ impl LayoutEngine {
                 );
                 x += char_pixel_advance(
                     &mut self.ascii_width_cache,
+                    frame_params.window_system,
                     &mut self.font_metrics,
                     ctrl_ch,
                     1,
@@ -5225,6 +5282,7 @@ impl LayoutEngine {
                         );
                         x += char_pixel_advance(
                             &mut self.ascii_width_cache,
+                            frame_params.window_system,
                             &mut self.font_metrics,
                             display_ch,
                             1,
@@ -5265,6 +5323,7 @@ impl LayoutEngine {
                             );
                             x += char_pixel_advance(
                                 &mut self.ascii_width_cache,
+                                frame_params.window_system,
                                 &mut self.font_metrics,
                                 '\\',
                                 1,
@@ -5277,6 +5336,7 @@ impl LayoutEngine {
                             );
                             x += char_pixel_advance(
                                 &mut self.ascii_width_cache,
+                                frame_params.window_system,
                                 &mut self.font_metrics,
                                 indicator,
                                 1,
@@ -5315,6 +5375,7 @@ impl LayoutEngine {
                         // Empty box: render U+25A1 (□) character
                         let adv = char_pixel_advance(
                             &mut self.ascii_width_cache,
+                            frame_params.window_system,
                             &mut self.font_metrics,
                             '\u{25A1}',
                             1,
@@ -5349,6 +5410,7 @@ impl LayoutEngine {
                             for hch in hex_str.chars() {
                                 x += char_pixel_advance(
                                     &mut self.ascii_width_cache,
+                                    frame_params.window_system,
                                     &mut self.font_metrics,
                                     hch,
                                     1,
@@ -5366,6 +5428,7 @@ impl LayoutEngine {
                             for hch in hex_str.chars() {
                                 let adv = char_pixel_advance(
                                     &mut self.ascii_width_cache,
+                                    frame_params.window_system,
                                     &mut self.font_metrics,
                                     hch,
                                     1,
@@ -5437,6 +5500,7 @@ impl LayoutEngine {
             } else {
                 char_advance(
                     &mut self.ascii_width_cache,
+                    frame_params.window_system,
                     &mut self.font_metrics,
                     ch,
                     char_cols as i32,
@@ -6333,7 +6397,7 @@ impl LayoutEngine {
                 evaluator,
                 frame_id,
                 &retry_params,
-                _frame_params,
+                frame_params,
                 face_resolver,
                 reserve_right_border_col,
                 remaining_visibility_retries.saturating_sub(1),
@@ -7204,6 +7268,7 @@ impl LayoutEngine {
 #[inline(always)]
 fn char_pixel_advance(
     ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
+    use_font_metrics: bool,
     font_metrics_svc: &mut Option<FontMetricsService>,
     ch: char,
     char_cols: i32,
@@ -7216,6 +7281,7 @@ fn char_pixel_advance(
 ) -> f32 {
     char_advance(
         ascii_width_cache,
+        use_font_metrics,
         font_metrics_svc,
         ch,
         char_cols,
@@ -7230,10 +7296,11 @@ fn char_pixel_advance(
 
 /// Standalone function to avoid borrow conflicts with `LayoutEngine::text_buf`.
 ///
-/// Uses `FontMetricsService` (cosmic-text) for measurement, matching the render
-/// thread's font resolution exactly.
+/// Uses `FontMetricsService` only for window-system frames, matching GNU's
+/// split between GUI redisplay and terminal cell redisplay.
 fn char_advance(
     ascii_width_cache: &mut std::collections::HashMap<AsciiWidthCacheKey, [f32; 128]>,
+    use_font_metrics: bool,
     font_metrics_svc: &mut Option<FontMetricsService>,
     ch: char,
     char_cols: i32,
@@ -7266,10 +7333,17 @@ fn char_advance(
     } else {
         char_w
     };
+    if char_cols <= 0 {
+        return 0.0;
+    }
     let min_grid_advance = char_cols as f32 * face_w;
 
-    // TTY mode: when no font metrics service exists (enable_cosmic_metrics not called),
-    // use char-cell grid advance directly.  Don't auto-create pixel-based metrics.
+    // TTY redisplay uses character-cell metrics even if this test/engine
+    // instance owns a GUI font service for another frame.
+    if !use_font_metrics {
+        return snap_advance_to_pixel_grid(min_grid_advance, min_grid_advance);
+    }
+
     let svc = match font_metrics_svc.as_mut() {
         Some(svc) => svc,
         None => return snap_advance_to_pixel_grid(min_grid_advance, min_grid_advance),

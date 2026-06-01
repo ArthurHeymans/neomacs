@@ -3618,6 +3618,7 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
 
     let regular_width = char_advance(
         &mut ascii_width_cache,
+        true,
         &mut font_metrics_svc,
         'A',
         1,
@@ -3640,6 +3641,7 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
 
     let bold_width = char_advance(
         &mut ascii_width_cache,
+        true,
         &mut font_metrics_svc,
         'A',
         1,
@@ -3662,6 +3664,7 @@ fn char_advance_ascii_cache_distinguishes_semantic_font_identity() {
 
     let repeated_regular_width = char_advance(
         &mut ascii_width_cache,
+        true,
         &mut font_metrics_svc,
         'A',
         1,
