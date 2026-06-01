@@ -2976,9 +2976,10 @@ impl LayoutEngine {
         let char_w = params.char_width;
         let char_h = params.char_height;
         let font_ascent = params.font_ascent;
+        let minibuffer_active = evaluator.minibuffer_is_active();
         let echo_message = minibuffer_echo_message_for_window(
             params.is_minibuffer,
-            evaluator.minibuffer_is_active(),
+            minibuffer_active,
             evaluator.current_message_text(),
         );
 
@@ -3458,6 +3459,34 @@ impl LayoutEngine {
                 self.matrix_builder.install_current_row_glyphs(glyphs);
                 self.matrix_builder.end_row();
             }
+            self.matrix_builder.end_window();
+            return;
+        }
+
+        if params.is_minibuffer && !minibuffer_active {
+            // GNU `display_echo_area` temporarily displays an echo-area
+            // buffer in the minibuffer window.  With no current message that
+            // buffer is empty; the inactive minibuffer must not redisplay the
+            // ordinary buffer attached to the window record.
+            let cols = (text_width / char_w).ceil().max(1.0) as usize;
+            self.matrix_builder.begin_window_with_text_bounds(
+                params.window_id as u64,
+                1,
+                cols,
+                params.bounds,
+                params.text_bounds,
+                params.selected,
+            );
+            self.matrix_builder.begin_row(
+                0,
+                neomacs_display_protocol::frame_glyphs::GlyphRowRole::Minibuffer,
+            );
+            self.matrix_builder.set_current_row_metrics(
+                params.bounds.y,
+                char_h,
+                default_face_ascent,
+            );
+            self.matrix_builder.end_row();
             self.matrix_builder.end_window();
             return;
         }

@@ -520,6 +520,12 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
     let frame_id = eval
         .frame_manager_mut()
         .create_frame("layout-face-advance", 800, 160, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -551,7 +557,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
                 .get(frame_id)
                 .expect("frame")
                 .font_pixel_size,
-            None,
+            Some("neo".to_string()),
         );
         let mut next_check = buffer.point_max_char();
         let resolved = face_resolver.face_at_pos(buffer, 0, &mut next_check);
