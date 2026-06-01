@@ -21,7 +21,11 @@ use super::hook_runtime;
 use super::intern::intern;
 use super::value::*;
 use crate::buffer::{Buffer, BufferId, TextPropertyTable};
-use crate::window::{DisplayPointSnapshot, FrameId, FrameManager, Window, WindowId};
+use crate::window::{
+    DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
+    WindowId,
+};
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -149,13 +153,25 @@ fn trim_window_text_to_non_empty_line_end(bytes: &[u8]) -> &[u8] {
     &bytes[..end]
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum WindowLineSelector {
+    ModeLine,
+    HeaderLine,
+    TabLine,
+}
+
+impl WindowLineSelector {
+    fn from_lisp_value(value: Value) -> Option<Self> {
+        value.as_symbol_name().and_then(|name| name.parse().ok())
+    }
+}
+
 fn window_text_pixel_size_includes_mode_line(mode_lines: Option<&Value>) -> bool {
     mode_lines.is_some_and(|mode| {
         mode.is_t()
             || mode.is_symbol_named("t")
-            || mode.is_symbol_named("mode-line")
-            || mode.is_symbol_named("header-line")
-            || mode.is_symbol_named("tab-line")
+            || WindowLineSelector::from_lisp_value(*mode).is_some()
     })
 }
 
@@ -2740,14 +2756,16 @@ fn window_line_height_impl(
         if let Some(frame) = frames.get(fid) {
             if let Some(snapshot) = frame.window_display_snapshot(wid) {
                 let line_spec = args.first().copied().unwrap_or(Value::NIL);
-                let exact_row = if line_spec.is_nil() {
-                    resolve_exact_visible_metrics(frames, buffers, args.get(1), None)?
-                        .and_then(|(_, metrics)| snapshot.row_metrics(metrics.row))
-                } else if line_spec.is_symbol_named("mode-line")
-                    || line_spec.is_symbol_named("header-line")
-                    || line_spec.is_symbol_named("tab-line")
-                {
-                    None
+                let metrics = if line_spec.is_nil() {
+                    resolve_exact_visible_metrics(frames, buffers, args.get(1), None)?.and_then(
+                        |(_, metrics)| {
+                            snapshot
+                                .row_metrics(metrics.row)
+                                .map(|row| snapshot_text_row_line_metrics(snapshot, row))
+                        },
+                    )
+                } else if let Some(selector) = WindowLineSelector::from_lisp_value(line_spec) {
+                    snapshot_chrome_line_metrics(snapshot, selector)
                 } else {
                     let line_num = match line_spec.kind() {
                         ValueKind::Fixnum(n) => n,
@@ -2758,21 +2776,17 @@ fn window_line_height_impl(
                             ));
                         }
                     };
-                    let row = if line_num < 0 {
-                        snapshot.rows.len() as i64 + line_num
-                    } else {
-                        line_num
-                    };
-                    snapshot.row_metrics(row)
+                    snapshot_text_line_metrics(snapshot, line_num)
                 };
-                if let Some(row) = exact_row {
+                if let Some(metrics) = metrics {
                     return Ok(Value::list(vec![
-                        Value::fixnum(row.height),
-                        Value::fixnum(row.row),
-                        Value::fixnum(row.y),
-                        Value::fixnum(0),
+                        Value::fixnum(metrics.height),
+                        Value::fixnum(metrics.vpos),
+                        Value::fixnum(metrics.ypos),
+                        Value::fixnum(metrics.offbot),
                     ]));
                 }
+                return Ok(Value::NIL);
             }
         }
     }
@@ -2785,19 +2799,16 @@ fn window_line_height_impl(
         let current_pos = current_window_point_lisp(&ctx);
         approximate_pos_visible_metrics(&ctx, current_pos)
             .map(ApproxVisibleMetrics::as_window_line_height)
-    } else if line_spec.is_symbol_named("mode-line") {
-        if ctx.is_minibuffer {
-            None
-        } else {
-            Some(WindowLineMetrics {
+    } else if let Some(selector) = WindowLineSelector::from_lisp_value(line_spec) {
+        match selector {
+            WindowLineSelector::ModeLine if !ctx.is_minibuffer => Some(WindowLineMetrics {
                 height: ctx.char_height,
                 vpos: 0,
                 ypos: ctx.body_height,
                 offbot: 0,
-            })
+            }),
+            _ => None,
         }
-    } else if line_spec.is_symbol_named("header-line") || line_spec.is_symbol_named("tab-line") {
-        None
     } else {
         let line_num = match line_spec.kind() {
             ValueKind::Fixnum(n) => n,
@@ -3365,6 +3376,103 @@ struct WindowLineMetrics {
     vpos: i64,
     ypos: i64,
     offbot: i64,
+}
+
+fn snapshot_top_chrome_rows(snapshot: &WindowDisplaySnapshot) -> i64 {
+    i64::from(snapshot.tab_line_height > 0) + i64::from(snapshot.header_line_height > 0)
+}
+
+fn snapshot_top_chrome_height(snapshot: &WindowDisplaySnapshot) -> i64 {
+    snapshot.tab_line_height.max(0) + snapshot.header_line_height.max(0)
+}
+
+fn snapshot_tab_line_row(snapshot: &WindowDisplaySnapshot) -> Option<&DisplayRowSnapshot> {
+    (snapshot.tab_line_height > 0)
+        .then(|| snapshot.row_metrics(0))
+        .flatten()
+}
+
+fn snapshot_header_line_row(snapshot: &WindowDisplaySnapshot) -> Option<&DisplayRowSnapshot> {
+    if snapshot.header_line_height <= 0 {
+        return None;
+    }
+    let row = i64::from(snapshot.tab_line_height > 0);
+    snapshot.row_metrics(row)
+}
+
+fn snapshot_mode_line_row(snapshot: &WindowDisplaySnapshot) -> Option<&DisplayRowSnapshot> {
+    if snapshot.mode_line_height <= 0 {
+        return None;
+    }
+    snapshot.rows.iter().max_by_key(|row| row.row)
+}
+
+fn snapshot_chrome_line_metrics(
+    snapshot: &WindowDisplaySnapshot,
+    selector: WindowLineSelector,
+) -> Option<WindowLineMetrics> {
+    let row = match selector {
+        WindowLineSelector::TabLine => snapshot_tab_line_row(snapshot)?,
+        WindowLineSelector::HeaderLine => snapshot_header_line_row(snapshot)?,
+        WindowLineSelector::ModeLine => snapshot_mode_line_row(snapshot)?,
+    };
+    Some(match selector {
+        WindowLineSelector::TabLine | WindowLineSelector::HeaderLine => WindowLineMetrics {
+            height: row.height,
+            vpos: 0,
+            ypos: 0,
+            offbot: 0,
+        },
+        WindowLineSelector::ModeLine => WindowLineMetrics {
+            height: row.height,
+            vpos: 0,
+            ypos: row.y,
+            offbot: 0,
+        },
+    })
+}
+
+fn snapshot_text_rows(snapshot: &WindowDisplaySnapshot) -> Vec<&DisplayRowSnapshot> {
+    let top_chrome_rows = snapshot_top_chrome_rows(snapshot);
+    let mode_row = snapshot_mode_line_row(snapshot).map(|row| row.row);
+    let mut rows = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.row >= top_chrome_rows && Some(row.row) != mode_row)
+        .collect::<Vec<_>>();
+    rows.sort_by_key(|row| row.row);
+    rows
+}
+
+fn snapshot_text_row_line_metrics(
+    snapshot: &WindowDisplaySnapshot,
+    row: &DisplayRowSnapshot,
+) -> WindowLineMetrics {
+    let top_chrome_rows = snapshot_top_chrome_rows(snapshot);
+    let top_chrome_height = snapshot_top_chrome_height(snapshot);
+    WindowLineMetrics {
+        height: row.height,
+        vpos: row.row - top_chrome_rows,
+        ypos: row.y - top_chrome_height,
+        offbot: 0,
+    }
+}
+
+fn snapshot_text_line_metrics(
+    snapshot: &WindowDisplaySnapshot,
+    line_num: i64,
+) -> Option<WindowLineMetrics> {
+    let rows = snapshot_text_rows(snapshot);
+    let idx = if line_num < 0 {
+        rows.len() as i64 + line_num
+    } else {
+        line_num
+    };
+    if idx < 0 {
+        return None;
+    }
+    rows.get(idx as usize)
+        .map(|row| snapshot_text_row_line_metrics(snapshot, row))
 }
 
 impl ApproxVisibleMetrics {

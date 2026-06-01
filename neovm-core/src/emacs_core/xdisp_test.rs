@@ -1693,6 +1693,182 @@ fn test_window_line_height_eval_returns_live_gui_row_metrics() {
 }
 
 #[test]
+fn test_window_line_height_eval_uses_exact_chrome_rows() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-line-height-chrome", 160, 80, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            tab_line_height: 5,
+            header_line_height: 7,
+            mode_line_height: 9,
+            rows: vec![
+                crate::window::DisplayRowSnapshot {
+                    row: 0,
+                    y: 0,
+                    height: 5,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: None,
+                    end_buffer_pos: None,
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 5,
+                    height: 7,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: None,
+                    end_buffer_pos: None,
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 2,
+                    y: 12,
+                    height: 11,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: Some(1),
+                    end_buffer_pos: Some(3),
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 3,
+                    y: 23,
+                    height: 9,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: None,
+                    end_buffer_pos: None,
+                },
+            ],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let tab = builtin_window_line_height(
+        &mut eval,
+        vec![
+            Value::symbol("tab-line"),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .unwrap();
+    let header = builtin_window_line_height(
+        &mut eval,
+        vec![
+            Value::symbol("header-line"),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .unwrap();
+    let mode = builtin_window_line_height(
+        &mut eval,
+        vec![
+            Value::symbol("mode-line"),
+            Value::make_window(selected_window.0),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(super::super::print::print_value(&tab), "(5 0 0 0)");
+    assert_eq!(super::super::print::print_value(&header), "(7 0 0 0)");
+    assert_eq!(super::super::print::print_value(&mode), "(9 0 23 0)");
+}
+
+#[test]
+fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-line-height-text-origin", 160, 80, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            tab_line_height: 5,
+            header_line_height: 7,
+            rows: vec![
+                crate::window::DisplayRowSnapshot {
+                    row: 0,
+                    y: 0,
+                    height: 5,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: None,
+                    end_buffer_pos: None,
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 5,
+                    height: 7,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: None,
+                    end_buffer_pos: None,
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 2,
+                    y: 12,
+                    height: 11,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: Some(1),
+                    end_buffer_pos: Some(3),
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 3,
+                    y: 23,
+                    height: 13,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 20,
+                    end_col: 2,
+                    start_buffer_pos: Some(4),
+                    end_buffer_pos: Some(6),
+                },
+            ],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let first = builtin_window_line_height(
+        &mut eval,
+        vec![Value::fixnum(0), Value::make_window(selected_window.0)],
+    )
+    .unwrap();
+    let last = builtin_window_line_height(
+        &mut eval,
+        vec![Value::fixnum(-1), Value::make_window(selected_window.0)],
+    )
+    .unwrap();
+
+    assert_eq!(super::super::print::print_value(&first), "(11 0 0 0)");
+    assert_eq!(super::super::print::print_value(&last), "(13 1 11 0)");
+}
+
+#[test]
 fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
