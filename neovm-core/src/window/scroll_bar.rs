@@ -1,15 +1,32 @@
 use crate::emacs_core::value::Value;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
 
 /// GNU vertical scroll-bar type symbols accepted by window and frame code.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+///
+/// Mirrors concrete values from GNU `enum vertical_scroll_bar_type`:
+/// `none = 0`, `left = 1`, `right = 2`.  `none` is represented by
+/// `Option<VerticalScrollBarType>::None` in Neomacs because there is no Lisp
+/// symbol for the disabled state.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
+#[repr(u8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum VerticalScrollBarType {
-    Left,
-    Right,
+    Left = 1,
+    Right = 2,
 }
 
 impl VerticalScrollBarType {
+    pub fn from_gnu_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u8 {
+        self.into()
+    }
+
     pub fn from_symbol_name(name: &str) -> Option<Self> {
         name.parse().ok()
     }
@@ -79,6 +96,18 @@ mod tests {
             Some(VerticalScrollBarType::Right)
         );
         assert_eq!(VerticalScrollBarType::from_symbol_name("bottom"), None);
+        assert_eq!(VerticalScrollBarType::Left.gnu_code(), 1);
+        assert_eq!(VerticalScrollBarType::Right.gnu_code(), 2);
+        assert_eq!(VerticalScrollBarType::from_gnu_code(0), None);
+        assert_eq!(
+            VerticalScrollBarType::from_gnu_code(1),
+            Some(VerticalScrollBarType::Left)
+        );
+        assert_eq!(
+            VerticalScrollBarType::from_gnu_code(2),
+            Some(VerticalScrollBarType::Right)
+        );
+        assert_eq!(VerticalScrollBarType::from_gnu_code(3), None);
         assert!(is_valid_vertical_scroll_bar_value(Value::NIL));
         assert!(is_valid_vertical_scroll_bar_value(Value::T));
         assert!(!is_valid_vertical_scroll_bar_value(Value::symbol("bottom")));
