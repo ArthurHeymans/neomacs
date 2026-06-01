@@ -118,6 +118,60 @@ impl ProcessStatusSymbol {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+enum ProcessKeyword {
+    Name,
+    Type,
+    Buffer,
+    Command,
+    Coding,
+    Noquery,
+    Stop,
+    ConnectionType,
+    Filter,
+    Sentinel,
+    Stderr,
+    FileHandler,
+    Host,
+    Service,
+    Family,
+    Local,
+    Remote,
+    Server,
+    Nowait,
+    Log,
+    TlsParameters,
+    UseExternalSocket,
+    Plist,
+    Port,
+    Speed,
+    Process,
+    Bytesize,
+    Stopbits,
+    Parity,
+    Flowcontrol,
+    Summary,
+}
+
+impl ProcessKeyword {
+    fn keyword(self) -> &'static str {
+        self.into()
+    }
+
+    fn value(self) -> Value {
+        Value::keyword(self.keyword())
+    }
+
+    fn from_keyword(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    fn from_value(value: &Value) -> Option<Self> {
+        Self::from_keyword(keyword_name(value)?)
+    }
+}
+
 /// A tracked process record.
 pub struct Process {
     pub id: ProcessId,
@@ -636,7 +690,7 @@ fn process_contact_plist_put(contact: Value, key: Value, value: Value) -> EvalRe
 }
 
 fn process_contact_server_p(proc: &Process) -> bool {
-    process_contact_plist_get(proc.childp, Value::keyword(":server")).is_truthy()
+    process_contact_plist_get(proc.childp, ProcessKeyword::Server.value()).is_truthy()
 }
 
 impl ProcessManager {
@@ -4255,36 +4309,36 @@ pub(crate) fn builtin_make_network_process(
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        let Some(key_name) = keyword_name(key) else {
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
             i += 1;
             continue;
         };
-        match key_name {
-            ":name" => name = Some(expect_process_name_lisp_string(&value)?),
-            ":host" => {
+        match keyword {
+            ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
+            ProcessKeyword::Host => {
                 if !value.is_nil() {
                     host = Some(expect_string(&value)?);
                 }
             }
-            ":service" => service = Some(value),
-            ":server" => server = value.is_truthy(),
-            ":family" => {
+            ProcessKeyword::Service => service = Some(value),
+            ProcessKeyword::Server => server = value.is_truthy(),
+            ProcessKeyword::Family => {
                 if !value.is_nil() {
                     _family = value.as_symbol_name().map(|s| s.to_string());
                 }
             }
-            ":type" => {
+            ProcessKeyword::Type => {
                 if !value.is_nil() {
                     _type_kw = value.as_symbol_name().map(|s| s.to_string());
                 }
             }
-            ":nowait" => _nowait = value.is_truthy(),
-            ":filter" => filter_val = value,
-            ":sentinel" => sentinel_val = value,
-            ":log" => log_val = value,
-            ":buffer" => buffer_val = value,
-            ":coding" => _coding_val = value,
-            ":noquery" => noquery = value.is_truthy(),
+            ProcessKeyword::Nowait => _nowait = value.is_truthy(),
+            ProcessKeyword::Filter => filter_val = value,
+            ProcessKeyword::Sentinel => sentinel_val = value,
+            ProcessKeyword::Log => log_val = value,
+            ProcessKeyword::Buffer => buffer_val = value,
+            ProcessKeyword::Coding => _coding_val = value,
+            ProcessKeyword::Noquery => noquery = value.is_truthy(),
             _ => {}
         }
         i += 2;
@@ -4329,37 +4383,40 @@ pub(crate) fn builtin_make_network_process(
         ]);
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.childp = Value::list(vec![
-                Value::keyword(":name"),
+                ProcessKeyword::Name.value(),
                 proc.name,
-                Value::keyword(":server"),
+                ProcessKeyword::Server.value(),
                 Value::T,
-                Value::keyword(":service"),
+                ProcessKeyword::Service.value(),
                 Value::fixnum(port),
-                Value::keyword(":local"),
+                ProcessKeyword::Local.value(),
                 local,
             ]);
             proc.thread = current_thread_handle(&eval.threads);
             if !filter_val.is_nil() {
                 proc.filter = filter_val;
-                proc.childp =
-                    process_contact_plist_put(proc.childp, Value::keyword(":filter"), proc.filter)?;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Filter.value(),
+                    proc.filter,
+                )?;
             }
             if !sentinel_val.is_nil() {
                 proc.sentinel = sentinel_val;
                 proc.childp = process_contact_plist_put(
                     proc.childp,
-                    Value::keyword(":sentinel"),
+                    ProcessKeyword::Sentinel.value(),
                     proc.sentinel,
                 )?;
             }
             if !log_val.is_nil() {
                 proc.log = log_val;
                 proc.childp =
-                    process_contact_plist_put(proc.childp, Value::keyword(":log"), proc.log)?;
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Log.value(), proc.log)?;
             }
             if !buffer.is_nil() {
                 proc.childp =
-                    process_contact_plist_put(proc.childp, Value::keyword(":buffer"), buffer)?;
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
             }
             if noquery {
                 proc.query_on_exit_flag = false;
@@ -4412,29 +4469,35 @@ pub(crate) fn builtin_make_network_process(
         proc.socket = Some(stream);
         proc.status = process_status_run_value();
         proc.childp = Value::list(vec![
-            Value::keyword(":name"),
+            ProcessKeyword::Name.value(),
             proc.name,
-            Value::keyword(":host"),
+            ProcessKeyword::Host.value(),
             Value::heap_string(super::builtins::runtime_string_to_lisp_string(
                 &host_str, true,
             )),
-            Value::keyword(":service"),
+            ProcessKeyword::Service.value(),
             service,
         ]);
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;
-            proc.childp =
-                process_contact_plist_put(proc.childp, Value::keyword(":filter"), proc.filter)?;
+            proc.childp = process_contact_plist_put(
+                proc.childp,
+                ProcessKeyword::Filter.value(),
+                proc.filter,
+            )?;
         }
         if !sentinel_val.is_nil() {
             proc.sentinel = sentinel_val;
-            proc.childp =
-                process_contact_plist_put(proc.childp, Value::keyword(":sentinel"), proc.sentinel)?;
+            proc.childp = process_contact_plist_put(
+                proc.childp,
+                ProcessKeyword::Sentinel.value(),
+                proc.sentinel,
+            )?;
         }
         if !buffer.is_nil() {
             proc.childp =
-                process_contact_plist_put(proc.childp, Value::keyword(":buffer"), buffer)?;
+                process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
         }
         if noquery {
             proc.query_on_exit_flag = false;
@@ -4480,15 +4543,15 @@ pub(crate) fn builtin_make_pipe_process_impl(
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        let Some(key_name) = keyword_name(key) else {
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
             i += 1;
             continue;
         };
-        match key_name {
-            ":name" => {
+        match keyword {
+            ProcessKeyword::Name => {
                 name = Some(expect_process_name_lisp_string(&value)?);
             }
-            ":buffer" => {
+            ProcessKeyword::Buffer => {
                 buffer = Some(parse_make_process_buffer_in_state(buffers, &value)?);
             }
             _ => {}
@@ -4523,9 +4586,12 @@ pub(crate) fn builtin_make_pipe_process_impl(
     );
     processes.sync_process_mark(buffers, id)?;
     if let Some(proc) = processes.get_mut(id) {
-        proc.childp = Value::list(vec![Value::keyword(":name"), proc.name]);
-        proc.childp =
-            process_contact_plist_put(proc.childp, Value::keyword(":buffer"), resolved_buffer)?;
+        proc.childp = Value::list(vec![ProcessKeyword::Name.value(), proc.name]);
+        proc.childp = process_contact_plist_put(
+            proc.childp,
+            ProcessKeyword::Buffer.value(),
+            resolved_buffer,
+        )?;
         proc.thread = current_thread_handle(threads);
     }
     Ok(Value::fixnum(id as i64))
@@ -4555,22 +4621,22 @@ pub(crate) fn builtin_make_serial_process_impl(
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        let Some(key_name) = keyword_name(key) else {
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
             i += 1;
             continue;
         };
-        match key_name {
-            ":name" => {
+        match keyword {
+            ProcessKeyword::Name => {
                 name = Some(expect_process_name_lisp_string(&value)?);
             }
-            ":port" => {
+            ProcessKeyword::Port => {
                 if value.is_nil() {
                     port = None;
                 } else {
                     port = Some(expect_string_strict(&value)?);
                 }
             }
-            ":speed" => {
+            ProcessKeyword::Speed => {
                 speed = Some(value);
             }
             _ => {}
@@ -4598,11 +4664,11 @@ pub(crate) fn builtin_make_serial_process_impl(
             true,
         ));
         proc.childp = Value::list(vec![
-            Value::keyword(":name"),
+            ProcessKeyword::Name.value(),
             proc.name,
-            Value::keyword(":port"),
+            ProcessKeyword::Port.value(),
             port_value,
-            Value::keyword(":speed"),
+            ProcessKeyword::Speed.value(),
             speed.unwrap(),
         ]);
     }
@@ -4626,13 +4692,13 @@ pub(crate) fn builtin_serial_process_configure_impl(
     let mut i = 0usize;
     while i < args.len() {
         let key = &args[i];
-        let Some(key_name) = keyword_name(key) else {
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
             i += 1;
             continue;
         };
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        match key_name {
-            ":process" => {
+        match keyword {
+            ProcessKeyword::Process => {
                 if value.is_nil() {
                     process_id = None;
                 } else {
@@ -4641,7 +4707,7 @@ pub(crate) fn builtin_serial_process_configure_impl(
                     )?);
                 }
             }
-            ":name" => match value.kind() {
+            ProcessKeyword::Name => match value.kind() {
                 ValueKind::String => {
                     let name_str = process_owned_runtime_string(value);
                     process_id = Some(
@@ -5450,18 +5516,16 @@ fn builtin_make_process_impl_with_environment(
     while i < args.len() {
         let key = &args[i];
         let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        let key_name = match key.kind() {
-            ValueKind::Symbol(k) => Some(resolve_sym(k)),
-            _ => None,
-        };
-        match key_name {
-            Some(":name") => name = Some(expect_process_name_lisp_string(&value)?),
-            Some(":buffer") => buffer = Some(parse_make_process_buffer_in_state(buffers, &value)?),
-            Some(":command") => command = Some(parse_make_process_command(&value)?),
-            Some(":filter") => filter = value,
-            Some(":sentinel") => sentinel = value,
-            Some(":connection-type") => connection_type = Some(value),
-            Some(":stderr") => stderr_target = value,
+        match ProcessKeyword::from_value(key) {
+            Some(ProcessKeyword::Name) => name = Some(expect_process_name_lisp_string(&value)?),
+            Some(ProcessKeyword::Buffer) => {
+                buffer = Some(parse_make_process_buffer_in_state(buffers, &value)?)
+            }
+            Some(ProcessKeyword::Command) => command = Some(parse_make_process_command(&value)?),
+            Some(ProcessKeyword::Filter) => filter = value,
+            Some(ProcessKeyword::Sentinel) => sentinel = value,
+            Some(ProcessKeyword::ConnectionType) => connection_type = Some(value),
+            Some(ProcessKeyword::Stderr) => stderr_target = value,
             _ => {} // :coding, :noquery, :stop — ignored for now
         }
         i += 2;
@@ -5514,9 +5578,9 @@ fn builtin_make_process_impl_with_environment(
             buffers,
             threads,
             vec![
-                Value::keyword(":name"),
+                ProcessKeyword::Name.value(),
                 Value::heap_string(name.concat(&LispString::from_unibyte(b" stderr".to_vec()))),
-                Value::keyword(":buffer"),
+                ProcessKeyword::Buffer.value(),
                 stderr_target,
             ],
         )?,
@@ -5929,7 +5993,8 @@ pub(crate) fn builtin_set_process_buffer_impl(
         update_process_mark(buffers, proc)?;
     }
     if process_uses_contact_plist(proc) {
-        proc.childp = process_contact_plist_put(proc.childp, Value::keyword(":buffer"), args[1])?;
+        proc.childp =
+            process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), args[1])?;
     }
     Ok(args[1])
 }
@@ -6710,8 +6775,8 @@ pub(crate) fn builtin_process_contact_impl(
                 Ok(contact)
             } else if key.is_nil() {
                 Ok(Value::list(vec![
-                    process_contact_plist_get(contact, Value::keyword(":host")),
-                    process_contact_plist_get(contact, Value::keyword(":service")),
+                    process_contact_plist_get(contact, ProcessKeyword::Host.value()),
+                    process_contact_plist_get(contact, ProcessKeyword::Service.value()),
                 ]))
             } else {
                 Ok(process_contact_plist_get(contact, key))
@@ -6722,8 +6787,8 @@ pub(crate) fn builtin_process_contact_impl(
                 Ok(contact)
             } else if key.is_nil() {
                 Ok(Value::list(vec![
-                    process_contact_plist_get(contact, Value::keyword(":port")),
-                    process_contact_plist_get(contact, Value::keyword(":speed")),
+                    process_contact_plist_get(contact, ProcessKeyword::Port.value()),
+                    process_contact_plist_get(contact, ProcessKeyword::Speed.value()),
                 ]))
             } else {
                 Ok(process_contact_plist_get(contact, key))
@@ -6792,7 +6857,8 @@ pub(crate) fn builtin_set_process_filter_impl(
     })?;
     proc.filter = stored;
     if process_uses_contact_plist(proc) {
-        proc.childp = process_contact_plist_put(proc.childp, Value::keyword(":filter"), stored)?;
+        proc.childp =
+            process_contact_plist_put(proc.childp, ProcessKeyword::Filter.value(), stored)?;
     }
     Ok(stored)
 }
@@ -6847,7 +6913,8 @@ pub(crate) fn builtin_set_process_sentinel_impl(
     })?;
     proc.sentinel = stored;
     if process_uses_contact_plist(proc) {
-        proc.childp = process_contact_plist_put(proc.childp, Value::keyword(":sentinel"), stored)?;
+        proc.childp =
+            process_contact_plist_put(proc.childp, ProcessKeyword::Sentinel.value(), stored)?;
     }
     Ok(stored)
 }

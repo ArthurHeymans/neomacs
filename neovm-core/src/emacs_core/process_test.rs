@@ -38,6 +38,48 @@ fn process_finite_domains_match_gnu_symbols() {
     assert_eq!(ProcessKind::Pipe.name(), "pipe");
     assert_eq!(ProcessKind::Serial.name(), "serial");
 
+    for (keyword, parsed) in [
+        (":name", ProcessKeyword::Name),
+        (":type", ProcessKeyword::Type),
+        (":buffer", ProcessKeyword::Buffer),
+        (":command", ProcessKeyword::Command),
+        (":coding", ProcessKeyword::Coding),
+        (":noquery", ProcessKeyword::Noquery),
+        (":stop", ProcessKeyword::Stop),
+        (":connection-type", ProcessKeyword::ConnectionType),
+        (":filter", ProcessKeyword::Filter),
+        (":sentinel", ProcessKeyword::Sentinel),
+        (":stderr", ProcessKeyword::Stderr),
+        (":file-handler", ProcessKeyword::FileHandler),
+        (":host", ProcessKeyword::Host),
+        (":service", ProcessKeyword::Service),
+        (":family", ProcessKeyword::Family),
+        (":local", ProcessKeyword::Local),
+        (":remote", ProcessKeyword::Remote),
+        (":server", ProcessKeyword::Server),
+        (":nowait", ProcessKeyword::Nowait),
+        (":log", ProcessKeyword::Log),
+        (":tls-parameters", ProcessKeyword::TlsParameters),
+        (":use-external-socket", ProcessKeyword::UseExternalSocket),
+        (":plist", ProcessKeyword::Plist),
+        (":port", ProcessKeyword::Port),
+        (":speed", ProcessKeyword::Speed),
+        (":process", ProcessKeyword::Process),
+        (":bytesize", ProcessKeyword::Bytesize),
+        (":stopbits", ProcessKeyword::Stopbits),
+        (":parity", ProcessKeyword::Parity),
+        (":flowcontrol", ProcessKeyword::Flowcontrol),
+        (":summary", ProcessKeyword::Summary),
+    ] {
+        assert_eq!(ProcessKeyword::from_keyword(keyword), Some(parsed));
+        assert_eq!(parsed.keyword(), keyword);
+        assert_eq!(
+            ProcessKeyword::from_value(&Value::keyword(keyword)),
+            Some(parsed)
+        );
+    }
+    assert_eq!(ProcessKeyword::from_keyword("name"), None);
+
     let status_names: Vec<&str> = ProcessStatusSymbol::gnu_public_domain()
         .iter()
         .map(|status| status.name())
