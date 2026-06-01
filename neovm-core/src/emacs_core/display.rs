@@ -13,6 +13,7 @@ use super::terminal::pure::{
 use super::value::*;
 use super::{Context, PopupMenuEntry, PopupMenuRequest};
 use crate::window::{FrameId, WindowId};
+use strum::{EnumString, IntoStaticStr};
 
 /// Clear cached thread-local display values (must be called when heap changes).
 pub fn reset_display_thread_locals() {
@@ -1226,6 +1227,25 @@ enum MenuBarNavigationDirection {
     Right,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum TtyMenuNavigationCommand {
+    TtyMenuNextItem,
+    TtyMenuPrevItem,
+    TtyMenuNextMenu,
+    TtyMenuPrevMenu,
+    TtyMenuSelect,
+    TtyMenuExit,
+    KeyboardQuit,
+    KeyboardEscapeQuit,
+}
+
+impl TtyMenuNavigationCommand {
+    fn from_symbol_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+}
+
 fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
     let Some((entries, events)) = popup_menu_from_keymap(menu) else {
         return Ok(Value::NIL);
@@ -1302,35 +1322,42 @@ fn x_popup_menu_interactive_loop(
             return Ok(events.get(index as usize).copied().unwrap_or(Value::NIL));
         }
 
-        match binding.as_symbol_name() {
-            Some("tty-menu-next-item") => {
+        match binding
+            .as_symbol_name()
+            .and_then(TtyMenuNavigationCommand::from_symbol_name)
+        {
+            Some(TtyMenuNavigationCommand::TtyMenuNextItem) => {
                 *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
                 show_popup_menu_selection(ctx, x, y, entries, *selected)?;
             }
-            Some("tty-menu-prev-item") => {
+            Some(TtyMenuNavigationCommand::TtyMenuPrevItem) => {
                 *selected = (*selected).saturating_sub(1);
                 show_popup_menu_selection(ctx, x, y, entries, *selected)?;
             }
-            Some("tty-menu-next-menu") => {
+            Some(TtyMenuNavigationCommand::TtyMenuNextMenu) => {
                 if let Some(new_position) =
                     menu_bar_navigation_position(ctx, position, MenuBarNavigationDirection::Right)
                 {
                     return Ok(new_position);
                 }
             }
-            Some("tty-menu-prev-menu") => {
+            Some(TtyMenuNavigationCommand::TtyMenuPrevMenu) => {
                 if let Some(new_position) =
                     menu_bar_navigation_position(ctx, position, MenuBarNavigationDirection::Left)
                 {
                     return Ok(new_position);
                 }
             }
-            Some("tty-menu-select") => {
+            Some(TtyMenuNavigationCommand::TtyMenuSelect) => {
                 if popup_menu_entry_selectable(entries, *selected) {
                     return Ok(events.get(*selected).copied().unwrap_or(Value::NIL));
                 }
             }
-            Some("tty-menu-exit") | Some("keyboard-quit") | Some("keyboard-escape-quit") => {
+            Some(
+                TtyMenuNavigationCommand::TtyMenuExit
+                | TtyMenuNavigationCommand::KeyboardQuit
+                | TtyMenuNavigationCommand::KeyboardEscapeQuit,
+            ) => {
                 return Ok(Value::NIL);
             }
             _ => {}

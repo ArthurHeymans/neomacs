@@ -924,6 +924,50 @@ fn eval_x_close_connection_live_frame_uses_window_system_error() {
 }
 
 #[test]
+fn tty_menu_navigation_command_domain_matches_gnu_symbols() {
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-next-item"),
+        Some(TtyMenuNavigationCommand::TtyMenuNextItem)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-prev-item"),
+        Some(TtyMenuNavigationCommand::TtyMenuPrevItem)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-next-menu"),
+        Some(TtyMenuNavigationCommand::TtyMenuNextMenu)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-prev-menu"),
+        Some(TtyMenuNavigationCommand::TtyMenuPrevMenu)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-select"),
+        Some(TtyMenuNavigationCommand::TtyMenuSelect)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("tty-menu-exit"),
+        Some(TtyMenuNavigationCommand::TtyMenuExit)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("keyboard-quit"),
+        Some(TtyMenuNavigationCommand::KeyboardQuit)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("keyboard-escape-quit"),
+        Some(TtyMenuNavigationCommand::KeyboardEscapeQuit)
+    );
+    assert_eq!(
+        TtyMenuNavigationCommand::from_symbol_name("menu-bar-open"),
+        None
+    );
+    assert_eq!(
+        <&'static str>::from(TtyMenuNavigationCommand::TtyMenuNextItem),
+        "tty-menu-next-item"
+    );
+}
+
+#[test]
 fn x_display_pixel_size_errors_match_batch_shapes() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
