@@ -82,6 +82,7 @@ fn test_window_params() -> WindowParams {
         default_bg: 0x000000,
         char_width: 8.0,
         char_height: 16.0,
+        window_system: true,
         font_pixel_size: 14.0,
         font_ascent: 12.0,
         mode_line_height: 0.0,
@@ -223,6 +224,34 @@ fn enabled_window_row_texts(
                         text.chars().next()
                     }
                     _ => None,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn enabled_window_row_texts_expanding_stretches(
+    entry: &neomacs_display_protocol::glyph_matrix::WindowMatrixEntry,
+) -> Vec<String> {
+    entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled)
+        .map(|row| {
+            row.glyphs[1]
+                .iter()
+                .flat_map(|glyph| match &glyph.glyph_type {
+                    neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => {
+                        std::iter::repeat_n(*ch, 1).collect::<Vec<_>>()
+                    }
+                    neomacs_display_protocol::glyph_matrix::GlyphType::Composite { text } => {
+                        text.chars().collect::<Vec<_>>()
+                    }
+                    neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols } => {
+                        std::iter::repeat_n(' ', usize::from(*width_cols)).collect::<Vec<_>>()
+                    }
+                    _ => Vec::new(),
                 })
                 .collect()
         })
@@ -1857,6 +1886,182 @@ fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
         text.contains("C-f     ;; forward-char"),
         "right-window tab should expand relative to the right window text area, got {text:?}"
     );
+}
+
+#[test]
+fn layout_frame_rust_display_space_align_keeps_suffix_text_in_split_windows() {
+    let mut eval = Context::new();
+    let left_buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let right_buf_id = eval
+        .buffer_manager_mut()
+        .create_buffer("*right-display-space*");
+    let text = concat!(
+        "   m \tShow help for current major and minor modes and their commands\n",
+        "   b \tShow all key bindings\n",
+        "   k \tShow help for key\n",
+        "   c \tShow help for key briefly\n",
+        "   w \tShow which key runs a specific command\n"
+    );
+    {
+        let buf = eval
+            .buffer_manager_mut()
+            .get_mut(right_buf_id)
+            .expect("right buffer");
+        buf.insert(text);
+        for (byte_idx, ch) in text.char_indices() {
+            if ch == '\t' {
+                buf.text.text_props_put_property(
+                    byte_idx,
+                    byte_idx + 1,
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword(":align-to"),
+                        Value::fixnum(8),
+                    ]),
+                );
+            }
+        }
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-display-space-align-split",
+        800,
+        160,
+        left_buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            right_buf_id,
+            None,
+        )
+        .expect("split window");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let window_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == right_window.0)
+        .expect("right window matrix");
+    let rows = enabled_window_row_texts_expanding_stretches(window_entry);
+
+    assert!(
+        rows.iter()
+            .any(|row| row.contains("   c    Show help for key briefly")),
+        "display-space align-to should preserve suffix text after the stretch, rows={rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row.contains("   w    Show which key runs a specific command")),
+        "display-space align-to should not swallow following help rows, rows={rows:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_tty_display_space_align_stays_one_cell_high() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let text = concat!(
+        "   m \tShow help for current major and minor modes and their commands\n",
+        "   b \tShow all key bindings\n",
+        "   k \tShow help for key\n",
+        "   c \tShow help for key briefly\n",
+        "   w \tShow which key runs a specific command\n"
+    );
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        for (byte_idx, ch) in text.char_indices() {
+            if ch == '\t' {
+                buf.text.text_props_put_property(
+                    byte_idx,
+                    byte_idx + 1,
+                    Value::symbol("display"),
+                    Value::list(vec![
+                        Value::symbol("space"),
+                        Value::keyword(":align-to"),
+                        Value::fixnum(8),
+                    ]),
+                );
+            }
+        }
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-tty-display-space-align", 80, 25, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(None);
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 16.0;
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window
+        .0;
+    let window_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == window_id)
+        .expect("selected window matrix");
+    let rows = enabled_window_row_texts_expanding_stretches(window_entry);
+
+    assert!(
+        rows.iter()
+            .any(|row| row.contains("   w    Show which key runs a specific command")),
+        "TTY display-space align-to should not inflate rows and hide later Help entries, rows={rows:?}"
+    );
+
+    for row in window_entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text && row.total_glyphs() > 0)
+    {
+        assert_eq!(
+            row.height_px, 1.0,
+            "TTY display-space rows must stay one cell high: row={row:?}"
+        );
+        assert!(
+            row.ascent_px <= row.height_px,
+            "TTY row ascent must not exceed row height: row={row:?}"
+        );
+    }
 }
 
 #[test]

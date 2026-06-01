@@ -179,6 +179,8 @@ pub struct WindowParams {
     /// Character cell dimensions
     pub char_width: f32,
     pub char_height: f32,
+    /// Whether the containing frame is a real window-system frame.
+    pub window_system: bool,
     /// Font pixel size
     pub font_pixel_size: f32,
     /// Font ascent

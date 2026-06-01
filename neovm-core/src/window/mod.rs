@@ -1733,7 +1733,11 @@ impl Frame {
     /// Return the effective window-system symbol for this frame.
     pub fn effective_window_system(&self) -> Option<Value> {
         self.window_system
-            .or_else(|| self.parameter("window-system"))
+            .filter(|value| value.is_truthy())
+            .or_else(|| {
+                self.parameter("window-system")
+                    .filter(|value| value.is_truthy())
+            })
     }
 
     /// Update the frame's internal window-system kind and keep the Lisp-visible

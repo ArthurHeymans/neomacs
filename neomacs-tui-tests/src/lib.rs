@@ -89,7 +89,12 @@ impl TuiSession {
             // Prevent user config from interfering while also isolating
             // concurrent TUI tests from one another.
             .env("HOME", &home);
-        for var in ["RUST_LOG", "NEOMACS_LOG_FILE", "NEOMACS_LOG_TO_FILE"] {
+        for var in [
+            "RUST_LOG",
+            "NEOMACS_LOG_FILE",
+            "NEOMACS_LOG_TO_FILE",
+            "NEOMACS_DUMP_TTY_GLYPHS",
+        ] {
             if let Some(value) = std::env::var_os(var) {
                 command = command.env(var, value);
             }

@@ -326,6 +326,10 @@ impl TtyRif {
     ) {
         self.install_state_faces(state);
 
+        if std::env::var_os("NEOMACS_DUMP_TTY_GLYPHS").is_some() {
+            self.dump_frame_display_state_to_log(state, origin_col, origin_row);
+        }
+
         if clear_frame_rect {
             let attrs = CellAttrs {
                 bg: self.default_bg,
@@ -380,15 +384,12 @@ impl TtyRif {
                 let row_bounds = entry.row_pixel_bounds(glyph_row.role);
                 let row_col = origin_col + (row_bounds.x / char_w).round().max(0.0) as usize;
                 let row_base = origin_row + (row_bounds.y / char_h).round().max(0.0) as usize;
-                // Use the stored pixel_y (window-relative) when available,
-                // falling back to row_idx * char_h for rows without explicit
-                // metrics (matches materialize_grid_row in the GUI path).
-                let row_offset = if glyph_row.height_px > 0.0 {
-                    (glyph_row.pixel_y / char_h.max(1.0)).round() as usize
-                } else {
-                    row_idx
-                };
-                self.rasterize_glyph_row(row_col, row_base + row_offset, glyph_row);
+                // GNU keeps two coordinate domains in each glyph row:
+                // VPOS/HPOS are grid coordinates, while Y/X are pixel
+                // coordinates for GUI redisplay.  TTY output is written by
+                // matrix row index, so pixel_y/height_px must not stretch or
+                // skip terminal rows.
+                self.rasterize_glyph_row(row_col, row_base + row_idx, glyph_row);
             }
         }
 
@@ -919,4 +920,73 @@ impl TtyRif {
             );
         }
     }
+
+    fn dump_frame_display_state_to_log(
+        &self,
+        state: &FrameDisplayState,
+        origin_col: usize,
+        origin_row: usize,
+    ) {
+        tracing::info!(
+            target: "neomacs_display_protocol::tty_rif",
+            "tty matrix dump: frame={} origin=({}, {}) windows={}",
+            state.frame_id,
+            origin_col,
+            origin_row,
+            state.window_matrices.len()
+        );
+        for entry in &state.window_matrices {
+            tracing::info!(
+                target: "neomacs_display_protocol::tty_rif",
+                "tty matrix window={} selected={} bounds=({:.1},{:.1},{:.1},{:.1}) text_bounds=({:.1},{:.1},{:.1},{:.1}) rows={}",
+                entry.window_id,
+                entry.selected,
+                entry.pixel_bounds.x,
+                entry.pixel_bounds.y,
+                entry.pixel_bounds.width,
+                entry.pixel_bounds.height,
+                entry.text_pixel_bounds.x,
+                entry.text_pixel_bounds.y,
+                entry.text_pixel_bounds.width,
+                entry.text_pixel_bounds.height,
+                entry.matrix.rows.len()
+            );
+            for (row_idx, row) in entry.matrix.rows.iter().enumerate() {
+                if !row.enabled && row.total_glyphs() == 0 {
+                    continue;
+                }
+                tracing::info!(
+                    target: "neomacs_display_protocol::tty_rif",
+                    "tty matrix row window={} idx={} role={:?} enabled={} pixel_y={:.1} height={:.1} ascent={:.1} used=({},{},{}) text={:?}",
+                    entry.window_id,
+                    row_idx,
+                    row.role,
+                    row.enabled,
+                    row.pixel_y,
+                    row.height_px,
+                    row.ascent_px,
+                    row.used(GlyphArea::LeftMargin),
+                    row.used(GlyphArea::Text),
+                    row.used(GlyphArea::RightMargin),
+                    glyph_row_debug_text(row)
+                );
+            }
+        }
+    }
+}
+
+fn glyph_row_debug_text(row: &GlyphRow) -> String {
+    let mut text = String::new();
+    for area in &row.glyphs {
+        for glyph in area {
+            match &glyph.glyph_type {
+                GlyphType::Composite { text: cluster } => text.push_str(cluster),
+                GlyphType::Stretch { width_cols } => {
+                    text.extend(std::iter::repeat(' ').take(usize::from((*width_cols).max(1))));
+                }
+                _ => text.push(glyph_to_char(glyph)),
+            }
+        }
+    }
+    text
 }

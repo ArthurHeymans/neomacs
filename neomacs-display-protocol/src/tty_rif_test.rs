@@ -304,6 +304,37 @@ fn rasterize_respects_matrix_position() {
 }
 
 #[test]
+fn rasterize_uses_grid_rows_not_pixel_row_metrics() {
+    let mut state = FrameDisplayState::new(12, 5, 1.0, 1.0);
+    state.background = Color::rgb(0.0, 0.0, 0.0);
+
+    let mut matrix = GlyphMatrix::new(3, 12);
+    for (row_idx, ch) in ['A', 'B', 'C'].into_iter().enumerate() {
+        let mut row = GlyphRow::new(GlyphRowRole::Text);
+        row.pixel_y = row_idx as f32 * 13.0;
+        row.height_px = 13.0;
+        row.ascent_px = 10.0;
+        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, row_idx));
+        matrix.rows[row_idx] = row;
+    }
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 12.0, 5.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 12.0, 5.0),
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(12, 5);
+    rif.rasterize(&state);
+
+    assert_eq!(desired_char(&rif, 0, 0), 'A');
+    assert_eq!(desired_char(&rif, 1, 0), 'B');
+    assert_eq!(desired_char(&rif, 2, 0), 'C');
+}
+
+#[test]
 fn rasterize_text_rows_use_text_pixel_bounds_but_chrome_rows_do_not() {
     let mut state = FrameDisplayState::new(12, 3, 8.0, 16.0);
     state.background = Color::rgb(0.0, 0.0, 0.0);

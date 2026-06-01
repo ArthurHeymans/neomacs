@@ -883,6 +883,11 @@ pub fn window_params_from_neovm(
     window_cursor_effect: Value,
 ) -> Option<WindowParams> {
     // Only leaf windows can be laid out.
+    let effective_window_system = frame.effective_window_system();
+    let is_window_system = effective_window_system.is_some();
+    let window_system =
+        effective_window_system.and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
+
     let (
         win_id,
         _buf_id,
@@ -923,7 +928,7 @@ pub fn window_params_from_neovm(
             // Fringes only subtract from the text area on GUI frames.
             // TTY frames always have 0 fringes regardless of the
             // `left-fringe` / `right-fringe` frame parameter values.
-            if frame.window_system.is_some() {
+            if is_window_system {
                 if display.left_fringe_width >= 0 {
                     display.left_fringe_width
                 } else {
@@ -932,7 +937,7 @@ pub fn window_params_from_neovm(
             } else {
                 0
             },
-            if frame.window_system.is_some() {
+            if is_window_system {
                 if display.right_fringe_width >= 0 {
                     display.right_fringe_width
                 } else {
@@ -956,10 +961,6 @@ pub fn window_params_from_neovm(
         .background
         .map(|color| color_to_pixel(&color))
         .unwrap_or(0x00FFFFFF);
-    let window_system = frame
-        .window_system
-        .as_ref()
-        .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
     let face_resolver = FaceResolver::new(
         face_table,
         default_fg,
@@ -1146,10 +1147,18 @@ pub fn window_params_from_neovm(
         default_bg,
         char_width,
         char_height,
+        window_system: is_window_system,
         font_pixel_size: frame.font_pixel_size,
-        font_ascent: default_font_ascent
-            .filter(|ascent| *ascent > 0.0)
-            .unwrap_or(frame.font_pixel_size * 0.8),
+        font_ascent: if is_window_system {
+            default_font_ascent
+                .filter(|ascent| *ascent > 0.0)
+                .unwrap_or(frame.font_pixel_size * 0.8)
+        } else {
+            // GNU terminal redisplay has no font object here.  Stretch
+            // glyphs and ordinary rows use one terminal cell, not the
+            // GUI default font pixel ascent.
+            char_height.max(1.0)
+        },
         mode_line_height,
         header_line_height,
         tab_line_height,

@@ -133,6 +133,50 @@ fn tty_internal_border_width_parameters_do_not_inset_geometry() {
 }
 
 #[test]
+fn nil_window_system_parameter_does_not_make_tty_frame_graphic() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 100, 80, BufferId(1));
+
+    {
+        let frame = mgr.get_mut(fid).expect("frame");
+        frame.set_parameter(Value::symbol("window-system"), Value::NIL);
+        frame.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        frame.sync_window_area_bounds();
+    }
+
+    let frame = mgr.get(fid).expect("frame");
+    assert_eq!(frame.effective_window_system(), None);
+    assert_eq!(frame.internal_border_width(), 0);
+    assert_eq!(
+        *frame.root_window.bounds(),
+        Rect::new(0.0, 0.0, 100.0, 64.0)
+    );
+}
+
+#[test]
+fn nil_internal_window_system_does_not_make_tty_frame_graphic() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("F1", 100, 80, BufferId(1));
+
+    {
+        let frame = mgr.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::NIL));
+        frame.set_parameter(Value::symbol("internal-border-width"), Value::fixnum(4));
+        frame.sync_window_area_bounds();
+    }
+
+    let frame = mgr.get(fid).expect("frame");
+    assert_eq!(frame.effective_window_system(), None);
+    assert_eq!(frame.internal_border_width(), 0);
+    assert_eq!(
+        *frame.root_window.bounds(),
+        Rect::new(0.0, 0.0, 100.0, 64.0)
+    );
+}
+
+#[test]
 fn gui_child_frame_border_width_acts_as_child_internal_border() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

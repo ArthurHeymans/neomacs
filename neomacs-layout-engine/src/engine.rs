@@ -814,8 +814,16 @@ fn eval_display_space_geometry(
     use crate::display_pixel_calc::{PixelCalcContext, calc_pixel_width_or_height};
 
     let default_width = params.char_width.max(1.0);
-    let default_height = default_height.max(1.0);
-    let default_ascent = default_ascent.max(0.0).min(default_height);
+    let default_height = if params.window_system {
+        default_height.max(1.0)
+    } else {
+        params.char_height.max(1.0)
+    };
+    let default_ascent = if params.window_system {
+        default_ascent.max(0.0).min(default_height)
+    } else {
+        default_height
+    };
     let Some(items) = neovm_core::emacs_core::value::list_to_vec(spec) else {
         return DisplaySpaceGeometry {
             width: default_width,
@@ -897,37 +905,46 @@ fn eval_display_space_geometry(
         width = 1.0;
     }
 
-    let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
-        && !prop.is_nil()
-        && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
-    {
-        pixels as f32
-    } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
-        && let Some(factor) = display_space_positive_number(prop)
-    {
-        default_height * factor
-    } else {
-        default_height
-    };
-    let zero_height_ok = plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
-    if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
-        height = 1.0;
-    }
-
-    let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
-        if let Some(percent) = display_space_positive_number(prop)
-            && percent <= 100.0
-        {
-            height * percent / 100.0
-        } else if !prop.is_nil()
+    let (height, ascent) = if params.window_system {
+        let mut height = if let Some(prop) = plist_value(DisplaySpaceKey::Height)
+            && !prop.is_nil()
             && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
         {
-            (pixels as f32).max(0.0).min(height)
+            pixels as f32
+        } else if let Some(prop) = plist_value(DisplaySpaceKey::RelativeHeight)
+            && let Some(factor) = display_space_positive_number(prop)
+        {
+            default_height * factor
+        } else {
+            default_height
+        };
+        let zero_height_ok =
+            plist_value(DisplaySpaceKey::Height).is_some_and(|prop| !prop.is_nil());
+        if height <= 0.0 && (height < 0.0 || !zero_height_ok) {
+            height = 1.0;
+        }
+
+        let ascent = if let Some(prop) = plist_value(DisplaySpaceKey::Ascent) {
+            if let Some(percent) = display_space_positive_number(prop)
+                && percent <= 100.0
+            {
+                height * percent / 100.0
+            } else if !prop.is_nil()
+                && let Some(pixels) = calc_pixel_width_or_height(&pctx, &prop, false, None)
+            {
+                (pixels as f32).max(0.0).min(height)
+            } else {
+                height * default_ascent / default_height
+            }
         } else {
             height * default_ascent / default_height
-        }
+        };
+        (height, ascent)
     } else {
-        height * default_ascent / default_height
+        // GNU `produce_stretch_glyph` does not append a pixel stretch glyph on
+        // terminals; it appends ordinary TTY space glyphs and leaves the row
+        // one terminal cell high, ignoring :height/:relative-height/:ascent.
+        (1.0, 1.0)
     };
 
     DisplaySpaceGeometry {
@@ -2540,8 +2557,7 @@ impl LayoutEngine {
             let bootstrap =
                 super::neovm_bridge::frame_params_from_neovm(frame, evaluator.face_table());
             let ws = frame
-                .window_system
-                .as_ref()
+                .effective_window_system()
                 .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
             (bootstrap.background, frame.font_pixel_size, ws)
         };
@@ -4291,6 +4307,7 @@ impl LayoutEngine {
 
             // --- Display property check ---
             // Only call check_display_prop at property change boundaries for efficiency
+            resolve_current_face_state!();
             if charpos >= display_next_check {
                 let display_prop_val: Option<neovm_core::emacs_core::Value> = {
                     let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
@@ -5045,7 +5062,6 @@ impl LayoutEngine {
                 continue;
             }
 
-            resolve_current_face_state!();
             save_word_wrap_candidate!(ch, ch_start_byte_idx);
 
             if ch == '\n' {
