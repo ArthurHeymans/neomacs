@@ -1018,24 +1018,22 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn diff_no_changes_produces_minimal_output() {
+fn first_diff_repaints_unknown_terminal() {
     let mut rif = TtyRif::new(10, 5);
-    // Both grids are identical (blank). Diff should produce only:
-    // hide cursor + reset attrs (+ maybe show cursor).
+    // A fresh terminal's real contents are unknown.  GNU marks new/resized
+    // frames garbaged and repaints them before relying on matrix diffs.
     rif.diff_and_render();
     let output = rif.take_output();
 
     let s = String::from_utf8_lossy(&output);
-    // Should contain hide cursor and reset, but no CUP positioning for cells.
     assert!(s.contains("\x1b[?25l")); // hide cursor
     assert!(s.contains("\x1b[0m")); // reset
-    // No cell was changed, so no ";H" cursor moves for cells.
-    // The only H would be in the hide-cursor prefix. Count occurrences of "H".
+
+    // The first render repaints every row with one CUP per contiguous row run.
     let cup_count = s.matches("H").count();
-    // At most 0 CUP sequences if cursor is not visible.
     assert!(
-        cup_count == 0,
-        "Expected 0 CUP moves for no-change diff, got {}",
+        cup_count == 5,
+        "Expected 5 CUP moves for initial full repaint, got {}",
         cup_count
     );
 }

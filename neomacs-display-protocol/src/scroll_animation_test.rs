@@ -884,7 +884,7 @@ fn test_page_curl_above_curl_line_is_flat() {
 fn test_page_curl_below_curl_line_is_deformed() {
     // curl_progress=0.5 → curl_y=0.5
     // At t=0.8 (below curl), should have deformation
-    let (x, y, alpha) = page_curl_transform(0.8, 0.5, 400.0);
+    let (_x, y, alpha) = page_curl_transform(0.8, 0.5, 400.0);
     // y_offset should be negative (curling away)
     assert!(y < 0.0, "Page curl y should be negative, got {}", y);
     // Alpha should be reduced (darkened backside)

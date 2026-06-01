@@ -23,12 +23,14 @@
 //! is controlled separately via [`ScrollEasing`].
 
 use std::f32::consts::PI;
+use strum::{EnumString, IntoStaticStr};
 
 /// All available scroll animation effects.
 ///
 /// Each variant represents a complete visual style for scroll transitions.
 /// Select one at a time via configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ScrollEffect {
     // ── Transition effects (2D, vertex position/alpha changes) ──────────
     /// Default: old content slides out, new content slides in.
@@ -38,64 +40,125 @@ pub enum ScrollEffect {
     Crossfade,
 
     /// Destination appears at 95% scale and zooms to 100%.
+    #[strum(to_string = "scale-zoom", serialize = "scalezoom", serialize = "zoom")]
     ScaleZoom,
 
     /// Lines fade in/out at viewport edges with soft vignette.
+    #[strum(to_string = "fade-edges", serialize = "fadeedges", serialize = "fade")]
     FadeEdges,
 
     /// Lines drop in with staggered delay (waterfall effect).
+    #[strum(to_string = "cascade", serialize = "waterfall")]
     Cascade,
 
     /// Different layers scroll at different speeds for depth illusion.
+    #[strum(to_string = "parallax", serialize = "depth")]
     Parallax,
 
     // ── 3D effects (perspective-projected vertex transforms) ────────────
     /// Buffer tilts 1-3° around X-axis while scrolling, springs back flat.
+    #[strum(to_string = "tilt", serialize = "perspective")]
     Tilt,
 
     /// Current screen curls away like a turning book page.
+    #[strum(to_string = "page-curl", serialize = "pagecurl", serialize = "curl")]
     PageCurl,
 
     /// Screenful flips like a card rotating around the X-axis.
+    #[strum(to_string = "card-flip", serialize = "cardflip", serialize = "flip")]
     CardFlip,
 
     /// Content wraps around a vertical cylinder; scrolling rotates it.
+    #[strum(
+        to_string = "cylinder-roll",
+        serialize = "cylinderroll",
+        serialize = "cylinder",
+        serialize = "roll"
+    )]
     CylinderRoll,
 
     // ── Deformation effects (per-line vertex displacement) ──────────────
     /// Content deforms like gelatin; top moves first, bottom lags.
+    #[strum(to_string = "wobbly", serialize = "jelly", serialize = "wobble")]
     Wobbly,
 
     /// Horizontal sine-wave displacement propagates through text.
+    #[strum(to_string = "wave", serialize = "sine")]
     Wave,
 
     /// Each line on its own spring; scroll propagates with stagger delay.
+    #[strum(
+        to_string = "per-line-spring",
+        serialize = "perlinespring",
+        serialize = "line-spring",
+        serialize = "slinky"
+    )]
     PerLineSpring,
 
     /// Noise-based UV warping; text ripples like viewed through water.
+    #[strum(to_string = "liquid", serialize = "fluid", serialize = "water")]
     Liquid,
 
     // ── Post-processing effects (full-screen shader passes) ─────────────
     /// Vertical motion blur proportional to scroll speed.
+    #[strum(
+        to_string = "motion-blur",
+        serialize = "motionblur",
+        serialize = "blur"
+    )]
     MotionBlur,
 
     /// RGB channels separate vertically during fast scroll.
+    #[strum(
+        to_string = "chromatic-aberration",
+        serialize = "chromaticaberration",
+        serialize = "chromatic",
+        serialize = "aberration"
+    )]
     ChromaticAberration,
 
     /// Semi-transparent afterimages trail behind content.
+    #[strum(
+        to_string = "ghost-trails",
+        serialize = "ghosttrails",
+        serialize = "ghost",
+        serialize = "trails"
+    )]
     GhostTrails,
 
     /// Warm tint scrolling down, cool tint scrolling up.
+    #[strum(
+        to_string = "color-temperature",
+        serialize = "colortemperature",
+        serialize = "color-temp",
+        serialize = "temperature"
+    )]
     ColorTemperature,
 
     /// Retro scanline overlay sweeps with scroll position.
+    #[strum(
+        to_string = "crt-scanlines",
+        serialize = "crtscanlines",
+        serialize = "crt",
+        serialize = "scanlines"
+    )]
     CRTScanlines,
 
     /// Center sharp, edges blurred during fast scroll.
+    #[strum(
+        to_string = "depth-of-field",
+        serialize = "depthoffield",
+        serialize = "dof"
+    )]
     DepthOfField,
 
     // ── Creative effects (special rendering) ────────────────────────────
     /// New lines appear character-by-character left-to-right.
+    #[strum(
+        to_string = "typewriter-reveal",
+        serialize = "typewriterreveal",
+        serialize = "typewriter"
+    )]
     TypewriterReveal,
 }
 
@@ -130,61 +193,15 @@ impl ScrollEffect {
 
     /// Parse from string (for Lisp integration).
     pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().replace('_', "-").as_str() {
-            "slide" => Self::Slide,
-            "crossfade" => Self::Crossfade,
-            "scale-zoom" | "scalezoom" | "zoom" => Self::ScaleZoom,
-            "fade-edges" | "fadeedges" | "fade" => Self::FadeEdges,
-            "cascade" | "waterfall" => Self::Cascade,
-            "parallax" | "depth" => Self::Parallax,
-            "tilt" | "perspective" => Self::Tilt,
-            "page-curl" | "pagecurl" | "curl" => Self::PageCurl,
-            "card-flip" | "cardflip" | "flip" => Self::CardFlip,
-            "cylinder-roll" | "cylinderroll" | "cylinder" | "roll" => Self::CylinderRoll,
-            "wobbly" | "jelly" | "wobble" => Self::Wobbly,
-            "wave" | "sine" => Self::Wave,
-            "per-line-spring" | "perlinespring" | "line-spring" | "slinky" => Self::PerLineSpring,
-            "liquid" | "fluid" | "water" => Self::Liquid,
-            "motion-blur" | "motionblur" | "blur" => Self::MotionBlur,
-            "chromatic-aberration" | "chromaticaberration" | "chromatic" | "aberration" => {
-                Self::ChromaticAberration
-            }
-            "ghost-trails" | "ghosttrails" | "ghost" | "trails" => Self::GhostTrails,
-            "color-temperature" | "colortemperature" | "color-temp" | "temperature" => {
-                Self::ColorTemperature
-            }
-            "crt-scanlines" | "crtscanlines" | "crt" | "scanlines" => Self::CRTScanlines,
-            "depth-of-field" | "depthoffield" | "dof" => Self::DepthOfField,
-            "typewriter-reveal" | "typewriterreveal" | "typewriter" => Self::TypewriterReveal,
-            _ => Self::Slide,
-        }
+        s.to_lowercase()
+            .replace('_', "-")
+            .parse()
+            .unwrap_or(Self::Slide)
     }
 
     /// Convert to kebab-case string.
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Slide => "slide",
-            Self::Crossfade => "crossfade",
-            Self::ScaleZoom => "scale-zoom",
-            Self::FadeEdges => "fade-edges",
-            Self::Cascade => "cascade",
-            Self::Parallax => "parallax",
-            Self::Tilt => "tilt",
-            Self::PageCurl => "page-curl",
-            Self::CardFlip => "card-flip",
-            Self::CylinderRoll => "cylinder-roll",
-            Self::Wobbly => "wobbly",
-            Self::Wave => "wave",
-            Self::PerLineSpring => "per-line-spring",
-            Self::Liquid => "liquid",
-            Self::MotionBlur => "motion-blur",
-            Self::ChromaticAberration => "chromatic-aberration",
-            Self::GhostTrails => "ghost-trails",
-            Self::ColorTemperature => "color-temperature",
-            Self::CRTScanlines => "crt-scanlines",
-            Self::DepthOfField => "depth-of-field",
-            Self::TypewriterReveal => "typewriter-reveal",
-        }
+        (*self).into()
     }
 
     /// Whether this effect needs a post-processing shader pipeline.
@@ -233,21 +250,30 @@ impl Default for ScrollEffect {
 // ─── Scroll Easing (how the animation parameter `t` evolves) ────────────
 
 /// Physics model for scroll animation timing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ScrollEasing {
     /// Standard ease-out quadratic (current default).
+    #[strum(
+        to_string = "ease-out-quad",
+        serialize = "ease-out",
+        serialize = "quad"
+    )]
     EaseOutQuad,
 
     /// Ease-out cubic (stronger deceleration).
+    #[strum(to_string = "ease-out-cubic", serialize = "cubic")]
     EaseOutCubic,
 
     /// Critically damped spring (Neovide-style, natural feel).
+    #[strum(to_string = "spring", serialize = "damped")]
     Spring,
 
     /// Linear interpolation.
     Linear,
 
     /// Ease-in-out cubic (smooth S-curve).
+    #[strum(to_string = "ease-in-out-cubic", serialize = "ease-in-out")]
     EaseInOutCubic,
 }
 
@@ -280,24 +306,14 @@ impl ScrollEasing {
     }
 
     pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().replace('_', "-").as_str() {
-            "ease-out" | "ease-out-quad" | "quad" => Self::EaseOutQuad,
-            "ease-out-cubic" | "cubic" => Self::EaseOutCubic,
-            "spring" | "damped" => Self::Spring,
-            "linear" => Self::Linear,
-            "ease-in-out" | "ease-in-out-cubic" => Self::EaseInOutCubic,
-            _ => Self::EaseOutQuad,
-        }
+        s.to_lowercase()
+            .replace('_', "-")
+            .parse()
+            .unwrap_or(Self::EaseOutQuad)
     }
 
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::EaseOutQuad => "ease-out-quad",
-            Self::EaseOutCubic => "ease-out-cubic",
-            Self::Spring => "spring",
-            Self::Linear => "linear",
-            Self::EaseInOutCubic => "ease-in-out-cubic",
-        }
+        (*self).into()
     }
 }
 
