@@ -1,6 +1,8 @@
 use super::*;
 use neovm_core::emacs_core::Context;
-use neovm_core::emacs_core::load::create_bootstrap_evaluator_cached_with_features;
+use neovm_core::emacs_core::load::{
+    apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
+};
 use neovm_core::heap_types::LispString;
 
 #[test]
@@ -25,9 +27,10 @@ fn parse_tool_bar_item_preserves_raw_unibyte_label_and_help() {
 }
 
 #[test]
-fn collect_gui_menu_bar_items_bootstrap_has_help_menu() {
-    let eval =
+fn collect_gui_menu_bar_items_runtime_frame_has_help_menu() {
+    let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
     let items = collect_gui_menu_bar_items(&eval);
     assert!(!items.is_empty());
     assert!(items.iter().any(|item| item.key == "help-menu"));
