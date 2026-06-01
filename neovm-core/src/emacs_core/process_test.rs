@@ -119,6 +119,15 @@ fn process_finite_domains_match_gnu_symbols() {
         None
     );
     assert_eq!(NetworkAddressFamily::Ipv4.name(), "ipv4");
+    assert_eq!(
+        NetworkLookupHint::from_symbol_value(&Value::symbol("numeric")),
+        Some(NetworkLookupHint::Numeric)
+    );
+    assert_eq!(NetworkLookupHint::Numeric.name(), "numeric");
+    assert_eq!(
+        NetworkLookupHint::from_symbol_value(&Value::symbol("canonical")),
+        None
+    );
 
     assert_eq!(
         ProcessConnectionType::from_symbol_value(&Value::symbol("pipe")),
@@ -3294,34 +3303,51 @@ fn network_lookup_literal_family_filtering_helpers() {
     let loopback_v4 = int_vector(&[127, 0, 0, 1, 0]);
     let loopback_v6 = int_vector(&[0, 0, 0, 0, 0, 0, 0, 1, 0]);
 
-    let v4_any = resolve_network_lookup_addresses("127.0.0.1", None);
-    let v4_only = resolve_network_lookup_addresses("127.0.0.1", Some(NetworkAddressFamily::Ipv4));
+    let v4_any = resolve_network_lookup_addresses("127.0.0.1", None, None);
+    let v4_only =
+        resolve_network_lookup_addresses("127.0.0.1", Some(NetworkAddressFamily::Ipv4), None);
     let v4_rejected =
-        resolve_network_lookup_addresses("127.0.0.1", Some(NetworkAddressFamily::Ipv6));
+        resolve_network_lookup_addresses("127.0.0.1", Some(NetworkAddressFamily::Ipv6), None);
     assert!(!v4_any.is_empty());
     assert_eq!(v4_any, v4_only);
     assert_eq!(v4_any[0], loopback_v4);
     assert!(v4_rejected.is_empty());
 
-    let v6_any = resolve_network_lookup_addresses("::1", None);
-    let v6_only = resolve_network_lookup_addresses("::1", Some(NetworkAddressFamily::Ipv6));
-    let v6_rejected = resolve_network_lookup_addresses("::1", Some(NetworkAddressFamily::Ipv4));
+    let v6_any = resolve_network_lookup_addresses("::1", None, None);
+    let v6_only = resolve_network_lookup_addresses("::1", Some(NetworkAddressFamily::Ipv6), None);
+    let v6_rejected =
+        resolve_network_lookup_addresses("::1", Some(NetworkAddressFamily::Ipv4), None);
     assert_eq!(v6_any, v6_only);
     if let Some(first) = v6_any.first() {
         assert_eq!(first, &loopback_v6);
     }
     assert!(v6_rejected.is_empty());
+
+    let numeric_v4 = resolve_network_lookup_addresses(
+        "127.0.0.1",
+        Some(NetworkAddressFamily::Ipv4),
+        Some(NetworkLookupHint::Numeric),
+    );
+    assert_eq!(numeric_v4, vec![loopback_v4]);
+    assert!(
+        resolve_network_lookup_addresses(
+            "localhost",
+            Some(NetworkAddressFamily::Ipv4),
+            Some(NetworkLookupHint::Numeric)
+        )
+        .is_empty()
+    );
 }
 
 #[test]
 fn network_lookup_embedded_nul_normalizes_like_c_strings() {
     crate::test_utils::init_test_tracing();
-    let plain = resolve_network_lookup_addresses("abc", None);
-    let embedded_nul = resolve_network_lookup_addresses("abc\0def", None);
+    let plain = resolve_network_lookup_addresses("abc", None, None);
+    let embedded_nul = resolve_network_lookup_addresses("abc\0def", None, None);
     assert_eq!(embedded_nul, plain);
 
-    let empty = resolve_network_lookup_addresses("", None);
-    let nul_only = resolve_network_lookup_addresses("\0", None);
+    let empty = resolve_network_lookup_addresses("", None, None);
+    let nul_only = resolve_network_lookup_addresses("\0", None, None);
     assert_eq!(nul_only, empty);
 }
 
@@ -3505,6 +3531,9 @@ fn process_network_interface_and_signal_runtime_surface() {
               (equal (network-lookup-address-info (string 0))
                      (network-lookup-address-info ""))
               (condition-case err (network-lookup-address-info "localhost" t) (error err))
+              (equal (network-lookup-address-info "127.0.0.1" 'ipv4 'numeric)
+                     '([127 0 0 1 0]))
+              (null (network-lookup-address-info "localhost" 'ipv4 'numeric))
               (condition-case err (network-lookup-address-info "localhost" 'ipv4 t) (error err))
               (condition-case err (network-lookup-address-info 1) (error err))
               (listp (signal-names))
@@ -3520,6 +3549,6 @@ fn process_network_interface_and_signal_runtime_surface() {
     );
     assert_eq!(
         results[1],
-        "OK (\"127.0.0.1:80\" \"127.0.0.1\" \"[0:0:0:0:0:0:0:1]:80\" \"0:0:0:0:0:0:0:1\" \"x\" nil nil nil nil (wrong-number-of-arguments format-network-address 0) t t t t t t t (wrong-number-of-arguments network-interface-list 3) (error \"Unsupported address family\") t t t t t t t t t t (wrong-type-argument stringp nil) (error \"interface name too long\") (error \"interface name too long\") (error \"interface name too long\") t t t t t t t t t t t t t (error \"Unsupported family\") (error \"Unsupported hints value\") (wrong-type-argument stringp 1) t t t (wrong-number-of-arguments signal-names 1) (void-function process-connection))"
+        "OK (\"127.0.0.1:80\" \"127.0.0.1\" \"[0:0:0:0:0:0:0:1]:80\" \"0:0:0:0:0:0:0:1\" \"x\" nil nil nil nil (wrong-number-of-arguments format-network-address 0) t t t t t t t (wrong-number-of-arguments network-interface-list 3) (error \"Unsupported address family\") t t t t t t t t t t (wrong-type-argument stringp nil) (error \"interface name too long\") (error \"interface name too long\") (error \"interface name too long\") t t t t t t t t t t t t t (error \"Unsupported family\") t t (error \"Unsupported hints value\") (wrong-type-argument stringp 1) t t t (wrong-number-of-arguments signal-names 1) (void-function process-connection))"
     );
 }

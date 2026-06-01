@@ -3024,6 +3024,39 @@ impl NetworkAddressFamily {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+enum NetworkLookupHint {
+    Numeric,
+}
+
+impl NetworkLookupHint {
+    fn from_symbol_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn addrinfo_flags(self) -> i32 {
+        match self {
+            Self::Numeric => ai_numerichost_flag(),
+        }
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[cfg(unix)]
+fn ai_numerichost_flag() -> i32 {
+    libc::AI_NUMERICHOST
+}
+
+#[cfg(windows)]
+fn ai_numerichost_flag() -> i32 {
+    windows_sys::Win32::Networking::WinSock::AI_NUMERICHOST
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
 enum ProcessConnectionType {
     Pipe,
     Pty,
@@ -3218,6 +3251,7 @@ fn ip_to_value(ip: IpAddr) -> (NetworkAddressFamily, Value) {
 fn resolve_network_lookup_addresses(
     name: &str,
     family: Option<NetworkAddressFamily>,
+    hint: Option<NetworkLookupHint>,
 ) -> Vec<Value> {
     use dns_lookup::{AddrFamily, AddrInfoHints, SockType};
 
@@ -3226,7 +3260,8 @@ fn resolve_network_lookup_addresses(
     let normalized_name = name.split('\0').next().unwrap_or_default();
 
     let hints = AddrInfoHints {
-        socktype: SockType::Stream.into(),
+        flags: hint.map_or(0, NetworkLookupHint::addrinfo_flags),
+        socktype: SockType::DGram.into(),
         address: match family {
             Some(NetworkAddressFamily::Ipv4) => AddrFamily::Inet.into(),
             Some(NetworkAddressFamily::Ipv6) => AddrFamily::Inet6.into(),
@@ -4143,13 +4178,7 @@ pub(crate) fn builtin_network_lookup_address_info_impl(args: Vec<Value>) -> Eval
     let name = expect_string_strict(&args[0])?;
 
     let family = args.get(1).cloned().unwrap_or(Value::NIL);
-    let hints = args.get(2).cloned().unwrap_or(Value::NIL);
-    if !hints.is_nil() {
-        return Err(signal(
-            "error",
-            vec![Value::string("Unsupported hints value")],
-        ));
-    }
+    let hint_value = args.get(2).cloned().unwrap_or(Value::NIL);
 
     let lookup_family = if family.is_nil() {
         None
@@ -4159,7 +4188,15 @@ pub(crate) fn builtin_network_lookup_address_info_impl(args: Vec<Value>) -> Eval
                 .ok_or_else(|| signal("error", vec![Value::string("Unsupported family")]))?,
         )
     };
-    let entries = resolve_network_lookup_addresses(&name, lookup_family);
+    let lookup_hint = if hint_value.is_nil() {
+        None
+    } else {
+        Some(
+            NetworkLookupHint::from_symbol_value(&hint_value)
+                .ok_or_else(|| signal("error", vec![Value::string("Unsupported hints value")]))?,
+        )
+    };
+    let entries = resolve_network_lookup_addresses(&name, lookup_family, lookup_hint);
     Ok(Value::list(entries))
 }
 

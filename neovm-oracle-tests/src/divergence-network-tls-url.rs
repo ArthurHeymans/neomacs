@@ -69,6 +69,20 @@ fn divergence_dns_functions() {
 }
 
 #[test]
+fn divergence_network_lookup_numeric_hint() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(list
+  (network-lookup-address-info "127.0.0.1" 'ipv4 'numeric)
+  (network-lookup-address-info "localhost" 'ipv4 'numeric)
+  (condition-case err
+      (network-lookup-address-info "127.0.0.1" 'ipv4 'canonical)
+    (error (list 'error (car err) (cadr err))))) "#,
+    );
+}
+
+#[test]
 fn divergence_http_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
