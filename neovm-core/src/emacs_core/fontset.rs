@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 use std::thread::LocalKey;
+use strum::{EnumString, IntoStaticStr};
 
 pub const DEFAULT_FONTSET_NAME: &str = "-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default";
 pub const DEFAULT_FONTSET_ALIAS: &str = "fontset-default";
@@ -445,11 +446,22 @@ fn push_range_entry(ranges: &mut Vec<RangeEntry>, entry: RangeEntry) {
     ranges.push(entry);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 enum FontsetAddMode {
+    #[strum(to_string = "overwrite")]
     Overwrite,
+    #[strum(to_string = "append", serialize = ":append")]
     Append,
+    #[strum(to_string = "prepend", serialize = ":prepend")]
     Prepend,
+}
+
+impl FontsetAddMode {
+    fn from_lisp_value(add: Option<&Value>) -> Self {
+        add.and_then(|value| value.as_symbol_name())
+            .and_then(|name| name.parse().ok())
+            .unwrap_or(Self::Overwrite)
+    }
 }
 
 static FONTSET_REGISTRY: OnceLock<RwLock<FontsetRegistry>> = OnceLock::new();
@@ -787,13 +799,7 @@ pub(crate) fn set_fontset_font(
     font_encoding_alist: Option<&Value>,
 ) -> Result<Value, Flow> {
     let fontset_name = resolve_fontset_name_arg(fontset)?;
-    let add_mode = match add {
-        Some(v) if v.is_symbol_named("append") => FontsetAddMode::Append,
-        Some(v) if v.as_symbol_name().is_some_and(|n| n == ":append") => FontsetAddMode::Append,
-        Some(v) if v.is_symbol_named("prepend") => FontsetAddMode::Prepend,
-        Some(v) if v.as_symbol_name().is_some_and(|n| n == ":prepend") => FontsetAddMode::Prepend,
-        _ => FontsetAddMode::Overwrite,
-    };
+    let add_mode = FontsetAddMode::from_lisp_value(add);
     let entry = parse_font_spec_entry(font_spec, font_encoding_alist)?;
     let targets = expand_target(characters, char_script_table, charset_script_alist, true)?;
 

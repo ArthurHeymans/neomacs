@@ -15,6 +15,50 @@ fn registry_spec(name: &str) -> FontSpecEntry {
 }
 
 #[test]
+fn fontset_add_mode_accepts_gnu_append_prepend_symbols_and_keywords() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::symbol("append"))),
+        FontsetAddMode::Append
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::symbol(":append"))),
+        FontsetAddMode::Append
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::symbol("prepend"))),
+        FontsetAddMode::Prepend
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::symbol(":prepend"))),
+        FontsetAddMode::Prepend
+    );
+}
+
+#[test]
+fn fontset_add_mode_treats_other_values_as_overwrite() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(None),
+        FontsetAddMode::Overwrite
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::NIL)),
+        FontsetAddMode::Overwrite
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::T)),
+        FontsetAddMode::Overwrite
+    );
+    assert_eq!(
+        FontsetAddMode::from_lisp_value(Some(&Value::string("append"))),
+        FontsetAddMode::Overwrite
+    );
+}
+
+#[test]
 fn overlapping_ranges_follow_char_table_semantics() {
     crate::test_utils::init_test_tracing();
     let mut data = FontsetData::default();
