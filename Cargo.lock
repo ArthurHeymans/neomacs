@@ -2954,6 +2954,7 @@ dependencies = [
  "fontdb",
  "neomacs-display-protocol",
  "neovm-core",
+ "num_enum",
  "once_cell",
  "strum",
  "tracing",

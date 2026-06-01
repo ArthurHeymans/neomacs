@@ -22,6 +22,7 @@ ttf-parser.workspace = true
 allsorts.workspace = true
 unicode-script.workspace = true
 strum.workspace = true
+num_enum.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 fontconfig.workspace = true

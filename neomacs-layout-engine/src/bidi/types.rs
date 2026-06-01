@@ -1,42 +1,58 @@
 //! Core types for the Unicode Bidirectional Algorithm (UAX#9).
 
-/// Bidi character class as defined in Unicode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
+/// Bidi character class as defined in Unicode, stored with GNU Emacs'
+/// `bidi_type_t` discriminants from `src/dispextern.h`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum BidiClass {
-    // Strong types
-    L = 0,  // Left-to-right
-    R = 1,  // Right-to-left
-    AL = 2, // Arabic letter
+    // Strong types. GNU keeps these early because glyphs reserve only
+    // three bits for the subset stored in `struct glyph`.
+    L = 1,  // STRONG_L
+    R = 2,  // STRONG_R
+    AL = 7, // STRONG_AL
 
     // Weak types
-    EN = 3,  // European number
-    ES = 4,  // European separator
-    ET = 5,  // European terminator
-    AN = 6,  // Arabic number
-    CS = 7,  // Common separator
-    NSM = 8, // Non-spacing mark
-    BN = 9,  // Boundary neutral
+    EN = 3,   // WEAK_EN
+    ES = 17,  // WEAK_ES
+    ET = 18,  // WEAK_ET
+    AN = 4,   // WEAK_AN
+    CS = 19,  // WEAK_CS
+    NSM = 20, // WEAK_NSM
+    BN = 5,   // WEAK_BN
 
     // Neutral types
-    B = 10,  // Paragraph separator
-    S = 11,  // Segment separator
-    WS = 12, // Whitespace
-    ON = 13, // Other neutral
+    B = 6,   // NEUTRAL_B
+    S = 21,  // NEUTRAL_S
+    WS = 22, // NEUTRAL_WS
+    ON = 23, // NEUTRAL_ON
 
     // Explicit formatting
-    LRE = 14, // Left-to-right embedding
-    LRO = 15, // Left-to-right override
-    RLE = 16, // Right-to-left embedding
-    RLO = 17, // Right-to-left override
-    PDF = 18, // Pop directional format
-    LRI = 19, // Left-to-right isolate
-    RLI = 20, // Right-to-left isolate
-    FSI = 21, // First strong isolate
-    PDI = 22, // Pop directional isolate
+    LRE = 8,  // Left-to-right embedding
+    LRO = 9,  // Left-to-right override
+    RLE = 10, // Right-to-left embedding
+    RLO = 11, // Right-to-left override
+    PDF = 12, // Pop directional format
+    LRI = 13, // Left-to-right isolate
+    RLI = 14, // Right-to-left isolate
+    FSI = 15, // First strong isolate
+    PDI = 16, // Pop directional isolate
 }
 
 impl BidiClass {
+    /// GNU `bidi_type_t` code for this class.
+    pub fn gnu_type_code(self) -> u8 {
+        self.into()
+    }
+
+    /// Convert from a GNU `bidi_type_t` code.  Code 0 is GNU's internal
+    /// `UNKNOWN_BT`, which is not a valid Unicode bidi class for real
+    /// characters.
+    pub fn from_gnu_type_code(code: u8) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
     /// Whether this is a strong type (L, R, AL).
     pub fn is_strong(self) -> bool {
         matches!(self, BidiClass::L | BidiClass::R | BidiClass::AL)

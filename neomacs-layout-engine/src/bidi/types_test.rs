@@ -517,34 +517,43 @@ fn max_bpa_stack_is_63() {
 }
 
 // ===================================================================
-// BidiClass repr(u8) values
+// BidiClass GNU type codes
 // ===================================================================
 
 #[test]
-fn bidi_class_repr_values_are_sequential() {
-    assert_eq!(BidiClass::L as u8, 0);
-    assert_eq!(BidiClass::R as u8, 1);
-    assert_eq!(BidiClass::AL as u8, 2);
-    assert_eq!(BidiClass::EN as u8, 3);
-    assert_eq!(BidiClass::ES as u8, 4);
-    assert_eq!(BidiClass::ET as u8, 5);
-    assert_eq!(BidiClass::AN as u8, 6);
-    assert_eq!(BidiClass::CS as u8, 7);
-    assert_eq!(BidiClass::NSM as u8, 8);
-    assert_eq!(BidiClass::BN as u8, 9);
-    assert_eq!(BidiClass::B as u8, 10);
-    assert_eq!(BidiClass::S as u8, 11);
-    assert_eq!(BidiClass::WS as u8, 12);
-    assert_eq!(BidiClass::ON as u8, 13);
-    assert_eq!(BidiClass::LRE as u8, 14);
-    assert_eq!(BidiClass::LRO as u8, 15);
-    assert_eq!(BidiClass::RLE as u8, 16);
-    assert_eq!(BidiClass::RLO as u8, 17);
-    assert_eq!(BidiClass::PDF as u8, 18);
-    assert_eq!(BidiClass::LRI as u8, 19);
-    assert_eq!(BidiClass::RLI as u8, 20);
-    assert_eq!(BidiClass::FSI as u8, 21);
-    assert_eq!(BidiClass::PDI as u8, 22);
+fn bidi_class_codes_match_gnu_bidi_type_t() {
+    let classes = [
+        (BidiClass::L, 1),
+        (BidiClass::R, 2),
+        (BidiClass::EN, 3),
+        (BidiClass::AN, 4),
+        (BidiClass::BN, 5),
+        (BidiClass::B, 6),
+        (BidiClass::AL, 7),
+        (BidiClass::LRE, 8),
+        (BidiClass::LRO, 9),
+        (BidiClass::RLE, 10),
+        (BidiClass::RLO, 11),
+        (BidiClass::PDF, 12),
+        (BidiClass::LRI, 13),
+        (BidiClass::RLI, 14),
+        (BidiClass::FSI, 15),
+        (BidiClass::PDI, 16),
+        (BidiClass::ES, 17),
+        (BidiClass::ET, 18),
+        (BidiClass::CS, 19),
+        (BidiClass::NSM, 20),
+        (BidiClass::S, 21),
+        (BidiClass::WS, 22),
+        (BidiClass::ON, 23),
+    ];
+
+    assert_eq!(BidiClass::from_gnu_type_code(0), None);
+    for (class, code) in classes {
+        assert_eq!(class.gnu_type_code(), code);
+        assert_eq!(BidiClass::from_gnu_type_code(code), Some(class));
+    }
+    assert_eq!(BidiClass::from_gnu_type_code(24), None);
 }
 
 // ===================================================================
