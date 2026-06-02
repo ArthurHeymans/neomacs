@@ -16,6 +16,7 @@ use std::os::fd::AsRawFd;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
+use strum::{EnumString, IntoStaticStr};
 
 thread_local! {
     static BOOTSTRAP_PREFER_LDEFS_BOOT: Cell<bool> = const { Cell::new(false) };
@@ -344,10 +345,28 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum LoadControlSignal {
+    KillEmacs,
+}
+
+impl LoadControlSignal {
+    fn from_symbol_id(symbol: super::intern::SymId) -> Option<Self> {
+        resolve_sym(symbol).parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 fn is_kill_emacs_signal(err: &EvalError) -> bool {
     matches!(
         err,
-        EvalError::Signal { symbol, .. } if resolve_sym(*symbol) == "kill-emacs"
+        EvalError::Signal { symbol, .. } if LoadControlSignal::from_symbol_id(*symbol)
+            == Some(LoadControlSignal::KillEmacs)
     )
 }
 

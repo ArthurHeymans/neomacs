@@ -1090,6 +1090,16 @@ fn finalize_cached_bootstrap_eval_strips_transient_compile_features() {
 }
 
 #[test]
+fn load_control_signal_domain_matches_gnu_kill_emacs() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        LoadControlSignal::from_symbol_id(intern(LoadControlSignal::KillEmacs.name())),
+        Some(LoadControlSignal::KillEmacs)
+    );
+    assert_eq!(LoadControlSignal::from_symbol_id(intern("error")), None);
+}
+
+#[test]
 fn load_file_stops_immediately_on_kill_emacs() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
