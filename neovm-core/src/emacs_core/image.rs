@@ -249,6 +249,20 @@ impl ImageSpecKey {
     }
 }
 
+/// AREA argument accepted by GNU `put-image` and `insert-image`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ImageArea {
+    LeftMargin,
+    RightMargin,
+}
+
+impl ImageArea {
+    fn from_symbol_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+}
+
 pub(crate) fn supported_image_types_value() -> Value {
     Value::list(
         ImageType::AVAILABLE_IN_GNU_LIST_ORDER
@@ -281,6 +295,17 @@ fn normalize_image_type_name(name: &str) -> Option<&'static str> {
                 _ => None,
             }),
     }
+}
+
+fn validate_image_area(area: Value) -> Result<(), Flow> {
+    if area.is_nil() || ImageArea::from_symbol_value(area).is_some() {
+        return Ok(());
+    }
+    let rendered = super::print::print_value(&area);
+    Err(signal(
+        "error",
+        vec![Value::string(format!("Invalid area {rendered}"))],
+    ))
 }
 
 fn infer_image_type_from_filename(path: &str) -> Option<&'static str> {
@@ -683,19 +708,8 @@ pub(crate) fn builtin_put_image(args: Vec<Value>) -> EvalResult {
         ));
     }
 
-    // Optional AREA must be nil, left-margin, or right-margin.
     if args.len() > 3 && !args[3].is_nil() {
-        let valid = matches!(
-            args[3].as_symbol_name(),
-            Some("left-margin") | Some("right-margin")
-        );
-        if !valid {
-            let rendered = super::print::print_value(&args[3]);
-            return Err(signal(
-                "error",
-                vec![Value::string(format!("Invalid area {rendered}"))],
-            ));
-        }
+        validate_image_area(args[3])?;
     }
 
     // Batch compatibility: return a truthy placeholder for inserted overlay.
@@ -718,19 +732,8 @@ pub(crate) fn builtin_insert_image(args: Vec<Value>) -> EvalResult {
         ));
     }
 
-    // Optional AREA must be nil, left-margin, or right-margin.
     if args.len() > 2 && !args[2].is_nil() {
-        let valid = matches!(
-            args[2].as_symbol_name(),
-            Some("left-margin") | Some("right-margin")
-        );
-        if !valid {
-            let rendered = super::print::print_value(&args[2]);
-            return Err(signal(
-                "error",
-                vec![Value::string(format!("Invalid area {rendered}"))],
-            ));
-        }
+        validate_image_area(args[2])?;
     }
 
     Ok(Value::T)

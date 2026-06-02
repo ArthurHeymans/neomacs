@@ -452,6 +452,24 @@ fn image_mask_p_resolves_image_and_returns_nil_on_gui_frame() {
 // -----------------------------------------------------------------------
 
 #[test]
+fn image_area_domain_matches_gnu_margin_symbols() {
+    assert_eq!(
+        ImageArea::from_symbol_value(Value::symbol("left-margin")),
+        Some(ImageArea::LeftMargin)
+    );
+    assert_eq!(
+        ImageArea::from_symbol_value(Value::symbol("right-margin")),
+        Some(ImageArea::RightMargin)
+    );
+    assert_eq!(ImageArea::from_symbol_value(Value::NIL), None);
+    assert_eq!(
+        ImageArea::from_symbol_value(Value::symbol("Left-Margin")),
+        None
+    );
+    assert_eq!(ImageArea::from_symbol_value(Value::symbol("center")), None);
+}
+
+#[test]
 fn put_image_requires_image_and_point() {
     crate::test_utils::init_test_tracing();
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
