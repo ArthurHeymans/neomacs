@@ -58,6 +58,13 @@ fn eol_type_domain_matches_gnu_symbols_and_codes() {
     assert_eq!(EolType::Unix.to_int(), 0);
     assert_eq!(EolType::Dos.to_int(), 1);
     assert_eq!(EolType::Mac.to_int(), 2);
+    assert_eq!(i8::from(EolType::Unix), 0);
+    assert_eq!(i8::from(EolType::Dos), 1);
+    assert_eq!(i8::from(EolType::Mac), 2);
+    assert_eq!(EolType::try_from(0_i8), Ok(EolType::Unix));
+    assert_eq!(EolType::try_from(1_i8), Ok(EolType::Dos));
+    assert_eq!(EolType::try_from(2_i8), Ok(EolType::Mac));
+    assert!(EolType::try_from(3_i8).is_err());
     assert_eq!(EolType::Unix.name(), "unix");
 }
 

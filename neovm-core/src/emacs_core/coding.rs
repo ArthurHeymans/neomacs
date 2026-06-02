@@ -21,6 +21,7 @@ use super::eval::Context;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
 
@@ -141,17 +142,20 @@ fn coding_runtime_string(value: &Value) -> Result<String, Flow> {
 // ---------------------------------------------------------------------------
 
 /// End-of-line conversion types matching Emacs conventions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
+)]
+#[repr(i8)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EolType {
     /// LF (Unix) -- value 0
-    Unix,
+    Unix = 0,
     /// CRLF (DOS/Windows) -- value 1
-    Dos,
+    Dos = 1,
     /// CR (Classic Mac) -- value 2
-    Mac,
+    Mac = 2,
     /// Undecided / detect automatically
-    Undecided,
+    Undecided = -1,
 }
 
 impl EolType {
@@ -173,16 +177,18 @@ impl EolType {
     }
 
     pub fn to_int(self) -> i64 {
-        match self {
-            EolType::Unix => 0,
-            EolType::Dos => 1,
-            EolType::Mac => 2,
-            EolType::Undecided => 0,
-        }
+        self.specified_index().unwrap_or(0)
     }
 
     pub fn to_symbol(self) -> Value {
         Value::symbol(self.name())
+    }
+
+    pub fn specified_index(self) -> Option<i64> {
+        match self {
+            EolType::Undecided => None,
+            specified => Some(i8::from(specified) as i64),
+        }
     }
 
     pub fn suffix(self) -> &'static str {
@@ -1413,21 +1419,17 @@ pub(crate) fn builtin_coding_system_eol_type(
         return Ok(Value::NIL);
     };
 
-    match info.eol_type {
-        EolType::Unix => Ok(Value::fixnum(0)),
-        EolType::Dos => Ok(Value::fixnum(1)),
-        EolType::Mac => Ok(Value::fixnum(2)),
-        EolType::Undecided => {
-            // Return [base-unix base-dos base-mac] using Emacs display base names.
-            let base = eol_vector_base(strip_eol_suffix(&resolved_name));
-            let vec = vec![
-                Value::symbol(format!("{base}-unix")),
-                Value::symbol(format!("{base}-dos")),
-                Value::symbol(format!("{base}-mac")),
-            ];
-            Ok(Value::vector(vec))
-        }
+    if let Some(index) = info.eol_type.specified_index() {
+        return Ok(Value::fixnum(index));
     }
+    // Return [base-unix base-dos base-mac] using Emacs display base names.
+    let base = eol_vector_base(strip_eol_suffix(&resolved_name));
+    let vec = vec![
+        Value::symbol(format!("{base}-unix")),
+        Value::symbol(format!("{base}-dos")),
+        Value::symbol(format!("{base}-mac")),
+    ];
+    Ok(Value::vector(vec))
 }
 
 /// `(coding-system-type CODING-SYSTEM)` -- return the type symbol of the
@@ -1601,12 +1603,7 @@ pub(crate) fn builtin_coding_system_change_text_conversion(
                     if let Some(eol) = EolType::from_suffix(&resolved) {
                         Some(eol.to_int())
                     } else if let Some(info) = mgr.get(&resolved) {
-                        match info.eol_type {
-                            EolType::Unix => Some(0),
-                            EolType::Dos => Some(1),
-                            EolType::Mac => Some(2),
-                            EolType::Undecided => None,
-                        }
+                        info.eol_type.specified_index()
                     } else {
                         None
                     }
