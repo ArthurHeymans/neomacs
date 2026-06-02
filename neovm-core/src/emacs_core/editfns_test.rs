@@ -254,6 +254,46 @@ fn combine_after_change_still_updates_treesit_linecol_cache() {
 }
 
 #[test]
+fn combine_after_change_special_case_uses_gnu_symbol_identity() {
+    crate::test_utils::init_test_tracing();
+    install_test_runtime();
+
+    let mut eval = crate::emacs_core::Context::new();
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    let before_sym = crate::emacs_core::intern::intern("before-change-functions");
+    eval.obarray
+        .set_symbol_value("combine-after-change-calls", Value::T);
+    eval.obarray
+        .set_symbol_value("before-change-functions", Value::NIL);
+    eval.set_buffer_local_binding_by_id(
+        current,
+        before_sym,
+        Value::list(vec![Value::T, Value::symbol("syntax-ppss-flush-cache")]),
+    )
+    .expect("install canonical before-change-functions shape");
+
+    assert_eq!(
+        BeforeChangeSpecialFunction::SyntaxPpssFlushCache.name(),
+        "syntax-ppss-flush-cache"
+    );
+    assert!(combine_after_change_calls_active(&eval));
+
+    eval.set_buffer_local_binding_by_id(
+        current,
+        before_sym,
+        Value::list(vec![
+            Value::T,
+            Value::symbol(crate::emacs_core::intern::intern_uninterned(
+                "syntax-ppss-flush-cache",
+            )),
+        ]),
+    )
+    .expect("install uninterned same-name before-change function");
+
+    assert!(!combine_after_change_calls_active(&eval));
+}
+
+#[test]
 fn translate_region_accepts_real_char_table_translation_table() {
     crate::test_utils::init_test_tracing();
     install_test_runtime();

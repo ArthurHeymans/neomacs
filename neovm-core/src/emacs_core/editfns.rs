@@ -19,6 +19,7 @@ use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
 #[cfg(unix)]
 use std::ffi::CStr;
+use strum::IntoStaticStr;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -393,6 +394,22 @@ fn finish_treesit_after_buffer_change(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum BeforeChangeSpecialFunction {
+    SyntaxPpssFlushCache,
+}
+
+impl BeforeChangeSpecialFunction {
+    fn is_lisp_value(self, value: Value) -> bool {
+        value == Value::symbol(self.name())
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 /// Mirrors GNU's deferral predicate for `signal_after_change`
 /// (`insdel.c:2393`). True when `combine-after-change-calls` is non-nil and
 /// `before-change-functions` is either nil or the well-known
@@ -424,7 +441,7 @@ fn combine_after_change_calls_active(ctx: &crate::emacs_core::eval::Context) -> 
             let rest = tail.cons_cdr();
             if rest.is_nil()
                 && second.is_symbol()
-                && second.as_symbol_name() == Some("syntax-ppss-flush-cache")
+                && BeforeChangeSpecialFunction::SyntaxPpssFlushCache.is_lisp_value(second)
             {
                 let default_val = ctx
                     .obarray
