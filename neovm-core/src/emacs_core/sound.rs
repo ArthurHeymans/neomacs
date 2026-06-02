@@ -8,6 +8,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // GNU Emacs sound spec parsing
@@ -28,6 +29,23 @@ struct SoundSpec {
     device: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SoundSpecHead {
+    Sound,
+}
+
+impl SoundSpecHead {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
     let elements = list_to_vec(&sound).unwrap_or_default();
     if elements.is_empty() {
@@ -37,21 +55,15 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
         ));
     }
 
-    match elements[0].kind() {
-        ValueKind::Symbol(s) => {
-            if crate::emacs_core::intern::resolve_sym(s) != "sound" {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Invalid sound specification")],
-                ));
-            }
-        }
-        _ => {
-            return Err(signal(
-                "error",
-                vec![Value::string("Invalid sound specification")],
-            ));
-        }
+    if SoundSpecHead::from_lisp_value(&elements[0]) != Some(SoundSpecHead::Sound) {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid sound specification")],
+        ));
+    }
+
+    if (elements.len() - 1) % 2 != 0 {
+        return Err(signal("malformed-keyword-arg-list", vec![]));
     }
 
     let plist_val = if elements.len() > 1 {
@@ -351,6 +363,35 @@ pub(crate) fn builtin_play_sound_internal(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sound_spec_head_domain_matches_gnu() {
+        crate::test_utils::init_test_tracing();
+        assert_eq!(
+            SoundSpecHead::from_lisp_value(&Value::symbol("sound")),
+            Some(SoundSpecHead::Sound)
+        );
+        assert_eq!(SoundSpecHead::Sound.name(), "sound");
+        assert_eq!(
+            SoundSpecHead::from_lisp_value(&Value::symbol("not-sound")),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_sound_spec_odd_plist_signals_malformed_keyword_arg_list() {
+        crate::test_utils::init_test_tracing();
+
+        let invalid = Value::list(vec![Value::symbol("sound"), Value::symbol(":data")]);
+        match parse_sound_spec(invalid) {
+            Err(Flow::Signal(sig)) => {
+                assert_eq!(sig.symbol_name(), "malformed-keyword-arg-list");
+                assert!(sig.data.is_empty());
+            }
+            Err(other) => panic!("unexpected flow: {other:?}"),
+            Ok(_) => panic!("expected malformed keyword arg list"),
+        }
+    }
 
     #[test]
     fn parse_sound_spec_validates_device_like_gnu() {
