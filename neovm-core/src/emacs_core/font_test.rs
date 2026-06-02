@@ -2641,10 +2641,46 @@ fn face_id_rejects_non_symbol_faces() {
 #[test]
 fn face_id_known_faces_use_oracle_ids() {
     crate::test_utils::init_test_tracing();
-    let bold = builtin_face_id(vec![Value::symbol("bold")]).unwrap();
-    assert_eq!(bold.as_int(), Some(1));
-    let mode_line = builtin_face_id(vec![Value::symbol("mode-line")]).unwrap();
-    assert_eq!(mode_line.as_int(), Some(25));
+    let faces = [
+        ("default", 0),
+        ("bold", 1),
+        ("italic", 2),
+        ("bold-italic", 3),
+        ("mode-line", 25),
+        ("mode-line-active", 26),
+        ("mode-line-inactive", 27),
+        ("header-line", 31),
+        ("header-line-active", 33),
+        ("header-line-inactive", 34),
+        ("fringe", 42),
+        ("scroll-bar", 43),
+        ("cursor", 45),
+        ("tool-bar", 47),
+        ("tab-line", 49),
+        ("menu", 50),
+        ("tooltip", 182),
+    ];
+    for (face, id) in faces {
+        let value = builtin_face_id(vec![Value::symbol(face)]).unwrap();
+        assert_eq!(value.as_int(), Some(id), "face-id mismatch for {face}");
+    }
+    assert_eq!(FIRST_DYNAMIC_FACE_ID, 183);
+}
+
+#[test]
+fn gnu_bootstrap_lisp_face_ids_round_trip_names() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        GNU_BOOTSTRAP_LISP_FACES.len(),
+        FIRST_DYNAMIC_FACE_ID as usize
+    );
+    for (expected_id, face) in GNU_BOOTSTRAP_LISP_FACES.iter().copied().enumerate() {
+        assert_eq!(face.id(), expected_id as i64);
+        assert_eq!(known_face_id(face.name()), Some(expected_id as i64));
+    }
+    assert_eq!(known_face_id("isearch-group-1"), Some(111));
+    assert_eq!(known_face_id("isearch-group-2"), Some(112));
+    assert_eq!(known_face_id("unknown-face"), None);
 }
 
 #[test]

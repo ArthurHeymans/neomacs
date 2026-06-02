@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, RwLock};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use strum::EnumString;
+use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
@@ -2093,54 +2093,411 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
 // Face builtins (pure)
 // ===========================================================================
 
-/// Well-known face names returned by `face-list` and recognised by
-/// `internal-lisp-face-p`.
-const KNOWN_FACES: &[&str] = &[
-    "default",
-    "bold",
-    "italic",
-    "underline",
-    "fixed-pitch",
-    "variable-pitch",
-    "highlight",
-    "region",
-    "mode-line",
-    "mode-line-highlight",
-    "mode-line-emphasis",
-    "mode-line-buffer-id",
-    "mode-line-inactive",
-    "header-line",
-    "header-line-highlight",
-    "header-line-active",
-    "header-line-inactive",
-    "fringe",
-    "vertical-border",
-    "scroll-bar",
-    "border",
-    "internal-border",
-    "child-frame-border",
-    "cursor",
-    "mouse",
-    "tool-bar",
-    "tab-bar",
-    "tab-line",
+/// Lisp face IDs assigned during GNU Emacs `-Q` loadup.
+///
+/// These IDs are the symbol `face` property returned by `(face-id FACE)`.
+/// They are distinct from GNU's realized display-cache `enum face_id`.
+#[repr(i64)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoPrimitive, IntoStaticStr, TryFromPrimitive,
+)]
+#[strum(serialize_all = "kebab-case")]
+enum GnuBootstrapLispFaceId {
+    Default = 0,
+    Bold = 1,
+    Italic = 2,
+    BoldItalic = 3,
+    Underline = 4,
+    FixedPitch = 5,
+    FixedPitchSerif = 6,
+    VariablePitch = 7,
+    VariablePitchText = 8,
+    Shadow = 9,
+    Link = 10,
+    LinkVisited = 11,
+    Highlight = 12,
+    Region = 13,
+    SecondarySelection = 14,
+    TrailingWhitespace = 15,
+    LineNumber = 16,
+    LineNumberCurrentLine = 17,
+    LineNumberMajorTick = 18,
+    LineNumberMinorTick = 19,
+    FillColumnIndicator = 20,
+    EscapeGlyph = 21,
+    Homoglyph = 22,
+    NobreakSpace = 23,
+    NobreakHyphen = 24,
+    ModeLine = 25,
+    ModeLineActive = 26,
+    ModeLineInactive = 27,
+    ModeLineHighlight = 28,
+    ModeLineEmphasis = 29,
+    ModeLineBufferId = 30,
+    HeaderLine = 31,
+    HeaderLineHighlight = 32,
+    HeaderLineActive = 33,
+    HeaderLineInactive = 34,
+    VerticalBorder = 35,
+    WindowDivider = 36,
+    WindowDividerFirstPixel = 37,
+    WindowDividerLastPixel = 38,
+    InternalBorder = 39,
+    ChildFrameBorder = 40,
+    MinibufferPrompt = 41,
+    Fringe = 42,
+    ScrollBar = 43,
+    Border = 44,
+    Cursor = 45,
+    Mouse = 46,
+    ToolBar = 47,
+    TabBar = 48,
+    TabLine = 49,
+    Menu = 50,
+    HelpArgumentName = 51,
+    HelpKeyBinding = 52,
+    GlyphlessChar = 53,
+    Error = 54,
+    Warning = 55,
+    Success = 56,
+    ReadMultipleChoiceFace = 57,
+    TtyMenuEnabledFace = 58,
+    TtyMenuDisabledFace = 59,
+    TtyMenuSelectedFace = 60,
+    ShowParenMatch = 61,
+    ShowParenMatchExpression = 62,
+    ShowParenMismatch = 63,
+    Button = 64,
+    AbbrevTableName = 65,
+    HelpForHelpHeader = 66,
+    ConfusinglyReordered = 67,
+    NextError = 68,
+    NextErrorMessage = 69,
+    SeparatorLine = 70,
+    BlinkMatchingParenOffscreen = 71,
+    CompletionsGroupTitle = 72,
+    CompletionsGroupSeparator = 73,
+    CompletionsAnnotations = 74,
+    CompletionsHighlight = 75,
+    CompletionsFirstDifference = 76,
+    CompletionsCommonPart = 77,
+    MinibufferNonselected = 78,
+    FontLockCommentFace = 79,
+    FontLockCommentDelimiterFace = 80,
+    FontLockStringFace = 81,
+    FontLockDocFace = 82,
+    FontLockDocMarkupFace = 83,
+    FontLockKeywordFace = 84,
+    FontLockBuiltinFace = 85,
+    FontLockFunctionNameFace = 86,
+    FontLockFunctionCallFace = 87,
+    FontLockVariableNameFace = 88,
+    FontLockVariableUseFace = 89,
+    FontLockTypeFace = 90,
+    FontLockConstantFace = 91,
+    FontLockWarningFace = 92,
+    FontLockNegationCharFace = 93,
+    FontLockPreprocessorFace = 94,
+    FontLockRegexpFace = 95,
+    FontLockRegexpGroupingBackslash = 96,
+    FontLockRegexpGroupingConstruct = 97,
+    FontLockEscapeFace = 98,
+    FontLockNumberFace = 99,
+    FontLockOperatorFace = 100,
+    FontLockPropertyNameFace = 101,
+    FontLockPropertyUseFace = 102,
+    FontLockPunctuationFace = 103,
+    FontLockBracketFace = 104,
+    FontLockDelimiterFace = 105,
+    FontLockMiscPunctuationFace = 106,
+    MouseDragAndDropRegion = 107,
+    Isearch = 108,
+    IsearchFail = 109,
+    LazyHighlight = 110,
+    #[strum(to_string = "isearch-group-1")]
+    IsearchGroup1 = 111,
+    #[strum(to_string = "isearch-group-2")]
+    IsearchGroup2 = 112,
+    FileNameShadow = 113,
+    TabBarTab = 114,
+    TabBarTabInactive = 115,
+    TabBarTabGroupCurrent = 116,
+    TabBarTabGroupInactive = 117,
+    TabBarTabUngrouped = 118,
+    TabBarTabHighlight = 119,
+    QueryReplace = 120,
+    Match = 121,
+    TabulatedListFakeHeader = 122,
+    BufferMenuBuffer = 123,
+    ElispSymbolAtMouse = 124,
+    ElispFreeVariable = 125,
+    ElispSpecialVariableDeclaration = 126,
+    ElispCondition = 127,
+    ElispMajorModeName = 128,
+    ElispFace = 129,
+    ElispSymbolRole = 130,
+    ElispSymbolRoleDefinition = 131,
+    ElispFunction = 132,
+    ElispNonLocalExit = 133,
+    ElispUnknownCall = 134,
+    ElispMacro = 135,
+    ElispSpecialForm = 136,
+    ElispThrowTag = 137,
+    ElispFeature = 138,
+    ElispRx = 139,
+    ElispTheme = 140,
+    ElispBindingVariable = 141,
+    ElispBoundVariable = 142,
+    ElispShadowingVariable = 143,
+    ElispShadowedVariable = 144,
+    ElispVariableAtPoint = 145,
+    ElispWarningType = 146,
+    ElispFunctionPropertyDeclaration = 147,
+    ElispThing = 148,
+    ElispSlot = 149,
+    ElispWidgetType = 150,
+    ElispType = 151,
+    ElispGroup = 152,
+    ElispNnooBackend = 153,
+    ElispAmpersand = 154,
+    ElispConstant = 155,
+    ElispDefun = 156,
+    ElispDefmacro = 157,
+    ElispDefvar = 158,
+    ElispDefface = 159,
+    ElispIcon = 160,
+    ElispDeficon = 161,
+    ElispOclosure = 162,
+    ElispDefoclosure = 163,
+    ElispCoding = 164,
+    ElispDefcoding = 165,
+    ElispCharset = 166,
+    ElispDefcharset = 167,
+    ElispCompletionCategory = 168,
+    ElispCompletionCategoryDefinition = 169,
+    VcStateBase = 170,
+    VcUpToDateState = 171,
+    VcNeedsUpdateState = 172,
+    VcLockedState = 173,
+    VcLocallyAddedState = 174,
+    VcConflictState = 175,
+    VcRemovedState = 176,
+    VcMissingState = 177,
+    VcEditedState = 178,
+    VcIgnoredState = 179,
+    ElispShorthandFontLockFace = 180,
+    EldocHighlightFunctionArgument = 181,
+    Tooltip = 182,
+}
+
+const GNU_BOOTSTRAP_LISP_FACES: &[GnuBootstrapLispFaceId] = &[
+    GnuBootstrapLispFaceId::Default,
+    GnuBootstrapLispFaceId::Bold,
+    GnuBootstrapLispFaceId::Italic,
+    GnuBootstrapLispFaceId::BoldItalic,
+    GnuBootstrapLispFaceId::Underline,
+    GnuBootstrapLispFaceId::FixedPitch,
+    GnuBootstrapLispFaceId::FixedPitchSerif,
+    GnuBootstrapLispFaceId::VariablePitch,
+    GnuBootstrapLispFaceId::VariablePitchText,
+    GnuBootstrapLispFaceId::Shadow,
+    GnuBootstrapLispFaceId::Link,
+    GnuBootstrapLispFaceId::LinkVisited,
+    GnuBootstrapLispFaceId::Highlight,
+    GnuBootstrapLispFaceId::Region,
+    GnuBootstrapLispFaceId::SecondarySelection,
+    GnuBootstrapLispFaceId::TrailingWhitespace,
+    GnuBootstrapLispFaceId::LineNumber,
+    GnuBootstrapLispFaceId::LineNumberCurrentLine,
+    GnuBootstrapLispFaceId::LineNumberMajorTick,
+    GnuBootstrapLispFaceId::LineNumberMinorTick,
+    GnuBootstrapLispFaceId::FillColumnIndicator,
+    GnuBootstrapLispFaceId::EscapeGlyph,
+    GnuBootstrapLispFaceId::Homoglyph,
+    GnuBootstrapLispFaceId::NobreakSpace,
+    GnuBootstrapLispFaceId::NobreakHyphen,
+    GnuBootstrapLispFaceId::ModeLine,
+    GnuBootstrapLispFaceId::ModeLineActive,
+    GnuBootstrapLispFaceId::ModeLineInactive,
+    GnuBootstrapLispFaceId::ModeLineHighlight,
+    GnuBootstrapLispFaceId::ModeLineEmphasis,
+    GnuBootstrapLispFaceId::ModeLineBufferId,
+    GnuBootstrapLispFaceId::HeaderLine,
+    GnuBootstrapLispFaceId::HeaderLineHighlight,
+    GnuBootstrapLispFaceId::HeaderLineActive,
+    GnuBootstrapLispFaceId::HeaderLineInactive,
+    GnuBootstrapLispFaceId::VerticalBorder,
+    GnuBootstrapLispFaceId::WindowDivider,
+    GnuBootstrapLispFaceId::WindowDividerFirstPixel,
+    GnuBootstrapLispFaceId::WindowDividerLastPixel,
+    GnuBootstrapLispFaceId::InternalBorder,
+    GnuBootstrapLispFaceId::ChildFrameBorder,
+    GnuBootstrapLispFaceId::MinibufferPrompt,
+    GnuBootstrapLispFaceId::Fringe,
+    GnuBootstrapLispFaceId::ScrollBar,
+    GnuBootstrapLispFaceId::Border,
+    GnuBootstrapLispFaceId::Cursor,
+    GnuBootstrapLispFaceId::Mouse,
+    GnuBootstrapLispFaceId::ToolBar,
+    GnuBootstrapLispFaceId::TabBar,
+    GnuBootstrapLispFaceId::TabLine,
+    GnuBootstrapLispFaceId::Menu,
+    GnuBootstrapLispFaceId::HelpArgumentName,
+    GnuBootstrapLispFaceId::HelpKeyBinding,
+    GnuBootstrapLispFaceId::GlyphlessChar,
+    GnuBootstrapLispFaceId::Error,
+    GnuBootstrapLispFaceId::Warning,
+    GnuBootstrapLispFaceId::Success,
+    GnuBootstrapLispFaceId::ReadMultipleChoiceFace,
+    GnuBootstrapLispFaceId::TtyMenuEnabledFace,
+    GnuBootstrapLispFaceId::TtyMenuDisabledFace,
+    GnuBootstrapLispFaceId::TtyMenuSelectedFace,
+    GnuBootstrapLispFaceId::ShowParenMatch,
+    GnuBootstrapLispFaceId::ShowParenMatchExpression,
+    GnuBootstrapLispFaceId::ShowParenMismatch,
+    GnuBootstrapLispFaceId::Button,
+    GnuBootstrapLispFaceId::AbbrevTableName,
+    GnuBootstrapLispFaceId::HelpForHelpHeader,
+    GnuBootstrapLispFaceId::ConfusinglyReordered,
+    GnuBootstrapLispFaceId::NextError,
+    GnuBootstrapLispFaceId::NextErrorMessage,
+    GnuBootstrapLispFaceId::SeparatorLine,
+    GnuBootstrapLispFaceId::BlinkMatchingParenOffscreen,
+    GnuBootstrapLispFaceId::CompletionsGroupTitle,
+    GnuBootstrapLispFaceId::CompletionsGroupSeparator,
+    GnuBootstrapLispFaceId::CompletionsAnnotations,
+    GnuBootstrapLispFaceId::CompletionsHighlight,
+    GnuBootstrapLispFaceId::CompletionsFirstDifference,
+    GnuBootstrapLispFaceId::CompletionsCommonPart,
+    GnuBootstrapLispFaceId::MinibufferNonselected,
+    GnuBootstrapLispFaceId::FontLockCommentFace,
+    GnuBootstrapLispFaceId::FontLockCommentDelimiterFace,
+    GnuBootstrapLispFaceId::FontLockStringFace,
+    GnuBootstrapLispFaceId::FontLockDocFace,
+    GnuBootstrapLispFaceId::FontLockDocMarkupFace,
+    GnuBootstrapLispFaceId::FontLockKeywordFace,
+    GnuBootstrapLispFaceId::FontLockBuiltinFace,
+    GnuBootstrapLispFaceId::FontLockFunctionNameFace,
+    GnuBootstrapLispFaceId::FontLockFunctionCallFace,
+    GnuBootstrapLispFaceId::FontLockVariableNameFace,
+    GnuBootstrapLispFaceId::FontLockVariableUseFace,
+    GnuBootstrapLispFaceId::FontLockTypeFace,
+    GnuBootstrapLispFaceId::FontLockConstantFace,
+    GnuBootstrapLispFaceId::FontLockWarningFace,
+    GnuBootstrapLispFaceId::FontLockNegationCharFace,
+    GnuBootstrapLispFaceId::FontLockPreprocessorFace,
+    GnuBootstrapLispFaceId::FontLockRegexpFace,
+    GnuBootstrapLispFaceId::FontLockRegexpGroupingBackslash,
+    GnuBootstrapLispFaceId::FontLockRegexpGroupingConstruct,
+    GnuBootstrapLispFaceId::FontLockEscapeFace,
+    GnuBootstrapLispFaceId::FontLockNumberFace,
+    GnuBootstrapLispFaceId::FontLockOperatorFace,
+    GnuBootstrapLispFaceId::FontLockPropertyNameFace,
+    GnuBootstrapLispFaceId::FontLockPropertyUseFace,
+    GnuBootstrapLispFaceId::FontLockPunctuationFace,
+    GnuBootstrapLispFaceId::FontLockBracketFace,
+    GnuBootstrapLispFaceId::FontLockDelimiterFace,
+    GnuBootstrapLispFaceId::FontLockMiscPunctuationFace,
+    GnuBootstrapLispFaceId::MouseDragAndDropRegion,
+    GnuBootstrapLispFaceId::Isearch,
+    GnuBootstrapLispFaceId::IsearchFail,
+    GnuBootstrapLispFaceId::LazyHighlight,
+    GnuBootstrapLispFaceId::IsearchGroup1,
+    GnuBootstrapLispFaceId::IsearchGroup2,
+    GnuBootstrapLispFaceId::FileNameShadow,
+    GnuBootstrapLispFaceId::TabBarTab,
+    GnuBootstrapLispFaceId::TabBarTabInactive,
+    GnuBootstrapLispFaceId::TabBarTabGroupCurrent,
+    GnuBootstrapLispFaceId::TabBarTabGroupInactive,
+    GnuBootstrapLispFaceId::TabBarTabUngrouped,
+    GnuBootstrapLispFaceId::TabBarTabHighlight,
+    GnuBootstrapLispFaceId::QueryReplace,
+    GnuBootstrapLispFaceId::Match,
+    GnuBootstrapLispFaceId::TabulatedListFakeHeader,
+    GnuBootstrapLispFaceId::BufferMenuBuffer,
+    GnuBootstrapLispFaceId::ElispSymbolAtMouse,
+    GnuBootstrapLispFaceId::ElispFreeVariable,
+    GnuBootstrapLispFaceId::ElispSpecialVariableDeclaration,
+    GnuBootstrapLispFaceId::ElispCondition,
+    GnuBootstrapLispFaceId::ElispMajorModeName,
+    GnuBootstrapLispFaceId::ElispFace,
+    GnuBootstrapLispFaceId::ElispSymbolRole,
+    GnuBootstrapLispFaceId::ElispSymbolRoleDefinition,
+    GnuBootstrapLispFaceId::ElispFunction,
+    GnuBootstrapLispFaceId::ElispNonLocalExit,
+    GnuBootstrapLispFaceId::ElispUnknownCall,
+    GnuBootstrapLispFaceId::ElispMacro,
+    GnuBootstrapLispFaceId::ElispSpecialForm,
+    GnuBootstrapLispFaceId::ElispThrowTag,
+    GnuBootstrapLispFaceId::ElispFeature,
+    GnuBootstrapLispFaceId::ElispRx,
+    GnuBootstrapLispFaceId::ElispTheme,
+    GnuBootstrapLispFaceId::ElispBindingVariable,
+    GnuBootstrapLispFaceId::ElispBoundVariable,
+    GnuBootstrapLispFaceId::ElispShadowingVariable,
+    GnuBootstrapLispFaceId::ElispShadowedVariable,
+    GnuBootstrapLispFaceId::ElispVariableAtPoint,
+    GnuBootstrapLispFaceId::ElispWarningType,
+    GnuBootstrapLispFaceId::ElispFunctionPropertyDeclaration,
+    GnuBootstrapLispFaceId::ElispThing,
+    GnuBootstrapLispFaceId::ElispSlot,
+    GnuBootstrapLispFaceId::ElispWidgetType,
+    GnuBootstrapLispFaceId::ElispType,
+    GnuBootstrapLispFaceId::ElispGroup,
+    GnuBootstrapLispFaceId::ElispNnooBackend,
+    GnuBootstrapLispFaceId::ElispAmpersand,
+    GnuBootstrapLispFaceId::ElispConstant,
+    GnuBootstrapLispFaceId::ElispDefun,
+    GnuBootstrapLispFaceId::ElispDefmacro,
+    GnuBootstrapLispFaceId::ElispDefvar,
+    GnuBootstrapLispFaceId::ElispDefface,
+    GnuBootstrapLispFaceId::ElispIcon,
+    GnuBootstrapLispFaceId::ElispDeficon,
+    GnuBootstrapLispFaceId::ElispOclosure,
+    GnuBootstrapLispFaceId::ElispDefoclosure,
+    GnuBootstrapLispFaceId::ElispCoding,
+    GnuBootstrapLispFaceId::ElispDefcoding,
+    GnuBootstrapLispFaceId::ElispCharset,
+    GnuBootstrapLispFaceId::ElispDefcharset,
+    GnuBootstrapLispFaceId::ElispCompletionCategory,
+    GnuBootstrapLispFaceId::ElispCompletionCategoryDefinition,
+    GnuBootstrapLispFaceId::VcStateBase,
+    GnuBootstrapLispFaceId::VcUpToDateState,
+    GnuBootstrapLispFaceId::VcNeedsUpdateState,
+    GnuBootstrapLispFaceId::VcLockedState,
+    GnuBootstrapLispFaceId::VcLocallyAddedState,
+    GnuBootstrapLispFaceId::VcConflictState,
+    GnuBootstrapLispFaceId::VcRemovedState,
+    GnuBootstrapLispFaceId::VcMissingState,
+    GnuBootstrapLispFaceId::VcEditedState,
+    GnuBootstrapLispFaceId::VcIgnoredState,
+    GnuBootstrapLispFaceId::ElispShorthandFontLockFace,
+    GnuBootstrapLispFaceId::EldocHighlightFunctionArgument,
+    GnuBootstrapLispFaceId::Tooltip,
 ];
-const FIRST_DYNAMIC_FACE_ID: i64 = 133;
+
+const FIRST_DYNAMIC_FACE_ID: i64 = 183;
+
+impl GnuBootstrapLispFaceId {
+    fn from_name(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    fn id(self) -> i64 {
+        self.into()
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+fn is_known_lisp_face_name(name: &str) -> bool {
+    GnuBootstrapLispFaceId::from_name(name).is_some()
+}
 
 fn known_face_id(name: &str) -> Option<i64> {
-    match name {
-        "default" => Some(0),
-        "bold" => Some(1),
-        "italic" => Some(2),
-        "underline" => Some(4),
-        "highlight" => Some(12),
-        "region" => Some(13),
-        "mode-line" => Some(25),
-        "mode-line-inactive" => Some(27),
-        "fringe" => Some(40),
-        "cursor" => Some(43),
-        _ => None,
-    }
+    GnuBootstrapLispFaceId::from_name(name).map(GnuBootstrapLispFaceId::id)
 }
 
 const LISP_FACE_VECTOR_LEN: usize = LFACE_VECTOR_SIZE;
@@ -2379,7 +2736,7 @@ pub(crate) fn restore_created_faces_from_table(face_names: &[String]) {
     CREATED_LISP_FACES.with(|slot| {
         let mut set = slot.borrow_mut();
         for name in face_names {
-            if !KNOWN_FACES.contains(&name.as_str()) {
+            if !is_known_lisp_face_name(&name) {
                 set.insert(face_symbol_id(name));
             }
         }
@@ -2431,14 +2788,17 @@ pub(crate) fn face_id_for_name(name: &str) -> Option<i64> {
     if let Some(id) = known_face_id(name) {
         return Some(id);
     }
-    if KNOWN_FACES.contains(&name) {
+    if is_known_lisp_face_name(name) {
         ensure_dynamic_face_id(name);
     }
     dynamic_face_id(name)
 }
 
 pub(crate) fn all_defined_face_names_sorted_by_id_desc() -> Vec<String> {
-    let mut names: Vec<String> = KNOWN_FACES.iter().map(|name| (*name).to_string()).collect();
+    let mut names: Vec<String> = GNU_BOOTSTRAP_LISP_FACES
+        .iter()
+        .map(|face| face.name().to_string())
+        .collect();
     CREATED_LISP_FACES.with(|slot| {
         for symbol in slot.borrow().iter() {
             let name = resolve_sym(*symbol);
@@ -2472,7 +2832,7 @@ fn mark_selected_created_lisp_face(name: &str) {
 }
 
 fn face_exists_for_domain(name: &str, defaults_frame: bool) -> bool {
-    if KNOWN_FACES.contains(&name) {
+    if is_known_lisp_face_name(name) {
         return true;
     }
     // A face created via defface/internal-make-lisp-face exists for all
@@ -2616,7 +2976,7 @@ fn known_face_name(face: &Value) -> Option<String> {
         ValueKind::String => font_string_text(face).expect("checked string"),
         _ => symbol_name_for_face_value(face)?,
     };
-    if KNOWN_FACES.contains(&name.as_str()) || is_created_lisp_face(&name) {
+    if is_known_lisp_face_name(&name) || is_created_lisp_face(&name) {
         Some(name)
     } else {
         None
@@ -2625,7 +2985,7 @@ fn known_face_name(face: &Value) -> Option<String> {
 
 fn resolve_copy_source_face_symbol(face: &Value) -> Result<String, Flow> {
     let name = symbol_name_for_face_value(face).expect("checked symbol before resolve");
-    if KNOWN_FACES.contains(&name.as_str()) || is_created_lisp_face(&name) {
+    if is_known_lisp_face_name(&name) || is_created_lisp_face(&name) {
         return Ok(name);
     }
     Err(invalid_face_error(*face))
@@ -3900,7 +4260,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                     }
                     _ => vec![super::window_cmds::ensure_selected_frame_id(eval)],
                 };
-                let initial = if KNOWN_FACES.contains(&face_name.as_str()) {
+                let initial = if is_known_lisp_face_name(&face_name) {
                     FrameFaceInitial::SelectedBase
                 } else {
                     FrameFaceInitial::Empty
@@ -4429,7 +4789,7 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
 
     let lisp_value = frame_id
         .and_then(|frame_id| {
-            let initial = if KNOWN_FACES.contains(&face_name.as_str()) {
+            let initial = if is_known_lisp_face_name(&face_name) {
                 FrameFaceInitial::SelectedBase
             } else {
                 FrameFaceInitial::Empty
@@ -4516,7 +4876,7 @@ pub(crate) fn builtin_internal_merge_in_global_face(
         ));
     }
     let face_name = resolve_face_name_for_merge(&args[0])?;
-    if !KNOWN_FACES.contains(&face_name.as_str()) {
+    if !is_known_lisp_face_name(&face_name) {
         mark_created_lisp_face(&face_name);
         mark_selected_created_lisp_face(&face_name);
     }
@@ -5096,7 +5456,7 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
         return match args[0].kind() {
             ValueKind::String => {
                 let name = font_string_text(&args[0]).expect("checked string");
-                if KNOWN_FACES.contains(&name.as_str()) {
+                if is_known_lisp_face_name(&name) {
                     Ok(Value::NIL)
                 } else {
                     let payload = if name.is_empty() {
@@ -5113,7 +5473,7 @@ pub(crate) fn builtin_face_font(eval: &mut super::eval::Context, args: Vec<Value
             ValueKind::Nil => Err(signal("error", vec![Value::string("Invalid face")])),
             ValueKind::T | ValueKind::Symbol(_) => {
                 if let Some(name) = symbol_name_for_face_value(&args[0]) {
-                    if KNOWN_FACES.contains(&name.as_str()) {
+                    if is_known_lisp_face_name(&name) {
                         return Ok(Value::NIL);
                     }
                 }
