@@ -73,7 +73,7 @@ fn collect_hook_functions_impl(
             while cursor.is_cons() {
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
-                if pair_car.as_symbol_name() == Some("t") {
+                if pair_car.is_t() {
                     if inherit_global {
                         let global_value = obarray
                             .default_value_id(hook_sym)

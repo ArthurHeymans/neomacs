@@ -8296,6 +8296,25 @@ fn hook_system_runtime_value_shapes() {
 }
 
 #[test]
+fn local_hook_inheritance_marker_is_canonical_t_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (setq hook-count 0)
+             (defalias 'hook-inc #'(lambda () (setq hook-count (1+ hook-count))))
+             (set-default 'hook-probe-hook '(hook-inc))
+             (make-local-variable 'hook-probe-hook)
+             (setq hook-probe-hook (list (make-symbol "t") 'hook-inc))
+             (list (condition-case nil
+                       (progn (run-hooks 'hook-probe-hook) 'no-error)
+                     (void-function 'void-function)
+                     (error 'other-error))
+                   hook-count))"#,
+    );
+    assert_eq!(result, "OK (void-function 0)");
+}
+
+#[test]
 fn safe_run_hook_removes_failing_local_hook_and_continues_to_global_hook() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
