@@ -35,6 +35,23 @@ enum TimeConvertForm {
     ExplicitHz(Integer),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
+enum TimeZoneSymbol {
+    #[strum(serialize = "wall")]
+    Wall,
+}
+
+impl TimeZoneSymbol {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -774,7 +791,10 @@ fn parse_zone_rule(zone: &Value) -> Result<ZoneRule, Flow> {
     match zone.kind() {
         ValueKind::Nil => Ok(ZoneRule::Local),
         ValueKind::T => Ok(ZoneRule::Utc),
-        ValueKind::Symbol(id) if resolve_sym(id) == "wall" => Ok(ZoneRule::Local),
+        ValueKind::Symbol(_) => match TimeZoneSymbol::from_value(zone) {
+            Some(TimeZoneSymbol::Wall) => Ok(ZoneRule::Local),
+            None => Err(invalid_time_zone_spec(zone)),
+        },
         ValueKind::Fixnum(n) => Ok(ZoneRule::FixedOffset(n)),
         ValueKind::String => Ok(ZoneRule::TzString(
             zone.as_runtime_string_owned()

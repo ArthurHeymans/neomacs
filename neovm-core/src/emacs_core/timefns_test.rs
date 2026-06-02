@@ -1073,6 +1073,30 @@ fn current_time_string_epoch() {
 }
 
 #[test]
+fn time_zone_symbol_domain_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        TimeZoneSymbol::from_value(&Value::symbol("wall")),
+        Some(TimeZoneSymbol::Wall)
+    );
+    assert_eq!(TimeZoneSymbol::Wall.name(), "wall");
+    assert_eq!(TimeZoneSymbol::from_value(&Value::NIL), None);
+    assert_eq!(TimeZoneSymbol::from_value(&Value::T), None);
+    assert_eq!(TimeZoneSymbol::from_value(&Value::symbol("local")), None);
+
+    assert!(matches!(
+        parse_zone_rule(&Value::NIL).unwrap(),
+        ZoneRule::Local
+    ));
+    assert!(matches!(
+        parse_zone_rule(&Value::symbol("wall")).unwrap(),
+        ZoneRule::Local
+    ));
+    assert!(matches!(parse_zone_rule(&Value::T).unwrap(), ZoneRule::Utc));
+    assert!(parse_zone_rule(&Value::symbol("local")).is_err());
+}
+
+#[test]
 fn parse_zone_rule_accepts_raw_unibyte_string_without_panicking() {
     crate::test_utils::init_test_tracing();
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xFF]));
