@@ -99,6 +99,7 @@ fn toolbar_item(index: u32) -> ToolBarItem {
         enabled: true,
         selected: false,
         item_type: ToolBarItemType::Button,
+        wrap: false,
     }
 }
 

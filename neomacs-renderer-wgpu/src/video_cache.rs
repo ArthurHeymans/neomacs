@@ -118,8 +118,22 @@ pub struct CachedVideo {
 /// Request to load a video
 struct LoadRequest {
     id: u32,
-    path: String,
+    source: VideoLoadSource,
     loop_count: Arc<AtomicI32>,
+}
+
+#[derive(Debug)]
+enum VideoLoadSource {
+    File(String),
+    Uri(String),
+}
+
+impl VideoLoadSource {
+    fn as_str(&self) -> &str {
+        match self {
+            Self::File(path) | Self::Uri(path) => path,
+        }
+    }
 }
 
 /// Video pipeline with frame extraction
@@ -222,6 +236,31 @@ impl VideoCache {
 
     /// Load a video file with a pre-allocated ID.
     pub fn load_file_with_id(&mut self, id: u32, path: &str, loop_count: i32, autoplay: bool) {
+        self.load_source_with_id(
+            id,
+            VideoLoadSource::File(path.to_string()),
+            loop_count,
+            autoplay,
+        );
+    }
+
+    /// Load a video URI with a pre-allocated ID.
+    pub fn load_uri_with_id(&mut self, id: u32, uri: &str, loop_count: i32, autoplay: bool) {
+        self.load_source_with_id(
+            id,
+            VideoLoadSource::Uri(uri.to_string()),
+            loop_count,
+            autoplay,
+        );
+    }
+
+    fn load_source_with_id(
+        &mut self,
+        id: u32,
+        source: VideoLoadSource,
+        loop_count: i32,
+        autoplay: bool,
+    ) {
         self.next_id = self.next_id.max(id.saturating_add(1));
         // Create placeholder entry
         let loop_count = Arc::new(AtomicI32::new(loop_count));
@@ -245,13 +284,18 @@ impl VideoCache {
         );
 
         // Send load request
+        let source_label = source.as_str().to_string();
         let _ = self.load_tx.send(LoadRequest {
             id,
-            path: path.to_string(),
+            source,
             loop_count,
         });
 
-        tracing::info!("VideoCache: queued video {} for loading: {}", id, path);
+        tracing::info!(
+            "VideoCache: queued video {} for loading: {}",
+            id,
+            source_label
+        );
     }
 
     /// Get video state
@@ -762,13 +806,13 @@ impl VideoCache {
             tracing::info!(
                 "Decoder thread: dispatching video {}: {}",
                 request.id,
-                request.path
+                request.source.as_str()
             );
             let tx_clone = tx.clone();
             let loop_count = request.loop_count;
             // Spawn a dedicated thread per video so multiple videos load/play concurrently
             thread::spawn(move || {
-                Self::decode_single_video(request.id, &request.path, tx_clone, loop_count);
+                Self::decode_single_video(request.id, request.source, tx_clone, loop_count);
             });
         }
 
@@ -778,18 +822,15 @@ impl VideoCache {
     /// Decode a single video: create pipeline, pull frames, wait for EOS, cleanup.
     fn decode_single_video(
         video_id: u32,
-        raw_path: &str,
+        source: VideoLoadSource,
         tx: mpsc::SyncSender<DecodedFrame>,
         loop_count: Arc<AtomicI32>,
     ) {
-        tracing::info!("Video thread: loading video {}: {}", video_id, raw_path);
-
-        // Strip file:// prefix if present (filesrc needs raw paths)
-        let path = if raw_path.starts_with("file://") {
-            &raw_path[7..]
-        } else {
-            raw_path
-        };
+        tracing::info!(
+            "Video thread: loading video {}: {}",
+            video_id,
+            source.as_str()
+        );
 
         // Check if VA-API hardware acceleration is available
         let has_vapostproc = gst::ElementFactory::find("vapostproc").is_some();
@@ -798,6 +839,20 @@ impl VideoCache {
         // NOTE: vapostproc does YUV→RGB conversion but doesn't respect downstream
         // colorimetry caps (GitLab issue #80). For BT.2020 content (10-bit VP9/AV1),
         // colors may be slightly off.
+        let decode_source = match &source {
+            VideoLoadSource::File(raw_path) => {
+                // Strip file:// prefix if present; filesrc needs raw paths.
+                let path = raw_path.strip_prefix("file://").unwrap_or(raw_path);
+                format!(
+                    "filesrc location=\"{}\" ! decodebin",
+                    path.replace("\"", "\\\"")
+                )
+            }
+            VideoLoadSource::Uri(uri) => {
+                format!("uridecodebin uri=\"{}\"", uri.replace("\"", "\\\""))
+            }
+        };
+
         let pipeline_str = if has_vapostproc {
             tracing::info!("Using VA-API hardware acceleration pipeline with CPU upload");
             // VA-API decodes on GPU, vapostproc does YUV→RGB on GPU,
@@ -807,17 +862,17 @@ impl VideoCache {
             // on AMD RADV (~0.3 fds per import, exhausting ulimit within
             // seconds of 4K video playback).
             format!(
-                "filesrc location=\"{}\" ! decodebin ! \
+                "{} ! \
                  queue max-size-buffers=3 ! vapostproc ! \
                  video/x-raw,format=RGBA ! appsink name=sink",
-                path.replace("\"", "\\\"")
+                decode_source
             )
         } else {
             tracing::info!("VA-API not available, using software decoding");
             format!(
-                "filesrc location=\"{}\" ! decodebin ! \
+                "{} ! \
                  queue ! videoconvert ! video/x-raw,format=RGBA ! appsink name=sink",
-                path.replace("\"", "\\\"")
+                decode_source
             )
         };
 

@@ -1606,19 +1606,22 @@ fn render_command_webkit_pointer_event() {
 fn render_command_video_lifecycle() {
     let create = RenderCommand::Asset(AssetCommand::VideoCreate {
         id: 1,
-        path: "/home/user/video.mp4".to_string(),
+        source: MediaSource::File("/home/user/video.mp4".to_string()),
         loop_count: -1,
         autoplay: true,
     });
     match create {
         RenderCommand::Asset(AssetCommand::VideoCreate {
             id,
-            path,
+            source,
             loop_count,
             autoplay,
         }) => {
             assert_eq!(id, 1);
-            assert_eq!(path, "/home/user/video.mp4");
+            assert!(matches!(
+                source,
+                MediaSource::File(path) if path == "/home/user/video.mp4"
+            ));
             assert_eq!(loop_count, -1);
             assert!(autoplay);
         }

@@ -5,6 +5,10 @@
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
 use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
+use super::display_spec::{
+    DisplaySpecHead, parse_display_image_layout, parse_display_video_layout,
+    parse_display_webkit_layout,
+};
 use super::display_status_line::*;
 use super::font_metrics::{FontMetrics, FontMetricsService};
 use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
@@ -20,15 +24,9 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::glyph_matrix::ScrollBarItem;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::BufferId;
-use neovm_core::emacs_core::eval::{
-    ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
-};
-use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
-use neovm_core::face::Color as LispColor;
 use neovm_core::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
     WindowCursorSnapshot, WindowDisplaySnapshot, WindowId,
@@ -954,83 +952,6 @@ fn eval_display_space_geometry(
     }
 }
 
-/// Check if a Value is an image display spec: a cons whose car is the symbol `image`.
-/// e.g., `(image :type png :file "/path/to/image.png")`
-fn is_display_image_spec(val: &neovm_core::emacs_core::Value) -> bool {
-    if val.is_cons() {
-        return val.cons_car().is_symbol_named("image");
-    }
-    false
-}
-
-/// Check if a Value is a video display spec: a cons whose car is the symbol `video`.
-/// e.g., `(video :file "/path/to/video.mp4" :width 800 :height 450)`
-fn is_display_video_spec(val: &neovm_core::emacs_core::Value) -> bool {
-    if val.is_cons() {
-        return val.cons_car().is_symbol_named("video");
-    }
-    false
-}
-
-/// Check if a Value is a WebKit display spec: a cons whose car is `webkit`.
-/// e.g., `(webkit :uri "https://example.com" :width 800 :height 450)`
-fn is_display_webkit_spec(val: &neovm_core::emacs_core::Value) -> bool {
-    if val.is_cons() {
-        return val.cons_car().is_symbol_named("webkit");
-    }
-    false
-}
-
-#[derive(Clone, Debug)]
-struct DisplayImageLayout {
-    request: ImageResolveRequest,
-    scale: f32,
-}
-
-#[derive(Clone, Debug)]
-struct DisplayVideoLayout {
-    request: VideoResolveRequest,
-    width: f32,
-    height: f32,
-    loop_count: i32,
-    autoplay: bool,
-}
-
-#[derive(Clone, Debug)]
-struct DisplayWebKitLayout {
-    request: WebKitResolveRequest,
-    width: f32,
-    height: f32,
-}
-
-fn parse_image_dimension(value: Value) -> Option<u32> {
-    match value.kind() {
-        neovm_core::emacs_core::value::ValueKind::Fixnum(_) => Some(value.as_int()?.max(0) as u32),
-        neovm_core::emacs_core::value::ValueKind::Float => {
-            Some(value.as_float()?.max(0.0).round() as u32)
-        }
-        _ => None,
-    }
-}
-
-fn parse_image_scale(value: Value) -> Option<f32> {
-    if value.is_symbol_named("default") {
-        return None;
-    }
-    match value.kind() {
-        neovm_core::emacs_core::value::ValueKind::Fixnum(_) => Some(value.as_int()?.max(0) as f32),
-        neovm_core::emacs_core::value::ValueKind::Float => Some(value.as_float()?.max(0.0) as f32),
-        _ => None,
-    }
-}
-
-fn parse_image_color_pixel(value: Value) -> Option<u32> {
-    let color = value
-        .as_lisp_string()
-        .and_then(|name| LispColor::parse(name.as_utf8_str()?))?;
-    Some(((color.r as u32) << 16) | ((color.g as u32) << 8) | color.b as u32)
-}
-
 fn max_mini_window_lines(evaluator: &Context, frame_rows: f32) -> f32 {
     let raw = evaluator
         .obarray()
@@ -1094,205 +1015,6 @@ fn minibuffer_echo_message_for_window(
         return None;
     }
     current_message.filter(|message| !message.is_empty())
-}
-
-fn parse_display_image_layout(
-    prop_val: &Value,
-    default_fg: u32,
-    default_bg: u32,
-) -> Option<DisplayImageLayout> {
-    let items = list_to_vec(prop_val)?;
-    if items.first()?.as_symbol_name() != Some("image") {
-        return None;
-    }
-
-    let mut source = None;
-    let mut max_width = 0u32;
-    let mut max_height = 0u32;
-    let mut scale = 1.0f32;
-    let mut fg_color = default_fg;
-    let mut bg_color = default_bg;
-
-    let mut i = 1usize;
-    while i + 1 < items.len() {
-        let value = items[i + 1];
-        match ImageSpecKey::from_lisp_value(items[i]) {
-            Some(ImageSpecKey::File) => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(ImageResolveSource::File);
-            }
-            Some(ImageSpecKey::Data) => {
-                source = value
-                    .as_lisp_string()
-                    .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
-            }
-            Some(ImageSpecKey::Width | ImageSpecKey::MaxWidth) => {
-                max_width = parse_image_dimension(value).unwrap_or(max_width);
-            }
-            Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
-                max_height = parse_image_dimension(value).unwrap_or(max_height);
-            }
-            Some(ImageSpecKey::Scale) => {
-                scale = parse_image_scale(value).unwrap_or(scale);
-            }
-            Some(ImageSpecKey::Foreground) => {
-                fg_color = parse_image_color_pixel(value).unwrap_or(fg_color);
-            }
-            Some(ImageSpecKey::Background) => {
-                bg_color = parse_image_color_pixel(value).unwrap_or(bg_color);
-            }
-            _ => {}
-        }
-        i += 2;
-    }
-
-    Some(DisplayImageLayout {
-        request: ImageResolveRequest {
-            source: source?,
-            max_width,
-            max_height,
-            fg_color,
-            bg_color,
-        },
-        scale,
-    })
-}
-
-fn parse_boolish(value: Value) -> bool {
-    !value.is_nil()
-}
-
-fn parse_video_loop_count(value: Value) -> i32 {
-    if value.is_nil() {
-        return 0;
-    }
-    if value.is_symbol_named("t") {
-        return -1;
-    }
-    value.as_int().unwrap_or(-1) as i32
-}
-
-fn parse_display_video_layout(
-    prop_val: &Value,
-    fallback_width: f32,
-    fallback_height: f32,
-) -> Option<DisplayVideoLayout> {
-    let items = list_to_vec(prop_val)?;
-    if items.first()?.as_symbol_name() != Some("video") {
-        return None;
-    }
-
-    let mut source = None;
-    let mut width = fallback_width.max(1.0);
-    let mut height = fallback_height.max(1.0);
-    let mut loop_count = 0;
-    let mut autoplay = false;
-
-    let mut i = 1usize;
-    while i + 1 < items.len() {
-        let key = items[i].as_symbol_name();
-        let value = items[i + 1];
-        match key {
-            Some(":file") => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(VideoResolveSource::File);
-            }
-            Some(":uri") => {
-                source = value.as_lisp_string().cloned().map(VideoResolveSource::Uri);
-            }
-            Some(":width") => {
-                if let Some(parsed) = parse_image_dimension(value) {
-                    width = parsed.max(1) as f32;
-                }
-            }
-            Some(":height") => {
-                if let Some(parsed) = parse_image_dimension(value) {
-                    height = parsed.max(1) as f32;
-                }
-            }
-            Some(":loop") | Some(":loop-count") => {
-                loop_count = parse_video_loop_count(value);
-            }
-            Some(":autoplay") => {
-                autoplay = parse_boolish(value);
-            }
-            _ => {}
-        }
-        i += 2;
-    }
-
-    Some(DisplayVideoLayout {
-        request: VideoResolveRequest {
-            source: source?,
-            loop_count,
-            autoplay,
-        },
-        width,
-        height,
-        loop_count,
-        autoplay,
-    })
-}
-
-fn parse_display_webkit_layout(
-    prop_val: &Value,
-    fallback_width: f32,
-    fallback_height: f32,
-) -> Option<DisplayWebKitLayout> {
-    let items = list_to_vec(prop_val)?;
-    if items.first()?.as_symbol_name() != Some("webkit") {
-        return None;
-    }
-
-    let mut source = None;
-    let mut width = fallback_width.max(1.0);
-    let mut height = fallback_height.max(1.0);
-
-    let mut i = 1usize;
-    while i + 1 < items.len() {
-        let key = items[i].as_symbol_name();
-        let value = items[i + 1];
-        match key {
-            Some(":file") => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(WebKitResolveSource::File);
-            }
-            Some(":uri") => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(WebKitResolveSource::Uri);
-            }
-            Some(":width") => {
-                if let Some(parsed) = parse_image_dimension(value) {
-                    width = parsed.max(1) as f32;
-                }
-            }
-            Some(":height") => {
-                if let Some(parsed) = parse_image_dimension(value) {
-                    height = parsed.max(1) as f32;
-                }
-            }
-            _ => {}
-        }
-        i += 2;
-    }
-
-    Some(DisplayWebKitLayout {
-        request: WebKitResolveRequest {
-            source: source?,
-            width: width.round().max(1.0) as u32,
-            height: height.round().max(1.0) as u32,
-        },
-        width,
-        height,
-    })
 }
 
 #[inline]
@@ -4549,7 +4271,7 @@ impl LayoutEngine {
 
                     // Case 3: Image — emit a real inline image glyph when a GUI
                     // display host can resolve it, otherwise keep the TTY placeholder.
-                    if is_display_image_spec(&prop_val) {
+                    if DisplaySpecHead::Image.is_head_of(&prop_val) {
                         let replacement_start_x = x;
                         let replacement_start_col = col;
                         let maybe_image = parse_display_image_layout(
@@ -4695,7 +4417,7 @@ impl LayoutEngine {
 
                     // Case 4: Video — resolve the declarative video source to a stable
                     // renderer handle, then emit an inline video glyph.
-                    if is_display_video_spec(&prop_val) {
+                    if DisplaySpecHead::Video.is_head_of(&prop_val) {
                         let replacement_start_x = x;
                         let replacement_start_col = col;
                         let maybe_video = parse_display_video_layout(
@@ -4811,7 +4533,7 @@ impl LayoutEngine {
 
                     // Case 5: WebKit — resolve the declarative browser source to a
                     // stable renderer handle, then emit an inline WebKit glyph.
-                    if is_display_webkit_spec(&prop_val) {
+                    if DisplaySpecHead::Webkit.is_head_of(&prop_val) {
                         let replacement_start_x = x;
                         let replacement_start_col = col;
                         let maybe_webkit = parse_display_webkit_layout(

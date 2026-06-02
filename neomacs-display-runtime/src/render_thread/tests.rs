@@ -370,6 +370,7 @@ fn primary_toolbar_command_marks_render_state_dirty() {
             enabled: true,
             selected: false,
             item_type: ToolBarItemType::Button,
+            wrap: false,
         }],
         height: 34.0,
         fg_r: 1.0,

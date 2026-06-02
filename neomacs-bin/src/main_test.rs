@@ -16,7 +16,7 @@ use super::{
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
 use neomacs_display_runtime::thread_comm::{
-    AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, RenderCommand, UiCommand,
+    AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
     WindowCommand,
 };
 use neovm_core::emacs_core::Context;
@@ -884,13 +884,58 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         &commands[0],
         RenderCommand::Asset(AssetCommand::VideoCreate {
             id,
-            path,
+            source,
             loop_count,
             autoplay,
         }) if *id == first.video_id
-            && path == "/tmp/demo.mp4"
+            && matches!(source, MediaSource::File(path) if path == "/tmp/demo.mp4")
             && *loop_count == -1
             && *autoplay
+    ));
+}
+
+#[test]
+fn primary_display_host_request_video_preserves_uri_source() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = VideoResolveRequest {
+        source: VideoResolveSource::Uri(LispString::from_utf8("https://example.com/video.mp4")),
+        loop_count: 0,
+        autoplay: false,
+    };
+
+    let resolved = neovm_core::emacs_core::DisplayHost::request_video(&host, request)
+        .expect("request video")
+        .expect("video handle");
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert_eq!(commands.len(), 1);
+    assert!(matches!(
+        &commands[0],
+        RenderCommand::Asset(AssetCommand::VideoCreate {
+            id,
+            source,
+            loop_count,
+            autoplay,
+        }) if *id == resolved.video_id
+            && matches!(source, MediaSource::Uri(uri) if uri == "https://example.com/video.mp4")
+            && *loop_count == 0
+            && !*autoplay
     ));
 }
 

@@ -1,7 +1,7 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
-use crate::thread_comm::{AssetCommand, InputEvent};
+use crate::thread_comm::{AssetCommand, InputEvent, MediaSource};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeWebView;
@@ -402,14 +402,21 @@ impl RenderApp {
             }
             AssetCommand::VideoCreate {
                 id,
-                path,
+                source,
                 loop_count,
                 autoplay,
             } => {
-                tracing::info!("Loading video {}: {}", id, path);
+                tracing::info!("Loading video {}: {}", id, source.as_str());
                 #[cfg(feature = "video")]
                 if let Some(ref mut renderer) = self.renderer {
-                    renderer.load_video_file_with_id(id, &path, loop_count, autoplay);
+                    match source {
+                        MediaSource::File(path) => {
+                            renderer.load_video_file_with_id(id, &path, loop_count, autoplay);
+                        }
+                        MediaSource::Uri(uri) => {
+                            renderer.load_video_uri_with_id(id, &uri, loop_count, autoplay);
+                        }
+                    }
                     tracing::info!("Video loaded with requested id {}", id);
                 }
             }

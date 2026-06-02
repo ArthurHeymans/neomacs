@@ -280,6 +280,23 @@ pub enum WindowCommand {
     RequestAttention { urgent: bool },
 }
 
+/// Source for media assets that can be loaded either from files or URIs.
+#[derive(Debug)]
+pub enum MediaSource {
+    /// A filesystem path, matching Emacs Lisp `:file` display specs.
+    File(String),
+    /// A URI, matching Emacs Lisp `:uri` display specs.
+    Uri(String),
+}
+
+impl MediaSource {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::File(path) | Self::Uri(path) => path,
+        }
+    }
+}
+
 /// Asset and embedded-content commands.
 #[derive(Debug)]
 pub enum AssetCommand {
@@ -413,7 +430,7 @@ pub enum AssetCommand {
     /// Create video player
     VideoCreate {
         id: u32,
-        path: String,
+        source: MediaSource,
         loop_count: i32,
         autoplay: bool,
     },

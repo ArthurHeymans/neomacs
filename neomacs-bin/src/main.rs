@@ -35,7 +35,7 @@ use neomacs_display_runtime::render_thread::{
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, EmacsComms, FrameRef, InputEvent as DisplayInputEvent,
-    LifecycleCommand, RenderCommand, ThreadComms, UiCommand, WindowCommand,
+    LifecycleCommand, MediaSource, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
@@ -1515,15 +1515,18 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }
 
         let video_id = next_host_video_id();
-        let path = match &request.source {
-            VideoResolveSource::File(path) | VideoResolveSource::Uri(path) => {
-                path.as_utf8_str().unwrap_or_default().to_owned()
+        let source = match &request.source {
+            VideoResolveSource::File(path) => {
+                MediaSource::File(path.as_utf8_str().unwrap_or_default().to_owned())
+            }
+            VideoResolveSource::Uri(uri) => {
+                MediaSource::Uri(uri.as_utf8_str().unwrap_or_default().to_owned())
             }
         };
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::VideoCreate {
                 id: video_id,
-                path,
+                source,
                 loop_count: request.loop_count,
                 autoplay: request.autoplay,
             }),
