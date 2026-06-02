@@ -19,7 +19,7 @@ use crate::window::{
     window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
-use strum::EnumString;
+use strum::{EnumString, IntoStaticStr};
 
 pub(crate) use super::builtins::symbols::{
     builtin_resize_mini_window_internal, builtin_set_window_new_normal,
@@ -148,6 +148,36 @@ enum AllFramesScope {
     VisibleFrames,
     VisibleOrIconifiedFrames,
     SpecificFrame(FrameId),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum SplitWindowSide {
+    Above,
+    Below,
+    Left,
+    Right,
+}
+
+impl SplitWindowSide {
+    pub(crate) fn from_lisp_value(value: &Value) -> Option<Self> {
+        if value.is_nil() {
+            return Some(Self::Below);
+        }
+        if value.is_t() {
+            return Some(Self::Right);
+        }
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    pub(crate) fn is_horizontal(self) -> bool {
+        matches!(self, Self::Left | Self::Right)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 fn decode_all_frames_scope(
@@ -3766,12 +3796,12 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
 ) -> EvalResult {
     let (fid, wid) = resolve_window_id_or_error_in_state(frames, buffers, Some(&window))?;
 
-    // Determine split direction from SIDE argument.
-    let direction = match side.kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "right" || resolve_sym(id) == "left" => {
-            SplitDirection::Horizontal
-        }
-        _ => SplitDirection::Vertical,
+    // GNU `Fsplit_window_internal` treats SIDE t as `right`, nil as
+    // `below`, and unknown symbols like the vertical/default side.
+    let direction = if SplitWindowSide::from_lisp_value(&side).is_some_and(|s| s.is_horizontal()) {
+        SplitDirection::Horizontal
+    } else {
+        SplitDirection::Vertical
     };
 
     // Parse SIZE: positive means new window gets SIZE units, negative means

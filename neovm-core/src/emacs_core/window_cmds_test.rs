@@ -1,5 +1,6 @@
 use crate::emacs_core::eval::{GuiFrameHostSize, ResolvedFrameFont};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::window_cmds::SplitWindowSide;
 use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format_eval_result};
 use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
@@ -1441,6 +1442,56 @@ fn split_window_internal_creates_new() {
     );
     assert!(results[0].starts_with("OK "));
     assert_eq!(results[1], "OK 2");
+}
+
+#[test]
+fn split_window_side_domain_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::NIL),
+        Some(SplitWindowSide::Below)
+    );
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::T),
+        Some(SplitWindowSide::Right)
+    );
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::symbol("above")),
+        Some(SplitWindowSide::Above)
+    );
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::symbol("below")),
+        Some(SplitWindowSide::Below)
+    );
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::symbol("left")),
+        Some(SplitWindowSide::Left)
+    );
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::symbol("right")),
+        Some(SplitWindowSide::Right)
+    );
+    assert_eq!(SplitWindowSide::Right.name(), "right");
+    assert!(SplitWindowSide::Right.is_horizontal());
+    assert!(SplitWindowSide::Left.is_horizontal());
+    assert!(!SplitWindowSide::Above.is_horizontal());
+    assert!(!SplitWindowSide::Below.is_horizontal());
+    assert_eq!(
+        SplitWindowSide::from_lisp_value(&Value::symbol("other")),
+        None
+    );
+}
+
+#[test]
+fn split_window_internal_side_t_splits_horizontally_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let* ((old (selected-window))
+                (new (split-window-internal old nil t nil)))
+           (list (> (window-left-column new) (window-left-column old))
+                 (= (window-top-line new) (window-top-line old))))",
+    );
+    assert_eq!(results[0], "OK (t t)");
 }
 
 #[test]
