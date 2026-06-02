@@ -86,6 +86,30 @@ impl LFaceAttr {
     }
 }
 
+pub(crate) const LFACE_VECTOR_SIZE: usize = 20;
+
+pub(crate) const LFACE_ATTRS: [LFaceAttr; LFACE_VECTOR_SIZE - 1] = [
+    LFaceAttr::Family,
+    LFaceAttr::Foundry,
+    LFaceAttr::Width,
+    LFaceAttr::Height,
+    LFaceAttr::Weight,
+    LFaceAttr::Slant,
+    LFaceAttr::Underline,
+    LFaceAttr::InverseVideo,
+    LFaceAttr::Foreground,
+    LFaceAttr::Background,
+    LFaceAttr::Stipple,
+    LFaceAttr::Overline,
+    LFaceAttr::StrikeThrough,
+    LFaceAttr::Box,
+    LFaceAttr::Font,
+    LFaceAttr::Inherit,
+    LFaceAttr::Fontset,
+    LFaceAttr::DistantForeground,
+    LFaceAttr::Extend,
+];
+
 // ---------------------------------------------------------------------------
 // Color
 // ---------------------------------------------------------------------------

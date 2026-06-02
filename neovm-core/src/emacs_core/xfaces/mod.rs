@@ -9,9 +9,7 @@ use crate::emacs_core::error::{EvalResult, signal};
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{HashKey, HashTableTest, Value, ValueKind, list_to_vec};
-use crate::face::Face as RuntimeFace;
-
-const FACE_ATTRIBUTES_VECTOR_LEN: usize = 20;
+use crate::face::{Face as RuntimeFace, LFACE_VECTOR_SIZE, LFaceAttr};
 
 /// Register bootstrap variables owned by the face subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {
@@ -83,35 +81,7 @@ pub(crate) fn builtin_frame_face_hash_table(
 }
 
 fn unspecified_face_attributes_vector() -> Value {
-    Value::vector(vec![
-        Value::symbol("unspecified");
-        FACE_ATTRIBUTES_VECTOR_LEN
-    ])
-}
-
-fn face_attributes_vector_slot(attr_name: &str) -> Option<usize> {
-    match attr_name {
-        ":family" => Some(1),
-        ":foundry" => Some(2),
-        ":width" => Some(3),
-        ":height" => Some(4),
-        ":weight" => Some(5),
-        ":slant" => Some(6),
-        ":underline" => Some(7),
-        ":inverse-video" => Some(8),
-        ":foreground" => Some(9),
-        ":background" => Some(10),
-        ":stipple" => Some(11),
-        ":overline" => Some(12),
-        ":strike-through" => Some(13),
-        ":box" => Some(14),
-        ":font" => Some(15),
-        ":inherit" => Some(16),
-        ":fontset" => Some(17),
-        ":distant-foreground" => Some(18),
-        ":extend" => Some(19),
-        _ => None,
-    }
+    Value::vector(vec![Value::symbol("unspecified"); LFACE_VECTOR_SIZE])
 }
 
 fn face_attr_key_name(value: &Value) -> Option<&str> {
@@ -124,27 +94,25 @@ fn face_attr_key_name(value: &Value) -> Option<&str> {
 pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult {
     crate::emacs_core::display::expect_args("face-attributes-as-vector", &args, 1)?;
 
-    let mut attrs = vec![Value::symbol("unspecified"); FACE_ATTRIBUTES_VECTOR_LEN];
+    let mut attrs = vec![Value::symbol("unspecified"); LFACE_VECTOR_SIZE];
     let Some(plist) = list_to_vec(&args[0]) else {
         return Ok(Value::vector(attrs));
     };
 
     let mut i = 0;
     while i + 1 < plist.len() {
-        let Some(attr_name) = face_attr_key_name(&plist[i]) else {
+        let Some(attr) = face_attr_key_name(&plist[i]).and_then(LFaceAttr::from_keyword) else {
             i += 2;
             continue;
         };
-        let Some(slot) = face_attributes_vector_slot(attr_name) else {
-            i += 2;
-            continue;
-        };
+        let slot = attr.index();
 
         let value = plist[i + 1];
-        match attr_name {
-            ":foreground" | ":background" | ":distant-foreground" if value.is_nil() => {}
-            ":stipple" | ":font" | ":inherit" | ":fontset" => {}
-            ":box" if value.is_t() => attrs[slot] = Value::fixnum(1),
+        match attr {
+            LFaceAttr::Foreground | LFaceAttr::Background | LFaceAttr::DistantForeground
+                if value.is_nil() => {}
+            LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Inherit | LFaceAttr::Fontset => {}
+            LFaceAttr::Box if value.is_t() => attrs[slot] = Value::fixnum(1),
             _ => attrs[slot] = value,
         }
 

@@ -48,6 +48,13 @@ fn lface_attr_keyword_mapping_matches_gnu_slots() {
         (LFaceAttr::Extend, 19, ":extend"),
     ];
 
+    assert_eq!(LFACE_VECTOR_SIZE, 20);
+    assert_eq!(
+        LFACE_ATTRS,
+        attrs.map(|(attr, _, _)| attr),
+        "LFACE_ATTRS must stay in GNU xfaces.c face_attr_sym slot order"
+    );
+
     for (attr, index, keyword) in attrs {
         assert_eq!(attr.index(), index);
         assert_eq!(LFaceAttr::from_index(index), Some(attr));

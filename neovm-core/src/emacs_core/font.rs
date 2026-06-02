@@ -28,7 +28,7 @@ use crate::buffer::{Buffer, BufferManager};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
-    FontWidth, LFaceAttr, UnderlineStyle,
+    FontWidth, LFACE_ATTRS, LFACE_VECTOR_SIZE, LFaceAttr, UnderlineStyle,
 };
 use crate::heap_types::LispString;
 use crate::window::{FRAME_ID_BASE, FrameId, FrameManager, FrameParam, WindowId};
@@ -2501,29 +2501,6 @@ fn known_face_id(name: &str) -> Option<i64> {
 }
 
 const LISP_FACE_VECTOR_LEN: usize = LFACE_VECTOR_SIZE;
-const LFACE_VECTOR_SIZE: usize = 20;
-
-const LFACE_ATTRS: [LFaceAttr; LFACE_VECTOR_SIZE - 1] = [
-    LFaceAttr::Family,
-    LFaceAttr::Foundry,
-    LFaceAttr::Width,
-    LFaceAttr::Height,
-    LFaceAttr::Weight,
-    LFaceAttr::Slant,
-    LFaceAttr::Underline,
-    LFaceAttr::InverseVideo,
-    LFaceAttr::Foreground,
-    LFaceAttr::Background,
-    LFaceAttr::Stipple,
-    LFaceAttr::Overline,
-    LFaceAttr::StrikeThrough,
-    LFaceAttr::Box,
-    LFaceAttr::Font,
-    LFaceAttr::Inherit,
-    LFaceAttr::Fontset,
-    LFaceAttr::DistantForeground,
-    LFaceAttr::Extend,
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
 #[strum(prefix = ":", serialize_all = "kebab-case")]
