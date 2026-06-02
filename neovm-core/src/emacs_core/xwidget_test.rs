@@ -98,6 +98,26 @@ fn make_xwidget_builds_gnu_model_and_info_vector() {
 }
 
 #[test]
+fn make_xwidget_uses_sixth_arg_as_buffer_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = xwidget_context();
+
+    let result = eval(
+        &mut ctx,
+        r#"
+(let ((current (current-buffer))
+      (with-arguments (make-xwidget 'webkit "Args" 10 20 '(ignored args)))
+      (with-buffer (make-xwidget 'webkit "Buffer" 10 20 nil "xwidget-target")))
+  (list (eq (xwidget-buffer with-arguments) current)
+        (buffer-name (xwidget-buffer with-buffer))))
+"#,
+    );
+    let items = list_to_vec(&result).expect("result list");
+    assert!(items[0].is_t());
+    assert_eq!(items[1].as_utf8_str(), Some("xwidget-target"));
+}
+
+#[test]
 fn xwidget_public_list_is_not_the_internal_owner_list() {
     crate::test_utils::init_test_tracing();
     let mut ctx = xwidget_context();

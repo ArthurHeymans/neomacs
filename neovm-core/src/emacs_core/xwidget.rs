@@ -228,7 +228,7 @@ pub(crate) fn builtin_make_xwidget(eval: &mut Context, args: Vec<Value>) -> Eval
     let title = args[1];
     let width = expect_i32_wholenump(args[2])?;
     let height = expect_i32_wholenump(args[3])?;
-    let buffer_arg = args.get(4).copied().unwrap_or(Value::NIL);
+    let buffer_arg = args.get(5).copied().unwrap_or(Value::NIL);
     let buffer = if buffer_arg.is_nil() {
         current_buffer_value(eval)?
     } else {
