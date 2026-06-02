@@ -366,15 +366,7 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     ensure_runtime_inputs(&paths)?;
 
     if !options.skip_build {
-        let mut cargo_args = vec![
-            OsString::from("build"),
-            OsString::from("--verbose"),
-            OsString::from("-p"),
-            OsString::from("neomacs"),
-        ];
-        if options.release {
-            cargo_args.push(OsString::from("--release"));
-        }
+        let cargo_args = initial_cargo_build_args(options, env::consts::OS);
         run_command(
             options,
             &options.repo_root,
@@ -611,6 +603,23 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
         nbc = options.no_byte_compile,
     );
     Ok(())
+}
+
+fn initial_cargo_build_args(options: &FreshBuildOptions, target_os: &str) -> Vec<OsString> {
+    let mut cargo_args = vec![
+        OsString::from("build"),
+        OsString::from("--verbose"),
+        OsString::from("-p"),
+        OsString::from("neomacs"),
+    ];
+    if target_os == "linux" {
+        cargo_args.push(OsString::from("--features"));
+        cargo_args.push(OsString::from("wpe-webkit"));
+    }
+    if options.release {
+        cargo_args.push(OsString::from("--release"));
+    }
+    cargo_args
 }
 
 fn loaddefs_generation_args(loaddefs_gen: &Path, loaddefs_dirs: &[PathBuf]) -> Vec<OsString> {
@@ -3643,7 +3652,7 @@ fn usage_text() -> &'static str {
 Usage: cargo xtask [fresh-build] [--bin-dir DIR] [--runtime-root DIR] [--release] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile]
 
 Build the GNU-shaped Neomacs runtime pipeline:
-  1. cargo build --verbose -p neomacs [--release]
+  1. cargo build --verbose -p neomacs [--features wpe-webkit on Linux] [--release]
   2. generate GNU early charset/unidata Lisp sources
   3. regenerate GNU subdirs.el files
   4. neomacs-temacs --temacs=pbootstrap

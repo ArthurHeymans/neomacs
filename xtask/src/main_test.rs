@@ -38,6 +38,42 @@ fn explicit_bin_dir_before_release_stays_in_effect() {
 }
 
 #[test]
+fn initial_cargo_build_enables_webkit_on_linux() {
+    let options = parse_options(&["--release"]);
+    let args = initial_cargo_build_args(&options, "linux");
+
+    assert_eq!(
+        args,
+        vec![
+            OsString::from("build"),
+            OsString::from("--verbose"),
+            OsString::from("-p"),
+            OsString::from("neomacs"),
+            OsString::from("--features"),
+            OsString::from("wpe-webkit"),
+            OsString::from("--release"),
+        ]
+    );
+}
+
+#[test]
+fn initial_cargo_build_keeps_webkit_off_non_linux() {
+    let options = parse_options(&["--release"]);
+    let args = initial_cargo_build_args(&options, "windows");
+
+    assert_eq!(
+        args,
+        vec![
+            OsString::from("build"),
+            OsString::from("--verbose"),
+            OsString::from("-p"),
+            OsString::from("neomacs"),
+            OsString::from("--release"),
+        ]
+    );
+}
+
+#[test]
 fn compile_main_uses_final_dumped_emacs() {
     let options = parse_options(&[]);
     let paths = pipeline_paths(&options);
