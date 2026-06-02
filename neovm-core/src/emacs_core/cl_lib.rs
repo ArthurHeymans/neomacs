@@ -8,6 +8,8 @@ use super::intern::{intern, intern_uninterned, resolve_sym};
 use super::value::*;
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(test)]
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies for this module)
@@ -1035,6 +1037,27 @@ pub(crate) fn builtin_cl_remove_if_not(
     result
 }
 
+/// Concrete result-type symbols supported by the local `cl-map` test helper.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum ClMapResultType {
+    List,
+    Vector,
+    String,
+}
+
+#[cfg(test)]
+impl ClMapResultType {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 /// `(cl-map RESULT-TYPE FUNCTION SEQ...)` -- CL map with explicit result type.
 #[cfg(test)]
 pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -1048,15 +1071,15 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
     forwarded.extend(seqs);
     let mapped = builtin_seq_mapn(eval, forwarded)?;
 
-    match result_type.kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "list" => Ok(mapped),
-        ValueKind::Symbol(id) if resolve_sym(id) == "vector" => {
+    match ClMapResultType::from_lisp_value(&result_type) {
+        Some(ClMapResultType::List) => Ok(mapped),
+        Some(ClMapResultType::Vector) => {
             let items = list_to_vec(&mapped).ok_or_else(|| {
                 signal("wrong-type-argument", vec![Value::symbol("listp"), mapped])
             })?;
             Ok(Value::vector(items))
         }
-        ValueKind::Symbol(id) if resolve_sym(id) == "string" => {
+        Some(ClMapResultType::String) => {
             let items = list_to_vec(&mapped).ok_or_else(|| {
                 signal("wrong-type-argument", vec![Value::symbol("listp"), mapped])
             })?;

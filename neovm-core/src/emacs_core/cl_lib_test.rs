@@ -1140,6 +1140,24 @@ fn cl_remove_if_not_with_eval() {
 }
 
 #[test]
+fn cl_map_result_type_domain_matches_gnu_sequence_symbols() {
+    crate::test_utils::init_test_tracing();
+    for (result_type, name) in [
+        (ClMapResultType::List, "list"),
+        (ClMapResultType::Vector, "vector"),
+        (ClMapResultType::String, "string"),
+    ] {
+        let value = Value::symbol(name);
+        assert_eq!(result_type.name(), name);
+        assert_eq!(ClMapResultType::from_lisp_value(&value), Some(result_type));
+    }
+    assert_eq!(
+        ClMapResultType::from_lisp_value(&Value::symbol("hash-table")),
+        None
+    );
+}
+
+#[test]
 fn cl_map_list_with_eval() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
