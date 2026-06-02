@@ -1549,11 +1549,27 @@ fn internal_coding_system_setters_match_surface_validation() {
 #[test]
 fn text_quoting_and_conversion_style_basics() {
     crate::test_utils::init_test_tracing();
-    let eval = crate::emacs_core::eval::Context::new();
+    let mut eval = crate::emacs_core::eval::Context::new();
     assert_eq!(
         builtin_text_quoting_style(&eval, vec![]).expect("text-quoting-style"),
         Value::symbol("curve")
     );
+    for style in ["grave", "straight", "curve"] {
+        eval.obarray
+            .set_symbol_value("text-quoting-style", Value::symbol(style));
+        assert_eq!(
+            builtin_text_quoting_style(&eval, vec![]).expect("text-quoting-style explicit style"),
+            Value::symbol(style)
+        );
+    }
+    for style in ["nil", "foo", "Curve"] {
+        eval.obarray
+            .set_symbol_value("text-quoting-style", Value::symbol(style));
+        assert_eq!(
+            builtin_text_quoting_style(&eval, vec![]).expect("text-quoting-style fallback"),
+            Value::symbol("curve")
+        );
+    }
     assert!(builtin_text_quoting_style(&eval, vec![Value::NIL]).is_err());
     assert_eq!(
         builtin_set_text_conversion_style(vec![Value::symbol("latin-1")])
@@ -1566,6 +1582,31 @@ fn text_quoting_and_conversion_style_basics() {
         Value::NIL
     );
     assert!(builtin_set_text_conversion_style(vec![]).is_err());
+}
+
+#[test]
+fn text_quoting_style_domain_matches_gnu_symbols() {
+    for style in [
+        TextQuotingStyle::Grave,
+        TextQuotingStyle::Straight,
+        TextQuotingStyle::Curve,
+    ] {
+        let name = style.symbol_name();
+        assert_eq!(
+            TextQuotingStyle::from_symbol_value(Value::symbol(name)),
+            Some(style)
+        );
+        assert_eq!(style.to_symbol(), Value::symbol(name));
+    }
+    assert_eq!(
+        TextQuotingStyle::from_symbol_value(Value::symbol("Curve")),
+        None
+    );
+    assert_eq!(
+        TextQuotingStyle::from_symbol_value(Value::symbol("nil")),
+        None
+    );
+    assert_eq!(TextQuotingStyle::from_symbol_value(Value::NIL), None);
 }
 
 #[test]

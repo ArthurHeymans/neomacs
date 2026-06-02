@@ -207,6 +207,28 @@ impl EolType {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum TextQuotingStyle {
+    Grave,
+    Straight,
+    Curve,
+}
+
+impl TextQuotingStyle {
+    pub(crate) fn from_symbol_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    pub(crate) fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+
+    pub(crate) fn to_symbol(self) -> Value {
+        Value::symbol(self.symbol_name())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CodingSystemInfo
 // ---------------------------------------------------------------------------
@@ -2123,15 +2145,12 @@ pub(crate) fn builtin_text_quoting_style(
         // display table to decide whether curved quotes are renderable.
         // Stub: always pick `curve'. Bringing in real display-capability
         // detection is a separate task.
-        return Ok(Value::symbol("curve"));
+        return Ok(TextQuotingStyle::Curve.to_symbol());
     }
-    if let Some(name) = var.as_symbol_name() {
-        match name {
-            "grave" | "straight" | "curve" => return Ok(Value::symbol(name)),
-            _ => {}
-        }
+    if let Some(style) = TextQuotingStyle::from_symbol_value(var) {
+        return Ok(style.to_symbol());
     }
-    Ok(Value::symbol("curve"))
+    Ok(TextQuotingStyle::Curve.to_symbol())
 }
 
 /// `(set-text-conversion-style STYLE &optional WHERE)` -- set conversion style.

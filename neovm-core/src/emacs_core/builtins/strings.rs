@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::coding::TextQuotingStyle;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, get_string_text_properties_table_for_value,
     set_string_text_properties_table_for_value,
@@ -1466,19 +1467,12 @@ struct FormatSourceSpan {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FormatMessageQuotingStyle {
     None,
-    Grave,
-    Straight,
-    Curve,
+    Style(TextQuotingStyle),
 }
 
 impl FormatMessageQuotingStyle {
-    fn from_value(value: Value) -> Self {
-        match value.as_symbol_name() {
-            Some("grave") => Self::Grave,
-            Some("straight") => Self::Straight,
-            Some("curve") => Self::Curve,
-            _ => Self::Curve,
-        }
+    fn from_text_quoting_style(style: TextQuotingStyle) -> Self {
+        Self::Style(style)
     }
 }
 
@@ -1488,15 +1482,15 @@ fn push_format_literal(
     quoting_style: FormatMessageQuotingStyle,
 ) -> bool {
     match (quoting_style, ch) {
-        (FormatMessageQuotingStyle::Curve, '`') => {
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), '`') => {
             result.push('‘');
             true
         }
-        (FormatMessageQuotingStyle::Curve, '\'') => {
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Curve), '\'') => {
             result.push('’');
             true
         }
-        (FormatMessageQuotingStyle::Straight, '`') => {
+        (FormatMessageQuotingStyle::Style(TextQuotingStyle::Straight), '`') => {
             result.push('\'');
             false
         }
@@ -1864,7 +1858,9 @@ pub(crate) fn builtin_format_message_slice(
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Format, || {
         expect_min_args("format-message", args, 1)?;
         let quoting_style = crate::emacs_core::coding::builtin_text_quoting_style(ctx, vec![])?;
-        let quoting_style = FormatMessageQuotingStyle::from_value(quoting_style);
+        let quoting_style = TextQuotingStyle::from_symbol_value(quoting_style)
+            .map(FormatMessageQuotingStyle::from_text_quoting_style)
+            .expect("text-quoting-style builtin returns a GNU quoting style symbol");
         let (s, spans, source_spans, force_multibyte_result) = do_format(
             args,
             &|v| format_percent_s_in_state(ctx, v),
