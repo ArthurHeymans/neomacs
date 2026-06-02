@@ -1598,6 +1598,43 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }
         Ok(Some(resolved))
     }
+
+    fn create_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebKitCreate {
+                id,
+                width: width.max(1),
+                height: height.max(1),
+            }),
+            "failed to queue WebKit xwidget create",
+        )
+    }
+
+    fn load_webkit_xwidget_uri(&self, id: u32, uri: LispString) -> Result<(), String> {
+        let url = String::from_utf8_lossy(uri.as_bytes()).into_owned();
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebKitLoadUri { id, url }),
+            "failed to queue WebKit xwidget load",
+        )
+    }
+
+    fn resize_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebKitResize {
+                id,
+                width: width.max(1),
+                height: height.max(1),
+            }),
+            "failed to queue WebKit xwidget resize",
+        )
+    }
+
+    fn destroy_webkit_xwidget(&self, id: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
+            "failed to queue WebKit xwidget destroy",
+        )
+    }
 }
 
 fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {

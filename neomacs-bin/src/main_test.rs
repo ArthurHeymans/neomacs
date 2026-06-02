@@ -992,6 +992,70 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
 }
 
 #[test]
+fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+
+    neovm_core::emacs_core::DisplayHost::create_webkit_xwidget(&host, 42, 400, 300)
+        .expect("create xwidget");
+    neovm_core::emacs_core::DisplayHost::load_webkit_xwidget_uri(
+        &host,
+        42,
+        LispString::from_utf8("https://example.com"),
+    )
+    .expect("load xwidget");
+    neovm_core::emacs_core::DisplayHost::resize_webkit_xwidget(&host, 42, 320, 240)
+        .expect("resize xwidget");
+    neovm_core::emacs_core::DisplayHost::destroy_webkit_xwidget(&host, 42)
+        .expect("destroy xwidget");
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert_eq!(commands.len(), 4);
+    assert!(matches!(
+        &commands[0],
+        RenderCommand::Asset(AssetCommand::WebKitCreate {
+            id: 42,
+            width: 400,
+            height: 300,
+        })
+    ));
+    assert!(matches!(
+        &commands[1],
+        RenderCommand::Asset(AssetCommand::WebKitLoadUri {
+            id: 42,
+            url,
+        }) if url == "https://example.com"
+    ));
+    assert!(matches!(
+        &commands[2],
+        RenderCommand::Asset(AssetCommand::WebKitResize {
+            id: 42,
+            width: 320,
+            height: 240,
+        })
+    ));
+    assert!(matches!(
+        &commands[3],
+        RenderCommand::Asset(AssetCommand::WebKitDestroy { id: 42 })
+    ));
+}
+
+#[test]
 fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
     let mut eval = Context::new();
     let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());

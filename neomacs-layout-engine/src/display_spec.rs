@@ -1,9 +1,9 @@
 //! Display property parsing for replacement glyphs.
 //!
 //! GNU xdisp treats display specs as a small typed domain: strings, images,
-//! spaces, and xwidgets.  Neomacs adds native video and a temporary WebKit
-//! convenience spec.  Keep symbol/plist parsing in this module so layout code
-//! consumes typed requests instead of open-coding display-spec shapes.
+//! spaces, and xwidgets.  Neomacs adds native video and retains a temporary
+//! WebKit convenience spec.  Keep symbol/plist parsing in this module so layout
+//! code consumes typed requests instead of open-coding display-spec shapes.
 
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{
@@ -21,6 +21,7 @@ pub(crate) enum DisplaySpecHead {
     Image,
     Video,
     Webkit,
+    Xwidget,
 }
 
 impl DisplaySpecHead {
@@ -47,6 +48,13 @@ pub(crate) struct DisplayVideoLayout {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayWebKitLayout {
     pub(crate) request: WebKitResolveRequest,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayXwidgetLayout {
+    pub(crate) xwidget_id: u32,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -233,6 +241,30 @@ pub(crate) fn parse_display_webkit_layout(
         },
         width,
         height,
+    })
+}
+
+pub(crate) fn parse_display_xwidget_layout(prop_val: &Value) -> Option<DisplayXwidgetLayout> {
+    let items = list_to_vec(prop_val)?;
+    if items.first()?.as_symbol_name() != Some(DisplaySpecHead::Xwidget.into()) {
+        return None;
+    }
+
+    let mut xwidget = None;
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        if items[i].as_symbol_name() == Some(":xwidget") {
+            xwidget = items[i + 1].as_xwidget();
+            break;
+        }
+        i += 2;
+    }
+
+    let xwidget = xwidget?;
+    Some(DisplayXwidgetLayout {
+        xwidget_id: xwidget.xwidget_id,
+        width: xwidget.width.max(0) as f32,
+        height: xwidget.height.max(0) as f32,
     })
 }
 

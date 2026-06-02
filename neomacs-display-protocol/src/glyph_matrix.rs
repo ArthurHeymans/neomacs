@@ -37,9 +37,6 @@ pub enum GlyphType {
 }
 
 /// GNU `enum glyph_type` discriminants.
-///
-/// `Xwidget` is part of GNU's glyph domain even though Neomacs does not yet
-/// have a `GlyphType` payload variant for it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, IntoPrimitive, TryFromPrimitive)]
 #[repr(u8)]
 pub enum GlyphTypeKind {
@@ -546,14 +543,14 @@ pub struct VideoItem {
     pub autoplay: bool,
 }
 
-/// A WebKit view.
+/// An inline xwidget.
 #[derive(Clone, Debug)]
-pub struct WebKitItem {
+pub struct XwidgetItem {
     pub window_id: i64,
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub slot_id: Option<DisplaySlotId>,
-    pub webkit_id: u32,
+    pub xwidget_id: u32,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -618,8 +615,8 @@ pub struct FrameDisplayState {
     pub images: Vec<ImageItem>,
     /// Inline videos.
     pub videos: Vec<VideoItem>,
-    /// WebKit views.
-    pub webkits: Vec<WebKitItem>,
+    /// Inline xwidgets.
+    pub xwidgets: Vec<XwidgetItem>,
     /// Scroll bars.
     pub scroll_bars: Vec<ScrollBarItem>,
     /// Authoritative active cursor for the frame.
@@ -764,7 +761,7 @@ impl FrameDisplayState {
             cursor_effects_by_window: HashMap::new(),
             images: Vec::new(),
             videos: Vec::new(),
-            webkits: Vec::new(),
+            xwidgets: Vec::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
             stipple_patterns: HashMap::new(),
@@ -780,7 +777,7 @@ impl FrameDisplayState {
     /// Create a `FrameDisplayState` from an existing `FrameGlyphBuffer`.
     ///
     /// Decomposes the flat glyph list into structured non-grid item
-    /// vectors (backgrounds, borders, cursors, images, videos, webkits,
+    /// vectors (backgrounds, borders, cursors, images, videos, xwidgets,
     /// scroll bars) and copies metadata (faces, window_infos, hints).
     pub fn from_frame_glyph_buffer(buf: &FrameGlyphBuffer) -> Self {
         let frame_cols = (buf.width / buf.char_width.max(1.0)) as usize;
@@ -898,23 +895,23 @@ impl FrameDisplayState {
                         autoplay: *autoplay,
                     });
                 }
-                FrameGlyph::WebKit {
+                FrameGlyph::Xwidget {
                     window_id,
                     row_role,
                     clip_rect,
                     slot_id,
-                    webkit_id,
+                    xwidget_id,
                     x,
                     y,
                     width,
                     height,
                 } => {
-                    state.webkits.push(WebKitItem {
+                    state.xwidgets.push(XwidgetItem {
                         window_id: *window_id,
                         row_role: *row_role,
                         clip_rect: *clip_rect,
                         slot_id: *slot_id,
-                        webkit_id: *webkit_id,
+                        xwidget_id: *xwidget_id,
                         x: *x,
                         y: *y,
                         width: *width,
@@ -1109,18 +1106,18 @@ impl FrameDisplayState {
             });
         }
 
-        // --- Materialize WebKit views ---
-        for wk in &self.webkits {
-            buf.glyphs.push(FrameGlyph::WebKit {
-                window_id: wk.window_id,
-                row_role: wk.row_role,
-                clip_rect: wk.clip_rect,
-                slot_id: wk.slot_id,
-                webkit_id: wk.webkit_id,
-                x: wk.x,
-                y: wk.y,
-                width: wk.width,
-                height: wk.height,
+        // --- Materialize xwidgets ---
+        for xwidget in &self.xwidgets {
+            buf.glyphs.push(FrameGlyph::Xwidget {
+                window_id: xwidget.window_id,
+                row_role: xwidget.row_role,
+                clip_rect: xwidget.clip_rect,
+                slot_id: xwidget.slot_id,
+                xwidget_id: xwidget.xwidget_id,
+                x: xwidget.x,
+                y: xwidget.y,
+                width: xwidget.width,
+                height: xwidget.height,
             });
         }
 

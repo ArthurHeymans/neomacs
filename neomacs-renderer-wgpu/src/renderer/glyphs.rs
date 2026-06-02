@@ -376,7 +376,7 @@ fn cursor_glyph_slot_rect(
                 height: slot_height,
                 ..
             }
-            | FrameGlyph::WebKit {
+            | FrameGlyph::Xwidget {
                 x: slot_x,
                 y: slot_y,
                 width: slot_width,
@@ -1168,7 +1168,7 @@ impl WgpuRenderer {
         //   4. Non-overlay text (with cursor_fg swap for char at cursor position)
         //   5. Overlay backgrounds (mode-line/echo bg)
         //   6. Overlay text (mode-line/echo text)
-        //   7. Inline media (images, videos, webkits)
+        //   7. Inline media (images, videos, xwidgets)
         //   8. Front cursors (bar, hbar, hollow) and borders
         //
         // Filled box cursor (style 0) is split across steps 2-4 for inverse video.
@@ -3617,8 +3617,8 @@ impl WgpuRenderer {
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                 for glyph in &frame_glyphs.glyphs {
-                    if let FrameGlyph::WebKit {
-                        webkit_id,
+                    if let FrameGlyph::Xwidget {
+                        xwidget_id,
                         x,
                         y,
                         width,
@@ -3667,10 +3667,10 @@ impl WgpuRenderer {
                         }
 
                         // Check if webkit texture is ready
-                        if let Some(cached) = self.webkit_cache.get(*webkit_id) {
+                        if let Some(cached) = self.webkit_cache.get(*xwidget_id) {
                             tracing::debug!(
                                 "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
-                                webkit_id,
+                                xwidget_id,
                                 x,
                                 y,
                                 width,
@@ -3723,7 +3723,7 @@ impl WgpuRenderer {
                             render_pass.set_vertex_buffer(0, webkit_buffer.slice(..));
                             render_pass.draw(0..6, 0..1);
                         } else {
-                            tracing::debug!("WebKit {} not found in cache", webkit_id);
+                            tracing::debug!("WebKit xwidget {} not found in cache", xwidget_id);
                         }
                     }
                 }

@@ -1441,6 +1441,22 @@ pub trait DisplayHost {
     ) -> Result<Option<ResolvedWebKit>, String> {
         Ok(None)
     }
+    fn create_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {
+        Ok(())
+    }
+    fn load_webkit_xwidget_uri(
+        &self,
+        _id: u32,
+        _uri: crate::heap_types::LispString,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn resize_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {
+        Ok(())
+    }
+    fn destroy_webkit_xwidget(&self, _id: u32) -> Result<(), String> {
+        Ok(())
+    }
     fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {
         Ok(())
     }

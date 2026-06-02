@@ -13,12 +13,12 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use winit::window::WindowId;
 
-/// Search a glyph buffer for a WebKit view at the given local coordinates.
-/// Returns `(webkit_id, relative_x, relative_y)` if found.
+/// Search a glyph buffer for an inline xwidget at the given local coordinates.
+/// Returns `(xwidget_id, relative_x, relative_y)` if found.
 fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, i32, i32)> {
     for glyph in glyphs.iter().rev() {
-        if let FrameGlyph::WebKit {
-            webkit_id,
+        if let FrameGlyph::Xwidget {
+            xwidget_id,
             x: wx,
             y: wy,
             width,
@@ -27,7 +27,7 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
         } = glyph
         {
             if x >= *wx && x < *wx + *width && y >= *wy && y < *wy + *height {
-                return Some((*webkit_id, (x - *wx) as i32, (y - *wy) as i32));
+                return Some((*xwidget_id, (x - *wx) as i32, (y - *wy) as i32));
             }
         }
     }

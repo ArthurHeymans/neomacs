@@ -83,7 +83,7 @@ pub struct GlyphMatrixBuilder {
     cursors: Vec<CursorItem>,
     images: Vec<ImageItem>,
     videos: Vec<VideoItem>,
-    webkits: Vec<WebKitItem>,
+    xwidgets: Vec<XwidgetItem>,
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
     cursor_effects_by_window: HashMap<i64, EffectsConfig>,
@@ -225,7 +225,7 @@ impl GlyphMatrixBuilder {
             cursors: Vec::new(),
             images: Vec::new(),
             videos: Vec::new(),
-            webkits: Vec::new(),
+            xwidgets: Vec::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
             cursor_effects_by_window: HashMap::new(),
@@ -271,7 +271,7 @@ impl GlyphMatrixBuilder {
         self.cursors.clear();
         self.images.clear();
         self.videos.clear();
-        self.webkits.clear();
+        self.xwidgets.clear();
         self.scroll_bars.clear();
         self.phys_cursor = None;
         self.cursor_effects_by_window.clear();
@@ -703,23 +703,23 @@ impl GlyphMatrixBuilder {
         });
     }
 
-    pub fn push_webkit(
+    pub fn push_xwidget(
         &mut self,
         window_id: i64,
         role: GlyphRowRole,
         clip: Option<Rect>,
-        webkit_id: u32,
+        xwidget_id: u32,
         x: f32,
         y: f32,
         w: f32,
         h: f32,
     ) {
-        self.webkits.push(WebKitItem {
+        self.xwidgets.push(XwidgetItem {
             window_id,
             row_role: role,
             clip_rect: clip,
             slot_id: Some(DisplaySlotId::from_pixels(window_id, x, y, 1.0, 1.0)),
-            webkit_id,
+            xwidget_id,
             x,
             y,
             width: w,
@@ -1072,7 +1072,7 @@ impl GlyphMatrixBuilder {
         state.cursors = self.cursors;
         state.images = self.images;
         state.videos = self.videos;
-        state.webkits = self.webkits;
+        state.xwidgets = self.xwidgets;
         state.scroll_bars = self.scroll_bars;
         state.phys_cursor = self.phys_cursor;
         state.cursor_effects_by_window = self.cursor_effects_by_window;

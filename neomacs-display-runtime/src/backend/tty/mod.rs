@@ -593,7 +593,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
             // Non-text glyphs are not rendered in TTY mode
             FrameGlyph::Image { .. }
             | FrameGlyph::Video { .. }
-            | FrameGlyph::WebKit { .. }
+            | FrameGlyph::Xwidget { .. }
             | FrameGlyph::ScrollBar { .. } => {}
 
             #[cfg(feature = "neo-term")]
@@ -624,7 +624,7 @@ fn glyph_pixel_width(glyph: &FrameGlyph) -> f32 {
         FrameGlyph::Stretch { width, .. } => *width,
         FrameGlyph::Image { width, .. } => *width,
         FrameGlyph::Video { width, .. } => *width,
-        FrameGlyph::WebKit { width, .. } => *width,
+        FrameGlyph::Xwidget { width, .. } => *width,
         FrameGlyph::Background { bounds, .. } => bounds.width,
         FrameGlyph::Border { width, .. } => *width,
         FrameGlyph::ScrollBar { width, .. } => *width,

@@ -1114,7 +1114,7 @@ fn border_glyph_is_not_overlay() {
 }
 
 // =======================================================================
-// add_image() / add_video() / add_webkit()
+// add_image() / add_video() / add_xwidget()
 // =======================================================================
 
 #[test]
@@ -1165,13 +1165,13 @@ fn add_video_appends_video_glyph() {
 }
 
 #[test]
-fn add_webkit_appends_webkit_glyph() {
+fn add_xwidget_appends_xwidget_glyph() {
     let mut buf = FrameGlyphBuffer::new();
-    buf.add_webkit(99, 0.0, 0.0, 800.0, 600.0);
+    buf.add_xwidget(99, 0.0, 0.0, 800.0, 600.0);
 
     match &buf.glyphs[0] {
-        FrameGlyph::WebKit { webkit_id, .. } => assert_eq!(*webkit_id, 99),
-        other => panic!("Expected WebKit glyph, got {:?}", other),
+        FrameGlyph::Xwidget { xwidget_id, .. } => assert_eq!(*xwidget_id, 99),
+        other => panic!("Expected Xwidget glyph, got {:?}", other),
     }
 }
 

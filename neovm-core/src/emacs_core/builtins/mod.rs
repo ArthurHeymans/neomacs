@@ -1469,6 +1469,24 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
+    ctx.defsubr(
+        "xwidget-webkit-uri",
+        super::xwidget::builtin_xwidget_webkit_uri,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "xwidget-webkit-title",
+        super::xwidget::builtin_xwidget_webkit_title,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "xwidget-webkit-goto-uri",
+        super::xwidget::builtin_xwidget_webkit_goto_uri,
+        2,
+        Some(2),
+    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(

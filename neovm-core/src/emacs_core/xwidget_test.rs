@@ -1,6 +1,66 @@
-use super::eval::Context;
+use super::eval::{Context, DisplayHost, GuiFrameHostRequest};
 use super::intern::resolve_sym;
 use super::value::{Value, eq_value, list_to_vec};
+use crate::heap_types::LispString;
+use std::sync::{Arc, Mutex};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum XwidgetHostEvent {
+    Create { id: u32, width: u32, height: u32 },
+    LoadUri { id: u32, uri: String },
+    Resize { id: u32, width: u32, height: u32 },
+    Destroy { id: u32 },
+}
+
+#[derive(Clone, Default)]
+struct RecordingXwidgetDisplayHost {
+    events: Arc<Mutex<Vec<XwidgetHostEvent>>>,
+}
+
+impl DisplayHost for RecordingXwidgetDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn create_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+        self.events
+            .lock()
+            .expect("xwidget host events")
+            .push(XwidgetHostEvent::Create { id, width, height });
+        Ok(())
+    }
+
+    fn load_webkit_xwidget_uri(&self, id: u32, uri: LispString) -> Result<(), String> {
+        self.events
+            .lock()
+            .expect("xwidget host events")
+            .push(XwidgetHostEvent::LoadUri {
+                id,
+                uri: String::from_utf8_lossy(uri.as_bytes()).into_owned(),
+            });
+        Ok(())
+    }
+
+    fn resize_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
+        self.events
+            .lock()
+            .expect("xwidget host events")
+            .push(XwidgetHostEvent::Resize { id, width, height });
+        Ok(())
+    }
+
+    fn destroy_webkit_xwidget(&self, id: u32) -> Result<(), String> {
+        self.events
+            .lock()
+            .expect("xwidget host events")
+            .push(XwidgetHostEvent::Destroy { id });
+        Ok(())
+    }
+}
 
 fn eval(ctx: &mut Context, source: &str) -> Value {
     ctx.eval_str(source).expect("xwidget form should evaluate")
@@ -116,4 +176,52 @@ fn make_xwidget_accepts_only_gnu_webkit_type() {
     };
     assert_eq!(resolve_sym(symbol), "error");
     assert_eq!(data, vec![Value::string("Bad xwidget type")]);
+}
+
+#[test]
+fn xwidget_webkit_lifecycle_uses_gnu_model_id() {
+    crate::test_utils::init_test_tracing();
+    let host = RecordingXwidgetDisplayHost::default();
+    let events = Arc::clone(&host.events);
+    let mut ctx = xwidget_context();
+    ctx.set_display_host(Box::new(host));
+
+    let result = eval(
+        &mut ctx,
+        r#"
+(progn
+  (setq xw-test (make-xwidget 'webkit "Title" 10 20))
+  (xwidget-webkit-goto-uri xw-test "https://example.com")
+  (xwidget-resize xw-test 30 40)
+  (prog1
+      (list (xwidget-webkit-uri xw-test)
+            (xwidget-webkit-title xw-test))
+    (kill-xwidget xw-test)))
+"#,
+    );
+
+    let values = list_to_vec(&result).expect("result list");
+    assert_eq!(values[0].as_utf8_str(), Some("https://example.com"));
+    assert_eq!(values[1].as_utf8_str(), Some(""));
+
+    assert_eq!(
+        *events.lock().expect("xwidget host events"),
+        vec![
+            XwidgetHostEvent::Create {
+                id: 1,
+                width: 10,
+                height: 20,
+            },
+            XwidgetHostEvent::LoadUri {
+                id: 1,
+                uri: "https://example.com".to_owned(),
+            },
+            XwidgetHostEvent::Resize {
+                id: 1,
+                width: 30,
+                height: 40,
+            },
+            XwidgetHostEvent::Destroy { id: 1 },
+        ]
+    );
 }

@@ -7,7 +7,7 @@
 use super::display_space::{DisplaySpaceKey, display_space_positive_number, is_display_space_spec};
 use super::display_spec::{
     DisplaySpecHead, parse_display_image_layout, parse_display_video_layout,
-    parse_display_webkit_layout,
+    parse_display_webkit_layout, parse_display_xwidget_layout,
 };
 use super::display_status_line::*;
 use super::font_metrics::{FontMetrics, FontMetricsService};
@@ -4531,7 +4531,72 @@ impl LayoutEngine {
                         continue;
                     }
 
-                    // Case 5: WebKit — resolve the declarative browser source to a
+                    // Case 5: Xwidget — GNU display spec `(xwidget :xwidget XWIDGET)`.
+                    // The model object already owns the native xwidget id and geometry.
+                    if DisplaySpecHead::Xwidget.is_head_of(&prop_val) {
+                        if let Some(spec) = parse_display_xwidget_layout(&prop_val) {
+                            let replacement_start_x = x;
+                            let replacement_start_col = col;
+                            let display_width = spec.width;
+                            let display_height = spec.height;
+
+                            if point_in_display_replacement {
+                                capture_cursor_info(
+                                    &mut cursor_info,
+                                    CapturedCursorInfo {
+                                        x,
+                                        y,
+                                        face_w: face_char_w,
+                                        face_h: display_height.max(face_h),
+                                        face_ascent: display_height.max(face_ascent_val),
+                                        bg: current_bg,
+                                        byte_idx,
+                                        col,
+                                        matrix_row: row,
+                                        slot_width: Some(display_width.max(1.0)),
+                                        stretch_like: false,
+                                    },
+                                );
+                            }
+
+                            let xwidget_y = y + raise_y_offset;
+                            self.matrix_builder.push_xwidget(
+                                params.window_id,
+                                GlyphRowRole::Text,
+                                Some(params.text_bounds),
+                                spec.xwidget_id,
+                                x,
+                                xwidget_y,
+                                display_width,
+                                display_height,
+                            );
+                            row_max_height = row_max_height.max(display_height);
+                            row_max_ascent = row_max_ascent.max(display_height);
+                            x += display_width;
+                            col += ((display_width / face_char_w.max(1.0)).ceil() as usize).max(1);
+                            output_emitter.emit_text_span(
+                                evaluator,
+                                charpos as i64 + 1,
+                                row,
+                                y,
+                                replacement_start_x,
+                                xwidget_y,
+                                x - replacement_start_x,
+                                display_height,
+                                replacement_start_col,
+                                col,
+                            );
+
+                            while charpos < skip_to && byte_idx < text.len() {
+                                let (_ch, ch_len) = decode_utf8(&text[byte_idx..]);
+                                byte_idx += ch_len;
+                                charpos += 1;
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Case 6: WebKit — resolve the declarative browser source to a
                     // stable renderer handle, then emit an inline WebKit glyph.
                     if DisplaySpecHead::Webkit.is_head_of(&prop_val) {
                         let replacement_start_x = x;
@@ -4575,7 +4640,7 @@ impl LayoutEngine {
                             }
 
                             let webkit_y = y + raise_y_offset;
-                            self.matrix_builder.push_webkit(
+                            self.matrix_builder.push_xwidget(
                                 params.window_id,
                                 GlyphRowRole::Text,
                                 Some(params.text_bounds),
@@ -4645,13 +4710,13 @@ impl LayoutEngine {
                         continue;
                     }
 
-                    // Case 6: Raise — (raise FACTOR) or plist with :raise
+                    // Case 7: Raise — (raise FACTOR) or plist with :raise
                     if let Some(factor) = parse_display_raise_factor(&prop_val) {
                         raise_y_offset = -(factor * char_h);
                         raise_end = display_next_check;
                     }
 
-                    // Case 7: Height — (height FACTOR) or plist with :height
+                    // Case 8: Height — (height FACTOR) or plist with :height
                     if let Some(factor) = parse_display_height_factor(&prop_val) {
                         if factor > 0.0 {
                             height_scale = factor;

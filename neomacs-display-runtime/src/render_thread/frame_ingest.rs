@@ -285,7 +285,7 @@ impl RenderApp {
                         crate::core::frame_glyphs::FrameGlyph::Image { .. } => image_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::Stretch { .. } => stretch_count += 1,
                         crate::core::frame_glyphs::FrameGlyph::Video { .. } => video_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::WebKit { .. } => webkit_count += 1,
+                        crate::core::frame_glyphs::FrameGlyph::Xwidget { .. } => webkit_count += 1,
                         _ => other_count += 1,
                     }
                 }

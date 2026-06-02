@@ -13,11 +13,20 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::symbol::Obarray;
 use super::value::{Value, eq_value};
+use crate::heap_types::LispString;
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, Default)]
+struct WebKitRuntimeState {
+    uri: String,
+    title: String,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct XwidgetState {
     internal_xwidget_list: Value,
     internal_xwidget_view_list: Value,
+    webkit_state: HashMap<u32, WebKitRuntimeState>,
     counter: u32,
 }
 
@@ -26,6 +35,7 @@ impl XwidgetState {
         Self {
             internal_xwidget_list: Value::NIL,
             internal_xwidget_view_list: Value::NIL,
+            webkit_state: HashMap::new(),
             counter: 0,
         }
     }
@@ -38,6 +48,32 @@ impl XwidgetState {
     fn next_id(&mut self) -> u32 {
         self.counter = self.counter.wrapping_add(1);
         self.counter
+    }
+
+    fn ensure_webkit_state(&mut self, id: u32) {
+        self.webkit_state.entry(id).or_default();
+    }
+
+    fn remove_webkit_state(&mut self, id: u32) {
+        self.webkit_state.remove(&id);
+    }
+
+    fn webkit_uri(&self, id: u32) -> String {
+        self.webkit_state
+            .get(&id)
+            .map(|state| state.uri.clone())
+            .unwrap_or_default()
+    }
+
+    fn set_webkit_uri(&mut self, id: u32, uri: String) {
+        self.webkit_state.entry(id).or_default().uri = uri;
+    }
+
+    fn webkit_title(&self, id: u32) -> String {
+        self.webkit_state
+            .get(&id)
+            .map(|state| state.title.clone())
+            .unwrap_or_default()
     }
 
     fn publish(&self, obarray: &mut Obarray) {
@@ -104,6 +140,16 @@ fn expect_live_xwidget(value: Value) -> Result<Value, Flow> {
     }
 }
 
+fn expect_live_webkit_xwidget(value: Value) -> Result<Value, Flow> {
+    let value = expect_live_xwidget(value)?;
+    let xwidget = value.as_xwidget().unwrap();
+    if xwidget.type_.as_symbol_name() == Some("webkit") {
+        Ok(value)
+    } else {
+        Err(signal("error", vec![Value::string("Not a WebKit widget")]))
+    }
+}
+
 fn expect_xwidget_view(value: Value) -> Result<Value, Flow> {
     if value.is_xwidget_view() {
         Ok(value)
@@ -135,6 +181,13 @@ fn expect_symbol(value: Value) -> Result<Value, Flow> {
             vec![Value::symbol("symbolp"), value],
         ))
     }
+}
+
+fn expect_string(value: Value) -> Result<LispString, Flow> {
+    value
+        .as_lisp_string()
+        .cloned()
+        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))
 }
 
 fn expect_i32_wholenump(value: Value) -> Result<i32, Flow> {
@@ -183,6 +236,11 @@ pub(crate) fn builtin_make_xwidget(eval: &mut Context, args: Vec<Value>) -> Eval
     };
     let id = eval.xwidgets.next_id();
     let xwidget = Value::make_xwidget(type_, title, buffer, width, height, id);
+    if let Some(host) = eval.display_host.as_ref() {
+        host.create_webkit_xwidget(id, width.max(1) as u32, height.max(1) as u32)
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+    eval.xwidgets.ensure_webkit_state(id);
     eval.xwidgets.internal_xwidget_list = Value::cons(xwidget, eval.xwidgets.internal_xwidget_list);
     eval.xwidgets.publish(&mut eval.obarray);
     Ok(xwidget)
@@ -348,24 +406,63 @@ pub(crate) fn builtin_get_buffer_xwidgets(eval: &mut Context, args: Vec<Value>) 
 pub(crate) fn builtin_kill_xwidget(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("kill-xwidget", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
     eval.xwidgets.internal_xwidget_list =
         delq_from_list(eval.xwidgets.internal_xwidget_list, value);
     eval.xwidgets.publish(&mut eval.obarray);
+    if let Some(host) = eval.display_host.as_ref() {
+        host.destroy_webkit_xwidget(id)
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+    eval.xwidgets.remove_webkit_state(id);
     value.with_xwidget_mut(|xwidget| {
         xwidget.buffer = Value::NIL;
     });
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_xwidget_resize(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_xwidget_resize(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("xwidget-resize", &args, 3, 3)?;
     let value = expect_live_xwidget(args[0])?;
     let width = expect_i32_wholenump(args[1])?;
     let height = expect_i32_wholenump(args[2])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
     value.with_xwidget_mut(|xwidget| {
         xwidget.width = width;
         xwidget.height = height;
     });
+    if let Some(host) = eval.display_host.as_ref() {
+        host.resize_webkit_xwidget(id, width.max(1) as u32, height.max(1) as u32)
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+    Ok(Value::NIL)
+}
+
+pub(crate) fn builtin_xwidget_webkit_uri(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_range_args("xwidget-webkit-uri", &args, 1, 1)?;
+    let value = expect_live_webkit_xwidget(args[0])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
+    Ok(Value::string(_eval.xwidgets.webkit_uri(id)))
+}
+
+pub(crate) fn builtin_xwidget_webkit_title(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_range_args("xwidget-webkit-title", &args, 1, 1)?;
+    let value = expect_live_webkit_xwidget(args[0])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
+    Ok(Value::string(_eval.xwidgets.webkit_title(id)))
+}
+
+pub(crate) fn builtin_xwidget_webkit_goto_uri(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    expect_range_args("xwidget-webkit-goto-uri", &args, 2, 2)?;
+    let value = expect_live_webkit_xwidget(args[0])?;
+    let uri = expect_string(args[1])?;
+    let id = value.as_xwidget().unwrap().xwidget_id;
+    if let Some(host) = eval.display_host.as_ref() {
+        host.load_webkit_xwidget_uri(id, uri.clone())
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    }
+    eval.xwidgets
+        .set_webkit_uri(id, String::from_utf8_lossy(uri.as_bytes()).into_owned());
     Ok(Value::NIL)
 }
 

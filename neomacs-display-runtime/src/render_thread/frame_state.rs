@@ -188,7 +188,7 @@ impl RenderApp {
                     slot_id,
                     ..
                 }
-                | FrameGlyph::WebKit {
+                | FrameGlyph::Xwidget {
                     x,
                     y,
                     row_role,

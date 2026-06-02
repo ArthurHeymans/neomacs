@@ -1446,8 +1446,8 @@ impl WgpuRenderer {
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                 for glyph in &frame.glyphs {
-                    if let FrameGlyph::WebKit {
-                        webkit_id,
+                    if let FrameGlyph::Xwidget {
+                        xwidget_id,
                         x,
                         y,
                         width,
@@ -1455,12 +1455,12 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if let Some(cached) = self.webkit_cache.get(*webkit_id) {
+                        if let Some(cached) = self.webkit_cache.get(*xwidget_id) {
                             let wx = *x + offset_x;
                             let wy = *y + offset_y;
                             tracing::debug!(
                                 "render_frame_content: webkit {} at ({:.1},{:.1}) size {:.1}x{:.1}",
-                                webkit_id,
+                                xwidget_id,
                                 wx,
                                 wy,
                                 width,

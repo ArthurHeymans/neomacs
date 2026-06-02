@@ -1606,15 +1606,73 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let webkit = state.webkits.first().expect("inline webkit glyph");
-    assert_eq!(webkit.webkit_id, 99);
-    assert_eq!(webkit.width, 80.0);
-    assert_eq!(webkit.height, 45.0);
+    let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
+    assert_eq!(xwidget.xwidget_id, 99);
+    assert_eq!(xwidget.width, 80.0);
+    assert_eq!(xwidget.height, 45.0);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].width, 80);
     assert_eq!(requests[0].height, 45);
+}
+
+#[test]
+fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs() {
+    let mut eval = Context::new();
+    let webkit_requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::clone(&webkit_requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id;
+    let xwidget = Value::make_xwidget(
+        Value::symbol("webkit"),
+        Value::string("Title"),
+        Value::make_buffer(buf_id),
+        96,
+        54,
+        1234,
+    );
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aXb");
+        buf.goto_byte(1);
+        buf.text.text_props_put_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("xwidget"),
+                Value::keyword("xwidget"),
+                xwidget,
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-inline-xwidget", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
+    assert_eq!(xwidget.xwidget_id, 1234);
+    assert_eq!(xwidget.width, 96.0);
+    assert_eq!(xwidget.height, 54.0);
+
+    let requests = webkit_requests.lock().expect("webkit requests lock");
+    assert!(requests.is_empty());
 }
 
 #[test]
