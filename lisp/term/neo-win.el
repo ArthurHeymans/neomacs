@@ -637,7 +637,7 @@ Only takes effect when window decorations are disabled."
 (declare-function neomacs-set-toolbar-config "neomacsterm.c"
   (&optional icon-size padding))
 
-(defcustom neomacs-toolbar-icon-theme 'jetbrains-like
+(defcustom neomacs-toolbar-icon-theme 'vscode-like
   "Icon theme used for GPU tool-bar image lookup.
 The value `gnu' keeps GNU Emacs image lookup unchanged.  Other values
 replace recognized GNU tool-bar image names with SVG files from

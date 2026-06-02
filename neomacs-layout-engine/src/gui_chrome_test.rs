@@ -109,7 +109,7 @@ fn toolbar_theme_resolves_themed_svg_and_preserves_gnu_fallback() {
 }
 
 #[test]
-fn toolbar_theme_defaults_to_jetbrains_like() {
+fn toolbar_theme_defaults_to_vscode_like() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
     let spec = Value::list(vec![
@@ -124,7 +124,7 @@ fn toolbar_theme_defaults_to_jetbrains_like() {
     assert!(
         themed
             .file_path()
-            .is_some_and(|path| path.ends_with("etc/toolbar-icons/jetbrains-like/search.svg")),
+            .is_some_and(|path| path.ends_with("etc/toolbar-icons/vscode-like/search.svg")),
         "default image path: {themed:#?}"
     );
 }
@@ -148,7 +148,7 @@ fn toolbar_theme_resolves_gnu_find_image_expression_to_default_theme() {
     assert!(
         themed
             .file_path()
-            .is_some_and(|path| path.ends_with("etc/toolbar-icons/jetbrains-like/search.svg")),
+            .is_some_and(|path| path.ends_with("etc/toolbar-icons/vscode-like/search.svg")),
         "default image path from GNU find-image expression: {themed:#?}"
     );
 }
@@ -196,7 +196,7 @@ fn collect_gui_tool_bar_items_after_setup_uses_default_theme() {
             .image
             .as_ref()
             .and_then(|image| image.file_path())
-            .is_some_and(|path| path.ends_with("etc/toolbar-icons/jetbrains-like/search.svg"))),
+            .is_some_and(|path| path.ends_with("etc/toolbar-icons/vscode-like/search.svg"))),
         "tool-bar items: {items:#?}"
     );
 }

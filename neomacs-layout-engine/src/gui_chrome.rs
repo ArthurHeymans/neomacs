@@ -358,7 +358,7 @@ fn current_tool_bar_icon_theme(eval: &Context) -> ToolBarIconTheme {
         .symbol_value("neomacs-toolbar-icon-theme")
         .and_then(|value| value.as_symbol_name())
         .and_then(|name| ToolBarIconTheme::from_str(name).ok())
-        .unwrap_or(ToolBarIconTheme::JetbrainsLike)
+        .unwrap_or(ToolBarIconTheme::VscodeLike)
 }
 
 fn custom_tool_bar_icon_path(eval: &Context, icon_name: &str) -> Option<String> {
