@@ -19,7 +19,11 @@
 
 ;;; Code:
 
-(defvar neomacs-webkit-test-url "https://www.google.com/"
+(defconst neomacs-webkit-test-default-url
+  "data:text/html,%3Chtml%3E%3Cbody%20style%3D%22margin%3A0%3Bbackground%3A%231e1e1e%3Bcolor%3Awhite%3Bfont%3A24px%20sans-serif%22%3E%3Cdiv%20style%3D%22padding%3A40px%22%3E%3Ch1%3EInline%20WebKit%20Buffer%20Test%3C%2Fh1%3E%3Cinput%20value%3D%22type%20here%22%20style%3D%22font-size%3A24px%22%3E%3Cp%3EThis%20WebKit%20view%20is%20inside%20a%20buffer%20display%20property.%3C%2Fp%3E%3C%2Fdiv%3E%3C%2Fbody%3E%3C%2Fhtml%3E"
+  "Self-contained HTML page for inline WebKit rendering tests.")
+
+(defvar neomacs-webkit-test-url neomacs-webkit-test-default-url
   "URL to load for testing.")
 
 (defvar neomacs-webkit-test-width 0
