@@ -101,10 +101,7 @@ fn read_from_string_symbol() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
             let pair_cdr = result.cons_cdr();
-            assert!(
-                pair_car.as_symbol_id().is_some()
-                    && resolve_sym(pair_car.as_symbol_id().unwrap()) == "hello"
-            );
+            assert_eq!(pair_car.as_symbol_name(), Some("hello"));
             assert!(pair_cdr.is_fixnum());
         }
         _ => panic!("Expected cons, got {:?}", result),
@@ -425,10 +422,7 @@ fn read_from_string_keyword() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
             let pair_cdr = result.cons_cdr();
-            assert!(
-                pair_car.as_keyword_id().is_some()
-                    && resolve_sym(pair_car.as_keyword_id().unwrap()) == ":test"
-            );
+            assert_eq!(pair_car.as_symbol_name(), Some(":test"));
         }
         _ => panic!("Expected cons"),
     }
@@ -3525,8 +3519,9 @@ fn read_from_string_c_style_hex_token_is_symbol_like_gnu() {
     let result = builtin_read_from_string(&mut ev, vec![Value::string("0xc0")]).unwrap();
     assert_eq!(result.cons_cdr(), Value::fixnum(4));
     let symbol = result.cons_car();
-    assert!(
-        symbol.as_symbol_id().is_some() && resolve_sym(symbol.as_symbol_id().unwrap()) == "0xc0",
+    assert_eq!(
+        symbol.as_symbol_name(),
+        Some("0xc0"),
         "GNU reads ordinary 0x-prefixed tokens as symbols, got {symbol:?}"
     );
 

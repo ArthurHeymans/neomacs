@@ -408,10 +408,7 @@ fn parse_null() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("null")]);
     let val = result.unwrap();
-    assert!(
-        val.as_keyword_id()
-            .map_or(false, |k| resolve_sym(k) == ":null")
-    );
+    assert_eq!(val.as_symbol_name(), Some(":null"));
 }
 
 #[test]
@@ -426,10 +423,7 @@ fn parse_false() {
     crate::test_utils::init_test_tracing();
     let result = builtin_json_parse_string(vec![Value::string("false")]);
     let val = result.unwrap();
-    assert!(
-        val.as_keyword_id()
-            .map_or(false, |k| resolve_sym(k) == ":false")
-    );
+    assert_eq!(val.as_symbol_name(), Some(":false"));
 }
 
 #[test]
@@ -637,11 +631,7 @@ fn parse_object_as_plist() {
     let val = result.unwrap();
     let items = list_to_vec(&val).expect("should be a list");
     assert_eq!(items.len(), 2);
-    assert!(
-        items[0]
-            .as_keyword_id()
-            .map_or(false, |k| resolve_sym(k) == ":key")
-    );
+    assert_eq!(items[0].as_symbol_name(), Some(":key"));
     assert!(items[1].is_fixnum());
 }
 
@@ -673,10 +663,7 @@ fn parse_custom_false_object() {
         Value::keyword(":json-false"),
     ]);
     let val = result.unwrap();
-    assert!(
-        val.as_keyword_id()
-            .map_or(false, |k| resolve_sym(k) == ":json-false")
-    );
+    assert_eq!(val.as_symbol_name(), Some(":json-false"));
 }
 
 #[test]

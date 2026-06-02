@@ -171,11 +171,7 @@ fn indirect_function_follows_chain() {
     // alias -> real-fn
     ob.set_symbol_function("alias", Value::symbol(intern("real-fn")));
     let resolved = ob.indirect_function("alias").unwrap();
-    assert!(
-        resolved
-            .as_subr_id()
-            .map_or(false, |id| resolve_sym(id) == "+")
-    );
+    assert_eq!(resolved.as_subr_id().map(resolve_sym), Some("+"));
 }
 
 #[test]
