@@ -5079,7 +5079,31 @@ pub(crate) fn builtin_internal_make_var_non_special(
     Ok(Value::NIL)
 }
 
+fn face_boolean_x_resource_value(
+    value: &str,
+    signal_on_invalid: bool,
+) -> Result<Option<Value>, Flow> {
+    if value.eq_ignore_ascii_case("on") || value.eq_ignore_ascii_case("true") {
+        Ok(Some(Value::T))
+    } else if value.eq_ignore_ascii_case("off") || value.eq_ignore_ascii_case("false") {
+        Ok(Some(Value::NIL))
+    } else if value.eq_ignore_ascii_case("unspecified") {
+        Ok(Some(Value::symbol("unspecified")))
+    } else if signal_on_invalid {
+        Err(signal(
+            "error",
+            vec![
+                Value::string("Invalid face attribute value from X resource"),
+                Value::string(value),
+            ],
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
 pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args(
@@ -5088,7 +5112,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
         3,
         4,
     )?;
-    if args[0].as_symbol_name().is_none() {
+    if symbol_id(&args[0]).is_none() {
         return Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[0]],
@@ -5096,139 +5120,60 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
     }
     let resource_value = expect_strict_string(&args[2])?;
 
-    const VALID_X_RESOURCE_FACE_ATTRIBUTES: &[&str] = &[
-        ":family",
-        ":foundry",
-        ":height",
-        ":weight",
-        ":slant",
-        ":underline",
-        ":overline",
-        ":strike-through",
-        ":box",
-        ":inverse-video",
-        ":foreground",
-        ":distant-foreground",
-        ":background",
-        ":stipple",
-        ":width",
-        ":inherit",
-        ":extend",
-        ":font",
-        ":fontset",
-        ":bold",
-        ":italic",
-    ];
+    let Some(attr_id) = symbol_id(&args[1]) else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("symbolp"), args[1]],
+        ));
+    };
+    let attr_name = resolve_sym(attr_id);
 
-    let attr_name = match args[1].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        ValueKind::Nil | ValueKind::T => args[1].as_symbol_name().unwrap_or_default().to_string(),
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("symbolp"), args[1]],
-            ));
+    let converted_value = if resource_value.eq_ignore_ascii_case("unspecified") {
+        Value::symbol("unspecified")
+    } else {
+        match attr_name {
+            ":height" => {
+                let number = builtin_string_to_number(vec![Value::string(&resource_value)])?;
+                match number.kind() {
+                    ValueKind::Fixnum(height) if height > 0 => number,
+                    _ => {
+                        return Err(signal(
+                            "error",
+                            vec![
+                                Value::string("Invalid face height from X resource"),
+                                Value::string(resource_value),
+                            ],
+                        ));
+                    }
+                }
+            }
+            ":bold" | ":italic" => {
+                face_boolean_x_resource_value(&resource_value, true)?.expect("signal=true")
+            }
+            ":weight" | ":slant" | ":width" => Value::symbol(&resource_value),
+            ":inverse-video" | ":extend" => {
+                face_boolean_x_resource_value(&resource_value, true)?.expect("signal=true")
+            }
+            ":underline" | ":overline" | ":strike-through" => {
+                face_boolean_x_resource_value(&resource_value, false)?
+                    .unwrap_or_else(|| Value::string(&resource_value))
+            }
+            ":box" | ":inherit" => {
+                let read_result = crate::emacs_core::reader::builtin_read_from_string(
+                    eval,
+                    vec![Value::string(&resource_value)],
+                )?;
+                read_result.cons_car()
+            }
+            _ => Value::string(&resource_value),
         }
     };
-    if !VALID_X_RESOURCE_FACE_ATTRIBUTES.contains(&attr_name.as_str()) {
-        if args[1].is_nil() {
-            return Err(signal(
-                "error",
-                vec![Value::string("Invalid face attribute name")],
-            ));
-        }
-        return Err(signal(
-            "error",
-            vec![Value::string("Invalid face attribute name"), args[1]],
-        ));
+
+    let mut setter_args = vec![args[0], args[1], converted_value];
+    if let Some(frame) = args.get(3) {
+        setter_args.push(*frame);
     }
-
-    const VALID_FACE_WEIGHTS: &[&str] = &[
-        "ultra-light",
-        "extra-light",
-        "light",
-        "semi-light",
-        "normal",
-        "semi-bold",
-        "bold",
-        "extra-bold",
-        "ultra-bold",
-    ];
-    const VALID_FACE_SLANTS: &[&str] = &[
-        "normal",
-        "italic",
-        "oblique",
-        "reverse-italic",
-        "reverse-oblique",
-    ];
-    const VALID_FACE_WIDTHS: &[&str] = &[
-        "ultra-condensed",
-        "extra-condensed",
-        "condensed",
-        "semi-condensed",
-        "normal",
-        "semi-expanded",
-        "expanded",
-        "extra-expanded",
-        "ultra-expanded",
-    ];
-
-    let value_lc = resource_value.to_ascii_lowercase();
-    match attr_name.as_str() {
-        ":width" if !VALID_FACE_WIDTHS.contains(&value_lc.as_str()) => {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string("Invalid face width"),
-                    Value::symbol(resource_value),
-                ],
-            ));
-        }
-        ":weight" if !VALID_FACE_WEIGHTS.contains(&value_lc.as_str()) => {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string("Invalid face weight"),
-                    Value::symbol(resource_value),
-                ],
-            ));
-        }
-        ":slant" if !VALID_FACE_SLANTS.contains(&value_lc.as_str()) => {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string("Invalid face slant"),
-                    Value::symbol(resource_value),
-                ],
-            ));
-        }
-        ":box" if resource_value != "nil" && resource_value != "t" => {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string("Invalid face box"),
-                    Value::symbol(resource_value),
-                ],
-            ));
-        }
-        ":inverse-video" | ":extend" | ":bold" | ":italic"
-            if value_lc != "on"
-                && value_lc != "off"
-                && value_lc != "true"
-                && value_lc != "false" =>
-        {
-            return Err(signal(
-                "error",
-                vec![
-                    Value::string("Invalid face attribute value from X resource"),
-                    Value::string(resource_value),
-                ],
-            ));
-        }
-        _ => {}
-    }
-
-    Ok(args[0])
+    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(eval, setter_args)
 }
 
 pub(crate) fn builtin_internal_stack_stats(args: Vec<Value>) -> EvalResult {

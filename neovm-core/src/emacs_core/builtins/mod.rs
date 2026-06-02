@@ -5258,7 +5258,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "internal-set-lisp-face-attribute-from-resource",
-        |_ctx, args| builtin_internal_set_lisp_face_attribute_from_resource(args),
+        |ctx, args| builtin_internal_set_lisp_face_attribute_from_resource(ctx, args),
         3,
         Some(4),
     );

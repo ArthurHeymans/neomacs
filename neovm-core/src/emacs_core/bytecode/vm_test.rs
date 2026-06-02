@@ -6621,9 +6621,11 @@ fn vm_internal_utility_builtins_use_direct_and_shared_state_paths() {
                   (eq
                    (internal-set-lisp-face-attribute-from-resource
                     'default :weight "bold")
-                   'default)))"#
+                   'default)
+                  (eq (internal-get-lisp-face-attribute 'default :weight)
+                      'bold)))"#
         ),
-        r#"OK (t (t t t) t t (t nil) t)"#
+        r#"OK (t (t t t) t t (t nil) t t)"#
     );
 }
 

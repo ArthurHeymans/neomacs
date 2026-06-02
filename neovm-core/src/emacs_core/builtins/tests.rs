@@ -6514,18 +6514,6 @@ fn pure_dispatch_internal_placeholder_cluster_matches_compat_contracts() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let set_face_attr = dispatch_builtin_pure(
-        "internal-set-lisp-face-attribute-from-resource",
-        vec![
-            Value::symbol("face"),
-            Value::keyword(":height"),
-            Value::string("value"),
-        ],
-    )
-    .expect("builtin internal-set-lisp-face-attribute-from-resource should resolve")
-    .expect("builtin internal-set-lisp-face-attribute-from-resource should evaluate");
-    assert_eq!(set_face_attr, Value::symbol("face"));
-
     let stack_stats = dispatch_builtin_pure("internal-stack-stats", vec![])
         .expect("builtin internal-stack-stats should resolve")
         .expect("builtin internal-stack-stats should evaluate");
@@ -6535,6 +6523,55 @@ fn pure_dispatch_internal_placeholder_cluster_matches_compat_contracts() {
         .expect("builtin internal-subr-documentation should resolve")
         .expect("builtin internal-subr-documentation should evaluate");
     assert_eq!(subr_doc, Value::T);
+}
+
+#[test]
+fn internal_set_lisp_face_attribute_from_resource_matches_gnu_conversion() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let ((face 'resource-face))
+                 (list
+                  (eq (internal-set-lisp-face-attribute-from-resource
+                       face :weight "thin")
+                      face)
+                  (eq (internal-get-lisp-face-attribute face :weight) 'thin)
+                  (progn
+                    (internal-set-lisp-face-attribute-from-resource
+                     face :underline "red")
+                    (equal (internal-get-lisp-face-attribute face :underline) "red"))
+                  (progn
+                    (internal-set-lisp-face-attribute-from-resource
+                     face :inverse-video "TRUE")
+                    (eq (internal-get-lisp-face-attribute face :inverse-video) t))
+                  (progn
+                    (internal-set-lisp-face-attribute-from-resource
+                     face :box "(:line-width 2 :color \"red\")")
+                    (equal (internal-get-lisp-face-attribute face :box)
+                           '(:line-width 2 :color "red")))
+                  (progn
+                    (internal-set-lisp-face-attribute-from-resource
+                     face :height "120px")
+                    (= (internal-get-lisp-face-attribute face :height) 120))
+                  (condition-case err
+                      (internal-set-lisp-face-attribute-from-resource
+                       face :height "value")
+                    (error (car err)))))"#,
+        )
+        .expect("internal-set-lisp-face-attribute-from-resource");
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::T,
+            Value::T,
+            Value::T,
+            Value::T,
+            Value::T,
+            Value::T,
+            Value::symbol("error"),
+        ])
+    );
 }
 
 #[test]
