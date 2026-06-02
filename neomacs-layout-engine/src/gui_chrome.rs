@@ -118,6 +118,7 @@ fn parse_tool_bar_item(
             enabled: false,
             selected: false,
             item_type: ToolBarItemType::Separator,
+            wrap: false,
         });
     }
 
@@ -143,14 +144,9 @@ fn parse_tool_bar_item(
     let (item_type, selected) = plist_lookup(&plist, MenuItemProperty::Button)
         .and_then(|value| button_state(eval, value))
         .unwrap_or((ToolBarItemType::Button, false));
-    let item_type = if plist_lookup(&plist, MenuItemProperty::Wrap)
+    let wrap = plist_lookup(&plist, MenuItemProperty::Wrap)
         .map(|value| eval_menu_property(eval, value).is_truthy())
-        .unwrap_or(false)
-    {
-        ToolBarItemType::Wrap
-    } else {
-        item_type
-    };
+        .unwrap_or(false);
 
     Some(ToolBarItem {
         index,
@@ -158,13 +154,10 @@ fn parse_tool_bar_item(
         image,
         label,
         help,
-        enabled: if item_type == ToolBarItemType::Wrap {
-            false
-        } else {
-            enabled
-        },
+        enabled: if wrap { false } else { enabled },
         selected,
         item_type,
+        wrap,
     })
 }
 

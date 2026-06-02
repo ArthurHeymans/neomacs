@@ -27,6 +27,30 @@ fn parse_tool_bar_item_preserves_raw_unibyte_label_and_help() {
 }
 
 #[test]
+fn parse_tool_bar_item_keeps_wrap_separate_from_button_type() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let def = Value::list(vec![
+        Value::symbol("menu-item"),
+        Value::string("Wrapped"),
+        Value::symbol("ignore"),
+        Value::symbol(":button"),
+        Value::cons(Value::symbol(":toggle"), Value::T),
+        Value::symbol(":wrap"),
+        Value::T,
+        Value::symbol(":enable"),
+        Value::T,
+    ]);
+
+    let item = parse_tool_bar_item(&mut eval, "wrapped-toggle", &def, 0).expect("tool-bar item");
+    assert_eq!(item.item_type, ToolBarItemType::Toggle);
+    assert_eq!(item.item_type.gnu_type_name(), ":toggle");
+    assert!(item.selected);
+    assert!(item.wrap);
+    assert!(!item.enabled);
+}
+
+#[test]
 fn toolbar_image_extensions_use_typed_gnu_image_domain() {
     assert!(is_supported_toolbar_image_file("open.xpm"));
     assert!(is_supported_toolbar_image_file("photo.JPG"));

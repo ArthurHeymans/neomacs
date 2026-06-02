@@ -76,7 +76,18 @@ impl BoxType {
 /// IDs 0–19 in every frame's face cache; dynamic faces start at
 /// [`BasicFaceId::SENTINEL`].
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    EnumString,
+    IntoPrimitive,
+    IntoStaticStr,
+    TryFromPrimitive,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum BasicFaceId {
     Default = 0,
@@ -115,15 +126,19 @@ impl BasicFaceId {
         name.parse().ok()
     }
 
+    /// Look up a basic face by GNU's fixed `enum face_id` value.
+    pub fn from_gnu_code(code: u32) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
     /// Return the canonical basic face name.
     pub fn name(self) -> &'static str {
         self.into()
     }
-}
 
-impl From<BasicFaceId> for u32 {
-    fn from(id: BasicFaceId) -> u32 {
-        id as u32
+    /// Return GNU's fixed `enum face_id` value.
+    pub fn gnu_code(self) -> u32 {
+        self.into()
     }
 }
 

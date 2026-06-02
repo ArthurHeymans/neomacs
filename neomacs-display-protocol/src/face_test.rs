@@ -35,10 +35,13 @@ fn basic_face_ids_preserve_gnu_slots_and_names() {
 
     for (face, id, name) in faces {
         assert_eq!(u32::from(face), id);
+        assert_eq!(face.gnu_code(), id);
+        assert_eq!(BasicFaceId::from_gnu_code(id), Some(face));
         assert_eq!(face.name(), name);
         assert_eq!(BasicFaceId::from_name(name), Some(face));
     }
     assert_eq!(BasicFaceId::SENTINEL, 20);
+    assert_eq!(BasicFaceId::from_gnu_code(BasicFaceId::SENTINEL), None);
 }
 
 #[test]

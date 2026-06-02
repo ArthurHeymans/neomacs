@@ -1,5 +1,7 @@
 //! Shared UI menu/toolbar/popup item types.
 
+use strum::IntoStaticStr;
+
 /// A single item in a popup menu.
 #[derive(Debug, Clone)]
 pub struct PopupMenuItem {
@@ -50,14 +52,24 @@ impl ToolBarImageSource {
 }
 
 /// GNU toolbar item type.  The C redisplay path stores this in
-/// `TOOL_BAR_ITEM_TYPE`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `TOOL_BAR_ITEM_TYPE`.  Wrapping is a separate GNU slot
+/// (`TOOL_BAR_ITEM_WRAP`) and is represented by [`ToolBarItem::wrap`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoStaticStr)]
 pub enum ToolBarItemType {
+    #[strum(to_string = "button")]
     Button,
+    #[strum(to_string = "separator")]
     Separator,
+    #[strum(to_string = ":radio")]
     Radio,
+    #[strum(to_string = ":toggle")]
     Toggle,
-    Wrap,
+}
+
+impl ToolBarItemType {
+    pub fn gnu_type_name(self) -> &'static str {
+        self.into()
+    }
 }
 
 /// A single toolbar item.
@@ -71,6 +83,7 @@ pub struct ToolBarItem {
     pub enabled: bool,
     pub selected: bool,
     pub item_type: ToolBarItemType,
+    pub wrap: bool,
 }
 
 impl ToolBarItem {
