@@ -7084,6 +7084,21 @@ fn nested_condition_case_uses_current_shared_condition_slice() {
 }
 
 #[test]
+fn condition_control_symbol_domain_matches_gnu_debug_marker() {
+    crate::test_utils::init_test_tracing();
+    let debug = Value::symbol(ConditionControlSymbol::Debug.name());
+    let error = Value::symbol("error");
+    assert_eq!(
+        ConditionControlSymbol::from_lisp_value(&debug),
+        Some(ConditionControlSymbol::Debug)
+    );
+    assert_eq!(ConditionControlSymbol::from_lisp_value(&error), None);
+    assert!(condition_value_contains_debug(&Value::list(vec![
+        debug, error
+    ])));
+}
+
+#[test]
 fn condition_case_suppresses_debugger_without_debug_marker() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

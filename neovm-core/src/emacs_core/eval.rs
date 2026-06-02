@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
+use strum::{EnumString, IntoStaticStr};
 
 use super::abbrev::AbbrevManager;
 use super::advice::VariableWatcherList;
@@ -1541,9 +1542,28 @@ pub(crate) enum ConditionFrame {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum ConditionControlSymbol {
+    Debug,
+}
+
+impl ConditionControlSymbol {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 fn condition_value_contains_debug(value: &Value) -> bool {
     match value.kind() {
-        ValueKind::Symbol(id) => resolve_sym(id) == "debug",
+        ValueKind::Symbol(_) => {
+            ConditionControlSymbol::from_lisp_value(value) == Some(ConditionControlSymbol::Debug)
+        }
         ValueKind::Cons => {
             list_to_vec(value).is_some_and(|items| items.iter().any(condition_value_contains_debug))
         }
