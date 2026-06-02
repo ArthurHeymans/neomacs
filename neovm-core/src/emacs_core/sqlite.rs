@@ -12,6 +12,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use rusqlite::{Connection, OpenFlags, ffi};
+use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -172,8 +173,43 @@ fn expect_sql_cstring(v: &Value) -> Result<CString, Flow> {
     CString::new(s.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SqliteReturnType {
+    Set,
+    Full,
+}
+
+impl SqliteReturnType {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SqliteBindSymbol {
+    False,
+}
+
+impl SqliteBindSymbol {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+}
+
 fn value_is_false_symbol(v: &Value) -> bool {
-    matches!(v.kind(), ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "false")
+    SqliteBindSymbol::from_value(v) == Some(SqliteBindSymbol::False)
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +248,7 @@ fn bind_elisp_value(
         ValueKind::T => stmt
             .raw_bind_parameter(idx, 1i64)
             .map_err(|e| sqlite_err(&e.to_string())),
-        ValueKind::Symbol(sym) if crate::emacs_core::intern::resolve_sym(sym) == "false" => stmt
+        ValueKind::Symbol(_) if value_is_false_symbol(val) => stmt
             .raw_bind_parameter(idx, 0i64)
             .map_err(|e| sqlite_err(&e.to_string())),
         ValueKind::Fixnum(n) => stmt
@@ -571,19 +607,9 @@ pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
     let id = expect_db(&args[0])?;
     let sql = expect_strict_string(&args[1])?;
     let values = args.get(2).copied().unwrap_or(Value::NIL);
-    let return_type = args.get(3).copied().unwrap_or(Value::NIL);
-
-    // Check if return_type is 'set
-    let is_set = match return_type.kind() {
-        ValueKind::Symbol(sym) => crate::emacs_core::intern::resolve_sym(sym) == "set",
-        _ => false,
-    };
-
-    // Check if return_type is 'full
-    let is_full = match return_type.kind() {
-        ValueKind::Symbol(sym) => crate::emacs_core::intern::resolve_sym(sym) == "full",
-        _ => false,
-    };
+    let return_type = args.get(3).and_then(SqliteReturnType::from_value);
+    let is_set = return_type == Some(SqliteReturnType::Set);
+    let is_full = return_type == Some(SqliteReturnType::Full);
 
     if is_set {
         // Keep a live SQLite statement and step it incrementally, like GNU.
@@ -933,4 +959,34 @@ pub(crate) fn builtin_sqlite_load_extension(
     })?;
 
     Ok(Value::bool_val(loaded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sqlite_symbol_domains_match_gnu_symbols() {
+        assert_eq!(
+            SqliteReturnType::from_value(&Value::symbol("set")),
+            Some(SqliteReturnType::Set)
+        );
+        assert_eq!(
+            SqliteReturnType::from_value(&Value::symbol("full")),
+            Some(SqliteReturnType::Full)
+        );
+        assert_eq!(SqliteReturnType::Set.symbol_name(), "set");
+        assert_eq!(SqliteReturnType::Full.symbol_name(), "full");
+        assert_eq!(SqliteReturnType::from_value(&Value::symbol("rows")), None);
+        assert_eq!(SqliteReturnType::from_value(&Value::NIL), None);
+
+        assert_eq!(
+            SqliteBindSymbol::from_value(&Value::symbol("false")),
+            Some(SqliteBindSymbol::False)
+        );
+        assert_eq!(SqliteBindSymbol::False.symbol_name(), "false");
+        assert!(value_is_false_symbol(&Value::symbol("false")));
+        assert!(!value_is_false_symbol(&Value::keyword(":false")));
+        assert_eq!(SqliteBindSymbol::from_value(&Value::T), None);
+    }
 }
