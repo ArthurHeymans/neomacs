@@ -30,6 +30,25 @@ impl DisplaySpecHead {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+enum DisplayMediaKey {
+    File,
+    Uri,
+    Width,
+    Height,
+    Loop,
+    LoopCount,
+    Autoplay,
+    Xwidget,
+}
+
+impl DisplayMediaKey {
+    fn from_lisp_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.strip_prefix(':')?.parse().ok()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayImageLayout {
     pub(crate) request: ImageResolveRequest,
@@ -141,32 +160,31 @@ pub(crate) fn parse_display_video_layout(
 
     let mut i = 1usize;
     while i + 1 < items.len() {
-        let key = items[i].as_symbol_name();
         let value = items[i + 1];
-        match key {
-            Some(":file") => {
+        match DisplayMediaKey::from_lisp_value(items[i]) {
+            Some(DisplayMediaKey::File) => {
                 source = value
                     .as_lisp_string()
                     .cloned()
                     .map(VideoResolveSource::File);
             }
-            Some(":uri") => {
+            Some(DisplayMediaKey::Uri) => {
                 source = value.as_lisp_string().cloned().map(VideoResolveSource::Uri);
             }
-            Some(":width") => {
+            Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     width = parsed.max(1) as f32;
                 }
             }
-            Some(":height") => {
+            Some(DisplayMediaKey::Height) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     height = parsed.max(1) as f32;
                 }
             }
-            Some(":loop") | Some(":loop-count") => {
+            Some(DisplayMediaKey::Loop | DisplayMediaKey::LoopCount) => {
                 loop_count = parse_video_loop_count(value);
             }
-            Some(":autoplay") => {
+            Some(DisplayMediaKey::Autoplay) => {
                 autoplay = parse_boolish(value);
             }
             _ => {}
@@ -203,27 +221,26 @@ pub(crate) fn parse_display_webkit_layout(
 
     let mut i = 1usize;
     while i + 1 < items.len() {
-        let key = items[i].as_symbol_name();
         let value = items[i + 1];
-        match key {
-            Some(":file") => {
+        match DisplayMediaKey::from_lisp_value(items[i]) {
+            Some(DisplayMediaKey::File) => {
                 source = value
                     .as_lisp_string()
                     .cloned()
                     .map(WebKitResolveSource::File);
             }
-            Some(":uri") => {
+            Some(DisplayMediaKey::Uri) => {
                 source = value
                     .as_lisp_string()
                     .cloned()
                     .map(WebKitResolveSource::Uri);
             }
-            Some(":width") => {
+            Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     width = parsed.max(1) as f32;
                 }
             }
-            Some(":height") => {
+            Some(DisplayMediaKey::Height) => {
                 if let Some(parsed) = parse_image_dimension(value) {
                     height = parsed.max(1) as f32;
                 }
@@ -253,7 +270,7 @@ pub(crate) fn parse_display_xwidget_layout(prop_val: &Value) -> Option<DisplayXw
     let mut xwidget = None;
     let mut i = 1usize;
     while i + 1 < items.len() {
-        if items[i].as_symbol_name() == Some(":xwidget") {
+        if DisplayMediaKey::from_lisp_value(items[i]) == Some(DisplayMediaKey::Xwidget) {
             xwidget = items[i + 1].as_xwidget();
             break;
         }
@@ -306,4 +323,41 @@ fn parse_video_loop_count(value: Value) -> i32 {
         return -1;
     }
     value.as_int().unwrap_or(-1) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_media_keys_match_lisp_keyword_domain() {
+        let keys = [
+            (DisplayMediaKey::File, ":file"),
+            (DisplayMediaKey::Uri, ":uri"),
+            (DisplayMediaKey::Width, ":width"),
+            (DisplayMediaKey::Height, ":height"),
+            (DisplayMediaKey::Loop, ":loop"),
+            (DisplayMediaKey::LoopCount, ":loop-count"),
+            (DisplayMediaKey::Autoplay, ":autoplay"),
+            (DisplayMediaKey::Xwidget, ":xwidget"),
+        ];
+
+        for (key, name) in keys {
+            assert_eq!(
+                DisplayMediaKey::from_lisp_value(Value::symbol(name)),
+                Some(key)
+            );
+            let serialized: &'static str = key.into();
+            assert_eq!(serialized, name);
+        }
+
+        assert_eq!(
+            DisplayMediaKey::from_lisp_value(Value::symbol("width")),
+            None
+        );
+        assert_eq!(
+            DisplayMediaKey::from_lisp_value(Value::symbol(":foreground")),
+            None
+        );
+    }
 }

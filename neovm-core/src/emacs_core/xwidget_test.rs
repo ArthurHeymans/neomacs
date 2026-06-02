@@ -199,6 +199,21 @@ fn make_xwidget_accepts_only_gnu_webkit_type() {
 }
 
 #[test]
+fn make_xwidget_requires_interned_gnu_webkit_symbol() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+
+    let err = ctx
+        .eval_str(r#"(make-xwidget (make-symbol "webkit") "Title" 10 20)"#)
+        .expect_err("GNU make-xwidget compares against Qwebkit by identity");
+    let super::error::EvalError::Signal { symbol, data, .. } = err else {
+        panic!("make-xwidget should signal error");
+    };
+    assert_eq!(resolve_sym(symbol), "error");
+    assert_eq!(data, vec![Value::string("Bad xwidget type")]);
+}
+
+#[test]
 fn xwidget_webkit_lifecycle_uses_gnu_model_id() {
     crate::test_utils::init_test_tracing();
     let host = RecordingXwidgetDisplayHost::default();

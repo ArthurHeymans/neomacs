@@ -15,6 +15,27 @@ use super::symbol::Obarray;
 use super::value::{Value, eq_value};
 use crate::heap_types::LispString;
 use std::collections::HashMap;
+use strum::IntoStaticStr;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum XwidgetType {
+    Webkit,
+}
+
+impl XwidgetType {
+    fn is_lisp_value(self, value: Value) -> bool {
+        value == self.value()
+    }
+
+    fn value(self) -> Value {
+        Value::symbol(self.name())
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
 
 #[derive(Clone, Debug, Default)]
 struct WebKitRuntimeState {
@@ -143,7 +164,7 @@ fn expect_live_xwidget(value: Value) -> Result<Value, Flow> {
 fn expect_live_webkit_xwidget(value: Value) -> Result<Value, Flow> {
     let value = expect_live_xwidget(value)?;
     let xwidget = value.as_xwidget().unwrap();
-    if xwidget.type_.as_symbol_name() == Some("webkit") {
+    if XwidgetType::Webkit.is_lisp_value(xwidget.type_) {
         Ok(value)
     } else {
         Err(signal("error", vec![Value::string("Not a WebKit widget")]))
@@ -221,7 +242,7 @@ fn xwidget_live_p_value(value: Value) -> bool {
 pub(crate) fn builtin_make_xwidget(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("make-xwidget", &args, 4, 7)?;
     let type_ = expect_symbol(args[0])?;
-    if type_.as_symbol_name() != Some("webkit") {
+    if !XwidgetType::Webkit.is_lisp_value(type_) {
         return Err(signal("error", vec![Value::string("Bad xwidget type")]));
     }
     eval.require_value(Value::symbol("xwidget"), None, None)?;
