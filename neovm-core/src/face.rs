@@ -1103,13 +1103,8 @@ fn parse_underline_value(value: &Value) -> Option<Underline> {
                     }
                     "style" => {
                         if let Some(name) = item.as_symbol_name() {
-                            style = match name {
-                                "wave" => UnderlineStyle::Wave,
-                                "double-line" => UnderlineStyle::DoubleLine,
-                                "dots" => UnderlineStyle::Dots,
-                                "dashes" => UnderlineStyle::Dashes,
-                                _ => UnderlineStyle::Line,
-                            };
+                            style =
+                                UnderlineStyle::from_symbol(name).unwrap_or(UnderlineStyle::Line);
                         }
                     }
                     "position" => {
@@ -1186,9 +1181,7 @@ fn parse_box_value(value: &Value) -> Option<BoxBorder> {
                     }
                     "style" => {
                         if let Some(name) = item.as_symbol_name() {
-                            style = match name {
-                                name => BoxStyle::from_symbol(name).unwrap_or(BoxStyle::Flat),
-                            };
+                            style = BoxStyle::from_symbol(name).unwrap_or(BoxStyle::Flat);
                         }
                     }
                     _ => {}

@@ -66,38 +66,46 @@ fn lface_attr_keyword_mapping_matches_gnu_slots() {
 fn underline_style_codes_match_gnu_face_underline_type() {
     crate::test_utils::init_test_tracing();
     let styles = [
-        (UnderlineStyle::Line, 1),
-        (UnderlineStyle::DoubleLine, 2),
-        (UnderlineStyle::Wave, 3),
-        (UnderlineStyle::Dots, 4),
-        (UnderlineStyle::Dashes, 5),
+        (UnderlineStyle::Line, 1, "line"),
+        (UnderlineStyle::DoubleLine, 2, "double-line"),
+        (UnderlineStyle::Wave, 3, "wave"),
+        (UnderlineStyle::Dots, 4, "dots"),
+        (UnderlineStyle::Dashes, 5, "dashes"),
     ];
 
-    for (style, code) in styles {
+    for (style, code, symbol) in styles {
         assert_eq!(style.gnu_code(), code);
         assert_eq!(UnderlineStyle::from_gnu_code(code), Some(style));
+        assert_eq!(style.symbol_name(), symbol);
+        assert_eq!(UnderlineStyle::from_symbol(symbol), Some(style));
     }
 
     assert_eq!(UnderlineStyle::from_gnu_code(0), None);
     assert_eq!(UnderlineStyle::from_gnu_code(6), None);
+    assert_eq!(UnderlineStyle::from_symbol("dash"), None);
+    assert_eq!(UnderlineStyle::from_symbol("double"), None);
 }
 
 #[test]
 fn box_style_codes_match_gnu_face_box_type() {
     crate::test_utils::init_test_tracing();
     let styles = [
-        (BoxStyle::Flat, 1),
-        (BoxStyle::Raised, 2),
-        (BoxStyle::Pressed, 3),
+        (BoxStyle::Flat, 1, "flat-button"),
+        (BoxStyle::Raised, 2, "released-button"),
+        (BoxStyle::Pressed, 3, "pressed-button"),
     ];
 
-    for (style, code) in styles {
+    for (style, code, symbol) in styles {
         assert_eq!(style.gnu_code(), code);
         assert_eq!(BoxStyle::from_gnu_code(code), Some(style));
+        assert_eq!(style.symbol_name(), symbol);
+        assert_eq!(BoxStyle::from_symbol(symbol), Some(style));
     }
 
     assert_eq!(BoxStyle::from_gnu_code(0), None);
     assert_eq!(BoxStyle::from_gnu_code(4), None);
+    assert_eq!(BoxStyle::from_symbol("flat"), None);
+    assert_eq!(BoxStyle::from_symbol("raised"), None);
 }
 
 #[test]
