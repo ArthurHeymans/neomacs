@@ -235,6 +235,14 @@ impl TextQuotingStyle {
     }
 }
 
+fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
+    if value.is_nil() {
+        None
+    } else {
+        value.as_symbol_id()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CodingSystemInfo
 // ---------------------------------------------------------------------------
@@ -1748,16 +1756,10 @@ pub(crate) fn builtin_define_coding_system_internal(
     // arg[6]: encode-translation-table (ignored for now)
 
     // arg[7]: post-read-conversion
-    let post_read_conversion = match args[7].kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) != "nil" => Some(id),
-        _ => None,
-    };
+    let post_read_conversion = non_nil_symbol_id(&args[7]);
 
     // arg[8]: pre-write-conversion
-    let pre_write_conversion = match args[8].kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) != "nil" => Some(id),
-        _ => None,
-    };
+    let pre_write_conversion = non_nil_symbol_id(&args[8]);
 
     // arg[9]: default-char
     let default_char = match args[9].kind() {

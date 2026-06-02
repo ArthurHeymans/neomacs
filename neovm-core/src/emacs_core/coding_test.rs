@@ -599,6 +599,59 @@ fn define_coding_system_internal_keeps_symbol_metadata() {
     assert!(info.properties.contains_key(&intern(":foo")));
 }
 
+#[test]
+fn define_coding_system_internal_nil_conversion_slots_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut m = mgr();
+    builtin_define_coding_system_internal(
+        &mut m,
+        vec![
+            Value::symbol("vm-nil-conversion-coding"),
+            Value::char('N'),
+            Value::symbol("charset"),
+            Value::list(vec![Value::symbol("ascii")]),
+            Value::T,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum('?' as i64),
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("unix"),
+        ],
+    )
+    .unwrap();
+
+    let info = m
+        .get("vm-nil-conversion-coding")
+        .expect("defined coding system should exist");
+    assert_eq!(info.post_read_conversion, None);
+    assert_eq!(info.pre_write_conversion, None);
+    assert_eq!(
+        builtin_coding_system_get(
+            &m,
+            vec![
+                Value::symbol("vm-nil-conversion-coding"),
+                Value::keyword(":post-read-conversion"),
+            ],
+        )
+        .unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_coding_system_get(
+            &m,
+            vec![
+                Value::symbol("vm-nil-conversion-coding"),
+                Value::keyword(":pre-write-conversion"),
+            ],
+        )
+        .unwrap(),
+        Value::NIL
+    );
+}
+
 // ----- coding-system-base -----
 
 #[test]
