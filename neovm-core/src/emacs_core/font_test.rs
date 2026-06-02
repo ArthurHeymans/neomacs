@@ -2117,6 +2117,22 @@ fn internal_lisp_face_attribute_values_rejects_non_symbol() {
 }
 
 #[test]
+fn set_face_attr_alias_domain_matches_gnu_legacy_keywords() {
+    assert_eq!(
+        SetFaceAttrAlias::from_keyword(":bold"),
+        Some(SetFaceAttrAlias::Bold)
+    );
+    assert_eq!(
+        SetFaceAttrAlias::from_keyword(":italic"),
+        Some(SetFaceAttrAlias::Italic)
+    );
+    assert_eq!(SetFaceAttrAlias::Bold.keyword(), ":bold");
+    assert_eq!(SetFaceAttrAlias::Italic.keyword(), ":italic");
+    assert_eq!(SetFaceAttrAlias::from_keyword(":Bold"), None);
+    assert_eq!(SetFaceAttrAlias::from_keyword(":ITALIC"), None);
+}
+
+#[test]
 fn set_face_attribute_accepts_only_gnu_underline_style_symbols() {
     crate::test_utils::init_test_tracing();
     let rendered = bootstrap_eval_all(

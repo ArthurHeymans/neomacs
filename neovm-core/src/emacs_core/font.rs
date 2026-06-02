@@ -2168,22 +2168,34 @@ const LFACE_ATTRS: [LFaceAttr; LFACE_VECTOR_SIZE - 1] = [
     LFaceAttr::Extend,
 ];
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString, strum::IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+enum SetFaceAttrAlias {
+    Bold,
+    Italic,
+}
+
+impl SetFaceAttrAlias {
+    fn from_keyword(name: &str) -> Option<Self> {
+        name.strip_prefix(':')?.parse().ok()
+    }
+
+    fn keyword(self) -> &'static str {
+        self.into()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SetFaceAttr {
     LFace(LFaceAttr),
-    Bold,
-    Italic,
+    Alias(SetFaceAttrAlias),
 }
 
 impl SetFaceAttr {
     fn from_keyword(name: &str) -> Option<Self> {
         LFaceAttr::from_keyword(name)
             .map(Self::LFace)
-            .or_else(|| match name {
-                ":bold" => Some(Self::Bold),
-                ":italic" => Some(Self::Italic),
-                _ => None,
-            })
+            .or_else(|| SetFaceAttrAlias::from_keyword(name).map(Self::Alias))
     }
 }
 
@@ -3454,8 +3466,7 @@ fn normalize_face_attr_for_set_with_eval(
 ) -> Result<(LFaceAttr, Value), Flow> {
     let attr_name = match attr {
         SetFaceAttr::LFace(attr) => attr.keyword(),
-        SetFaceAttr::Bold => ":bold",
-        SetFaceAttr::Italic => ":italic",
+        SetFaceAttr::Alias(alias) => alias.keyword(),
     };
     let mut normalized = match attr_name {
         ":foreground" | ":background" | ":distant-foreground" if value.is_nil() => {
@@ -3662,7 +3673,7 @@ fn normalize_face_attr_for_set_with_eval(
 
     match attr {
         SetFaceAttr::LFace(attr) => Ok((attr, normalized)),
-        SetFaceAttr::Bold | SetFaceAttr::Italic => unreachable!("aliases returned above"),
+        SetFaceAttr::Alias(_) => unreachable!("aliases returned above"),
     }
 }
 
