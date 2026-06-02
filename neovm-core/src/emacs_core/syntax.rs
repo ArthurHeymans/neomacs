@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
@@ -62,6 +63,23 @@ pub fn collect_syntax_gc_roots(roots: &mut Vec<Value>) {
             roots.push(v);
         }
     });
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SyntaxPurposeSymbol {
+    SyntaxTable,
+}
+
+impl SyntaxPurposeSymbol {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 // Phase 10D holdout 3: the per-buffer syntax table char-table now lives in
@@ -2116,10 +2134,14 @@ pub(crate) fn builtin_syntax_table_p(args: Vec<Value>) -> EvalResult {
     }
 
     let subtype = super::chartable::builtin_char_table_subtype(vec![args[0]])?;
-    match subtype.kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "syntax-table" => Ok(Value::T),
-        _ => Ok(Value::NIL),
-    }
+    Ok(
+        if SyntaxPurposeSymbol::from_lisp_value(&subtype) == Some(SyntaxPurposeSymbol::SyntaxTable)
+        {
+            Value::T
+        } else {
+            Value::NIL
+        },
+    )
 }
 
 /// `(syntax-table)` — return the current buffer syntax table.
@@ -3732,12 +3754,13 @@ fn parse_commentstop_mode(arg: Option<&Value>) -> CommentStopMode {
     match arg {
         None => CommentStopMode::None,
         Some(v) if v.is_nil() => CommentStopMode::None,
-        Some(v) => match v.kind() {
-            ValueKind::Symbol(sym) if resolve_sym(sym) == "syntax-table" => {
-                CommentStopMode::SyntaxTable
-            }
-            _ => CommentStopMode::Comment,
-        },
+        Some(v)
+            if SyntaxPurposeSymbol::from_lisp_value(v)
+                == Some(SyntaxPurposeSymbol::SyntaxTable) =>
+        {
+            CommentStopMode::SyntaxTable
+        }
+        Some(_) => CommentStopMode::Comment,
     }
 }
 

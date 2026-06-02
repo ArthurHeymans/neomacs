@@ -885,6 +885,42 @@ fn syntax_table_p_recognizes_syntax_tables() {
 }
 
 #[test]
+fn syntax_purpose_symbol_domain_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        SyntaxPurposeSymbol::from_lisp_value(&Value::symbol("syntax-table")),
+        Some(SyntaxPurposeSymbol::SyntaxTable)
+    );
+    assert_eq!(SyntaxPurposeSymbol::SyntaxTable.name(), "syntax-table");
+    assert_eq!(
+        SyntaxPurposeSymbol::from_lisp_value(&Value::symbol("other")),
+        None
+    );
+}
+
+#[test]
+fn parse_partial_sexp_commentstop_matches_gnu_symbol_domain() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(parse_commentstop_mode(None), CommentStopMode::None);
+    assert_eq!(
+        parse_commentstop_mode(Some(&Value::NIL)),
+        CommentStopMode::None
+    );
+    assert_eq!(
+        parse_commentstop_mode(Some(&Value::symbol("syntax-table"))),
+        CommentStopMode::SyntaxTable
+    );
+    assert_eq!(
+        parse_commentstop_mode(Some(&Value::symbol("other"))),
+        CommentStopMode::Comment
+    );
+    assert_eq!(
+        parse_commentstop_mode(Some(&Value::T)),
+        CommentStopMode::Comment
+    );
+}
+
+#[test]
 fn set_syntax_table_validates_and_returns_table() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
