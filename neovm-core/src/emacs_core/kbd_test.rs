@@ -57,6 +57,14 @@ fn kbd_ctrl_meta_char_returns_vector() {
 fn kbd_named_keys_without_modifiers_return_chars() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
+        parse_kbd_string("NUL").expect("NUL parse").as_utf8_str(),
+        Some("\0")
+    );
+    assert_eq!(
+        parse_kbd_string("LFD").expect("LFD parse").as_utf8_str(),
+        Some("\n")
+    );
+    assert_eq!(
         parse_kbd_string("RET").expect("RET parse").as_utf8_str(),
         Some("\r")
     );
@@ -78,6 +86,14 @@ fn kbd_named_keys_without_modifiers_return_chars() {
 fn kbd_named_keys_with_modifiers_return_modifier_encoded_ints() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
+        expect_vector_ints(parse_kbd_string("C-NUL").expect("C-NUL parse")),
+        vec![67_108_864]
+    );
+    assert_eq!(
+        expect_vector_ints(parse_kbd_string("C-LFD").expect("C-LFD parse")),
+        vec![67_108_874]
+    );
+    assert_eq!(
         expect_vector_ints(parse_kbd_string("C-RET").expect("C-RET parse")),
         vec![67_108_877]
     );
@@ -85,6 +101,26 @@ fn kbd_named_keys_with_modifiers_return_modifier_encoded_ints() {
         expect_vector_ints(parse_kbd_string("C-SPC").expect("C-SPC parse")),
         vec![67_108_896]
     );
+}
+
+#[test]
+fn event_modifier_domain_matches_gnu_names_and_kbd_prefixes() {
+    crate::test_utils::init_test_tracing();
+    let cases = [
+        (EventModifier::Control, "control", "C-"),
+        (EventModifier::Meta, "meta", "M-"),
+        (EventModifier::Shift, "shift", "S-"),
+        (EventModifier::Super, "super", "s-"),
+        (EventModifier::Hyper, "hyper", "H-"),
+        (EventModifier::Alt, "alt", "A-"),
+    ];
+    for (modifier, symbol, prefix) in cases {
+        assert_eq!(EventModifier::from_lispy_symbol(symbol), Some(modifier));
+        assert_eq!(modifier.lispy_symbol(), symbol);
+        assert_eq!(modifier.kbd_prefix(), prefix);
+    }
+    assert_eq!(EventModifier::from_lispy_symbol("ctrl"), None);
+    assert_eq!(EventModifier::from_lispy_symbol("command"), None);
 }
 
 #[test]
@@ -240,6 +276,30 @@ fn key_events_from_designator_decodes_event_modifier_list() {
             super_: false,
             hyper: false,
             alt: false,
+        }]
+    );
+
+    let list = Value::list(vec![
+        Value::symbol("alt"),
+        Value::symbol("super"),
+        Value::symbol("hyper"),
+        Value::symbol("shift"),
+        Value::symbol("control"),
+        Value::symbol("meta"),
+        Value::symbol("f1"),
+    ]);
+    let events =
+        key_events_from_designator(&Value::vector(vec![list])).expect("decode all modifiers");
+    assert_eq!(
+        events,
+        vec![KeyEvent::Function {
+            name: intern("f1"),
+            ctrl: true,
+            meta: true,
+            shift: true,
+            super_: true,
+            hyper: true,
+            alt: true,
         }]
     );
 }

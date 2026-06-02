@@ -11,6 +11,7 @@ use super::{
     keymap::KeyEvent,
     value::{Value, ValueKind, VecLikeType},
 };
+use strum::{EnumString, IntoStaticStr};
 
 const CHAR_META: i64 = 0x8000000;
 const CHAR_CTL: i64 = 0x4000000;
@@ -40,6 +41,64 @@ struct Modifiers {
 impl Modifiers {
     fn any(self) -> bool {
         self.ctrl || self.meta || self.shift || self.super_ || self.hyper || self.alt
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum EventModifier {
+    Control,
+    Meta,
+    Shift,
+    Super,
+    Hyper,
+    Alt,
+}
+
+impl EventModifier {
+    const KBD_PREFIX_ORDER: [Self; 6] = [
+        Self::Control,
+        Self::Meta,
+        Self::Shift,
+        Self::Super,
+        Self::Hyper,
+        Self::Alt,
+    ];
+
+    fn from_lispy_symbol(name: &str) -> Option<Self> {
+        name.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn lispy_symbol(self) -> &'static str {
+        self.into()
+    }
+
+    fn kbd_prefix(self) -> &'static str {
+        match self {
+            Self::Control => "C-",
+            Self::Meta => "M-",
+            Self::Shift => "S-",
+            Self::Super => "s-",
+            Self::Hyper => "H-",
+            Self::Alt => "A-",
+        }
+    }
+
+    fn strip_kbd_prefix<'a>(self, token: &'a str) -> Option<&'a str> {
+        let rest = token.strip_prefix(self.kbd_prefix())?;
+        (!rest.is_empty()).then_some(rest)
+    }
+
+    fn set(self, mods: &mut Modifiers) {
+        match self {
+            Self::Control => mods.ctrl = true,
+            Self::Meta => mods.meta = true,
+            Self::Shift => mods.shift = true,
+            Self::Super => mods.super_ = true,
+            Self::Hyper => mods.hyper = true,
+            Self::Alt => mods.alt = true,
+        }
     }
 }
 
@@ -220,26 +279,17 @@ fn decode_event_modifier_list(list: &Value) -> Result<KeyEvent, String> {
                 match pair_car.kind() {
                     ValueKind::Symbol(id) => {
                         let name = resolve_sym(id);
-                        match name {
-                            "control" => mods.ctrl = true,
-                            "meta" => mods.meta = true,
-                            "shift" => mods.shift = true,
-                            "super" => mods.super_ = true,
-                            "hyper" => mods.hyper = true,
-                            "alt" => mods.alt = true,
-                            _ => {
-                                // Not a modifier — this symbol IS the base event
-                                // and cdr should be nil
-                                if pair_cdr.is_nil() {
-                                    return Ok(apply_mods_to_event(
-                                        decode_symbol_event(name)?,
-                                        mods,
-                                    ));
-                                }
-                                return Err(format!("unknown modifier in event list: {name}"));
+                        if let Some(modifier) = EventModifier::from_lispy_symbol(name) {
+                            modifier.set(&mut mods);
+                            cursor = pair_cdr;
+                        } else {
+                            // Not a modifier — this symbol IS the base event
+                            // and cdr should be nil.
+                            if pair_cdr.is_nil() {
+                                return Ok(apply_mods_to_event(decode_symbol_event(name)?, mods));
                             }
+                            return Err(format!("unknown modifier in event list: {name}"));
                         }
-                        cursor = pair_cdr;
                     }
                     ValueKind::Fixnum(n) => {
                         // Base event is a character code
@@ -386,58 +436,17 @@ fn parse_modifiers(mut token: &str) -> (Modifiers, String, &str) {
     let mut prefix = String::new();
 
     loop {
-        if let Some(rest) = token.strip_prefix("C-") {
-            if rest.is_empty() {
+        let mut consumed = false;
+        for modifier in EventModifier::KBD_PREFIX_ORDER {
+            if let Some(rest) = modifier.strip_kbd_prefix(token) {
+                modifier.set(&mut mods);
+                prefix.push_str(modifier.kbd_prefix());
+                token = rest;
+                consumed = true;
                 break;
             }
-            mods.ctrl = true;
-            prefix.push_str("C-");
-            token = rest;
-            continue;
         }
-        if let Some(rest) = token.strip_prefix("M-") {
-            if rest.is_empty() {
-                break;
-            }
-            mods.meta = true;
-            prefix.push_str("M-");
-            token = rest;
-            continue;
-        }
-        if let Some(rest) = token.strip_prefix("S-") {
-            if rest.is_empty() {
-                break;
-            }
-            mods.shift = true;
-            prefix.push_str("S-");
-            token = rest;
-            continue;
-        }
-        if let Some(rest) = token.strip_prefix("s-") {
-            if rest.is_empty() {
-                break;
-            }
-            mods.super_ = true;
-            prefix.push_str("s-");
-            token = rest;
-            continue;
-        }
-        if let Some(rest) = token.strip_prefix("H-") {
-            if rest.is_empty() {
-                break;
-            }
-            mods.hyper = true;
-            prefix.push_str("H-");
-            token = rest;
-            continue;
-        }
-        if let Some(rest) = token.strip_prefix("A-") {
-            if rest.is_empty() {
-                break;
-            }
-            mods.alt = true;
-            prefix.push_str("A-");
-            token = rest;
+        if consumed {
             continue;
         }
         break;
@@ -453,7 +462,9 @@ fn parse_angle_symbol(token: &str) -> Option<&str> {
 
 fn named_char_token(token: &str) -> Option<char> {
     match token {
+        "NUL" => Some('\0'),
         "RET" | "return" => Some('\r'),
+        "LFD" => Some('\n'),
         "TAB" | "tab" => Some('\t'),
         "SPC" | "space" => Some(' '),
         "ESC" | "escape" => Some('\u{1b}'),
