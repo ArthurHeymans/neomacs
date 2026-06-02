@@ -206,36 +206,14 @@ fn read_opt_color(cursor: &mut Cursor<'_>) -> Result<Option<DumpColor>, DumpErro
     }
 }
 
-const SLANT_NORMAL: u8 = 0;
-const SLANT_ITALIC: u8 = 1;
-const SLANT_OBLIQUE: u8 = 2;
-const SLANT_REVERSE_ITALIC: u8 = 3;
-const SLANT_REVERSE_OBLIQUE: u8 = 4;
-
 fn write_font_slant(out: &mut Vec<u8>, slant: &DumpFontSlant) {
-    write_u8(
-        out,
-        match slant {
-            DumpFontSlant::Normal => SLANT_NORMAL,
-            DumpFontSlant::Italic => SLANT_ITALIC,
-            DumpFontSlant::Oblique => SLANT_OBLIQUE,
-            DumpFontSlant::ReverseItalic => SLANT_REVERSE_ITALIC,
-            DumpFontSlant::ReverseOblique => SLANT_REVERSE_OBLIQUE,
-        },
-    );
+    write_u8(out, (*slant).into());
 }
 
 fn read_font_slant(cursor: &mut Cursor<'_>) -> Result<DumpFontSlant, DumpError> {
-    match cursor.read_u8("font slant")? {
-        SLANT_NORMAL => Ok(DumpFontSlant::Normal),
-        SLANT_ITALIC => Ok(DumpFontSlant::Italic),
-        SLANT_OBLIQUE => Ok(DumpFontSlant::Oblique),
-        SLANT_REVERSE_ITALIC => Ok(DumpFontSlant::ReverseItalic),
-        SLANT_REVERSE_OBLIQUE => Ok(DumpFontSlant::ReverseOblique),
-        other => Err(DumpError::ImageFormatError(format!(
-            "unknown font slant tag {other}"
-        ))),
-    }
+    let tag = cursor.read_u8("font slant")?;
+    DumpFontSlant::try_from(tag)
+        .map_err(|_| DumpError::ImageFormatError(format!("unknown font slant tag {tag}")))
 }
 
 fn write_opt_font_slant(out: &mut Vec<u8>, slant: Option<&DumpFontSlant>) {

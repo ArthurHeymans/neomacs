@@ -784,39 +784,13 @@ fn read_opt_font_width(cursor: &mut Cursor<'_>) -> Result<Option<DumpFontWidth>,
 }
 
 fn write_font_width(out: &mut Vec<u8>, width: DumpFontWidth) {
-    write_u8(
-        out,
-        match width {
-            DumpFontWidth::UltraCondensed => 0,
-            DumpFontWidth::ExtraCondensed => 1,
-            DumpFontWidth::Condensed => 2,
-            DumpFontWidth::SemiCondensed => 3,
-            DumpFontWidth::Normal => 4,
-            DumpFontWidth::SemiExpanded => 5,
-            DumpFontWidth::Expanded => 6,
-            DumpFontWidth::ExtraExpanded => 7,
-            DumpFontWidth::UltraExpanded => 8,
-        },
-    );
+    write_u8(out, width.into());
 }
 
 fn read_font_width(cursor: &mut Cursor<'_>) -> Result<DumpFontWidth, DumpError> {
-    Ok(match cursor.read_u8("font width tag")? {
-        0 => DumpFontWidth::UltraCondensed,
-        1 => DumpFontWidth::ExtraCondensed,
-        2 => DumpFontWidth::Condensed,
-        3 => DumpFontWidth::SemiCondensed,
-        4 => DumpFontWidth::Normal,
-        5 => DumpFontWidth::SemiExpanded,
-        6 => DumpFontWidth::Expanded,
-        7 => DumpFontWidth::ExtraExpanded,
-        8 => DumpFontWidth::UltraExpanded,
-        other => {
-            return Err(DumpError::ImageFormatError(format!(
-                "unknown font width tag {other}"
-            )));
-        }
-    })
+    let tag = cursor.read_u8("font width tag")?;
+    DumpFontWidth::try_from(tag)
+        .map_err(|_| DumpError::ImageFormatError(format!("unknown font width tag {tag}")))
 }
 
 fn write_opt_font_slant(out: &mut Vec<u8>, slant: Option<DumpFontSlant>) {
@@ -838,31 +812,13 @@ fn read_opt_font_slant(cursor: &mut Cursor<'_>) -> Result<Option<DumpFontSlant>,
 }
 
 fn write_font_slant(out: &mut Vec<u8>, slant: DumpFontSlant) {
-    write_u8(
-        out,
-        match slant {
-            DumpFontSlant::Normal => 0,
-            DumpFontSlant::Italic => 1,
-            DumpFontSlant::Oblique => 2,
-            DumpFontSlant::ReverseItalic => 3,
-            DumpFontSlant::ReverseOblique => 4,
-        },
-    );
+    write_u8(out, slant.into());
 }
 
 fn read_font_slant(cursor: &mut Cursor<'_>) -> Result<DumpFontSlant, DumpError> {
-    Ok(match cursor.read_u8("font slant tag")? {
-        0 => DumpFontSlant::Normal,
-        1 => DumpFontSlant::Italic,
-        2 => DumpFontSlant::Oblique,
-        3 => DumpFontSlant::ReverseItalic,
-        4 => DumpFontSlant::ReverseOblique,
-        other => {
-            return Err(DumpError::ImageFormatError(format!(
-                "unknown font slant tag {other}"
-            )));
-        }
-    })
+    let tag = cursor.read_u8("font slant tag")?;
+    DumpFontSlant::try_from(tag)
+        .map_err(|_| DumpError::ImageFormatError(format!("unknown font slant tag {tag}")))
 }
 
 fn write_abbrev_manager(out: &mut Vec<u8>, manager: &DumpAbbrevManager) -> Result<(), DumpError> {

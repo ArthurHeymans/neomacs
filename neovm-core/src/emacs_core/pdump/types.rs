@@ -4,6 +4,7 @@
 //! Each `Dump*` type maps 1:1 to a runtime type but uses only plain data
 //! (no Rc, HashMap, raw pointers, thread-locals).
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::heap_types::LispString;
@@ -329,19 +330,21 @@ pub enum DumpOp {
 // Hash tables
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 pub enum DumpHashTableTest {
-    Eq,
-    Eql,
-    Equal,
+    Eq = 0,
+    Eql = 1,
+    Equal = 2,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 pub enum DumpHashTableWeakness {
-    Key,
-    Value,
-    KeyOrValue,
-    KeyAndValue,
+    Key = 0,
+    Value = 1,
+    KeyOrValue = 2,
+    KeyAndValue = 3,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1066,17 +1069,18 @@ pub struct DumpCharsetRegistry {
     pub next_id: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 pub enum DumpFontWidth {
-    UltraCondensed,
-    ExtraCondensed,
-    Condensed,
-    SemiCondensed,
-    Normal,
-    SemiExpanded,
-    Expanded,
-    ExtraExpanded,
-    UltraExpanded,
+    UltraCondensed = 0,
+    ExtraCondensed = 1,
+    Condensed = 2,
+    SemiCondensed = 3,
+    Normal = 4,
+    SemiExpanded = 5,
+    Expanded = 6,
+    ExtraExpanded = 7,
+    UltraExpanded = 8,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1148,13 +1152,14 @@ pub struct DumpColor {
     pub a: u8,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, IntoPrimitive, TryFromPrimitive)]
 pub enum DumpFontSlant {
-    Normal,
-    Italic,
-    Oblique,
-    ReverseItalic,
-    ReverseOblique,
+    Normal = 0,
+    Italic = 1,
+    Oblique = 2,
+    ReverseItalic = 3,
+    ReverseOblique = 4,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

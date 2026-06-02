@@ -284,39 +284,15 @@ fn write_hash_table(out: &mut Vec<u8>, table: &DumpLispHashTable) -> Result<(), 
     Ok(())
 }
 
-const HASH_TEST_EQ: u8 = 0;
-const HASH_TEST_EQL: u8 = 1;
-const HASH_TEST_EQUAL: u8 = 2;
-
 fn write_hash_table_test(out: &mut Vec<u8>, test: &DumpHashTableTest) {
-    write_u8(
-        out,
-        match test {
-            DumpHashTableTest::Eq => HASH_TEST_EQ,
-            DumpHashTableTest::Eql => HASH_TEST_EQL,
-            DumpHashTableTest::Equal => HASH_TEST_EQUAL,
-        },
-    );
+    write_u8(out, (*test).into());
 }
-
-const HASH_WEAKNESS_KEY: u8 = 0;
-const HASH_WEAKNESS_VALUE: u8 = 1;
-const HASH_WEAKNESS_KEY_OR_VALUE: u8 = 2;
-const HASH_WEAKNESS_KEY_AND_VALUE: u8 = 3;
 
 fn write_opt_hash_table_weakness(out: &mut Vec<u8>, weakness: Option<&DumpHashTableWeakness>) {
     match weakness {
         Some(weakness) => {
             write_bool(out, true);
-            write_u8(
-                out,
-                match weakness {
-                    DumpHashTableWeakness::Key => HASH_WEAKNESS_KEY,
-                    DumpHashTableWeakness::Value => HASH_WEAKNESS_VALUE,
-                    DumpHashTableWeakness::KeyOrValue => HASH_WEAKNESS_KEY_OR_VALUE,
-                    DumpHashTableWeakness::KeyAndValue => HASH_WEAKNESS_KEY_AND_VALUE,
-                },
-            );
+            write_u8(out, (*weakness).into());
         }
         None => write_bool(out, false),
     }
@@ -1062,29 +1038,19 @@ impl<'a> Cursor<'a> {
     }
 
     fn read_hash_table_test(&mut self) -> Result<DumpHashTableTest, DumpError> {
-        match self.read_u8("hash table test")? {
-            HASH_TEST_EQ => Ok(DumpHashTableTest::Eq),
-            HASH_TEST_EQL => Ok(DumpHashTableTest::Eql),
-            HASH_TEST_EQUAL => Ok(DumpHashTableTest::Equal),
-            other => Err(DumpError::ImageFormatError(format!(
-                "unknown hash table test tag {other}"
-            ))),
-        }
+        let tag = self.read_u8("hash table test")?;
+        DumpHashTableTest::try_from(tag)
+            .map_err(|_| DumpError::ImageFormatError(format!("unknown hash table test tag {tag}")))
     }
 
     fn read_opt_hash_table_weakness(&mut self) -> Result<Option<DumpHashTableWeakness>, DumpError> {
         if !self.read_bool("hash table weakness present")? {
             return Ok(None);
         }
-        match self.read_u8("hash table weakness")? {
-            HASH_WEAKNESS_KEY => Ok(Some(DumpHashTableWeakness::Key)),
-            HASH_WEAKNESS_VALUE => Ok(Some(DumpHashTableWeakness::Value)),
-            HASH_WEAKNESS_KEY_OR_VALUE => Ok(Some(DumpHashTableWeakness::KeyOrValue)),
-            HASH_WEAKNESS_KEY_AND_VALUE => Ok(Some(DumpHashTableWeakness::KeyAndValue)),
-            other => Err(DumpError::ImageFormatError(format!(
-                "unknown hash table weakness tag {other}"
-            ))),
-        }
+        let tag = self.read_u8("hash table weakness")?;
+        DumpHashTableWeakness::try_from(tag).map(Some).map_err(|_| {
+            DumpError::ImageFormatError(format!("unknown hash table weakness tag {tag}"))
+        })
     }
 
     fn read_hash_key(&mut self) -> Result<DumpHashKey, DumpError> {
