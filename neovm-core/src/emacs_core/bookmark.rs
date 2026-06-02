@@ -19,9 +19,10 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
 use super::value::{Value, ValueKind};
 use crate::heap_types::LispString;
+#[cfg(test)]
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Bookmark types
@@ -59,6 +60,37 @@ pub struct BookmarkManager {
     recent: Vec<LispString>,
     /// True if bookmarks have been modified since last save.
     modified: bool,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum BookmarkRecordKey {
+    Filename,
+    Position,
+    Annotation,
+}
+
+#[cfg(test)]
+impl BookmarkRecordKey {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[cfg(test)]
+fn bookmark_record_prop(record: &Value, key: BookmarkRecordKey) -> Option<Option<Value>> {
+    let items = super::value::list_to_vec(record)?;
+    for item in items {
+        if item.is_cons() && BookmarkRecordKey::from_lisp_value(&item.cons_car()) == Some(key) {
+            return Some(Some(item.cons_cdr()));
+        }
+    }
+    Some(None)
 }
 
 impl Default for BookmarkManager {
@@ -598,19 +630,8 @@ pub(crate) fn builtin_bookmark_get_filename(
 ) -> EvalResult {
     expect_args("bookmark-get-filename", &args, 1)?;
 
-    if let Some(items) = super::value::list_to_vec(&args[0]) {
-        for item in &items {
-            if item.is_cons() {
-                let pair_car = item.cons_car();
-                let pair_cdr = item.cons_cdr();
-                if let Some(id) = pair_car.as_symbol_id() {
-                    if resolve_sym(id) == "filename" {
-                        return Ok(pair_cdr);
-                    }
-                }
-            }
-        }
-        return Ok(Value::NIL);
+    if let Some(value) = bookmark_record_prop(&args[0], BookmarkRecordKey::Filename) {
+        return Ok(value.unwrap_or(Value::NIL));
     }
 
     let name = expect_lisp_string(&args[0])?;
@@ -633,19 +654,8 @@ pub(crate) fn builtin_bookmark_get_position(
 ) -> EvalResult {
     expect_args("bookmark-get-position", &args, 1)?;
 
-    if let Some(items) = super::value::list_to_vec(&args[0]) {
-        for item in &items {
-            if item.is_cons() {
-                let pair_car = item.cons_car();
-                let pair_cdr = item.cons_cdr();
-                if let Some(id) = pair_car.as_symbol_id() {
-                    if resolve_sym(id) == "position" {
-                        return Ok(pair_cdr);
-                    }
-                }
-            }
-        }
-        return Ok(Value::NIL);
+    if let Some(value) = bookmark_record_prop(&args[0], BookmarkRecordKey::Position) {
+        return Ok(value.unwrap_or(Value::NIL));
     }
 
     let name = expect_lisp_string(&args[0])?;
@@ -667,19 +677,8 @@ pub(crate) fn builtin_bookmark_get_annotation(
 ) -> EvalResult {
     expect_args("bookmark-get-annotation", &args, 1)?;
 
-    if let Some(items) = super::value::list_to_vec(&args[0]) {
-        for item in &items {
-            if item.is_cons() {
-                let pair_car = item.cons_car();
-                let pair_cdr = item.cons_cdr();
-                if let Some(id) = pair_car.as_symbol_id() {
-                    if resolve_sym(id) == "annotation" {
-                        return Ok(pair_cdr);
-                    }
-                }
-            }
-        }
-        return Ok(Value::NIL);
+    if let Some(value) = bookmark_record_prop(&args[0], BookmarkRecordKey::Annotation) {
+        return Ok(value.unwrap_or(Value::NIL));
     }
 
     let name = expect_lisp_string(&args[0])?;

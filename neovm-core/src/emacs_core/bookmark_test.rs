@@ -520,6 +520,36 @@ fn test_builtin_bookmark_get_annotation() {
 }
 
 #[test]
+fn bookmark_record_key_domain_matches_gnu_bookmark_props() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    for (key, name) in [
+        (BookmarkRecordKey::Filename, "filename"),
+        (BookmarkRecordKey::Position, "position"),
+        (BookmarkRecordKey::Annotation, "annotation"),
+    ] {
+        let value = Value::symbol(name);
+        assert_eq!(key.name(), name);
+        assert_eq!(BookmarkRecordKey::from_lisp_value(&value), Some(key));
+    }
+
+    let record = Value::list(vec![
+        Value::cons(Value::symbol("filename"), Value::string("/tmp/record.el")),
+        Value::cons(Value::symbol("position"), Value::fixnum(42)),
+        Value::cons(Value::symbol("annotation"), Value::string("note")),
+    ]);
+    let mut eval = Context::new();
+    let filename = builtin_bookmark_get_filename(&mut eval, vec![record]).unwrap();
+    let position = builtin_bookmark_get_position(&mut eval, vec![record]).unwrap();
+    let annotation = builtin_bookmark_get_annotation(&mut eval, vec![record]).unwrap();
+
+    assert_eq!(filename.as_utf8_str(), Some("/tmp/record.el"));
+    assert_eq!(position.as_int(), Some(42));
+    assert_eq!(annotation.as_utf8_str(), Some("note"));
+}
+
+#[test]
 fn test_builtin_bookmark_set_annotation() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
