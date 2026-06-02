@@ -142,6 +142,10 @@ fn font_spacing_codes_match_gnu_font_spacing() {
 
     assert_eq!(FontSpacing::from_gnu_code(1), None);
     assert_eq!(FontSpacing::from_gnu_code(111), None);
+    assert_eq!(FontSpacing::from_symbol_name("proportional"), None);
+    assert_eq!(FontSpacing::from_symbol_name("dual"), None);
+    assert_eq!(FontSpacing::from_symbol_name("mono"), None);
+    assert_eq!(FontSpacing::from_symbol_name("charcell"), None);
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(0), Some("p"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(1), Some("d"));
     assert_eq!(FontSpacing::xlfd_letter_for_gnu_code(89), Some("d"));
@@ -176,6 +180,14 @@ fn font_spec_spacing_symbols_normalize_to_gnu_codes() {
     );
 
     assert!(builtin_font_spec(vec![Value::keyword("spacing"), Value::fixnum(111)]).is_err());
+    assert!(builtin_font_spec(vec![Value::keyword("spacing"), Value::symbol("mono")]).is_err());
+    assert!(
+        builtin_font_spec(vec![
+            Value::keyword("spacing"),
+            Value::symbol("proportional")
+        ])
+        .is_err()
+    );
 }
 
 #[test]

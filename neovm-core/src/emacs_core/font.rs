@@ -19,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{OnceLock, RwLock};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use strum::EnumString;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
@@ -75,12 +76,16 @@ const FONT_WIDTH_STYLE_TABLE: &[(i64, &[&str])] = &[
     (200, &["ultra-expanded", "ultraexpanded", "wide"]),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoPrimitive, TryFromPrimitive)]
 #[repr(i32)]
 enum FontSpacing {
+    #[strum(serialize = "p", serialize = "P")]
     Proportional = 0,
+    #[strum(serialize = "d", serialize = "D")]
     Dual = 90,
+    #[strum(serialize = "m", serialize = "M")]
     Mono = 100,
+    #[strum(serialize = "c", serialize = "C")]
     Charcell = 110,
 }
 
@@ -88,13 +93,7 @@ impl FontSpacing {
     const MAX_GNU_CODE: i64 = 110;
 
     fn from_symbol_name(name: &str) -> Option<Self> {
-        match name {
-            "p" | "P" => Some(Self::Proportional),
-            "d" | "D" => Some(Self::Dual),
-            "m" | "M" => Some(Self::Mono),
-            "c" | "C" => Some(Self::Charcell),
-            _ => None,
-        }
+        name.parse().ok()
     }
 
     fn from_gnu_code(code: i64) -> Option<Self> {
