@@ -107,6 +107,24 @@ fn process_finite_domains_match_gnu_symbols() {
     );
 
     assert_eq!(
+        ProcessTtyStream::from_value(&Value::symbol("stdin")),
+        Some(ProcessTtyStream::Stdin)
+    );
+    assert_eq!(
+        ProcessTtyStream::from_value(&Value::symbol("stdout")),
+        Some(ProcessTtyStream::Stdout)
+    );
+    assert_eq!(
+        ProcessTtyStream::from_value(&Value::symbol("stderr")),
+        Some(ProcessTtyStream::Stderr)
+    );
+    assert_eq!(ProcessTtyStream::Stdin.name(), "stdin");
+    assert_eq!(ProcessTtyStream::Stdout.name(), "stdout");
+    assert_eq!(ProcessTtyStream::Stderr.name(), "stderr");
+    assert_eq!(ProcessTtyStream::from_value(&Value::NIL), None);
+    assert_eq!(ProcessTtyStream::from_value(&Value::symbol("stream")), None);
+
+    assert_eq!(
         NetworkAddressFamily::from_symbol_value(&Value::symbol("ipv4")),
         Some(NetworkAddressFamily::Ipv4)
     );

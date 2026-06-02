@@ -158,6 +158,24 @@ impl ProcessStatusSymbol {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ProcessTtyStream {
+    Stdin,
+    Stdout,
+    Stderr,
+}
+
+impl ProcessTtyStream {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(prefix = ":", serialize_all = "kebab-case")]
 enum ProcessKeyword {
     Name,
@@ -7493,30 +7511,30 @@ pub(crate) fn builtin_process_tty_name_impl(
     let stream = args.get(1).cloned().unwrap_or(Value::NIL);
     let tty_value = || proc.tty_name;
 
-    match stream.kind() {
-        ValueKind::Nil => Ok(tty_value()),
-        ValueKind::Symbol(sym) if resolve_sym(sym) == "stdin" => {
+    match ProcessTtyStream::from_value(&stream) {
+        None if stream.is_nil() => Ok(tty_value()),
+        Some(ProcessTtyStream::Stdin) => {
             if proc.tty_stdin {
                 Ok(tty_value())
             } else {
                 Ok(Value::NIL)
             }
         }
-        ValueKind::Symbol(sym) if resolve_sym(sym) == "stdout" => {
+        Some(ProcessTtyStream::Stdout) => {
             if proc.tty_stdout {
                 Ok(tty_value())
             } else {
                 Ok(Value::NIL)
             }
         }
-        ValueKind::Symbol(sym) if resolve_sym(sym) == "stderr" => {
+        Some(ProcessTtyStream::Stderr) => {
             if proc.tty_stderr && proc.stderrproc.is_nil() {
                 Ok(tty_value())
             } else {
                 Ok(Value::NIL)
             }
         }
-        other => Err(signal(
+        None => Err(signal(
             "error",
             vec![Value::string("Unknown stream"), stream],
         )),
