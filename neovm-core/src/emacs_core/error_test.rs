@@ -1,4 +1,4 @@
-use super::{EvalError, format_flow_with_eval, signal};
+use super::{EvalError, PrintShorthandSymbol, format_flow_with_eval, quote_payload, signal};
 use crate::emacs_core::{Context, Value, print_value_bytes_with_eval, print_value_with_eval};
 
 #[test]
@@ -157,6 +157,27 @@ fn eval_context_printer_renders_terminal_thread_handles_consistently() -> Result
     );
 
     Ok(())
+}
+
+#[test]
+fn print_shorthand_symbol_domain_matches_gnu_printer_symbols() {
+    crate::test_utils::init_test_tracing();
+    for (symbol, name) in [
+        (PrintShorthandSymbol::Quote, "quote"),
+        (PrintShorthandSymbol::Function, "function"),
+        (PrintShorthandSymbol::Backquote, "`"),
+        (PrintShorthandSymbol::Comma, ","),
+        (PrintShorthandSymbol::CommaAt, ",@"),
+    ] {
+        let value = Value::symbol(name);
+        assert_eq!(symbol.name(), name);
+        assert_eq!(PrintShorthandSymbol::from_lisp_value(&value), Some(symbol));
+    }
+
+    let quoted = Value::list(vec![Value::symbol("quote"), Value::symbol("foo")]);
+    let function_quoted = Value::list(vec![Value::symbol("function"), Value::symbol("foo")]);
+    assert_eq!(quote_payload(&quoted), Some(Value::symbol("foo")));
+    assert_eq!(quote_payload(&function_quoted), None);
 }
 
 #[test]

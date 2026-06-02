@@ -10,6 +10,7 @@ use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_em
 use super::value::{Value, ValueKind, VecLikeType, get_string_text_properties_for_value};
 use crate::emacs_core::eval::ResumeTarget;
 use crate::window::WindowId;
+use strum::{EnumString, IntoStaticStr};
 
 thread_local! {
     static FORMAT_OBJECT_STACK: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
@@ -536,6 +537,75 @@ fn format_value_in_state_slow(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+enum PrintShorthandSymbol {
+    #[strum(serialize = "quote")]
+    Quote,
+    #[strum(serialize = "function")]
+    Function,
+    #[strum(serialize = "`")]
+    Backquote,
+    #[strum(serialize = ",")]
+    Comma,
+    #[strum(serialize = ",@")]
+    CommaAt,
+}
+
+impl PrintShorthandSymbol {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    fn string_form<'a>(
+        self,
+        payload: &'a Value,
+        options: PrintOptions,
+    ) -> Option<(&'static str, &'a Value, PrintOptions)> {
+        match self {
+            Self::Quote => Some(("'", payload, options)),
+            Self::Function => Some(("#'", payload, options)),
+            Self::Backquote => Some(("`", payload, options.enter_backquote())),
+            Self::Comma => options.allow_unquote_shorthand().then_some((
+                ",",
+                payload,
+                options.exit_backquote(),
+            )),
+            Self::CommaAt => options.allow_unquote_shorthand().then_some((
+                ",@",
+                payload,
+                options.exit_backquote(),
+            )),
+        }
+    }
+
+    fn bytes_form<'a>(
+        self,
+        payload: &'a Value,
+        options: PrintOptions,
+    ) -> Option<(&'static [u8], &'a Value, PrintOptions)> {
+        match self {
+            Self::Quote => Some((b"'" as &[u8], payload, options)),
+            Self::Function => Some((b"#'" as &[u8], payload, options)),
+            Self::Backquote => Some((b"`" as &[u8], payload, options.enter_backquote())),
+            Self::Comma => options.allow_unquote_shorthand().then_some((
+                b"," as &[u8],
+                payload,
+                options.exit_backquote(),
+            )),
+            Self::CommaAt => options.allow_unquote_shorthand().then_some((
+                b",@" as &[u8],
+                payload,
+                options.exit_backquote(),
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
 fn format_list_shorthand_in_state(
     obarray: &super::symbol::Obarray,
     buffers: &crate::buffer::BufferManager,
@@ -549,12 +619,7 @@ fn format_list_shorthand_in_state(
         return None;
     }
 
-    let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
-        _ => return None,
-    };
-
-    if head == "make-hash-table-from-literal" {
+    if items[0].as_symbol_name() == Some("make-hash-table-from-literal") {
         let payload = quote_payload(&items[1])?;
         return Some(format!(
             "#s{}",
@@ -562,27 +627,12 @@ fn format_list_shorthand_in_state(
         ));
     }
 
-    let is_reader_shorthand = matches!(head, "quote" | "function" | "`" | "," | ",@");
-    if is_reader_shorthand && !options.print_quoted {
+    let shorthand = PrintShorthandSymbol::from_lisp_value(&items[0])?;
+    if !options.print_quoted {
         return None;
     }
 
-    let (prefix, quoted, nested_options) = match head {
-        "quote" => Some(("'", &items[1], options)),
-        "function" => Some(("#'", &items[1], options)),
-        "`" => Some(("`", &items[1], options.enter_backquote())),
-        "," => {
-            options
-                .allow_unquote_shorthand()
-                .then_some((",", &items[1], options.exit_backquote()))
-        }
-        ",@" => {
-            options
-                .allow_unquote_shorthand()
-                .then_some((",@", &items[1], options.exit_backquote()))
-        }
-        _ => None,
-    }?;
+    let (prefix, quoted, nested_options) = shorthand.string_form(&items[1], options)?;
 
     Some(format!(
         "{prefix}{}",
@@ -879,12 +929,7 @@ fn format_list_shorthand_bytes_in_state(
         return None;
     }
 
-    let head = match items[0].kind() {
-        ValueKind::Symbol(id) => resolve_sym(id),
-        _ => return None,
-    };
-
-    if head == "make-hash-table-from-literal" {
+    if items[0].as_symbol_name() == Some("make-hash-table-from-literal") {
         let payload = quote_payload(&items[1])?;
         let mut out = Vec::new();
         out.extend_from_slice(b"#s");
@@ -894,27 +939,12 @@ fn format_list_shorthand_bytes_in_state(
         return Some(out);
     }
 
-    let is_reader_shorthand = matches!(head, "quote" | "function" | "`" | "," | ",@");
-    if is_reader_shorthand && !options.print_quoted {
+    let shorthand = PrintShorthandSymbol::from_lisp_value(&items[0])?;
+    if !options.print_quoted {
         return None;
     }
 
-    let (prefix, quoted, nested_options) = match head {
-        "quote" => Some((b"'" as &[u8], &items[1], options)),
-        "function" => Some((b"#'" as &[u8], &items[1], options)),
-        "`" => Some((b"`" as &[u8], &items[1], options.enter_backquote())),
-        "," => options.allow_unquote_shorthand().then_some((
-            b"," as &[u8],
-            &items[1],
-            options.exit_backquote(),
-        )),
-        ",@" => options.allow_unquote_shorthand().then_some((
-            b",@" as &[u8],
-            &items[1],
-            options.exit_backquote(),
-        )),
-        _ => None,
-    }?;
+    let (prefix, quoted, nested_options) = shorthand.bytes_form(&items[1], options)?;
 
     let mut out = Vec::new();
     out.extend_from_slice(prefix);
@@ -934,9 +964,10 @@ fn quote_payload(value: &Value) -> Option<Value> {
     if items.len() != 2 {
         return None;
     }
-    match items[0].kind() {
-        ValueKind::Symbol(id) if resolve_sym(id) == "quote" => Some(items[1]),
-        _ => None,
+    if PrintShorthandSymbol::from_lisp_value(&items[0]) == Some(PrintShorthandSymbol::Quote) {
+        Some(items[1])
+    } else {
+        None
     }
 }
 
