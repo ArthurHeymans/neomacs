@@ -123,6 +123,26 @@ impl ArrayType {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(prefix = ":", serialize_all = "kebab-case")]
+enum JsonOptionKey {
+    ObjectType,
+    ArrayType,
+    NullObject,
+    FalseObject,
+}
+
+impl JsonOptionKey {
+    fn from_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.strip_prefix(':')?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn keyword(self) -> &'static str {
+        self.into()
+    }
+}
+
 /// Parse keyword arguments from the &rest tail (starting at `start_index`).
 /// Returns `ParseOpts`.  Unknown keywords signal `json-error`.
 fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, Flow> {
@@ -138,8 +158,8 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
     for i in (0..rest.len()).step_by(2).rev() {
         let key = &rest[i];
         let value = &rest[i + 1];
-        match key.kind() {
-            ValueKind::Symbol(k) if resolve_sym(k) == ":object-type" => {
+        match JsonOptionKey::from_value(key) {
+            Some(JsonOptionKey::ObjectType) => {
                 if let Some(object_type) = ObjectType::from_symbol_value(value) {
                     opts.object_type = object_type;
                 } else {
@@ -152,7 +172,7 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
                     ));
                 }
             }
-            ValueKind::Symbol(k) if resolve_sym(k) == ":array-type" => {
+            Some(JsonOptionKey::ArrayType) => {
                 if let Some(array_type) = ArrayType::from_symbol_value(value) {
                     opts.array_type = array_type;
                 } else {
@@ -165,10 +185,10 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
                     ));
                 }
             }
-            ValueKind::Symbol(k) if resolve_sym(k) == ":null-object" => {
+            Some(JsonOptionKey::NullObject) => {
                 opts.null_object = *value;
             }
-            ValueKind::Symbol(k) if resolve_sym(k) == ":false-object" => {
+            Some(JsonOptionKey::FalseObject) => {
                 opts.false_object = *value;
             }
             _ => {
@@ -201,11 +221,11 @@ fn parse_serialize_kwargs(args: &[Value], start_index: usize) -> Result<Serializ
     for i in (0..rest.len()).step_by(2).rev() {
         let key = &rest[i];
         let value = &rest[i + 1];
-        match key.kind() {
-            ValueKind::Symbol(k) if resolve_sym(k) == ":null-object" => {
+        match JsonOptionKey::from_value(key) {
+            Some(JsonOptionKey::NullObject) => {
                 opts.null_object = *value;
             }
-            ValueKind::Symbol(k) if resolve_sym(k) == ":false-object" => {
+            Some(JsonOptionKey::FalseObject) => {
                 opts.false_object = *value;
             }
             _ => {

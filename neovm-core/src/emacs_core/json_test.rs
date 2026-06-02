@@ -28,6 +28,24 @@ fn json_option_domains_match_gnu_symbols() {
     assert_eq!(ObjectType::HashTable.symbol_name(), "hash-table");
     assert_eq!(ArrayType::Vector.symbol_name(), "array");
     assert_eq!(ArrayType::from_symbol_value(&Value::symbol("vector")), None);
+
+    for (keyword, parsed) in [
+        (":object-type", JsonOptionKey::ObjectType),
+        (":array-type", JsonOptionKey::ArrayType),
+        (":null-object", JsonOptionKey::NullObject),
+        (":false-object", JsonOptionKey::FalseObject),
+    ] {
+        assert_eq!(
+            JsonOptionKey::from_value(&Value::keyword(keyword)),
+            Some(parsed)
+        );
+        assert_eq!(parsed.keyword(), keyword);
+    }
+    assert_eq!(
+        JsonOptionKey::from_value(&Value::symbol("object-type")),
+        None
+    );
+    assert_eq!(JsonOptionKey::from_value(&Value::keyword(":unknown")), None);
 }
 
 // -----------------------------------------------------------------------
