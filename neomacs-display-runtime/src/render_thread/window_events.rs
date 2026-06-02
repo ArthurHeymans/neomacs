@@ -123,6 +123,14 @@ impl RenderApp {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        if self.lifecycle_flags.shutdown_requested {
+            tracing::debug!(
+                "Dropping window event after shutdown requested: {:?}",
+                event
+            );
+            return;
+        }
+
         match event {
             WindowEvent::CloseRequested => {
                 tracing::info!("Window close requested");
@@ -132,6 +140,24 @@ impl RenderApp {
                     emacs_frame_id: emacs_fid,
                 });
                 if is_primary {
+                    self.lifecycle_flags.shutdown_requested = true;
+                    event_loop.exit();
+                } else {
+                    self.frame_windows.request_destroy(emacs_fid);
+                }
+            }
+
+            WindowEvent::Destroyed => {
+                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let emacs_fid = self.emacs_frame_for_window_event(window_id);
+                tracing::info!(
+                    "Window destroyed: winit={:?} emacs_frame_id=0x{:x} primary={}",
+                    window_id,
+                    emacs_fid,
+                    is_primary
+                );
+                if is_primary {
+                    self.lifecycle_flags.shutdown_requested = true;
                     event_loop.exit();
                 } else {
                     self.frame_windows.request_destroy(emacs_fid);

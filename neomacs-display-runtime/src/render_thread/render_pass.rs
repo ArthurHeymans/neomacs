@@ -431,9 +431,10 @@ impl RenderApp {
                 wgpu::CurrentSurfaceTexture::Success(output)
                 | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
                 wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
-                    native
-                        .surface
-                        .configure(renderer.device(), &native.surface_config);
+                    tracing::info!(
+                        "Skipping redraw for frame 0x{:x}: surface lost or outdated",
+                        render.emacs_frame_id
+                    );
                     return None;
                 }
                 wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
@@ -933,6 +934,9 @@ impl RenderApp {
     }
 
     pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) {
+        if self.lifecycle_flags.shutdown_requested {
+            return;
+        }
         self.prepare_frame_state_for_render();
 
         let bg_gradient = if self.effects.bg_gradient.enabled {

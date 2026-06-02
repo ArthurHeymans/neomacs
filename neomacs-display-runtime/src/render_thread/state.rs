@@ -358,6 +358,7 @@ pub(super) struct RenderLifecycle {
     pub resumed_seen: bool,
     pub about_to_wait_seen: bool,
     pub poll_when_idle: bool,
+    pub shutdown_requested: bool,
 }
 
 impl RenderLifecycle {
@@ -366,6 +367,7 @@ impl RenderLifecycle {
             resumed_seen: false,
             about_to_wait_seen: false,
             poll_when_idle,
+            shutdown_requested: false,
         }
     }
 }

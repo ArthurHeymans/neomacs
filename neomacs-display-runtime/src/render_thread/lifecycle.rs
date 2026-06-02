@@ -207,6 +207,10 @@ impl RenderApp {
             );
             self.lifecycle_flags.about_to_wait_seen = true;
         }
+        if self.lifecycle_flags.shutdown_requested {
+            event_loop.exit();
+            return;
+        }
         self.refresh_monitor_snapshot(event_loop, true);
         if self.process_commands() {
             event_loop.exit();
