@@ -63,10 +63,17 @@ fn image_type_domain_matches_gnu_available_symbols() {
     assert_eq!(ImageType::from_symbol_name("pbm"), Some(ImageType::Pbm));
     assert_eq!(ImageType::from_symbol_name("jpg"), None);
     assert_eq!(ImageType::from_symbol_name("bmp"), None);
+    assert_eq!(ImageType::from_file_extension("bmp"), None);
+    assert_eq!(ImageType::from_file_extension("ps"), None);
+    assert_eq!(ImageType::from_file_extension("heic"), None);
 
     assert_eq!(normalize_image_type_name("JPG"), Some("jpeg"));
     assert_eq!(normalize_image_type_name("TIF"), Some("tiff"));
     assert_eq!(normalize_image_type_name("PNG"), Some("png"));
+    assert_eq!(normalize_image_type_name("PS"), Some("postscript"));
+    assert_eq!(normalize_image_type_name("HEIC"), Some("heic"));
+    assert_eq!(normalize_image_type_name("HEIFS"), Some("heic"));
+    assert_eq!(normalize_image_type_name("NEOMACS"), None);
     assert_eq!(ImageType::from_file_extension("jpg"), Some(ImageType::Jpeg));
     assert_eq!(
         ImageType::from_file_extension(".tif"),
@@ -76,6 +83,18 @@ fn image_type_domain_matches_gnu_available_symbols() {
     assert_eq!(
         ImageType::from_file_name("toolbar.SEARCH.PNG"),
         Some(ImageType::Png)
+    );
+    assert_eq!(
+        ImageFilenameType::from_file_extension("bmp"),
+        Some(ImageFilenameType::Bmp)
+    );
+    assert_eq!(
+        ImageFilenameType::from_file_extension(".ps"),
+        Some(ImageFilenameType::Postscript)
+    );
+    assert_eq!(
+        ImageFilenameType::from_file_extension("heifs"),
+        Some(ImageFilenameType::Heic)
     );
 }
 
@@ -300,7 +319,7 @@ fn create_image_default_type_from_jpg_extension() {
 }
 
 #[test]
-fn create_image_default_type_falls_back_to_neomacs() {
+fn create_image_unknown_extension_type_is_nil_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = builtin_create_image(vec![Value::string("foo.unknown")]);
     assert!(result.is_ok());
@@ -309,6 +328,29 @@ fn create_image_default_type_falls_back_to_neomacs() {
     let plist = image_spec_plist(&spec);
     let img_type = plist_get(&plist, &Value::keyword("type"));
     assert!(img_type.is_nil());
+}
+
+#[test]
+fn create_image_infers_unavailable_gnu_filename_types() {
+    crate::test_utils::init_test_tracing();
+    for (file_name, expected_type) in [
+        ("foo.BMP", "bmp"),
+        ("foo.ps", "postscript"),
+        ("foo.heic", "heic"),
+        ("foo.HEIFS", "heic"),
+    ] {
+        let result = builtin_create_image(vec![Value::string(file_name)]);
+        assert!(result.is_ok());
+        let spec = result.unwrap();
+
+        let plist = image_spec_plist(&spec);
+        let img_type = plist_get(&plist, &Value::keyword("type"));
+        assert_eq!(
+            img_type.as_symbol_name(),
+            Some(expected_type),
+            "type inferred for {file_name}"
+        );
+    }
 }
 
 #[test]

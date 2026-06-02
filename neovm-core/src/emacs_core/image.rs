@@ -159,20 +159,11 @@ impl ImageType {
     }
 
     pub fn from_file_extension(extension: &str) -> Option<Self> {
-        let extension = extension
-            .strip_prefix('.')
-            .unwrap_or(extension)
-            .to_ascii_lowercase();
-        match extension.as_str() {
-            "jpg" => Some(Self::Jpeg),
-            "tif" => Some(Self::Tiff),
-            "svgz" => Some(Self::Svg),
-            name => Self::from_symbol_name(name),
-        }
+        ImageFilenameType::from_file_extension(extension)?.available_type()
     }
 
     pub fn from_file_name(path: &str) -> Option<Self> {
-        Self::from_file_extension(path.rsplit('.').next()?)
+        ImageFilenameType::from_file_name(path)?.available_type()
     }
 
     pub fn name(self) -> &'static str {
@@ -181,6 +172,58 @@ impl ImageType {
 
     pub fn value(self) -> Value {
         Value::symbol(self.name())
+    }
+}
+
+/// Image types recognized by GNU filename inference.
+///
+/// GNU `lisp/image.el:image-type-file-name-regexps` has a wider domain than
+/// `image-type-available-p`: unavailable loaders such as `bmp`, `postscript`,
+/// and `heic` can still be inferred from file names for diagnostics and later
+/// availability checks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ImageFilenameType {
+    Png,
+    Gif,
+    Jpeg,
+    Webp,
+    Bmp,
+    Xpm,
+    Pbm,
+    Xbm,
+    Postscript,
+    Tiff,
+    Svg,
+    Heic,
+}
+
+impl ImageFilenameType {
+    fn from_file_extension(extension: &str) -> Option<Self> {
+        let extension = extension
+            .strip_prefix('.')
+            .unwrap_or(extension)
+            .to_ascii_lowercase();
+        match extension.as_str() {
+            "jpg" => Some(Self::Jpeg),
+            "tif" => Some(Self::Tiff),
+            "svgz" => Some(Self::Svg),
+            "ps" => Some(Self::Postscript),
+            "heics" | "heif" | "heifs" => Some(Self::Heic),
+            name => name.parse().ok(),
+        }
+    }
+
+    fn from_file_name(path: &str) -> Option<Self> {
+        Self::from_file_extension(path.rsplit('.').next()?)
+    }
+
+    fn name(self) -> &'static str {
+        self.into()
+    }
+
+    fn available_type(self) -> Option<ImageType> {
+        ImageType::from_symbol_name(self.name())
     }
 }
 
@@ -279,22 +322,7 @@ pub(crate) fn is_supported_image_type(name: &str) -> bool {
 }
 
 fn normalize_image_type_name(name: &str) -> Option<&'static str> {
-    let lower = name.to_ascii_lowercase();
-    match lower.as_str() {
-        "jpg" => Some(ImageType::Jpeg.name()),
-        "tif" => Some(ImageType::Tiff.name()),
-        name => ImageType::from_symbol_name(name)
-            .map(ImageType::name)
-            .or_else(|| match name {
-                // Kept as recognized-but-unavailable extension names.  GNU on
-                // non-native-image Linux builds reports these unavailable.
-                // Inference may still produce the symbol for caller diagnostics.
-                // They must not make `image-type-available-p` return t.
-                "bmp" => Some("bmp"),
-                "neomacs" => Some("neomacs"),
-                _ => None,
-            }),
-    }
+    ImageFilenameType::from_file_extension(name).map(ImageFilenameType::name)
 }
 
 fn validate_image_area(area: Value) -> Result<(), Flow> {
@@ -309,9 +337,7 @@ fn validate_image_area(area: Value) -> Result<(), Flow> {
 }
 
 fn infer_image_type_from_filename(path: &str) -> Option<&'static str> {
-    ImageType::from_file_name(path)
-        .map(ImageType::name)
-        .or_else(|| normalize_image_type_name(path.rsplit('.').next()?))
+    ImageFilenameType::from_file_name(path).map(ImageFilenameType::name)
 }
 
 fn parse_image_dimension(value: Value) -> Option<u32> {
