@@ -320,20 +320,50 @@ fn expect_fixnum_like(value: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn parse_time_unit_factor(unit: &str) -> Option<f64> {
-    let unit = unit.to_ascii_lowercase();
-    match unit.as_str() {
-        // Full-word and widely-used shorthand forms.
-        "sec" | "secs" | "second" | "seconds" => Some(1.0),
-        "min" | "mins" | "minute" | "minutes" => Some(60.0),
-        "hour" | "hours" => Some(3600.0),
-        "day" | "days" => Some(86_400.0),
-        "week" | "weeks" => Some(604_800.0),
-        "month" | "months" => Some(2_592_000.0),
-        "year" | "years" => Some(31_104_000.0),
-        "fortnight" | "fortnights" => Some(1_209_600.0),
-        _ => None,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumString)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+enum TimerDurationUnit {
+    #[strum(serialize = "microsec", serialize = "microsecond")]
+    Microsecond,
+    #[strum(serialize = "millisec", serialize = "millisecond")]
+    Millisecond,
+    #[strum(serialize = "sec", serialize = "second")]
+    Second,
+    #[strum(serialize = "min", serialize = "minute")]
+    Minute,
+    Hour,
+    Day,
+    Week,
+    Fortnight,
+    Month,
+    Year,
+}
+
+impl TimerDurationUnit {
+    fn parse_gnu_word(word: &str) -> Option<Self> {
+        let lower = word.to_ascii_lowercase();
+        let singular = lower.strip_suffix('s').unwrap_or(&lower);
+        singular.parse().ok()
     }
+
+    fn factor(self) -> f64 {
+        match self {
+            Self::Microsecond => 0.000_001,
+            Self::Millisecond => 0.001,
+            Self::Second => 1.0,
+            Self::Minute => 60.0,
+            Self::Hour => 3_600.0,
+            Self::Day => 86_400.0,
+            Self::Week => 604_800.0,
+            Self::Fortnight => 1_209_600.0,
+            Self::Month => 2_592_000.0,
+            Self::Year => 31_557_600.0,
+        }
+    }
+}
+
+fn parse_time_unit_factor(unit: &str) -> Option<f64> {
+    Some(TimerDurationUnit::parse_gnu_word(unit)?.factor())
 }
 
 fn parse_concatenated_time_delay_spec(spec: &str) -> Option<f64> {

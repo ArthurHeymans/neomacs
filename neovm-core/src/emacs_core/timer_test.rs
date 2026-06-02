@@ -729,8 +729,21 @@ fn test_parse_run_at_time_delay_units() {
         604_800.0
     );
     assert_eq!(
+        parse_run_at_time_delay(&Value::string("1 microsecond"))
+            .expect("1 microsecond should parse"),
+        0.000_001
+    );
+    assert_eq!(
+        parse_run_at_time_delay(&Value::string("1 millisec")).expect("1 millisec should parse"),
+        0.001
+    );
+    assert_eq!(
         parse_run_at_time_delay(&Value::string("4 fortnights")).expect("4 fortnights should parse"),
         4_838_400.0
+    );
+    assert_eq!(
+        parse_run_at_time_delay(&Value::string("1 year")).expect("1 year should parse"),
+        31_557_600.0
     );
     assert_eq!(
         parse_run_at_time_delay(&Value::string("4fortnight")).expect("4fortnight should parse"),
