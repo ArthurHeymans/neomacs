@@ -130,6 +130,30 @@ fn toolbar_theme_defaults_to_jetbrains_like() {
 }
 
 #[test]
+fn toolbar_theme_resolves_gnu_find_image_expression_to_default_theme() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
+    let expression = eval
+        .eval_str(
+            r#"
+            '(find-image
+              '((:type xpm :file "search.xpm")
+                (:type pbm :file "search.pbm")
+                (:type xbm :file "search.xbm")))
+            "#,
+        )
+        .expect("GNU find-image expression");
+
+    let themed = tool_bar_image_source(&eval, &expression).expect("default themed image source");
+    assert!(
+        themed
+            .file_path()
+            .is_some_and(|path| path.ends_with("etc/toolbar-icons/jetbrains-like/search.svg")),
+        "default image path from GNU find-image expression: {themed:#?}"
+    );
+}
+
+#[test]
 fn collect_gui_menu_bar_items_runtime_frame_has_help_menu() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
@@ -157,4 +181,22 @@ fn collect_gui_tool_bar_items_after_setup_has_search_item_and_separator() {
         "tool-bar items: {items:#?}"
     );
     assert!(items.iter().any(|item| item.is_separator()));
+}
+
+#[test]
+fn collect_gui_tool_bar_items_after_setup_uses_default_theme() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["neomacs"]).expect("bootstrap evaluator");
+    eval.eval_str("(tool-bar-setup)")
+        .expect("run GNU tool-bar setup");
+
+    let items = collect_gui_tool_bar_items(&mut eval);
+    assert!(
+        items.iter().any(|item| item
+            .image
+            .as_ref()
+            .and_then(|image| image.file_path())
+            .is_some_and(|path| path.ends_with("etc/toolbar-icons/jetbrains-like/search.svg"))),
+        "tool-bar items: {items:#?}"
+    );
 }
