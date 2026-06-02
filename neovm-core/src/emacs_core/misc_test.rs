@@ -522,6 +522,29 @@ fn multibyte_char_to_unibyte_returns_minus_one_for_non_unibyte_unicode() {
 // ----- locale-info -----
 
 #[test]
+fn locale_info_item_domain_matches_gnu_symbols() {
+    assert_eq!(
+        LocaleInfoItem::from_value(Value::symbol("codeset")),
+        Some(LocaleInfoItem::Codeset)
+    );
+    assert_eq!(
+        LocaleInfoItem::from_value(Value::symbol("days")),
+        Some(LocaleInfoItem::Days)
+    );
+    assert_eq!(
+        LocaleInfoItem::from_value(Value::symbol("months")),
+        Some(LocaleInfoItem::Months)
+    );
+    assert_eq!(
+        LocaleInfoItem::from_value(Value::symbol("paper")),
+        Some(LocaleInfoItem::Paper)
+    );
+    assert_eq!(LocaleInfoItem::Codeset.symbol_name(), "codeset");
+    assert_eq!(LocaleInfoItem::from_value(Value::symbol("time")), None);
+    assert_eq!(LocaleInfoItem::from_value(Value::string("codeset")), None);
+}
+
+#[test]
 fn locale_info_codeset_returns_utf8() {
     crate::test_utils::init_test_tracing();
     let result = builtin_locale_info(vec![Value::symbol("codeset")]).unwrap();

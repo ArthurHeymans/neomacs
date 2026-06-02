@@ -7,10 +7,30 @@
 //! - Eval-dependent builtins: backtrace-* helpers, recursion-depth
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
 use super::value::*;
+use strum::{EnumString, IntoStaticStr};
 
 const MAX_EMACS_CHAR: i64 = 0x3FFFFF;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum LocaleInfoItem {
+    Codeset,
+    Days,
+    Months,
+    Paper,
+}
+
+impl LocaleInfoItem {
+    fn from_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn symbol_name(self) -> &'static str {
+        self.into()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Argument helpers (local to this module)
@@ -543,9 +563,9 @@ pub(crate) fn builtin_multibyte_char_to_unibyte(args: Vec<Value>) -> EvalResult 
 /// Returns a small oracle-aligned subset in batch mode.
 pub(crate) fn builtin_locale_info(args: Vec<Value>) -> EvalResult {
     expect_args("locale-info", &args, 1)?;
-    match args[0].kind() {
-        ValueKind::Symbol(item) if resolve_sym(item) == "codeset" => Ok(Value::string("UTF-8")),
-        ValueKind::Symbol(item) if resolve_sym(item) == "days" => Ok(Value::vector(vec![
+    match LocaleInfoItem::from_value(args[0]) {
+        Some(LocaleInfoItem::Codeset) => Ok(Value::string("UTF-8")),
+        Some(LocaleInfoItem::Days) => Ok(Value::vector(vec![
             Value::string("Sunday"),
             Value::string("Monday"),
             Value::string("Tuesday"),
@@ -554,7 +574,7 @@ pub(crate) fn builtin_locale_info(args: Vec<Value>) -> EvalResult {
             Value::string("Friday"),
             Value::string("Saturday"),
         ])),
-        ValueKind::Symbol(item) if resolve_sym(item) == "months" => Ok(Value::vector(vec![
+        Some(LocaleInfoItem::Months) => Ok(Value::vector(vec![
             Value::string("January"),
             Value::string("February"),
             Value::string("March"),
@@ -568,10 +588,10 @@ pub(crate) fn builtin_locale_info(args: Vec<Value>) -> EvalResult {
             Value::string("November"),
             Value::string("December"),
         ])),
-        ValueKind::Symbol(item) if resolve_sym(item) == "paper" => {
+        Some(LocaleInfoItem::Paper) => {
             Ok(Value::list(vec![Value::fixnum(210), Value::fixnum(297)]))
         }
-        _ => Ok(Value::NIL),
+        None => Ok(Value::NIL),
     }
 }
 
