@@ -456,6 +456,11 @@ fn font_weight_from_symbol_all_names() {
         assert_eq!(weight.css_weight(), css_weight);
         assert_eq!(FontWeight::from_dump_code(weight.dump_code()), weight);
     }
+    assert_eq!(FontWeight::from_symbol("BOLD"), Some(FontWeight::Bold));
+    assert_eq!(
+        FontWeight::from_symbol("EXTRA-BOLD"),
+        Some(FontWeight::ExtraBold)
+    );
     assert_eq!(FontWeight::from_symbol("unknown"), None);
 }
 
@@ -464,7 +469,6 @@ fn font_slant_from_symbol_all() {
     crate::test_utils::init_test_tracing();
     let cases = [
         ("normal", FontSlant::Normal, 100),
-        ("roman", FontSlant::Normal, 100),
         ("r", FontSlant::Normal, 100),
         ("unspecified", FontSlant::Normal, 100),
         ("italic", FontSlant::Italic, 200),
@@ -488,6 +492,8 @@ fn font_slant_from_symbol_all() {
         "GNU slant table has no 205 entry"
     );
     assert_eq!(FontSlant::from_symbol("unknown"), None);
+    assert_eq!(FontSlant::from_symbol("roman"), None);
+    assert_eq!(FontSlant::from_symbol("ITALIC"), Some(FontSlant::Italic));
     assert!(FontSlant::Italic.is_italic());
     assert!(FontSlant::Oblique.is_italic());
     assert!(!FontSlant::Normal.is_italic());
@@ -528,6 +534,10 @@ fn font_width_from_symbol_all() {
         assert_eq!(width.gnu_numeric(), gnu_numeric);
         assert_eq!(FontWidth::from_gnu_numeric(gnu_numeric), Some(width));
     }
+    assert_eq!(
+        FontWidth::from_symbol("EXTRA-EXPANDED"),
+        Some(FontWidth::ExtraExpanded)
+    );
     assert_eq!(
         FontWidth::from_gnu_numeric(101),
         None,

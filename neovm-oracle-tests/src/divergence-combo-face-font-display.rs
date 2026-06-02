@@ -195,6 +195,22 @@ fn divergence_font_spec_creation() {
 }
 
 #[test]
+fn divergence_font_spec_style_symbol_casefolding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    assert_oracle_parity(
+        r#"(list
+  (font-get (font-spec :weight 'BOLD) :weight)
+  (font-get (font-spec :weight 'EXTRA-BOLD) :weight)
+  (font-get (font-spec :slant 'ITALIC) :slant)
+  (font-get (font-spec :width 'EXTRA-EXPANDED) :width)
+  (condition-case err
+      (font-spec :slant 'roman)
+    (error (list 'error (car err) (cadr err)))))"#,
+    );
+}
+
+#[test]
 fn divergence_font_spec_spacing_gnu_codes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

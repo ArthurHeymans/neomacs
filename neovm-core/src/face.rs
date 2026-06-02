@@ -290,6 +290,7 @@ impl BoxStyle {
 /// (`src/font.c:weight_table`).  Display backends still need CSS-style
 /// numeric weights, so use [`FontWeight::css_weight`] at renderer boundaries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(ascii_case_insensitive)]
 pub enum FontWeight {
     #[strum(to_string = "thin")]
     Thin,
@@ -547,14 +548,9 @@ impl FontWeight {
     Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
 )]
 #[repr(u16)]
-#[strum(serialize_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
 pub enum FontSlant {
-    #[strum(
-        to_string = "normal",
-        serialize = "roman",
-        serialize = "r",
-        serialize = "unspecified"
-    )]
+    #[strum(to_string = "normal", serialize = "r", serialize = "unspecified")]
     Normal = 100,
     #[strum(to_string = "italic", serialize = "i", serialize = "ot")]
     Italic = 200,
@@ -593,7 +589,7 @@ impl FontSlant {
     Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr, IntoPrimitive, TryFromPrimitive,
 )]
 #[repr(u16)]
-#[strum(serialize_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case", ascii_case_insensitive)]
 pub enum FontWidth {
     #[strum(to_string = "ultra-condensed", serialize = "ultracondensed")]
     UltraCondensed = 50,

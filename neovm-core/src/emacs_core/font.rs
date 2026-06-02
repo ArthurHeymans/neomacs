@@ -991,6 +991,22 @@ fn font_style_symbol_from_gnu_code(
     }
 }
 
+fn font_style_symbol_from_name(
+    table: &'static [(i64, &'static [&'static str])],
+    name: &str,
+) -> Option<&'static str> {
+    table
+        .iter()
+        .flat_map(|(_, names)| names.iter().copied())
+        .find(|candidate| *candidate == name)
+        .or_else(|| {
+            table
+                .iter()
+                .flat_map(|(_, names)| names.iter().copied())
+                .find(|candidate| candidate.eq_ignore_ascii_case(name))
+        })
+}
+
 fn validate_font_style_prop(key: &str, prop: &Value, val: &Value) -> EvalResult {
     if val.is_nil() {
         return Ok(*val);
@@ -998,17 +1014,10 @@ fn validate_font_style_prop(key: &str, prop: &Value, val: &Value) -> EvalResult 
     match val.kind() {
         ValueKind::Symbol(id) => {
             let name = resolve_sym(id);
-            let valid = match key {
-                "weight" => FontWeight::from_symbol(name).is_some(),
-                "slant" => FontSlant::from_symbol(name).is_some(),
-                "width" => FontWidth::from_symbol(name).is_some(),
-                _ => false,
-            };
-            if valid {
-                Ok(*val)
-            } else {
-                Err(invalid_font_property(prop, val))
-            }
+            font_style_table_for_key(key)
+                .and_then(|table| font_style_symbol_from_name(table, name))
+                .map(Value::symbol)
+                .ok_or_else(|| invalid_font_property(prop, val))
         }
         ValueKind::Fixnum(n) => font_style_table_for_key(key)
             .and_then(|table| font_style_symbol_from_gnu_code(table, n))

@@ -434,6 +434,83 @@ fn font_spec_rejects_numeric_weight_like_gnu() {
 }
 
 #[test]
+fn font_spec_style_symbols_casefold_and_preserve_aliases_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let spec = builtin_font_spec(vec![
+        Value::keyword("weight"),
+        Value::symbol("BOLD"),
+        Value::keyword("slant"),
+        Value::symbol("ITALIC"),
+        Value::keyword("width"),
+        Value::symbol("EXTRA-EXPANDED"),
+    ])
+    .unwrap();
+    assert_eq!(
+        builtin_font_get(vec![spec, Value::keyword("weight")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("bold")
+    );
+    assert_eq!(
+        builtin_font_get(vec![spec, Value::keyword("slant")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("italic")
+    );
+    assert_eq!(
+        builtin_font_get(vec![spec, Value::keyword("width")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("extra-expanded")
+    );
+
+    let alias_spec = builtin_font_spec(vec![
+        Value::keyword("weight"),
+        Value::symbol("EXTRABOLD"),
+        Value::keyword("slant"),
+        Value::symbol("OT"),
+        Value::keyword("width"),
+        Value::symbol("WIDE"),
+    ])
+    .unwrap();
+    assert_eq!(
+        builtin_font_get(vec![alias_spec, Value::keyword("weight")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("extrabold")
+    );
+    assert_eq!(
+        builtin_font_get(vec![alias_spec, Value::keyword("slant")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("ot")
+    );
+    assert_eq!(
+        builtin_font_get(vec![alias_spec, Value::keyword("width")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("wide")
+    );
+
+    let put = builtin_font_put(vec![
+        spec,
+        Value::keyword("weight"),
+        Value::symbol("EXTRABOLD"),
+    ])
+    .unwrap();
+    assert_eq!(put.as_symbol_name(), Some("extrabold"));
+    assert_eq!(
+        builtin_font_get(vec![spec, Value::keyword("weight")])
+            .unwrap()
+            .as_symbol_name(),
+        Some("extrabold")
+    );
+
+    assert!(builtin_font_spec(vec![Value::keyword("slant"), Value::symbol("roman")]).is_err());
+}
+
+#[test]
 fn font_get_and_put() {
     crate::test_utils::init_test_tracing();
     let spec =
