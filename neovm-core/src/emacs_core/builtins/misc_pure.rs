@@ -11,13 +11,7 @@ pub(crate) fn builtin_identity(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_prefix_numeric_value(args: Vec<Value>) -> EvalResult {
     expect_args("prefix-numeric-value", &args, 1)?;
-    let numeric = match args[0].kind() {
-        ValueKind::Nil => 1,
-        ValueKind::Symbol(id) if resolve_sym(id) == "-" => -1,
-        ValueKind::Fixnum(n) => n,
-        ValueKind::Cons => args[0].cons_car().as_int().unwrap_or(1),
-        _ => 1,
-    };
+    let numeric = crate::emacs_core::prefix::prefix_numeric_value(&args[0]);
     Ok(Value::fixnum(numeric))
 }
 

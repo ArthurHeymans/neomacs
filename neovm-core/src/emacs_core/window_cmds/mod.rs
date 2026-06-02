@@ -2654,20 +2654,7 @@ pub(crate) fn builtin_set_window_hscroll(
 }
 
 fn scroll_prefix_value(value: &Value) -> i64 {
-    match value.kind() {
-        ValueKind::Fixnum(n) => n,
-        ValueKind::Float => value.xfloat() as i64,
-        ValueKind::Symbol(id) if resolve_sym(id) == "-" => -1,
-        ValueKind::Cons => {
-            let car = value.cons_car();
-            match car.kind() {
-                ValueKind::Fixnum(n) => n,
-                ValueKind::Float => car.xfloat() as i64,
-                _ => 1,
-            }
-        }
-        _ => 1,
-    }
+    crate::emacs_core::prefix::prefix_numeric_value(value)
 }
 
 fn default_scroll_columns(eval: &super::eval::Context, fid: FrameId, wid: WindowId) -> i64 {

@@ -68,13 +68,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 }
 
 fn prefix_numeric_value(value: &Value) -> i64 {
-    match value.kind() {
-        ValueKind::Nil => 1,
-        ValueKind::Symbol(id) if resolve_sym(id) == "-" => -1,
-        ValueKind::Fixnum(n) => n,
-        ValueKind::Cons => value.cons_car().as_int().unwrap_or(1),
-        _ => 1,
-    }
+    crate::emacs_core::prefix::prefix_numeric_value(value)
 }
 
 // ---------------------------------------------------------------------------
