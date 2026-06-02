@@ -1,6 +1,22 @@
 use super::*;
 
 #[test]
+fn undo_entry_head_domain_matches_gnu_apply_marker() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(UndoEntryHead::Apply.name(), "apply");
+    assert_eq!(
+        UndoEntryHead::from_lisp_value(&Value::symbol("apply")),
+        Some(UndoEntryHead::Apply)
+    );
+    assert_eq!(
+        UndoEntryHead::from_lisp_value(&Value::symbol("quote")),
+        None
+    );
+    assert_eq!(UndoEntryHead::from_lisp_value(&Value::fixnum(0)), None);
+}
+
+#[test]
 fn test_undo_boundary_no_args() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

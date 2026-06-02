@@ -7,6 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
 // Bootstrap variables
@@ -83,6 +84,23 @@ fn char_pos1_to_char0(pos1: i64) -> usize {
 
 fn char_pos1_to_byte_clamped(buf: &crate::buffer::Buffer, pos1: i64) -> usize {
     buf.char_to_byte_clamped(char_pos1_to_char0(pos1))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum UndoEntryHead {
+    Apply,
+}
+
+impl UndoEntryHead {
+    fn from_lisp_value(value: &Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+
+    #[cfg(test)]
+    fn name(self) -> &'static str {
+        self.into()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +401,7 @@ fn primitive_undo_inner(
                 // (apply FUN . ARGS) or
                 // (apply DELTA START END FUN . ARGS) — call FUN with ARGS.
                 // Mirrors GNU lisp/simple.el:3702-3722.
-                _ if car.as_symbol_name() == Some("apply") => {
+                _ if UndoEntryHead::from_lisp_value(&car) == Some(UndoEntryHead::Apply) => {
                     if cdr.is_cons() {
                         let fun_args_head = cdr.cons_car();
                         let (fun, fargs) = if fun_args_head.as_fixnum().is_some() {
