@@ -1454,6 +1454,76 @@ pub(crate) fn builtin_coding_system_type(
     Ok(Value::from_sym_id(info.coding_type))
 }
 
+#[derive(Clone, Copy, Debug)]
+enum EolConversionRequest {
+    Nil,
+    Integer(i64),
+    Float { value: Value, number: f64 },
+    NonNumber(Value),
+}
+
+impl EolConversionRequest {
+    fn from_lisp_value(value: Value) -> Self {
+        if value.is_nil() {
+            return Self::Nil;
+        }
+        match value.kind() {
+            ValueKind::Fixnum(n) => Self::Integer(n),
+            ValueKind::Float => Self::Float {
+                value,
+                number: value.xfloat(),
+            },
+            ValueKind::Symbol(_) => EolType::from_specified_symbol_value(&value)
+                .map(|eol| Self::Integer(eol.to_int()))
+                .unwrap_or(Self::NonNumber(value)),
+            _ => Self::NonNumber(value),
+        }
+    }
+
+    fn vector_index(self) -> Result<i64, Flow> {
+        match self {
+            Self::Integer(index) => Ok(index),
+            Self::Nil => Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("fixnump"), Value::NIL],
+            )),
+            Self::Float { value, .. } | Self::NonNumber(value) => Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("fixnump"), value],
+            )),
+        }
+    }
+
+    fn numeric_equals(self, rhs: i64) -> Result<bool, Flow> {
+        match self {
+            Self::Integer(value) => Ok(value == rhs),
+            Self::Float { number, .. } => Ok(number == rhs as f64),
+            Self::Nil => Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("number-or-marker-p"), Value::NIL],
+            )),
+            Self::NonNumber(value) => Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("number-or-marker-p"), value],
+            )),
+        }
+    }
+}
+
+fn eol_vector_ref(vector: Value, request: EolConversionRequest) -> EvalResult {
+    let index = request.vector_index()?;
+    let data = vector
+        .as_vector_data()
+        .expect("coding-system-eol-type vector value");
+    if index < 0 || index as usize >= data.len() {
+        return Err(signal(
+            "args-out-of-range",
+            vec![vector, Value::fixnum(index)],
+        ));
+    }
+    Ok(data[index as usize])
+}
+
 /// `(coding-system-change-eol-conversion CODING-SYSTEM EOL-TYPE)` -- return
 /// a coding system derived from CODING-SYSTEM but with a different EOL type.
 /// EOL-TYPE is 0 (unix), 1 (dos), or 2 (mac), or a symbol.
@@ -1469,120 +1539,43 @@ pub(crate) fn builtin_coding_system_change_eol_conversion(
         ));
     }
     let raw_name = coding_symbol_name(&args[0])?;
-    let is_nil_coding = raw_name == "nil";
-    if !is_nil_coding && resolve_runtime_name(mgr, &raw_name).is_none() {
+    if resolve_runtime_name(mgr, &raw_name).is_none() {
         return Err(signal("coding-system-error", vec![args[0]]));
     }
-    let canonical_name = if is_nil_coding {
-        "no-conversion".to_string()
-    } else {
-        canonical_runtime_name(mgr, &raw_name)
-            .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?
-    };
-    let canonical_base = strip_eol_suffix(&canonical_name);
-    let resolved_base = canonical_base;
-    let no_conversion_family = is_nil_coding || matches!(resolved_base, "no-conversion" | "binary");
 
-    if no_conversion_family {
-        let out = match args[1].kind() {
-            ValueKind::Nil => Value::symbol("no-conversion"),
-            ValueKind::Fixnum(n) => {
-                if n == 0 {
-                    if is_nil_coding {
-                        Value::NIL
-                    } else if resolved_base == "binary" {
-                        Value::symbol("binary")
-                    } else {
-                        Value::symbol("no-conversion")
-                    }
-                } else {
-                    Value::NIL
-                }
-            }
-            ValueKind::Float => {
-                if args[1].xfloat() == 0.0 {
-                    if is_nil_coding {
-                        Value::NIL
-                    } else if resolved_base == "binary" {
-                        Value::symbol("binary")
-                    } else {
-                        Value::symbol("no-conversion")
-                    }
-                } else {
-                    Value::NIL
-                }
-            }
-            ValueKind::Symbol(id) if resolve_sym(id) == "unix" => {
-                if is_nil_coding {
-                    Value::NIL
-                } else if resolved_base == "binary" {
-                    Value::symbol("binary")
-                } else {
-                    Value::symbol("no-conversion")
-                }
-            }
-            ValueKind::Symbol(id)
-                if {
-                    let n = resolve_sym(id);
-                    n == "dos" || n == "mac"
-                } =>
-            {
-                Value::NIL
-            }
-            _ => {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("number-or-marker-p"), args[1]],
-                ));
-            }
+    let request = EolConversionRequest::from_lisp_value(args[1]);
+    let base = builtin_coding_system_base(mgr, vec![args[0]])?;
+    let orig_eol_type = builtin_coding_system_eol_type(mgr, vec![args[0]])?;
+
+    if matches!(
+        orig_eol_type.kind(),
+        ValueKind::Veclike(VecLikeType::Vector)
+    ) {
+        return match request {
+            EolConversionRequest::Nil => Ok(args[0]),
+            _ => eol_vector_ref(orig_eol_type, request),
         };
-        return Ok(out);
     }
 
-    let target_eol = match args[1].kind() {
-        ValueKind::Nil => None,
-        ValueKind::Fixnum(n) => Some(n),
-        ValueKind::Symbol(id) if resolve_sym(id) == "unix" => Some(0),
-        ValueKind::Symbol(id) if resolve_sym(id) == "dos" => Some(1),
-        ValueKind::Symbol(id) if resolve_sym(id) == "mac" => Some(2),
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("fixnump"), args[1]],
-            ));
-        }
-    };
-
-    let raw_base = strip_eol_suffix(&raw_name);
-    if target_eol.is_none() {
-        if EolType::from_suffix(&raw_name).is_some() {
-            return Ok(Value::symbol(display_base_name(canonical_base)));
-        }
-        if canonical_base == "emacs-internal" {
-            return Ok(Value::symbol("utf-8-emacs"));
-        }
-        return Ok(Value::symbol(raw_name));
+    if matches!(request, EolConversionRequest::Nil) {
+        return Ok(base);
     }
 
-    let eol = target_eol.expect("checked above");
-    if !(0..=2).contains(&eol) {
-        let vec_base = eol_vector_base(resolved_base);
-        let variants = vec![
-            Value::symbol(format!("{vec_base}-unix")),
-            Value::symbol(format!("{vec_base}-dos")),
-            Value::symbol(format!("{vec_base}-mac")),
-        ];
-        return Err(signal(
-            "args-out-of-range",
-            vec![Value::vector(variants), Value::fixnum(eol)],
-        ));
+    let orig_eol = orig_eol_type
+        .as_fixnum()
+        .expect("coding-system-eol-type fixed value");
+    if request.numeric_equals(orig_eol)? {
+        return Ok(args[0]);
     }
 
-    if let Some(derived) = derive_coding_for_eol(canonical_base, eol) {
-        Ok(Value::symbol(derived))
-    } else {
-        Ok(Value::NIL)
+    let base_eol_type = builtin_coding_system_eol_type(mgr, vec![base])?;
+    if matches!(
+        base_eol_type.kind(),
+        ValueKind::Veclike(VecLikeType::Vector)
+    ) {
+        return eol_vector_ref(base_eol_type, request);
     }
+    Ok(Value::NIL)
 }
 
 /// `(coding-system-change-text-conversion CODING-SYSTEM TEXT-CODING)` -- return

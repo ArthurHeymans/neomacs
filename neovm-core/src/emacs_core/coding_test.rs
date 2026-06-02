@@ -829,6 +829,73 @@ fn change_eol_gbk_alias_variant_to_nil_returns_canonical_base() {
     assert_eq!(result, Value::symbol("chinese-gbk"));
 }
 
+#[test]
+fn change_eol_same_fixed_eol_returns_original_designator_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let result = builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("latin-1-unix"), Value::fixnum(0)],
+    )
+    .unwrap();
+    assert_eq!(result, Value::symbol("latin-1-unix"));
+}
+
+#[test]
+fn change_eol_fixed_eol_accepts_equal_float_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    let result = builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("utf-8-unix"), Value::make_float(0.0)],
+    )
+    .unwrap();
+    assert_eq!(result, Value::symbol("utf-8-unix"));
+
+    let result = builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("utf-8-dos"), Value::make_float(1.0)],
+    )
+    .unwrap();
+    assert_eq!(result, Value::symbol("utf-8-dos"));
+}
+
+#[test]
+fn change_eol_nonmatching_float_uses_gnu_aref_error() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    match builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("utf-8-unix"), Value::make_float(1.0)],
+    ) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "wrong-type-argument");
+            assert_eq!(
+                sig.data,
+                vec![Value::symbol("fixnump"), Value::make_float(1.0)]
+            );
+        }
+        other => panic!("expected wrong-type-argument signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn change_eol_out_of_range_uses_gnu_aref_error() {
+    crate::test_utils::init_test_tracing();
+    let m = mgr();
+    match builtin_coding_system_change_eol_conversion(
+        &m,
+        vec![Value::symbol("utf-8"), Value::fixnum(3)],
+    ) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(sig.data.len(), 2);
+            assert_eq!(sig.data[1], Value::fixnum(3));
+        }
+        other => panic!("expected args-out-of-range signal, got {other:?}"),
+    }
+}
+
 // ----- coding-system-change-text-conversion -----
 
 #[test]
