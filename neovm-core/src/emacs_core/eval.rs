@@ -87,7 +87,7 @@ fn gnu_system_type() -> &'static str {
 }
 
 fn initial_feature_names() -> Vec<&'static str> {
-    let mut features = vec!["threads", "emacs"];
+    let mut features = vec!["xwidget-internal", "threads", "emacs"];
     if cfg!(target_os = "linux") {
         // GNU dbusbind.c provides `dbusbind' when Emacs is built with DBus.
         features.insert(0, "dbusbind");
@@ -1663,6 +1663,8 @@ pub struct Context {
     pub(crate) loads_in_progress: Vec<crate::heap_types::LispString>,
     /// Buffer manager — owns all live buffers and tracks current buffer.
     pub buffers: BufferManager,
+    /// GNU xwidget runtime state: internal model/view lists and id counter.
+    pub(crate) xwidgets: super::xwidget::XwidgetState,
     /// GNU `last_overlay_modification_hooks`: hook-list/overlay pairs recorded
     /// by the before-change overlay scan and replayed by the after-change scan.
     pub(crate) last_overlay_modification_hooks: Vec<OverlayModificationHook>,
@@ -2508,6 +2510,7 @@ impl Context {
         ev.require_stack.clear();
         ev.loads_in_progress.clear();
         ev.buffers = BufferManager::new();
+        ev.xwidgets = super::xwidget::XwidgetState::new();
         ev.last_overlay_modification_hooks.clear();
         ev.interval_insert_behind_hooks = Value::NIL;
         ev.interval_insert_in_front_hooks = Value::NIL;
@@ -3205,6 +3208,7 @@ impl Context {
         // thread.c:syms_of_threads provides `threads' when thread builtins
         // are installed.
         obarray.set_symbol_value("features", initial_features_value());
+        super::xwidget::init_xwidget_variables(&mut obarray);
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
         obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
@@ -4601,6 +4605,7 @@ impl Context {
             require_stack: Vec::new(),
             loads_in_progress: Vec::new(),
             buffers: BufferManager::new(),
+            xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
@@ -4777,6 +4782,7 @@ impl Context {
             require_stack,
             loads_in_progress,
             buffers,
+            xwidgets: super::xwidget::XwidgetState::new(),
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
@@ -5035,6 +5041,7 @@ impl Context {
         self.custom.trace_roots_with(visit);
         self.autoloads.trace_roots_with(visit);
         self.buffers.trace_roots_with(visit);
+        self.xwidgets.trace_roots_with(visit);
         self.face_table.trace_roots_with(visit);
         self.threads.trace_roots_with(visit);
         self.kmacro.trace_roots_with(visit);

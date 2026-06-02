@@ -1090,6 +1090,8 @@ mod tests {
             VecLikeType::Frame,
             VecLikeType::Timer,
             VecLikeType::Subr,
+            VecLikeType::Xwidget,
+            VecLikeType::XwidgetView,
             VecLikeType::Bignum,
             VecLikeType::SymbolWithPos,
             VecLikeType::Sqlite,

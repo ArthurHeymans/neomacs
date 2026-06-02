@@ -33,6 +33,7 @@ use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
     HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
     RecordObj, StringObj, SubCharTableObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
+    XwidgetObj, XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1531,6 +1532,23 @@ impl TaggedValue {
         })
     }
 
+    /// Allocate a GNU-shaped xwidget model object.
+    pub fn make_xwidget(
+        type_: Value,
+        title: Value,
+        buffer: Value,
+        width: i32,
+        height: i32,
+        xwidget_id: u32,
+    ) -> Self {
+        with_tagged_heap(|h| h.alloc_xwidget(type_, title, buffer, width, height, xwidget_id))
+    }
+
+    /// Allocate a GNU-shaped xwidget view object.
+    pub fn make_xwidget_view(model: Value, window: Value) -> Self {
+        with_tagged_heap(|h| h.alloc_xwidget_view(model, window))
+    }
+
     /// Allocate an opaque SQLite database or statement object.
     pub(crate) fn make_sqlite(is_statement: bool, id: i64) -> Self {
         with_tagged_heap(|h| h.alloc_sqlite(is_statement, id))
@@ -1590,6 +1608,18 @@ impl TaggedValue {
     #[inline]
     pub fn is_overlay(self) -> bool {
         self.veclike_type() == Some(VecLikeType::Overlay)
+    }
+
+    /// Check if this is an xwidget.
+    #[inline]
+    pub fn is_xwidget(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::Xwidget)
+    }
+
+    /// Check if this is an xwidget view.
+    #[inline]
+    pub fn is_xwidget_view(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::XwidgetView)
     }
 
     // -- Data accessors for heap types --
@@ -1774,6 +1804,36 @@ impl TaggedValue {
         } else {
             None
         }
+    }
+
+    /// Get the xwidget payload from an xwidget value.
+    pub fn as_xwidget(self) -> Option<&'static XwidgetObj> {
+        if self.is_xwidget() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const XwidgetObj;
+            Some(unsafe { &*ptr })
+        } else {
+            None
+        }
+    }
+
+    /// Mutate xwidget data through the centralized tagged-runtime write path.
+    pub fn with_xwidget_mut<R>(self, f: impl FnOnce(&mut XwidgetObj) -> R) -> Option<R> {
+        mutate::with_xwidget_mut(self, f)
+    }
+
+    /// Get the xwidget-view payload from an xwidget-view value.
+    pub fn as_xwidget_view(self) -> Option<&'static XwidgetViewObj> {
+        if self.is_xwidget_view() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const XwidgetViewObj;
+            Some(unsafe { &*ptr })
+        } else {
+            None
+        }
+    }
+
+    /// Mutate xwidget-view data through the centralized tagged-runtime write path.
+    pub fn with_xwidget_view_mut<R>(self, f: impl FnOnce(&mut XwidgetViewObj) -> R) -> Option<R> {
+        mutate::with_xwidget_view_mut(self, f)
     }
 
     /// Get the marker data from a marker value.

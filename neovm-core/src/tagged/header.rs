@@ -150,6 +150,10 @@ pub enum VecLikeType {
     Obarray = 15,
     /// Built-in function (like GNU's PVEC_SUBR).
     Subr = 18,
+    /// Embedded widget model object (GNU `PVEC_XWIDGET`).
+    Xwidget = 20,
+    /// Embedded widget view object (GNU `PVEC_XWIDGET_VIEW`).
+    XwidgetView = 21,
     /// Dynamic module function (GNU `PVEC_MODULE_FUNCTION`).
     ModuleFunction = 25,
     /// SQLite database or statement object (like GNU's PVEC_SQLITE).
@@ -181,6 +185,8 @@ impl VecLikeType {
             Self::HashTable => GnuPvecType::HashTable,
             Self::Obarray => GnuPvecType::Obarray,
             Self::Subr => GnuPvecType::Subr,
+            Self::Xwidget => GnuPvecType::Xwidget,
+            Self::XwidgetView => GnuPvecType::XwidgetView,
             Self::ModuleFunction => GnuPvecType::ModuleFunction,
             Self::Sqlite => GnuPvecType::Sqlite,
             Self::Lambda => GnuPvecType::Closure,
@@ -593,6 +599,47 @@ pub struct FrameObj {
 pub struct TimerObj {
     pub header: VecLikeHeader,
     pub id: u64,
+}
+
+/// Heap-allocated xwidget model object.
+///
+/// Mirrors GNU `struct xwidget`: Lisp-traced fields come first
+/// (`plist`, `type`, `buffer`, `title`, `script_callbacks`), followed by
+/// native geometry/lifetime fields.
+#[repr(C)]
+pub struct XwidgetObj {
+    pub header: VecLikeHeader,
+    pub plist: TaggedValue,
+    pub type_: TaggedValue,
+    pub buffer: TaggedValue,
+    pub title: TaggedValue,
+    pub script_callbacks: TaggedValue,
+    pub height: i32,
+    pub width: i32,
+    pub xwidget_id: u32,
+    /// GNU stores `kill_without_query`; query-on-exit returns nil when this is
+    /// true and t otherwise.
+    pub kill_without_query: bool,
+}
+
+/// Heap-allocated xwidget view object.
+///
+/// GNU's public view object keeps the model and window as Lisp references.
+/// Native window-system payload is owned by frontend/backends, not by this VM
+/// object.
+#[repr(C)]
+pub struct XwidgetViewObj {
+    pub header: VecLikeHeader,
+    pub model: TaggedValue,
+    pub window: TaggedValue,
+    pub x: i32,
+    pub y: i32,
+    pub clip_right: i32,
+    pub clip_bottom: i32,
+    pub clip_top: i32,
+    pub clip_left: i32,
+    pub redisplayed: bool,
+    pub hidden: bool,
 }
 
 /// Heap-allocated built-in function (like GNU's PVEC_SUBR).

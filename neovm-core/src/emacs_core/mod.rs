@@ -125,6 +125,9 @@ pub(crate) mod windows;
 pub mod xdisp;
 pub mod xfaces;
 pub mod xml;
+pub mod xwidget;
+#[cfg(test)]
+mod xwidget_test;
 pub(crate) mod zlib;
 
 // Re-export the main public API

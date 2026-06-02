@@ -59,6 +59,8 @@ pub enum HeapWriteKind {
     ByteCodeData,
     LispMarker,
     OverlayData,
+    XwidgetData,
+    XwidgetViewData,
 }
 
 /// A single heap mutation event.
@@ -1071,6 +1073,8 @@ impl TaggedHeap {
                         VecLikeType::Window => size_of::<WindowObj>(),
                         VecLikeType::Frame => size_of::<FrameObj>(),
                         VecLikeType::Timer => size_of::<TimerObj>(),
+                        VecLikeType::Xwidget => size_of::<XwidgetObj>(),
+                        VecLikeType::XwidgetView => size_of::<XwidgetViewObj>(),
                         VecLikeType::Subr => size_of::<SubrObj>(),
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
@@ -1362,6 +1366,57 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<TimerObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate an xwidget model object.
+    pub fn alloc_xwidget(
+        &mut self,
+        type_: TaggedValue,
+        title: TaggedValue,
+        buffer: TaggedValue,
+        width: i32,
+        height: i32,
+        xwidget_id: u32,
+    ) -> TaggedValue {
+        let obj = Box::new(XwidgetObj {
+            header: VecLikeHeader::new(VecLikeType::Xwidget),
+            plist: TaggedValue::NIL,
+            type_,
+            buffer,
+            title,
+            script_callbacks: TaggedValue::NIL,
+            height,
+            width,
+            xwidget_id,
+            kill_without_query: false,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<XwidgetObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate an xwidget view object.
+    pub fn alloc_xwidget_view(&mut self, model: TaggedValue, window: TaggedValue) -> TaggedValue {
+        let obj = Box::new(XwidgetViewObj {
+            header: VecLikeHeader::new(VecLikeType::XwidgetView),
+            model,
+            window,
+            x: 0,
+            y: 0,
+            clip_right: 0,
+            clip_bottom: 0,
+            clip_top: 0,
+            clip_left: 0,
+            redisplayed: false,
+            hidden: false,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<XwidgetViewObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -2095,6 +2150,37 @@ impl TaggedHeap {
                     self.push_gray(interactive, "module-function-interactive");
                 }
             }
+            VecLikeType::Xwidget => {
+                let obj = ptr as *const XwidgetObj;
+                let fields = unsafe {
+                    [
+                        ((*obj).plist, "xwidget-plist"),
+                        ((*obj).type_, "xwidget-type"),
+                        ((*obj).buffer, "xwidget-buffer"),
+                        ((*obj).title, "xwidget-title"),
+                        ((*obj).script_callbacks, "xwidget-script-callbacks"),
+                    ]
+                };
+                for (value, label) in fields {
+                    if value.is_heap_object() {
+                        self.push_gray(value, label);
+                    }
+                }
+            }
+            VecLikeType::XwidgetView => {
+                let obj = ptr as *const XwidgetViewObj;
+                let fields = unsafe {
+                    [
+                        ((*obj).model, "xwidget-view-model"),
+                        ((*obj).window, "xwidget-view-window"),
+                    ]
+                };
+                for (value, label) in fields {
+                    if value.is_heap_object() {
+                        self.push_gray(value, label);
+                    }
+                }
+            }
             VecLikeType::Buffer
             | VecLikeType::Window
             | VecLikeType::Frame
@@ -2228,6 +2314,10 @@ impl TaggedHeap {
                     VecLikeType::Window => unsafe { drop(Box::from_raw(ptr as *mut WindowObj)) },
                     VecLikeType::Frame => unsafe { drop(Box::from_raw(ptr as *mut FrameObj)) },
                     VecLikeType::Timer => unsafe { drop(Box::from_raw(ptr as *mut TimerObj)) },
+                    VecLikeType::Xwidget => unsafe { drop(Box::from_raw(ptr as *mut XwidgetObj)) },
+                    VecLikeType::XwidgetView => unsafe {
+                        drop(Box::from_raw(ptr as *mut XwidgetViewObj))
+                    },
                     VecLikeType::Subr => unsafe { drop(Box::from_raw(ptr as *mut SubrObj)) },
                     VecLikeType::Bignum => unsafe {
                         // Box::drop runs malachite::Integer::drop, which

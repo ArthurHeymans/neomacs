@@ -859,6 +859,8 @@ impl TaggedValue {
             ValueKind::Subr(_) => "subr",
             ValueKind::Veclike(ty) => match ty {
                 VecLikeType::Subr => "subr",
+                VecLikeType::Xwidget => "xwidget",
+                VecLikeType::XwidgetView => "xwidget-view",
                 VecLikeType::Vector => "vector",
                 VecLikeType::HashTable => "hash-table",
                 VecLikeType::Lambda => "closure",

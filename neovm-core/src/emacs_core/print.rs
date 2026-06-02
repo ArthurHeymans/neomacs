@@ -918,6 +918,13 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
             let tid = value.as_timer_id().unwrap();
             write!(out, "#<timer {}>", tid).unwrap();
         }
+        ValueKind::Veclike(VecLikeType::Xwidget) => {
+            let xw = value.as_xwidget().unwrap();
+            write!(out, "#<xwidget {}>", xw.xwidget_id).unwrap();
+        }
+        ValueKind::Veclike(VecLikeType::XwidgetView) => {
+            out.push_str("#<xwidget-view>");
+        }
         ValueKind::Veclike(VecLikeType::Bignum) => {
             // GNU `print_object` formats bignums via `mpz_get_str`
             // (`src/print.c` PRINT_INTEGER branch). `malachite::Integer`'s
@@ -1883,6 +1890,13 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::Timer) => {
             out.extend_from_slice(format!("#<timer {}>", value.as_timer_id().unwrap()).as_bytes());
+        }
+        ValueKind::Veclike(VecLikeType::Xwidget) => {
+            let xw = value.as_xwidget().unwrap();
+            out.extend_from_slice(format!("#<xwidget {}>", xw.xwidget_id).as_bytes());
+        }
+        ValueKind::Veclike(VecLikeType::XwidgetView) => {
+            out.extend_from_slice(b"#<xwidget-view>");
         }
         ValueKind::Veclike(VecLikeType::Bignum) => {
             out.extend_from_slice(value.as_bignum().unwrap().to_string().as_bytes());

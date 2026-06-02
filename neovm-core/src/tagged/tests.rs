@@ -104,6 +104,8 @@ fn gnu_pvec_type_layout_for_shared_vectorlikes() {
         (VecLikeType::HashTable, 14),
         (VecLikeType::Obarray, 15),
         (VecLikeType::Subr, 18),
+        (VecLikeType::Xwidget, 20),
+        (VecLikeType::XwidgetView, 21),
         (VecLikeType::ModuleFunction, 25),
         (VecLikeType::Sqlite, 30),
         (VecLikeType::Lambda, 31),

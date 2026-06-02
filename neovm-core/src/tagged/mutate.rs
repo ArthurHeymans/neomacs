@@ -11,7 +11,7 @@ use crate::heap_types::{LispMarker, LispString, OverlayData};
 use super::gc::{HeapWriteKind, note_heap_slot_write, note_heap_write};
 use super::header::{
     ByteCodeObj, ConsCell, HashTableObj, LambdaObj, MacroObj, MarkerObj, OverlayObj, RecordObj,
-    StringObj, VecLikeType, VectorObj,
+    StringObj, VecLikeType, VectorObj, XwidgetObj, XwidgetViewObj,
 };
 use super::value::TaggedValue;
 
@@ -240,4 +240,27 @@ pub fn with_overlay_data_mut<R>(
     note_heap_write(value, HeapWriteKind::OverlayData);
     let ptr = value.as_veclike_ptr().unwrap() as *mut OverlayObj;
     Some(f(unsafe { &mut (*ptr).data }))
+}
+
+#[inline]
+pub fn with_xwidget_mut<R>(value: TaggedValue, f: impl FnOnce(&mut XwidgetObj) -> R) -> Option<R> {
+    if value.veclike_type()? != VecLikeType::Xwidget {
+        return None;
+    }
+    note_heap_write(value, HeapWriteKind::XwidgetData);
+    let ptr = value.as_veclike_ptr().unwrap() as *mut XwidgetObj;
+    Some(f(unsafe { &mut *ptr }))
+}
+
+#[inline]
+pub fn with_xwidget_view_mut<R>(
+    value: TaggedValue,
+    f: impl FnOnce(&mut XwidgetViewObj) -> R,
+) -> Option<R> {
+    if value.veclike_type()? != VecLikeType::XwidgetView {
+        return None;
+    }
+    note_heap_write(value, HeapWriteKind::XwidgetViewData);
+    let ptr = value.as_veclike_ptr().unwrap() as *mut XwidgetViewObj;
+    Some(f(unsafe { &mut *ptr }))
 }

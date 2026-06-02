@@ -257,6 +257,10 @@ impl DumpEncoder {
             ValueKind::Veclike(VecLikeType::Window) => DumpValue::Window(v.as_window_id().unwrap()),
             ValueKind::Veclike(VecLikeType::Frame) => DumpValue::Frame(v.as_frame_id().unwrap()),
             ValueKind::Veclike(VecLikeType::Timer) => DumpValue::Timer(v.as_timer_id().unwrap()),
+            ValueKind::Veclike(VecLikeType::Xwidget)
+            | ValueKind::Veclike(VecLikeType::XwidgetView) => {
+                panic!("pdump: xwidget objects are not portable")
+            }
             ValueKind::Veclike(VecLikeType::Bignum) => {
                 DumpValue::Bignum(v.as_bignum().unwrap().to_string())
             }
@@ -2509,6 +2513,9 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
         }
         ValueKind::Veclike(VecLikeType::Timer) => {
             DumpHeapObject::Timer(value.as_timer_id().expect("timer"))
+        }
+        ValueKind::Veclike(VecLikeType::Xwidget) | ValueKind::Veclike(VecLikeType::XwidgetView) => {
+            panic!("pdump: xwidget objects are not portable")
         }
         ValueKind::Veclike(VecLikeType::Subr) => {
             let ptr = value.as_veclike_ptr().expect("subr") as *const SubrObj;

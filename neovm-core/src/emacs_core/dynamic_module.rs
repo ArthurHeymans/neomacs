@@ -796,6 +796,8 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
             VecLikeType::Window => "window",
             VecLikeType::Frame => "frame",
             VecLikeType::Timer => "timer",
+            VecLikeType::Xwidget => "xwidget",
+            VecLikeType::XwidgetView => "xwidget-view",
             VecLikeType::Subr => "primitive-function",
             VecLikeType::Bignum => "bignum",
             VecLikeType::SymbolWithPos => "symbol-with-pos",
