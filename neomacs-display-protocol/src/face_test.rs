@@ -4,11 +4,11 @@ use super::*;
 fn basic_face_ids_preserve_gnu_slots_and_names() {
     let faces = [
         (BasicFaceId::Default, 0, "default"),
-        (BasicFaceId::ModeLine, 1, "mode-line"),
+        (BasicFaceId::ModeLineActive, 1, "mode-line-active"),
         (BasicFaceId::ModeLineInactive, 2, "mode-line-inactive"),
         (BasicFaceId::ToolBar, 3, "tool-bar"),
         (BasicFaceId::Fringe, 4, "fringe"),
-        (BasicFaceId::HeaderLine, 5, "header-line"),
+        (BasicFaceId::HeaderLineActive, 5, "header-line-active"),
         (BasicFaceId::HeaderLineInactive, 6, "header-line-inactive"),
         (BasicFaceId::ScrollBar, 7, "scroll-bar"),
         (BasicFaceId::Border, 8, "border"),
@@ -81,16 +81,10 @@ fn box_type_codes_match_gnu_face_box_type() {
 }
 
 #[test]
-fn basic_face_id_accepts_fringe_aliases() {
+fn basic_face_id_rejects_fringe_area_symbols() {
     assert_eq!(BasicFaceId::from_name("fringe"), Some(BasicFaceId::Fringe));
-    assert_eq!(
-        BasicFaceId::from_name("left-fringe"),
-        Some(BasicFaceId::Fringe)
-    );
-    assert_eq!(
-        BasicFaceId::from_name("right-fringe"),
-        Some(BasicFaceId::Fringe)
-    );
+    assert_eq!(BasicFaceId::from_name("left-fringe"), None);
+    assert_eq!(BasicFaceId::from_name("right-fringe"), None);
     assert_eq!(BasicFaceId::from_name("unknown-face"), None);
 }
 

@@ -91,16 +91,11 @@ impl BoxType {
 #[strum(serialize_all = "kebab-case")]
 pub enum BasicFaceId {
     Default = 0,
-    ModeLine = 1,
+    ModeLineActive = 1,
     ModeLineInactive = 2,
     ToolBar = 3,
-    #[strum(
-        to_string = "fringe",
-        serialize = "left-fringe",
-        serialize = "right-fringe"
-    )]
     Fringe = 4,
-    HeaderLine = 5,
+    HeaderLineActive = 5,
     HeaderLineInactive = 6,
     ScrollBar = 7,
     Border = 8,

@@ -1035,7 +1035,7 @@ pub fn window_params_from_neovm(
     // height and lets realized face metrics grow from there.
     let mode_line_height = if wants_mode_line {
         let mode_line_face_name = if is_selected {
-            "mode-line"
+            "mode-line-active"
         } else {
             "mode-line-inactive"
         };

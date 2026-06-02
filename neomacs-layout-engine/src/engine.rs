@@ -3221,7 +3221,7 @@ impl LayoutEngine {
 
         let mode_line_face = if params.mode_line_height > 0.0 {
             Some(face_resolver.resolve_named_face(if params.selected {
-                "mode-line"
+                "mode-line-active"
             } else {
                 "mode-line-inactive"
             }))
