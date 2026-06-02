@@ -3,7 +3,8 @@
 //! Mirrors the existing TTY menu-bar walk, but produces GUI overlay
 //! payloads for the render thread from the active Lisp keymaps.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+use std::str::FromStr;
 
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neovm_core::emacs_core::image::{ImageSpecKey, ImageType};
@@ -13,8 +14,29 @@ use neovm_core::emacs_core::keymap::{
 };
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::window::FrameId;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::tty_menu_bar::{collect_tty_menu_bar_items, collect_tty_menu_bar_items_for_frame};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum ToolBarIconTheme {
+    Gnu,
+    Neomacs,
+    VscodeLike,
+    JetbrainsLike,
+    AtomLike,
+    Material,
+}
+
+impl ToolBarIconTheme {
+    fn directory(self) -> Option<&'static str> {
+        match self {
+            Self::Gnu => None,
+            theme => Some(theme.into()),
+        }
+    }
+}
 
 pub fn compact_bar_mode_enabled(eval: &Context) -> bool {
     eval.obarray()
@@ -134,7 +156,7 @@ fn parse_tool_bar_item(
             .unwrap_or_default();
     }
     let image = plist_lookup(&plist, MenuItemProperty::Image)
-        .and_then(|image| tool_bar_image_source(&image));
+        .and_then(|image| tool_bar_image_source(eval, &image));
     let help = plist_lookup(&plist, MenuItemProperty::Help)
         .and_then(|value| value.as_runtime_string_owned())
         .unwrap_or_default();
@@ -231,11 +253,11 @@ fn plist_lookup_by_symbol(
     None
 }
 
-fn tool_bar_image_source(value: &Value) -> Option<ToolBarImageSource> {
+fn tool_bar_image_source(eval: &Context, value: &Value) -> Option<ToolBarImageSource> {
     image_file_from_spec(value)
         .or_else(|| best_image_file_from_expression(value))
         .map(|path| ToolBarImageSource::File {
-            path: resolve_tool_bar_image_path(&path),
+            path: themed_tool_bar_image_path(eval, &path),
         })
 }
 
@@ -309,6 +331,93 @@ fn toolbar_image_type_rank(image_type: ImageType) -> u8 {
     }
 }
 
+fn themed_tool_bar_image_path(eval: &Context, path: &str) -> String {
+    let original_path = resolve_tool_bar_image_path(path);
+    let Some(icon_name) =
+        tool_bar_icon_name_from_path(path).or_else(|| tool_bar_icon_name_from_path(&original_path))
+    else {
+        return original_path;
+    };
+
+    if let Some(path) = custom_tool_bar_icon_path(eval, &icon_name) {
+        return path;
+    }
+
+    let theme = current_tool_bar_icon_theme(eval);
+    if theme == ToolBarIconTheme::Gnu {
+        return original_path;
+    }
+
+    themed_tool_bar_icon_path(theme, &icon_name)
+        .or_else(|| themed_tool_bar_icon_path(ToolBarIconTheme::Neomacs, &icon_name))
+        .unwrap_or(original_path)
+}
+
+fn current_tool_bar_icon_theme(eval: &Context) -> ToolBarIconTheme {
+    eval.obarray()
+        .symbol_value("neomacs-toolbar-icon-theme")
+        .and_then(|value| value.as_symbol_name())
+        .and_then(|name| ToolBarIconTheme::from_str(name).ok())
+        .unwrap_or(ToolBarIconTheme::JetbrainsLike)
+}
+
+fn custom_tool_bar_icon_path(eval: &Context, icon_name: &str) -> Option<String> {
+    let directory = eval
+        .obarray()
+        .symbol_value("neomacs-toolbar-icon-directory")
+        .and_then(|value| value.as_runtime_string_owned())?;
+    let directory = directory.trim();
+    if directory.is_empty() {
+        return None;
+    }
+    let path = Path::new(directory).join(format!("{icon_name}.svg"));
+    if path.exists() {
+        return Some(path.to_string_lossy().into_owned());
+    }
+    None
+}
+
+fn themed_tool_bar_icon_path(theme: ToolBarIconTheme, icon_name: &str) -> Option<String> {
+    let directory = theme.directory()?;
+    let relative = Path::new(directory).join(format!("{icon_name}.svg"));
+    resolve_tool_bar_icon_theme_path(&relative)
+}
+
+fn tool_bar_icon_name_from_path(path: &str) -> Option<String> {
+    let mut parts = normal_path_components(path);
+    if parts.is_empty() {
+        return None;
+    }
+
+    if let Some(pos) = parts
+        .windows(2)
+        .position(|window| window[0] == "etc" && window[1] == "images")
+    {
+        parts.drain(..pos + 2);
+    }
+    if parts.first().is_some_and(|part| part == "low-color") {
+        parts.remove(0);
+    }
+
+    let last = parts.pop()?;
+    let stem = Path::new(&last).file_stem()?.to_str()?.to_string();
+    if stem.is_empty() {
+        return None;
+    }
+    parts.push(stem);
+    Some(parts.join("/"))
+}
+
+fn normal_path_components(path: &str) -> Vec<String> {
+    Path::new(path)
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => value.to_str().map(str::to_string),
+            _ => None,
+        })
+        .collect()
+}
+
 fn resolve_tool_bar_image_path(path: &str) -> String {
     let original = Path::new(path);
     if original.is_absolute() && original.exists() {
@@ -322,6 +431,42 @@ fn resolve_tool_bar_image_path(path: &str) -> String {
     }
 
     path.to_string()
+}
+
+fn resolve_tool_bar_icon_theme_path(relative_path: &Path) -> Option<String> {
+    tool_bar_icon_theme_load_candidates(relative_path)
+        .into_iter()
+        .find(|candidate| candidate.exists())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+fn tool_bar_icon_theme_load_candidates(relative_path: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("etc/toolbar-icons").join(relative_path));
+    }
+    candidates.push(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../etc/toolbar-icons")
+            .join(relative_path),
+    );
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(exe_dir) = exe.parent()
+    {
+        candidates.push(exe_dir.join("etc/toolbar-icons").join(relative_path));
+        candidates.push(
+            exe_dir
+                .join("../share/neomacs/etc/toolbar-icons")
+                .join(relative_path),
+        );
+        candidates.push(
+            exe_dir
+                .join("../Resources/etc/toolbar-icons")
+                .join(relative_path),
+        );
+    }
+    candidates
 }
 
 fn tool_bar_image_load_candidates(path: &Path) -> Vec<PathBuf> {

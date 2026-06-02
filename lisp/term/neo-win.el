@@ -637,6 +637,28 @@ Only takes effect when window decorations are disabled."
 (declare-function neomacs-set-toolbar-config "neomacsterm.c"
   (&optional icon-size padding))
 
+(defcustom neomacs-toolbar-icon-theme 'jetbrains-like
+  "Icon theme used for GPU tool-bar image lookup.
+The value `gnu' keeps GNU Emacs image lookup unchanged.  Other values
+replace recognized GNU tool-bar image names with SVG files from
+\"etc/toolbar-icons\" and fall back to GNU images when no themed icon exists."
+  :type '(choice (const :tag "GNU Emacs images" gnu)
+                 (const :tag "Neomacs" neomacs)
+                 (const :tag "VS Code-like" vscode-like)
+                 (const :tag "JetBrains-like" jetbrains-like)
+                 (const :tag "Atom-like" atom-like)
+                 (const :tag "Material" material))
+  :group 'frames)
+
+(defcustom neomacs-toolbar-icon-directory nil
+  "Directory containing user-provided SVG tool-bar icons.
+When non-nil, this directory is checked before `neomacs-toolbar-icon-theme'.
+Files should use GNU tool-bar image base names, for example \"save.svg\" or
+\"mail/compose.svg\"."
+  :type '(choice (const :tag "Use selected theme" nil)
+                 directory)
+  :group 'frames)
+
 (defcustom neomacs-toolbar-icon-size 24
   "Size of toolbar icons in pixels."
   :type 'integer
