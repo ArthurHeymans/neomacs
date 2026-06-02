@@ -10,6 +10,7 @@ use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_pr
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::BufferManager;
 use malachite::integer::Integer;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 // ---------------------------------------------------------------------------
 // Argument helpers (duplicated from builtins.rs — they are not `pub`)
@@ -903,25 +904,27 @@ pub(crate) fn builtin_backward_char(
     builtin_forward_char(eval, vec![Value::fixnum(-n)])
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumString, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+#[strum(serialize_all = "lowercase")]
 enum SkipCharClass {
-    Alnum,
-    Alpha,
-    Blank,
-    Cntrl,
-    Digit,
-    Graph,
-    Lower,
-    Print,
-    Punct,
-    Space,
-    Upper,
-    Xdigit,
-    Ascii,
-    Word,
-    Nonascii,
-    Unibyte,
-    Multibyte,
+    Alnum = 1,
+    Alpha = 2,
+    Word = 3,
+    Graph = 4,
+    Print = 5,
+    Lower = 6,
+    Upper = 7,
+    Punct = 8,
+    Cntrl = 9,
+    Digit = 10,
+    Xdigit = 11,
+    Blank = 12,
+    Space = 13,
+    Multibyte = 14,
+    Nonascii = 15,
+    Ascii = 16,
+    Unibyte = 17,
 }
 
 #[derive(Clone, Debug)]
@@ -949,30 +952,11 @@ fn parse_skip_char_class(codes: &[u32], i: usize) -> Result<Option<(SkipCharClas
                 .iter()
                 .filter_map(|code| char::from_u32(*code))
                 .collect();
-            let class = match name.as_str() {
-                "alnum" => SkipCharClass::Alnum,
-                "alpha" => SkipCharClass::Alpha,
-                "blank" => SkipCharClass::Blank,
-                "cntrl" => SkipCharClass::Cntrl,
-                "digit" => SkipCharClass::Digit,
-                "graph" => SkipCharClass::Graph,
-                "lower" => SkipCharClass::Lower,
-                "print" => SkipCharClass::Print,
-                "punct" => SkipCharClass::Punct,
-                "space" => SkipCharClass::Space,
-                "upper" => SkipCharClass::Upper,
-                "xdigit" => SkipCharClass::Xdigit,
-                "ascii" => SkipCharClass::Ascii,
-                "word" => SkipCharClass::Word,
-                "nonascii" => SkipCharClass::Nonascii,
-                "unibyte" => SkipCharClass::Unibyte,
-                "multibyte" => SkipCharClass::Multibyte,
-                _ => {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string("Invalid ISO C character class")],
-                    ));
-                }
+            let Ok(class) = name.parse::<SkipCharClass>() else {
+                return Err(signal(
+                    "error",
+                    vec![Value::string("Invalid ISO C character class")],
+                ));
             };
             return Ok(Some((class, end + 2)));
         }
