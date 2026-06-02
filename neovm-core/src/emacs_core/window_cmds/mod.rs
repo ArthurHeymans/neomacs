@@ -19,6 +19,7 @@ use crate::window::{
     window_parent_id, window_prev_sibling_id,
 };
 use std::collections::HashSet;
+use strum::EnumString;
 
 pub(crate) use super::builtins::symbols::{
     builtin_resize_mini_window_internal, builtin_set_window_new_normal,
@@ -126,6 +127,81 @@ fn find_or_create_buffer_by_name_arg(
     Ok(buffers
         .find_buffer_by_name(&name)
         .unwrap_or_else(|| buffers.create_buffer(&name)))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+enum AllFramesSymbol {
+    Visible,
+}
+
+impl AllFramesSymbol {
+    fn from_lisp_value(value: Value) -> Option<Self> {
+        value.as_symbol_name()?.parse().ok()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AllFramesScope {
+    BaseFrame,
+    AllFrames,
+    VisibleFrames,
+    VisibleOrIconifiedFrames,
+    SpecificFrame(FrameId),
+}
+
+fn decode_all_frames_scope(
+    frames: &FrameManager,
+    value: Option<Value>,
+) -> Result<AllFramesScope, Flow> {
+    let Some(value) = value else {
+        return Ok(AllFramesScope::BaseFrame);
+    };
+    if value.is_nil() {
+        return Ok(AllFramesScope::BaseFrame);
+    }
+    if value == Value::T {
+        return Ok(AllFramesScope::AllFrames);
+    }
+    if AllFramesSymbol::from_lisp_value(value) == Some(AllFramesSymbol::Visible) {
+        return Ok(AllFramesScope::VisibleFrames);
+    }
+    if value.as_fixnum() == Some(0) {
+        return Ok(AllFramesScope::VisibleOrIconifiedFrames);
+    }
+    if let Some(raw_id) = value.as_frame_id() {
+        let frame_id = FrameId(raw_id);
+        if frames.get(frame_id).is_none() {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("frame-live-p"), value],
+            ));
+        }
+        return Ok(AllFramesScope::SpecificFrame(frame_id));
+    }
+    Ok(AllFramesScope::BaseFrame)
+}
+
+fn frame_ids_for_all_frames_scope(
+    frames: &FrameManager,
+    base_fid: FrameId,
+    scope: AllFramesScope,
+) -> Vec<FrameId> {
+    let mut ids = match scope {
+        AllFramesScope::BaseFrame => vec![base_fid],
+        AllFramesScope::AllFrames => frames.frame_list(),
+        AllFramesScope::VisibleFrames | AllFramesScope::VisibleOrIconifiedFrames => frames
+            .frame_list()
+            .into_iter()
+            .filter(|frame_id| frames.get(*frame_id).is_some_and(|frame| frame.visible))
+            .collect(),
+        AllFramesScope::SpecificFrame(frame_id) => vec![frame_id],
+    };
+    ids.sort_by_key(|frame_id| frame_id.0);
+    if let Some(start_pos) = ids.iter().position(|frame_id| *frame_id == base_fid) {
+        ids.rotate_left(start_pos);
+    }
+    ids
 }
 
 #[derive(Clone, Debug)]
@@ -3416,48 +3492,10 @@ pub(crate) fn builtin_window_list_1(
         }
     };
 
-    // ALL-FRAMES matches GNU Emacs: nil/default => WINDOW's frame; t => all
-    // frames; 'visible and 0 => visible/iconified frames (we only model
-    // visibility); a frame object => that frame; anything else => WINDOW's frame.
-    let mut frame_ids: Vec<FrameId> = if args.get(2).is_none_or(|v| v.is_nil()) {
-        vec![fid]
-    } else {
-        let af = args.get(2).unwrap();
-        if *af == Value::T {
-            let mut ids = frames.frame_list();
-            ids.sort_by_key(|f| f.0);
-            ids
-        } else if af.as_symbol_name() == Some("visible") {
-            let mut ids = frames.frame_list();
-            ids.sort_by_key(|f| f.0);
-            ids.into_iter()
-                .filter(|frame_id| frames.get(*frame_id).is_some_and(|frame| frame.visible))
-                .collect()
-        } else if af.as_fixnum() == Some(0) {
-            let mut ids = frames.frame_list();
-            ids.sort_by_key(|f| f.0);
-            ids.into_iter()
-                .filter(|frame_id| frames.get(*frame_id).is_some_and(|frame| frame.visible))
-                .collect()
-        } else if let Some(raw_id) = af.as_frame_id() {
-            let frame_id = FrameId(raw_id);
-            if frames.get(frame_id).is_none() {
-                return Err(signal(
-                    "wrong-type-argument",
-                    vec![Value::symbol("frame-live-p"), args[2]],
-                ));
-            }
-            vec![frame_id]
-        } else {
-            vec![fid]
-        }
-    };
+    let scope = decode_all_frames_scope(frames, args.get(2).copied())?;
+    let mut frame_ids = frame_ids_for_all_frames_scope(frames, fid, scope);
     if frame_ids.is_empty() {
         frame_ids.push(fid);
-    }
-
-    if let Some(start_pos) = frame_ids.iter().position(|frame_id| *frame_id == fid) {
-        frame_ids.rotate_left(start_pos);
     }
 
     #[derive(Clone, Copy)]
@@ -3515,49 +3553,51 @@ pub(crate) fn builtin_window_list_1(
 
 /// `(get-buffer-window &optional BUFFER-OR-NAME ALL-FRAMES)` -> window or nil.
 ///
-/// Batch-compatible behavior: search the selected frame for a window showing
-/// the requested buffer.
+/// Search the GNU `ALL-FRAMES` scope for a window showing the requested buffer.
 pub(crate) fn builtin_get_buffer_window(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("get-buffer-window", &args, 2)?;
-    if args.first().is_none_or(|v| v.is_nil()) {
-        return Ok(Value::NIL);
-    }
-    let val = args.first().unwrap();
-    let target = match val.kind() {
-        ValueKind::String => match find_buffer_by_name_arg(&eval.buffers, val)? {
-            Some(id) => id,
+    let fid = ensure_selected_frame_id(eval);
+    let target = match args.first().copied() {
+        Some(value) if !value.is_nil() => match value.kind() {
+            ValueKind::String => match find_buffer_by_name_arg(&eval.buffers, &value)? {
+                Some(id) => id,
+                None => return Ok(Value::NIL),
+            },
+            ValueKind::Veclike(VecLikeType::Buffer) => {
+                let bid = value.as_buffer_id().unwrap();
+                if eval.buffers.get(bid).is_none() {
+                    return Ok(Value::NIL);
+                }
+                bid
+            }
+            _ => {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("stringp"), value],
+                ));
+            }
+        },
+        _ => match eval.buffers.current_buffer_id() {
+            Some(buffer_id) => buffer_id,
             None => return Ok(Value::NIL),
         },
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = val.as_buffer_id().unwrap();
-            if eval.buffers.get(bid).is_none() {
-                return Ok(Value::NIL);
-            }
-            bid
-        }
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("stringp"), *val],
-            ));
-        }
     };
-    let fid = ensure_selected_frame_id(eval);
-    let frame = eval
-        .frames
-        .get(fid)
-        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-
-    for wid in frame.window_list() {
-        let matches = frame
-            .find_window(wid)
-            .and_then(|w| w.buffer_id())
-            .is_some_and(|bid| bid == target);
-        if matches {
-            return Ok(window_value(wid));
+    let scope = decode_all_frames_scope(&eval.frames, args.get(1).copied())?;
+    for frame_id in frame_ids_for_all_frames_scope(&eval.frames, fid, scope) {
+        let Some(frame) = eval.frames.get(frame_id) else {
+            continue;
+        };
+        for wid in frame.window_list() {
+            let matches = frame
+                .find_window(wid)
+                .and_then(|w| w.buffer_id())
+                .is_some_and(|bid| bid == target);
+            if matches {
+                return Ok(window_value(wid));
+            }
         }
     }
 

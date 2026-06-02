@@ -1122,8 +1122,8 @@ fn get_buffer_window_and_list_match_optional_and_missing_buffer_semantics() {
         "(let ((vm-gbwl-live (generate-new-buffer \"gbwl-live\"))
                (vm-gbwl-dead (generate-new-buffer \"gbwl-dead\")))
            (list
-            (condition-case err (get-buffer-window) (error err))
-            (condition-case err (get-buffer-window nil) (error err))
+            (windowp (condition-case err (get-buffer-window) (error err)))
+            (windowp (condition-case err (get-buffer-window nil) (error err)))
             (condition-case err (get-buffer-window \"missing\") (error err))
             (windowp (get-buffer-window \"*scratch*\"))
             (length (get-buffer-window-list))
@@ -1139,7 +1139,7 @@ fn get_buffer_window_and_list_match_optional_and_missing_buffer_semantics() {
     );
     assert_eq!(
         results[0],
-        "OK (nil nil nil t 1 1 1 (error \"No such live buffer missing\") (error \"No such buffer 1\") nil (error \"No such live buffer #<killed buffer>\"))"
+        "OK (t t nil t 1 1 1 (error \"No such live buffer missing\") (error \"No such buffer 1\") nil (error \"No such live buffer #<killed buffer>\"))"
     );
 }
 
@@ -1263,6 +1263,26 @@ fn window_list_1_all_frames_includes_other_frame_windows() {
                (delete-frame f2))))",
     );
     assert_eq!(r, "OK (t t t t t t)");
+}
+
+#[test]
+fn get_buffer_window_all_frames_selects_gnu_frame_scope() {
+    crate::test_utils::init_test_tracing();
+    let r = eval_one_with_frame(
+        "(let ((f1 (selected-frame))
+              (f2 (make-frame)))
+           (let ((w1 (progn (select-frame f1) (selected-window)))
+                 (w2 (progn (select-frame f2) (selected-window)))
+                 (buf (current-buffer)))
+             (select-frame f1)
+             (prog1
+                 (list (eq (get-buffer-window buf nil) w1)
+                       (eq (get-buffer-window buf f2) w2)
+                       (eq (get-buffer-window buf :bad) w1))
+               (select-frame f1)
+               (delete-frame f2))))",
+    );
+    assert_eq!(r, "OK (t t t)");
 }
 
 #[test]
