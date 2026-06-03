@@ -1451,6 +1451,20 @@ impl PartialEq for BufferStateMarkers {
 }
 impl Eq for BufferStateMarkers {}
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AccessibleBufferRegionSnapshot {
+    start_char: CharPos0,
+    start_emacs_byte: EmacsBytePos,
+    end_char: CharPos0,
+    end_emacs_byte: EmacsBytePos,
+}
+
+impl AccessibleBufferRegionSnapshot {
+    pub fn end_emacs_byte(self) -> EmacsBytePos {
+        self.end_emacs_byte
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LabeledRestrictionLabel {
     Outermost,
@@ -2318,6 +2332,34 @@ impl Buffer {
     /// Remove narrowing — make the entire buffer accessible again.
     pub fn widen(&mut self) {
         self.narrow_to_byte_region(0, self.total_bytes());
+    }
+
+    pub fn accessible_region_snapshot(&self) -> AccessibleBufferRegionSnapshot {
+        AccessibleBufferRegionSnapshot {
+            start_char: CharPos0::new(self.begv),
+            start_emacs_byte: EmacsBytePos::new(self.begv_byte),
+            end_char: CharPos0::new(self.zv),
+            end_emacs_byte: EmacsBytePos::new(self.zv_byte),
+        }
+    }
+
+    pub fn restore_accessible_region(&mut self, snapshot: AccessibleBufferRegionSnapshot) {
+        self.begv = snapshot.start_char.get();
+        self.begv_byte = snapshot.start_emacs_byte.get();
+        self.zv = snapshot.end_char.get();
+        self.zv_byte = snapshot.end_emacs_byte.get();
+        self.goto_byte(self.pt_byte);
+    }
+
+    pub fn restore_accessible_region_with_current_full_end(
+        &mut self,
+        snapshot: AccessibleBufferRegionSnapshot,
+    ) {
+        self.begv = snapshot.start_char.get();
+        self.begv_byte = snapshot.start_emacs_byte.get();
+        self.zv = self.total_chars();
+        self.zv_byte = self.total_bytes();
+        self.goto_byte(self.pt_byte);
     }
 
     pub fn register_marker(

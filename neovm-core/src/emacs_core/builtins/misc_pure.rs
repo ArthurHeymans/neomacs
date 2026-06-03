@@ -46,13 +46,10 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     let _ = ctx.set_current_buffer_unrecorded(buf_id);
     if let Some(buf) = ctx.buffers.get_mut(buf_id) {
         let old_pt_byte = buf.point_byte();
-        let old_begv = buf.begv;
-        let old_begv_byte = buf.begv_byte;
-        let old_zv = buf.zv;
-        let old_zv_byte = buf.zv_byte;
+        let old_accessible = buf.accessible_region_snapshot();
         let old_total_bytes = buf.total_bytes();
         let point_at_end = old_pt_byte == old_total_bytes;
-        let zv_at_end = old_zv_byte == old_total_bytes;
+        let zv_at_end = old_accessible.end_emacs_byte().get() == old_total_bytes;
 
         buf.widen();
         buf.goto_byte(buf.total_bytes());
@@ -65,15 +62,10 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         buf.insert("\n");
 
         let new_total_bytes = buf.total_bytes();
-        let new_total_chars = buf.total_chars();
-        buf.begv = old_begv;
-        buf.begv_byte = old_begv_byte;
         if zv_at_end {
-            buf.zv = new_total_chars;
-            buf.zv_byte = new_total_bytes;
+            buf.restore_accessible_region_with_current_full_end(old_accessible);
         } else {
-            buf.zv = old_zv;
-            buf.zv_byte = old_zv_byte;
+            buf.restore_accessible_region(old_accessible);
         }
         let restored_point = if point_at_end {
             new_total_bytes

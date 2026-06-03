@@ -447,6 +447,49 @@ fn byte_position_aliases_match_legacy_buffer_apis() {
 }
 
 #[test]
+fn accessible_region_snapshot_restores_saved_bounds() {
+    crate::test_utils::init_test_tracing();
+    for kind in implemented_text_backends() {
+        let mut buf = buf_with_text_backend("aébc", kind);
+        buf.narrow_to_byte_region(1, 4);
+        buf.goto_byte(3);
+
+        let saved = buf.accessible_region_snapshot();
+        buf.widen();
+        buf.goto_byte(buf.total_bytes());
+        buf.insert("Z");
+        buf.restore_accessible_region(saved);
+
+        assert_eq!(buf.point_min_byte(), 1);
+        assert_eq!(buf.point_max_byte(), 4);
+        assert_eq!(buf.point_min_char(), 1);
+        assert_eq!(buf.point_max_char(), 3);
+        assert_eq!(buf.point_byte(), 4);
+    }
+}
+
+#[test]
+fn accessible_region_snapshot_can_restore_end_to_current_full_buffer() {
+    crate::test_utils::init_test_tracing();
+    for kind in implemented_text_backends() {
+        let mut buf = buf_with_text_backend("aébc", kind);
+        buf.narrow_to_byte_region(1, buf.total_bytes());
+
+        let saved = buf.accessible_region_snapshot();
+        buf.widen();
+        buf.goto_byte(buf.total_bytes());
+        buf.insert("Z");
+        buf.restore_accessible_region_with_current_full_end(saved);
+
+        assert_eq!(buf.point_min_byte(), 1);
+        assert_eq!(buf.point_max_byte(), buf.total_bytes());
+        assert_eq!(buf.point_min_char(), 1);
+        assert_eq!(buf.point_max_char(), buf.total_chars());
+        assert_eq!(buf.point_byte(), buf.total_bytes());
+    }
+}
+
+#[test]
 fn cached_char_positions_track_multibyte_edits_and_narrowing() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
