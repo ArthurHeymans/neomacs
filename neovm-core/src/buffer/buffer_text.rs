@@ -502,7 +502,7 @@ impl BufferText {
         let mut storage = self.storage.borrow_mut();
         storage
             .backend
-            .replace_same_len_emacs_bytes(range, replacement);
+            .replace_same_len_emacs_byte_range(range, replacement);
         Self::refresh_backend_metrics(&mut storage);
     }
 

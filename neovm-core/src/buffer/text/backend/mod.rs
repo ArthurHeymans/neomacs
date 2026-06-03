@@ -232,7 +232,7 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn replace_same_len_emacs_bytes(
+    pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
         replacement: &[u8],
