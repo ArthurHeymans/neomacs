@@ -138,6 +138,7 @@ fn replacement_region_bounds(
     backward: bool,
     region_noncontiguous: bool,
 ) -> Result<(usize, usize), Flow> {
+    let accessible = buf.accessible_emacs_byte_region();
     if region_noncontiguous {
         let mark = buf.mark().ok_or_else(|| {
             signal(
@@ -153,13 +154,13 @@ fn replacement_region_bounds(
 
     let start = match start_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ if backward => buf.point_min(),
+        _ if backward => accessible.start_usize(),
         _ => buf.point(),
     };
     let end = match end_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ if backward => buf.point(),
-        _ => buf.point_max(),
+        _ => accessible.end_usize(),
     };
     if start <= end {
         Ok((start, end))
@@ -173,13 +174,14 @@ fn line_operation_region_bounds(
     start_arg: Option<&Value>,
     end_arg: Option<&Value>,
 ) -> Result<(usize, usize), Flow> {
+    let accessible = buf.accessible_emacs_byte_region();
     let start = match start_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ => buf.point(),
     };
     let end = match end_arg {
         Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
-        _ => buf.point_max(),
+        _ => accessible.end_usize(),
     };
     if start <= end {
         Ok((start, end))
@@ -1517,7 +1519,7 @@ fn replace_string_eval_impl(
                     )],
                 ));
             }
-            buf.point_max()
+            buf.accessible_emacs_byte_region().end_usize()
         };
         let current_id = eval
             .buffers
@@ -1751,7 +1753,7 @@ fn replace_regexp_eval_impl(
                     )],
                 ));
             }
-            buf.point_max()
+            buf.accessible_emacs_byte_region().end_usize()
         };
         let current_id = eval
             .buffers
@@ -1939,9 +1941,10 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let accessible = buf.accessible_emacs_byte_region();
         let (source_text, source) =
-            buffer_region_storage_string(buf, buf.point_min(), buf.point_max());
-        (buf.point_min(), start, end, source_text, source)
+            buffer_region_storage_string(buf, accessible.start_usize(), accessible.end_usize());
+        (accessible.start_usize(), start, end, source_text, source)
     };
     let source_byte_len = source_text.sbytes();
 
@@ -2029,9 +2032,10 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let (start, end) = line_operation_region_bounds(buf, args.get(1), args.get(2))?;
+        let accessible = buf.accessible_emacs_byte_region();
         let (source_text, source) =
-            buffer_region_storage_string(buf, buf.point_min(), buf.point_max());
-        (buf.point_min(), start, end, source_text, source)
+            buffer_region_storage_string(buf, accessible.start_usize(), accessible.end_usize());
+        (accessible.start_usize(), start, end, source_text, source)
     };
     let source_byte_len = source_text.sbytes();
 
