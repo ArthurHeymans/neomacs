@@ -59,11 +59,20 @@ fn pdump_round_trip_preserves_buffer_text_backend_kind() {
 
     let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
     let restored = loaded.eval_str(
-        r#"(save-current-buffer
-             (set-buffer (get-buffer "piece-dump"))
-             (list (neomacs-buffer-text-backend) (buffer-string)))"#,
+        r#"(list
+             (neomacs-default-buffer-text-backend)
+             (save-current-buffer
+               (set-buffer (get-buffer "piece-dump"))
+               (list (neomacs-buffer-text-backend) (buffer-string)))
+             (save-current-buffer
+               (set-buffer (get-buffer-create "piece-after-load"))
+               (insert "z")
+               (list (neomacs-buffer-text-backend) (buffer-string))))"#,
     );
-    assert_eq!(format_eval_result(&restored), r#"OK (piece-tree "éabc")"#);
+    assert_eq!(
+        format_eval_result(&restored),
+        r#"OK (piece-tree (piece-tree "éabc") (piece-tree "z"))"#
+    );
 }
 
 #[test]

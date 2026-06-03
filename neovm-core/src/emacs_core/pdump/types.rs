@@ -550,7 +550,6 @@ pub enum DumpBufferTextBackendKind {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpGapBuffer {
-    #[serde(default)]
     pub backend_kind: DumpBufferTextBackendKind,
     pub text: Vec<u8>,
 }
@@ -761,6 +760,11 @@ pub struct DumpBufferManager {
     /// `BUFFER_SLOT_INFO` in `load_buffer_manager`.
     #[serde(default)]
     pub buffer_defaults: Vec<DumpValue>,
+    /// Neomacs text backend selector for future buffers. GNU always creates
+    /// ordinary buffers with gap-buffer text; this extension keeps that as the
+    /// initial value and only changes future buffer creation when explicitly
+    /// set at runtime.
+    pub default_text_backend_kind: DumpBufferTextBackendKind,
 }
 
 // ---------------------------------------------------------------------------

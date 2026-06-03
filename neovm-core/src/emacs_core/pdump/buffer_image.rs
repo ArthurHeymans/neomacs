@@ -17,10 +17,7 @@ use super::types::{
 };
 
 const BUFFER_MAGIC: [u8; 16] = *b"NEOBUFFER\0\0\0\0\0\0\0";
-const BUFFER_FORMAT_VERSION: u32 = 6;
-const BUFFER_FORMAT_VERSION_WITH_TEXT_BACKEND_KIND: u32 = 6;
-const BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER: u32 = 4;
-const MIN_BUFFER_FORMAT_VERSION: u32 = 5;
+const BUFFER_FORMAT_VERSION: u32 = 7;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -51,6 +48,7 @@ pub(crate) fn buffer_manager_section_bytes(
     for value in &manager.buffer_defaults {
         write_value(&mut bytes, value)?;
     }
+    write_u8(&mut bytes, manager.default_text_backend_kind.into());
     for (id, buffer) in &manager.buffers {
         write_buffer_id(&mut bytes, *id);
         write_buffer(&mut bytes, buffer)?;
@@ -89,25 +87,20 @@ pub(crate) fn load_buffer_manager_section(section: &[u8]) -> Result<DumpBufferMa
 
     let mut cursor = Cursor::new(&section[payload_offset..end]);
     let current = read_opt_buffer_id(&mut cursor)?;
-    let mut buffer_order = Vec::new();
-    if header.version >= BUFFER_FORMAT_VERSION_WITH_BUFFER_ORDER {
-        let order_count = read_len(&mut cursor, "buffer order count")?;
-        buffer_order = Vec::with_capacity(order_count);
-        for _ in 0..order_count {
-            buffer_order.push(read_buffer_id(&mut cursor)?);
-        }
+    let order_count = read_len(&mut cursor, "buffer order count")?;
+    let mut buffer_order = Vec::with_capacity(order_count);
+    for _ in 0..order_count {
+        buffer_order.push(read_buffer_id(&mut cursor)?);
     }
     let mut buffer_defaults =
         Vec::with_capacity(to_usize(header.default_count, "buffer default count")?);
     for _ in 0..header.default_count {
         buffer_defaults.push(cursor.read_value()?);
     }
+    let default_text_backend_kind = read_buffer_text_backend_kind(&mut cursor)?;
     let mut buffers = Vec::with_capacity(to_usize(header.buffer_count, "buffer count")?);
     for _ in 0..header.buffer_count {
-        buffers.push((
-            read_buffer_id(&mut cursor)?,
-            read_buffer(&mut cursor, header.version)?,
-        ));
+        buffers.push((read_buffer_id(&mut cursor)?, read_buffer(&mut cursor)?));
     }
 
     if !cursor.is_empty() {
@@ -124,6 +117,7 @@ pub(crate) fn load_buffer_manager_section(section: &[u8]) -> Result<DumpBufferMa
         next_id: header.next_id,
         next_marker_id: header.next_marker_id,
         buffer_defaults,
+        default_text_backend_kind,
     })
 }
 
@@ -140,7 +134,7 @@ fn read_header(section: &[u8]) -> Result<BufferHeader, DumpError> {
             "buffer section has bad magic".into(),
         ));
     }
-    if !(MIN_BUFFER_FORMAT_VERSION..=BUFFER_FORMAT_VERSION).contains(&header.version) {
+    if header.version != BUFFER_FORMAT_VERSION {
         return Err(DumpError::UnsupportedVersion(header.version));
     }
     if header.header_size != HEADER_SIZE as u32 {
@@ -201,7 +195,7 @@ fn write_buffer(out: &mut Vec<u8>, buffer: &DumpBuffer) -> Result<(), DumpError>
     Ok(())
 }
 
-fn read_buffer(cursor: &mut Cursor<'_>, version: u32) -> Result<DumpBuffer, DumpError> {
+fn read_buffer(cursor: &mut Cursor<'_>) -> Result<DumpBuffer, DumpError> {
     Ok(DumpBuffer {
         id: read_buffer_id(cursor)?,
         name_lisp: read_opt_lisp_string(cursor)?,
@@ -209,7 +203,7 @@ fn read_buffer(cursor: &mut Cursor<'_>, version: u32) -> Result<DumpBuffer, Dump
         last_name_lisp: read_opt_lisp_string(cursor)?,
         last_name: read_opt_string(cursor)?,
         base_buffer: read_opt_buffer_id(cursor)?,
-        text: read_gap_buffer(cursor, version)?,
+        text: read_gap_buffer(cursor)?,
         pt: read_usize(cursor, "buffer point")?,
         pt_char: read_opt_usize(cursor, "buffer point char")?,
         mark: read_opt_usize(cursor, "buffer mark")?,
@@ -256,18 +250,20 @@ fn write_gap_buffer(out: &mut Vec<u8>, buffer: &DumpGapBuffer) -> Result<(), Dum
     write_bytes(out, &buffer.text)
 }
 
-fn read_gap_buffer(cursor: &mut Cursor<'_>, version: u32) -> Result<DumpGapBuffer, DumpError> {
-    let backend_kind = if version >= BUFFER_FORMAT_VERSION_WITH_TEXT_BACKEND_KIND {
-        let tag = cursor.read_u8("buffer text backend kind")?;
-        DumpBufferTextBackendKind::try_from(tag).map_err(|_| {
-            DumpError::ImageFormatError(format!("invalid buffer text backend kind tag: {tag}"))
-        })?
-    } else {
-        DumpBufferTextBackendKind::GapBuffer
-    };
+fn read_gap_buffer(cursor: &mut Cursor<'_>) -> Result<DumpGapBuffer, DumpError> {
+    let backend_kind = read_buffer_text_backend_kind(cursor)?;
     Ok(DumpGapBuffer {
         backend_kind,
         text: read_bytes(cursor)?,
+    })
+}
+
+fn read_buffer_text_backend_kind(
+    cursor: &mut Cursor<'_>,
+) -> Result<DumpBufferTextBackendKind, DumpError> {
+    let tag = cursor.read_u8("buffer text backend kind")?;
+    DumpBufferTextBackendKind::try_from(tag).map_err(|_| {
+        DumpError::ImageFormatError(format!("invalid buffer text backend kind tag: {tag}"))
     })
 }
 
@@ -879,6 +875,7 @@ pub(crate) fn empty_buffer_manager() -> DumpBufferManager {
         next_id: 0,
         next_marker_id: 0,
         buffer_defaults: Vec::new(),
+        default_text_backend_kind: DumpBufferTextBackendKind::GapBuffer,
     }
 }
 
@@ -889,6 +886,7 @@ pub(crate) fn buffer_manager_is_empty(manager: &DumpBufferManager) -> bool {
         && manager.next_id == 0
         && manager.next_marker_id == 0
         && manager.buffer_defaults.is_empty()
+        && manager.default_text_backend_kind == DumpBufferTextBackendKind::GapBuffer
 }
 
 #[cfg(test)]
@@ -1005,6 +1003,7 @@ mod tests {
             next_id: 24,
             next_marker_id: 25,
             buffer_defaults: vec![DumpValue::Int(26)],
+            default_text_backend_kind: DumpBufferTextBackendKind::PieceTree,
         };
 
         let bytes = buffer_manager_section_bytes(&manager).expect("encode buffers");

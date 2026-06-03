@@ -4692,7 +4692,12 @@ impl BufferManager {
         next_marker_id: u64,
         dumped_buffer_order: Option<&[BufferId]>,
         dumped_buffer_defaults: Option<&[crate::emacs_core::value::Value]>,
+        default_text_backend_kind: BufferTextBackendKind,
     ) -> Self {
+        assert!(
+            default_text_backend_kind.is_implemented(),
+            "buffer text backend {default_text_backend_kind:?} is not implemented"
+        );
         let indirect_buffers: Vec<(BufferId, BufferId)> = buffers
             .iter()
             .filter_map(|(id, buffer)| buffer.base_buffer.map(|base_id| (*id, base_id)))
@@ -4743,7 +4748,7 @@ impl BufferManager {
             next_marker_id,
             labeled_restrictions: HashMap::new(),
             dead_buffers: HashMap::new(),
-            default_text_backend_kind: BufferTextBackendKind::GapBuffer,
+            default_text_backend_kind,
             buffer_defaults,
         };
         if let Some(dumped_order) = dumped_buffer_order {

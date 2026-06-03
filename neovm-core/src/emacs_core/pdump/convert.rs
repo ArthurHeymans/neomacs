@@ -2911,6 +2911,7 @@ pub(crate) fn dump_buffer_manager(
             .iter()
             .map(|value| encoder.dump_value(value))
             .collect(),
+        default_text_backend_kind: dump_buffer_text_backend_kind(bm.default_text_backend_kind()),
     }
 }
 
@@ -4790,6 +4791,7 @@ pub(crate) fn load_buffer_manager(
         dbm.next_marker_id,
         dumped_order,
         dumped_defaults,
+        load_buffer_text_backend_kind(dbm.default_text_backend_kind),
     )
 }
 

@@ -194,6 +194,7 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
         mgr.dump_next_marker_id(),
         None,
         None,
+        BufferTextBackendKind::GapBuffer,
     );
 
     let base = restored.get(base_id).expect("base buffer");
@@ -224,6 +225,7 @@ fn from_dump_preserves_dumped_buffer_order() {
         mgr.dump_next_marker_id(),
         Some(&[two, scratch, three, one]),
         None,
+        BufferTextBackendKind::GapBuffer,
     );
 
     assert_eq!(restored.buffer_list(), vec![two, scratch, three, one]);
