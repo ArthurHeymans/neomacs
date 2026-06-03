@@ -184,11 +184,11 @@ impl LayoutBufferView for Buffer {
     }
 
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
-        EmacsBytePos::new(self.point_min_byte())
+        self.point_min_emacs_byte_pos()
     }
 
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos {
-        EmacsBytePos::new(self.point_max_byte())
+        self.point_max_emacs_byte_pos()
     }
 
     fn layout_point_max_char(&self) -> usize {

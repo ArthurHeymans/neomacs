@@ -1880,8 +1880,13 @@ impl Buffer {
     // -- Point queries -------------------------------------------------------
 
     /// Current point as an Emacs byte position.
+    pub fn point_emacs_byte_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::new(self.pt_byte)
+    }
+
+    /// Current point as a raw Emacs byte position.
     pub fn point_byte(&self) -> usize {
-        self.pt_byte
+        self.point_emacs_byte_pos().get()
     }
 
     /// Legacy point accessor retained while buffer internals are byte-only.
@@ -1895,8 +1900,13 @@ impl Buffer {
     }
 
     /// Beginning of the accessible portion (Emacs byte position).
+    pub fn point_min_emacs_byte_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::new(self.begv_byte)
+    }
+
+    /// Beginning of the accessible portion as a raw Emacs byte position.
     pub fn point_min_byte(&self) -> usize {
-        self.begv_byte
+        self.point_min_emacs_byte_pos().get()
     }
 
     /// Beginning of the accessible portion (character position).
@@ -1910,8 +1920,13 @@ impl Buffer {
     }
 
     /// End of the accessible portion (Emacs byte position).
+    pub fn point_max_emacs_byte_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::new(self.zv_byte)
+    }
+
+    /// End of the accessible portion as a raw Emacs byte position.
     pub fn point_max_byte(&self) -> usize {
-        self.zv_byte
+        self.point_max_emacs_byte_pos().get()
     }
 
     /// End of the accessible portion (character position).
@@ -1938,19 +1953,24 @@ impl Buffer {
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the full buffer.
-    pub fn lisp_pos_to_byte(&self, lisp_pos: i64) -> usize {
+    pub fn lisp_pos_to_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
         let char_pos = if lisp_pos > 0 {
             lisp_pos as usize - 1
         } else {
             0
         };
         self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
-            .get()
+    }
+
+    /// Convert a 1-based Lisp character position to a raw byte position,
+    /// clamping to the full buffer.
+    pub fn lisp_pos_to_byte(&self, lisp_pos: i64) -> usize {
+        self.lisp_pos_to_emacs_byte_pos(lisp_pos).get()
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
     /// to the accessible region.
-    pub fn lisp_pos_to_accessible_byte(&self, lisp_pos: i64) -> usize {
+    pub fn lisp_pos_to_accessible_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
         let char_pos = if lisp_pos > 0 {
             lisp_pos as usize - 1
         } else {
@@ -1959,7 +1979,12 @@ impl Buffer {
         let clamped_char = char_pos.clamp(self.point_min_char(), self.point_max_char());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
-            .get()
+    }
+
+    /// Convert a 1-based Lisp character position to a raw byte position,
+    /// clamping to the accessible region.
+    pub fn lisp_pos_to_accessible_byte(&self, lisp_pos: i64) -> usize {
+        self.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos).get()
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
@@ -1967,7 +1992,7 @@ impl Buffer {
     ///
     /// GNU Emacs: `set-marker` clamps to the full buffer, not the narrowed
     /// region, so markers can be placed outside the accessible range.
-    pub fn lisp_pos_to_full_buffer_byte(&self, lisp_pos: i64) -> usize {
+    pub fn lisp_pos_to_full_buffer_emacs_byte_pos(&self, lisp_pos: i64) -> EmacsBytePos {
         let char_pos = if lisp_pos > 0 {
             lisp_pos as usize - 1
         } else {
@@ -1976,7 +2001,12 @@ impl Buffer {
         let clamped_char = char_pos.min(self.total_chars());
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
-            .get()
+    }
+
+    /// Convert a 1-based Lisp character position to a raw byte position,
+    /// clamping to the full buffer range (ignoring narrowing).
+    pub fn lisp_pos_to_full_buffer_byte(&self, lisp_pos: i64) -> usize {
+        self.lisp_pos_to_full_buffer_emacs_byte_pos(lisp_pos).get()
     }
 
     /// Legacy narrowing accessor retained for Lisp-facing callers.
@@ -1987,8 +2017,8 @@ impl Buffer {
     // -- Point movement ------------------------------------------------------
 
     /// Set point in Emacs bytes, clamping to the accessible region `[begv, zv]`.
-    pub fn goto_byte(&mut self, pos: usize) {
-        self.pt_byte = pos.clamp(self.begv_byte, self.zv_byte);
+    pub fn goto_emacs_byte_pos(&mut self, pos: EmacsBytePos) {
+        self.pt_byte = pos.get().clamp(self.begv_byte, self.zv_byte);
         self.pt = if self.pt_byte == self.begv_byte {
             self.begv
         } else if self.pt_byte == self.zv_byte {
@@ -1998,6 +2028,12 @@ impl Buffer {
                 .emacs_byte_pos_to_char_pos(EmacsBytePos::new(self.pt_byte))
                 .get()
         };
+    }
+
+    /// Set point in raw Emacs bytes, clamping to the accessible region
+    /// `[begv, zv]`.
+    pub fn goto_byte(&mut self, pos: usize) {
+        self.goto_emacs_byte_pos(EmacsBytePos::new(pos));
     }
 
     /// Legacy point setter retained while buffer internals are byte-only.
