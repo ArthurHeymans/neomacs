@@ -1159,7 +1159,7 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
     let text = eval
         .buffers
         .get(buffer_id)
-        .map(|buf| buf.buffer_substring_bytes(buf.point_min(), buf.point_max()))
+        .map(|buf| buf.buffer_substring_bytes_range(buf.accessible_emacs_byte_range()))
         .unwrap_or_default();
 
     let mut hasher = Sha1::new();

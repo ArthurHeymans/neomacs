@@ -730,10 +730,7 @@ fn forward_word_with_options(
         return backward_word_with_options(buf, table, -count, honor_properties);
     }
 
-    let chars = buffer_chars_in_range(
-        buf,
-        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
-    );
+    let chars = buffer_chars_in_range(buf, buf.accessible_emacs_byte_range());
     // Convert byte pos to char index within accessible region.
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
@@ -803,10 +800,7 @@ fn backward_word_with_options(
         return forward_word_with_options(buf, table, -count, honor_properties);
     }
 
-    let chars = buffer_chars_in_range(
-        buf,
-        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
-    );
+    let chars = buffer_chars_in_range(buf, buf.accessible_emacs_byte_range());
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx =
@@ -877,10 +871,7 @@ fn skip_syntax_forward_with_options(
 ) -> usize {
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
-    let chars = buffer_chars_in_range(
-        buf,
-        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
-    );
+    let chars = buffer_chars_in_range(buf, buf.accessible_emacs_byte_range());
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx =
@@ -936,10 +927,7 @@ fn skip_syntax_backward_with_options(
 ) -> usize {
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
-    let chars = buffer_chars_in_range(
-        buf,
-        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
-    );
+    let chars = buffer_chars_in_range(buf, buf.accessible_emacs_byte_range());
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx =

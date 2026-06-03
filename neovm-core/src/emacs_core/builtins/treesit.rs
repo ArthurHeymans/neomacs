@@ -233,7 +233,7 @@ fn parser_deleted_error(value: Value) -> Flow {
 }
 
 fn treesit_buffer_source(buffer: &crate::buffer::Buffer) -> LispString {
-    buffer.buffer_substring_lisp_string(buffer.begv_byte, buffer.zv_byte)
+    buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range())
 }
 
 fn node_outdated_error(value: Value) -> Flow {

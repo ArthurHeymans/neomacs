@@ -232,7 +232,7 @@ pub(crate) fn signal_before_change(
     if ctx.treesit.has_editable_tree(current_id)
         && let Some(buf) = ctx.buffers.get(current_id)
     {
-        let source = buf.buffer_substring_lisp_string(buf.begv_byte, buf.zv_byte);
+        let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
         ctx.treesit
             .begin_buffer_edit(current_id, &source, beg.min(end), beg.max(end));
     }
@@ -390,7 +390,7 @@ fn finish_treesit_after_buffer_change(
     if ctx.treesit.has_pending_edit(buffer_id)
         && let Some(buf) = ctx.buffers.get(buffer_id)
     {
-        let source = buf.buffer_substring_lisp_string(buf.begv_byte, buf.zv_byte);
+        let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
         ctx.treesit.finish_buffer_edit(buffer_id, &source, end);
     }
 }

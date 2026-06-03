@@ -1608,9 +1608,6 @@ fn builtin_coding_region(
     else {
         return Ok(Value::NIL);
     };
-    let start_byte = byte_range.start_usize();
-    let end_byte = byte_range.end_usize();
-
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::NIL);
     };
@@ -1618,7 +1615,9 @@ fn builtin_coding_region(
         .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .buffer_substring_lisp_string(start_byte, end_byte);
+        .buffer_substring_lisp_string_range(byte_range);
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
     let result = transformed_region_string(source, &coding, encode)?;
     let result_text = result
         .as_lisp_string()

@@ -771,11 +771,7 @@ pub(crate) fn builtin_buffer_substring(
         ));
     }
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
-    Ok(buffer_slice_value(
-        buf,
-        byte_range.start_usize(),
-        byte_range.end_usize(),
-    ))
+    Ok(buffer_slice_value_range(buf, byte_range))
 }
 
 pub(crate) fn builtin_buffer_string(
@@ -787,9 +783,10 @@ pub(crate) fn builtin_buffer_string(
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let byte_start = buf.point_min();
-    let byte_end = buf.point_max();
-    Ok(buffer_slice_value(buf, byte_start, byte_end))
+    Ok(buffer_slice_value_range(
+        buf,
+        buf.accessible_emacs_byte_range(),
+    ))
 }
 
 fn resolve_buffer_designator_allow_nil_current(
@@ -1039,10 +1036,7 @@ pub(crate) fn builtin_buffer_line_statistics(
         .and_then(|id| {
             buffers.get(id).map(|buf| {
                 let mut bytes = Vec::new();
-                buf.copy_emacs_byte_range_to(
-                    EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
-                    &mut bytes,
-                );
+                buf.copy_emacs_byte_range_to(buf.accessible_emacs_byte_range(), &mut bytes);
                 bytes
             })
         })
@@ -2830,8 +2824,17 @@ pub(crate) fn buffer_slice_value(
     start_byte: usize,
     end_byte: usize,
 ) -> Value {
+    buffer_slice_value_range(buf, EmacsByteRange::from_usize(start_byte, end_byte))
+}
+
+pub(crate) fn buffer_slice_value_range(
+    buf: &crate::buffer::Buffer,
+    byte_range: EmacsByteRange,
+) -> Value {
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
     let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start_byte, end_byte), &mut bytes);
+    buf.copy_emacs_byte_range_to(byte_range, &mut bytes);
     let string = lisp_string_from_buffer_bytes(bytes, buf.get_multibyte());
     let value = Value::heap_string(string);
     if !buf.text.text_props_is_empty() {

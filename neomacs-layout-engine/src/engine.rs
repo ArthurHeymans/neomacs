@@ -3034,7 +3034,7 @@ impl LayoutEngine {
                 .map(|b| {
                     // Count newlines in accessible buffer text.
                     let text_lines = b
-                        .buffer_substring_bytes(b.point_min(), b.point_max())
+                        .buffer_substring_bytes_range(b.accessible_emacs_byte_range())
                         .into_iter()
                         .filter(|&byte| byte == b'\n')
                         .count();
