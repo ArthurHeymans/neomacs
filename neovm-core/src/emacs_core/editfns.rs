@@ -739,7 +739,7 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
     buffers: &BufferManager,
     start_arg: &Value,
     end_arg: &Value,
-) -> Result<Option<(usize, usize)>, Flow> {
+) -> Result<Option<EmacsByteRange>, Flow> {
     let Some(buf) = buffers.current_buffer() else {
         return Ok(None);
     };
@@ -760,9 +760,9 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
     } else {
         (end, start)
     };
-    Ok(Some((
-        buf.lisp_pos_to_accessible_byte(from),
-        buf.lisp_pos_to_accessible_byte(to),
+    Ok(Some(EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
     )))
 }
 
@@ -919,11 +919,13 @@ pub(crate) fn builtin_delete_region(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("delete-region", &args, 2)?;
-    let Some((start_byte, end_byte)) =
+    let Some(byte_range) =
         current_buffer_accessible_char_region_in_buffers(&ctx.buffers, &args[0], &args[1])?
     else {
         return Ok(Value::NIL);
     };
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
     if start_byte == end_byte {
         return Ok(Value::NIL);
     }
@@ -964,11 +966,13 @@ pub(crate) fn builtin_delete_and_extract_region(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("delete-and-extract-region", &args, 2)?;
-    let Some((start_byte, end_byte)) =
+    let Some(byte_range) =
         current_buffer_accessible_char_region_in_buffers(&ctx.buffers, &args[0], &args[1])?
     else {
         return Ok(Value::string(""));
     };
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
     if start_byte == end_byte {
         return Ok(Value::string(""));
     }
@@ -1075,7 +1079,7 @@ pub(crate) fn builtin_buffer_substring_no_properties(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("buffer-substring-no-properties", &args, 2)?;
-    let Some((start_byte, end_byte)) =
+    let Some(byte_range) =
         current_buffer_accessible_char_region_in_buffers(&ctx.buffers, &args[0], &args[1])?
     else {
         return Ok(Value::heap_string(
@@ -1088,7 +1092,7 @@ pub(crate) fn builtin_buffer_substring_no_properties(
         ));
     };
     let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start_byte, end_byte), &mut bytes);
+    buf.copy_emacs_byte_range_to(byte_range, &mut bytes);
     Ok(Value::heap_string(
         crate::emacs_core::builtins::lisp_string_from_buffer_bytes(bytes, buf.get_multibyte()),
     ))

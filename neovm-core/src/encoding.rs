@@ -1599,7 +1599,7 @@ fn builtin_coding_region(
 
     let coding = context_coding_name(ctx, args[2])?;
     let destination = coding_region_destination(args.get(3).copied())?;
-    let Some((start_byte, end_byte)) =
+    let Some(byte_range) =
         crate::emacs_core::editfns::current_buffer_accessible_char_region_in_buffers(
             &ctx.buffers,
             &args[0],
@@ -1608,6 +1608,8 @@ fn builtin_coding_region(
     else {
         return Ok(Value::NIL);
     };
+    let start_byte = byte_range.start_usize();
+    let end_byte = byte_range.end_usize();
 
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(Value::NIL);
