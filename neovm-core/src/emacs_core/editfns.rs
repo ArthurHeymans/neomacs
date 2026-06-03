@@ -13,7 +13,7 @@ use super::eval::OverlayModificationHook;
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
+use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
@@ -246,8 +246,8 @@ pub(crate) fn signal_before_change(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(());
         };
-        let beg_char = buf.text.emacs_byte_to_char(beg) as i64 + 1;
-        let end_char = buf.text.emacs_byte_to_char(end) as i64 + 1;
+        let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
+        let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
         (beg_char, end_char)
     };
 
@@ -314,8 +314,10 @@ pub(crate) fn signal_after_change(
         }
 
         if let Some(buf) = ctx.buffers.get(current_id) {
-            let beg_char = buf.text.emacs_byte_to_char(beg) as i64;
-            let end_char = buf.text.emacs_byte_to_char(end) as i64;
+            let beg_char = buf.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(beg));
+            let end_char = buf.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(end));
+            let beg_char = beg_char.get() as i64;
+            let end_char = end_char.get() as i64;
             let charpos = beg_char + 1; // 1-based, like GNU's PT/charpos.
             let lenins = end_char - beg_char;
             let lendel = old_len as i64;
@@ -341,8 +343,8 @@ pub(crate) fn signal_after_change(
         let Some(buf) = ctx.buffers.get(current_id) else {
             return Ok(());
         };
-        let beg_char = buf.text.emacs_byte_to_char(beg) as i64 + 1;
-        let end_char = buf.text.emacs_byte_to_char(end) as i64 + 1;
+        let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
+        let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
         (beg_char, end_char, old_len as i64)
     };
 
@@ -533,8 +535,12 @@ pub(crate) fn execute_combined_after_change(
         let beg_char_zero = (begpos - 1).max(0) as usize;
         let end_char_zero = (endpos - 1).max(0) as usize;
         (
-            buf.text.char_to_emacs_byte(beg_char_zero),
-            buf.text.char_to_emacs_byte(end_char_zero),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(beg_char_zero))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(end_char_zero))
+                .get(),
         )
     };
     let old_len = (endpos - begpos - change_total).max(0) as usize;
