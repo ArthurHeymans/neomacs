@@ -775,7 +775,7 @@ pub(crate) fn builtin_set_window_configuration(
         };
         if let Some((buffer_id, point)) = selected_window_state {
             if let Some(buffer) = eval.buffers.get(buffer_id) {
-                let byte_pos = buffer.lisp_pos_to_byte(point as i64);
+                let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point as i64).get();
                 let _ = eval.buffers.goto_buffer_byte(buffer_id, byte_pos);
             }
         }

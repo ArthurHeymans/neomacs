@@ -2270,8 +2270,10 @@ pub(crate) fn builtin_set_window_point(
                             if let Some(buffer_id) = buffer_id
                                 && let Some(buffer) = buffers.get(buffer_id)
                             {
-                                buffer_to_move =
-                                    Some((buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
+                                buffer_to_move = Some((
+                                    buffer_id,
+                                    buffer.lisp_pos_to_emacs_byte_pos(clamped as i64).get(),
+                                ));
                             }
                         }
                     }
@@ -2310,8 +2312,10 @@ pub(crate) fn builtin_set_window_point(
                         if let Some(buffer_id) = buffer_id
                             && let Some(buffer) = buffers.get(buffer_id)
                         {
-                            buffer_to_move =
-                                Some((buffer_id, buffer.lisp_pos_to_byte(clamped as i64)));
+                            buffer_to_move = Some((
+                                buffer_id,
+                                buffer.lisp_pos_to_emacs_byte_pos(clamped as i64).get(),
+                            ));
                         }
                     }
                 }
@@ -4040,7 +4044,7 @@ pub(crate) fn sync_selected_window_buffer_in_state(
     // `record_buffer`.  Selection/display primitives record explicitly.
     buffers.switch_current_unrecorded(buffer_id);
     if let Some(buffer) = buffers.get(buffer_id) {
-        let byte_pos = buffer.lisp_pos_to_byte(point as i64);
+        let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point as i64).get();
         let _ = buffers.goto_buffer_byte(buffer_id, byte_pos);
     }
 }
@@ -5429,7 +5433,8 @@ fn scroll_by_lines_in_state(
     };
     let text = buf.text.to_string();
     let pt = buf
-        .lisp_pos_to_byte(window_point)
+        .lisp_pos_to_emacs_byte_pos(window_point)
+        .get()
         .clamp(buf.begv_byte, buf.zv_byte);
     let bytes = text.as_bytes();
     let begv = buf.begv_byte;
@@ -5546,7 +5551,8 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         };
         let text = buf.text.to_string();
         let pt = buf
-            .lisp_pos_to_byte(window_point)
+            .lisp_pos_to_emacs_byte_pos(window_point)
+            .get()
             .clamp(buf.begv_byte, buf.zv_byte);
         let bytes = text.as_bytes();
         let begv = buf.begv_byte;

@@ -3051,7 +3051,7 @@ pub(crate) fn builtin_move_to_window_line(
     let byte_pos = eval
         .buffers
         .get(buf_id)
-        .map(|b| b.lisp_pos_to_byte(lisp_pos))
+        .map(|b| b.lisp_pos_to_emacs_byte_pos(lisp_pos).get())
         .unwrap_or(0);
     let current_id = eval
         .buffers
