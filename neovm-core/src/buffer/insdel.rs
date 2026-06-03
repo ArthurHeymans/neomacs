@@ -138,10 +138,7 @@ impl Buffer {
         self.text
             .insert_measured_emacs_bytes(insertion.byte_pos(), bytes, insertion.extent());
         self.apply_byte_insert_side_effects(
-            insertion.byte_pos_usize(),
-            insertion.char_pos_usize(),
-            insertion.extent().emacs_bytes().get(),
-            insertion.extent().chars().get(),
+            insertion,
             true,
             false,
             true,
@@ -151,16 +148,14 @@ impl Buffer {
             strict_after_markers,
         );
         if before_markers {
-            self.text.advance_markers_at(insert_pos, byte_len, char_len);
+            self.text
+                .advance_markers_at_position(insertion.byte_pos(), insertion.extent());
         }
     }
 
     fn apply_byte_insert_side_effects(
         &mut self,
-        insert_pos: usize,
-        insert_char_pos: usize,
-        byte_len: usize,
-        char_len: usize,
+        insertion: TextInsertion,
         update_state_fields: bool,
         shift_begv: bool,
         advance_point_at_insert: bool,
@@ -169,6 +164,10 @@ impl Buffer {
         overlay_before_markers: bool,
         strict_after_markers: bool,
     ) {
+        let insert_pos = insertion.byte_pos_usize();
+        let insert_char_pos = insertion.char_pos_usize();
+        let byte_len = insertion.extent().emacs_bytes().get();
+        let char_len = insertion.extent().chars().get();
         if byte_len == 0 {
             return;
         }
@@ -190,11 +189,13 @@ impl Buffer {
         }
         if adjust_shared_markers {
             if strict_after_markers {
-                self.text
-                    .adjust_markers_for_insert_strict_after(insert_pos, byte_len, char_len);
+                self.text.adjust_markers_for_insert_extent_strict_after(
+                    insertion.byte_pos(),
+                    insertion.extent(),
+                );
             } else {
                 self.text
-                    .adjust_markers_for_insert(insert_pos, byte_len, char_len);
+                    .adjust_markers_for_insert_extent(insertion.byte_pos(), insertion.extent());
             }
         }
         debug_assert_eq!(
@@ -204,7 +205,7 @@ impl Buffer {
         );
         if adjust_shared_text_props {
             self.text
-                .adjust_text_props_for_insert(insert_char_pos, char_len);
+                .adjust_text_props_for_insert_at(insertion.char_pos(), insertion.extent().chars());
         }
         self.overlays
             .adjust_for_insert(insert_pos, byte_len, overlay_before_markers);
@@ -213,20 +214,20 @@ impl Buffer {
 
     fn apply_byte_delete_side_effects(
         &mut self,
-        start: usize,
-        end: usize,
-        start_char: usize,
-        end_char: usize,
+        range: TextEditRange,
         update_state_fields: bool,
         shift_begv: bool,
         adjust_shared_markers: bool,
         adjust_shared_text_props: bool,
     ) {
-        if start >= end {
+        if range.is_empty() {
             return;
         }
-        let byte_len = end - start;
-        let char_len = end_char - start_char;
+        let start = range.byte_start_usize();
+        let end = range.byte_end_usize();
+        let start_char = range.char_start_usize();
+        let byte_len = range.byte_len().get();
+        let char_len = range.char_len().get();
 
         if update_state_fields {
             if self.pt_byte >= end {
@@ -257,12 +258,12 @@ impl Buffer {
         }
 
         if adjust_shared_markers {
-            self.text
-                .adjust_markers_for_delete(start, end, start_char, end_char);
+            self.text.adjust_markers_for_delete_range(range);
         }
 
         if adjust_shared_text_props {
-            self.text.adjust_text_props_for_delete(start_char, end_char);
+            self.text
+                .adjust_text_props_for_delete_range(range.char_range());
         }
         self.overlays.adjust_for_delete(start, end);
         self.record_char_modification(char_len);
@@ -465,18 +466,12 @@ impl Buffer {
             self.zv = start_char + new_char_len;
         }
 
-        self.text.adjust_markers_for_replace(
-            old_range.byte_start_usize(),
-            old_range.byte_end_usize(),
-            old_range.char_start_usize(),
-            old_range.char_end_usize(),
-            new_extent.emacs_bytes().get(),
-            new_extent.chars().get(),
-        );
-        self.text.adjust_text_props_for_replace(
-            old_range.char_start_usize(),
-            old_range.char_len().get(),
-            new_extent.chars().get(),
+        self.text
+            .adjust_markers_for_replace_range(old_range, new_extent);
+        self.text.adjust_text_props_for_replace_at(
+            old_range.char_start(),
+            old_range.char_len(),
+            new_extent.chars(),
         );
         if text.has_intervals() {
             self.text.text_props_append_shifted(text.intervals(), start);
@@ -523,16 +518,7 @@ impl Buffer {
 
         let range = TextEditRange::from_usize(start, end, start_char, end_char);
         self.text.delete_measured_range(range);
-        self.apply_byte_delete_side_effects(
-            range.byte_start_usize(),
-            range.byte_end_usize(),
-            range.char_start_usize(),
-            range.char_end_usize(),
-            true,
-            false,
-            true,
-            true,
-        );
+        self.apply_byte_delete_side_effects(range, true, false, true, true);
     }
 
     /// Replace every occurrence of `from_code` with the Emacs-encoded
@@ -817,19 +803,13 @@ impl Buffer {
 impl BufferManager {
     fn adjust_shared_insert_metadata(
         buf: &mut Buffer,
-        insert_pos: usize,
-        insert_char_pos: usize,
-        byte_len: usize,
-        char_len: usize,
+        insertion: TextInsertion,
         update_state_fields: bool,
         overlay_before_markers: bool,
     ) {
         Self::adjust_shared_insert_metadata_full(
             buf,
-            insert_pos,
-            insert_char_pos,
-            byte_len,
-            char_len,
+            insertion,
             update_state_fields,
             overlay_before_markers,
             false,
@@ -838,19 +818,13 @@ impl BufferManager {
 
     fn adjust_shared_insert_metadata_full(
         buf: &mut Buffer,
-        insert_pos: usize,
-        insert_char_pos: usize,
-        byte_len: usize,
-        char_len: usize,
+        insertion: TextInsertion,
         update_state_fields: bool,
         overlay_before_markers: bool,
         strict_after_markers: bool,
     ) {
         buf.apply_byte_insert_side_effects(
-            insert_pos,
-            insert_char_pos,
-            byte_len,
-            char_len,
+            insertion,
             update_state_fields,
             true,
             false,
@@ -863,36 +837,26 @@ impl BufferManager {
 
     fn adjust_shared_delete_metadata(
         buf: &mut Buffer,
-        start: usize,
-        end: usize,
-        start_char: usize,
-        end_char: usize,
+        range: TextEditRange,
         update_state_fields: bool,
     ) {
-        buf.apply_byte_delete_side_effects(
-            start,
-            end,
-            start_char,
-            end_char,
-            update_state_fields,
-            true,
-            false,
-            false,
-        );
+        buf.apply_byte_delete_side_effects(range, update_state_fields, true, false, false);
     }
 
     fn adjust_shared_replace_metadata(
         buf: &mut Buffer,
-        start: usize,
-        end: usize,
-        start_char: usize,
-        end_char: usize,
-        new_byte_len: usize,
-        new_char_len: usize,
+        old_range: TextEditRange,
+        new_extent: TextExtent,
         update_state_fields: bool,
     ) {
-        let old_byte_len = end - start;
-        let old_char_len = end_char - start_char;
+        let start = old_range.byte_start_usize();
+        let end = old_range.byte_end_usize();
+        let start_char = old_range.char_start_usize();
+        let end_char = old_range.char_end_usize();
+        let old_byte_len = old_range.byte_len().get();
+        let old_char_len = old_range.char_len().get();
+        let new_byte_len = new_extent.emacs_bytes().get();
+        let new_char_len = new_extent.chars().get();
         let old_pt_byte = buf.pt_byte;
         let old_pt = buf.pt;
 
@@ -959,6 +923,7 @@ impl BufferManager {
         let insert_char_pos = source.pt;
 
         let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert(text);
+        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         for sibling_id in shared_ids {
             if sibling_id == id {
@@ -967,15 +932,7 @@ impl BufferManager {
             let update_state_fields =
                 self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insert_pos,
-                insert_char_pos,
-                byte_len,
-                char_len,
-                update_state_fields,
-                false,
-            );
+            Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, false);
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())
@@ -1019,6 +976,7 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
+        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         if strict_after_markers {
             self.buffers
@@ -1037,10 +995,7 @@ impl BufferManager {
             let sibling = self.buffers.get_mut(&sibling_id)?;
             Self::adjust_shared_insert_metadata_full(
                 sibling,
-                insert_pos,
-                insert_char_pos,
-                byte_len,
-                char_len,
+                insertion,
                 update_state_fields,
                 false,
                 strict_after_markers,
@@ -1061,6 +1016,7 @@ impl BufferManager {
         let insert_char_pos = source.pt;
 
         let (byte_len, char_len) = self.buffers.get_mut(&id)?.insert_before_markers(text);
+        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         for sibling_id in shared_ids {
             if sibling_id == id {
@@ -1069,15 +1025,7 @@ impl BufferManager {
             let update_state_fields =
                 self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insert_pos,
-                insert_char_pos,
-                byte_len,
-                char_len,
-                update_state_fields,
-                true,
-            );
+            Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, true);
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())
@@ -1098,6 +1046,7 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let insert_pos = source.pt_byte;
         let insert_char_pos = source.pt;
+        let insertion = TextInsertion::from_usize(insert_pos, insert_char_pos, char_len, byte_len);
 
         self.buffers
             .get_mut(&id)?
@@ -1110,15 +1059,7 @@ impl BufferManager {
             let update_state_fields =
                 self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_insert_metadata(
-                sibling,
-                insert_pos,
-                insert_char_pos,
-                byte_len,
-                char_len,
-                update_state_fields,
-                true,
-            );
+            Self::adjust_shared_insert_metadata(sibling, insertion, update_state_fields, true);
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())
@@ -1134,6 +1075,7 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let start_char = source.text.emacs_byte_to_char(start);
         let end_char = source.text.emacs_byte_to_char(end);
+        let range = TextEditRange::from_usize(start, end, start_char, end_char);
         self.buffers.get_mut(&id)?.delete_region(start, end);
 
         for sibling_id in shared_ids {
@@ -1143,14 +1085,7 @@ impl BufferManager {
             let update_state_fields =
                 self.current == Some(sibling_id) || !self.buffer_has_state_markers(sibling_id);
             let sibling = self.buffers.get_mut(&sibling_id)?;
-            Self::adjust_shared_delete_metadata(
-                sibling,
-                start,
-                end,
-                start_char,
-                end_char,
-                update_state_fields,
-            );
+            Self::adjust_shared_delete_metadata(sibling, range, update_state_fields);
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;
         }
         Some(())
@@ -1183,6 +1118,8 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let start_char = source.text.emacs_byte_to_char(start);
         let end_char = source.text.emacs_byte_to_char(end);
+        let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
         self.buffers
             .get_mut(&id)?
@@ -1197,12 +1134,8 @@ impl BufferManager {
             let sibling = self.buffers.get_mut(&sibling_id)?;
             Self::adjust_shared_replace_metadata(
                 sibling,
-                start,
-                end,
-                start_char,
-                end_char,
-                new_byte_len,
-                new_char_len,
+                old_range,
+                new_extent,
                 update_state_fields,
             );
             self.refresh_shared_buffer_state_cache(sibling_id, update_state_fields)?;

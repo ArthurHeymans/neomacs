@@ -1,4 +1,6 @@
-use crate::buffer::position::{CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{
+    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+};
 
 /// Logical size of inserted or deleted buffer text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -143,6 +145,10 @@ impl TextEditRange {
 
     pub const fn char_end(self) -> CharPos0 {
         self.char_end
+    }
+
+    pub const fn char_range(self) -> CharRange {
+        CharRange::new(self.char_start, self.char_end)
     }
 
     pub const fn byte_start_usize(self) -> usize {
