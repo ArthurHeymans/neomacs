@@ -16,7 +16,9 @@ use crate::gc_trace::GcTrace;
 use super::buffer::{BufferId, InsertionType};
 use super::position::{CharPos0, EmacsBytePos, EmacsByteRange};
 use super::text::backend::TextBackend;
-use super::text::{BufferTextBackendKind, TextEditRange, TextExtent, TextMetrics};
+use super::text::{
+    BufferTextBackendKind, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
+};
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -398,18 +400,20 @@ impl BufferText {
         if text.is_empty() {
             return;
         }
-        let mut storage = self.storage.borrow_mut();
-        storage.backend.insert_str(pos, text);
-        Self::refresh_backend_debug_layout(&mut storage);
+        let multibyte = self.is_multibyte();
+        let bytes =
+            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, multibyte);
+        let extent = TextExtent::from_usize(emacs_char_count_bytes(&bytes, multibyte), bytes.len());
+        self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), &bytes, extent);
     }
 
     pub fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
-        let mut storage = self.storage.borrow_mut();
-        storage.backend.insert_emacs_bytes(pos, bytes);
-        Self::refresh_backend_debug_layout(&mut storage);
+        let multibyte = self.is_multibyte();
+        let extent = TextExtent::from_usize(emacs_char_count_bytes(bytes, multibyte), bytes.len());
+        self.insert_measured_emacs_bytes(EmacsBytePos::new(pos), bytes, extent);
     }
 
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
@@ -440,9 +444,10 @@ impl BufferText {
         if start >= end {
             return;
         }
-        let mut storage = self.storage.borrow_mut();
-        storage.backend.delete_range(start, end);
-        Self::refresh_backend_debug_layout(&mut storage);
+        let start_char = self.buf_bytepos_to_charpos(start);
+        let end_char = self.buf_bytepos_to_charpos(end);
+        let range = TextEditRange::from_usize(start, end, start_char, end_char);
+        self.delete_measured_range(range);
     }
 
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {

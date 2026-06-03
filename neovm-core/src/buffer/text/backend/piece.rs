@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::buffer::buffer_text::TextBackendDebugLayout;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
-use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics};
+use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PieceSource {
@@ -808,15 +808,6 @@ fn splitmix64(mut x: u64) -> u64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
     x ^ (x >> 31)
-}
-
-#[inline]
-fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> usize {
-    if multibyte {
-        crate::emacs_core::emacs_char::chars_in_multibyte(bytes)
-    } else {
-        bytes.len()
-    }
 }
 
 #[inline]

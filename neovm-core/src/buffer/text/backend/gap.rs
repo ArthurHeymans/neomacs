@@ -149,14 +149,6 @@ impl GapTextBackend {
         self.gap.with_contiguous_emacs_byte_range(range, f)
     }
 
-    pub(in crate::buffer) fn insert_str(&mut self, pos: usize, text: &str) {
-        self.gap.insert_str(pos, text);
-    }
-
-    pub(in crate::buffer) fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
-        self.gap.insert_emacs_bytes(pos, bytes);
-    }
-
     pub(in crate::buffer) fn insert_measured_emacs_bytes(
         &mut self,
         pos: EmacsBytePos,
@@ -164,10 +156,6 @@ impl GapTextBackend {
         extent: TextExtent,
     ) {
         self.gap.insert_measured_emacs_bytes(pos, bytes, extent);
-    }
-
-    pub(in crate::buffer) fn delete_range(&mut self, start: usize, end: usize) {
-        self.gap.delete_range(start, end);
     }
 
     pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {

@@ -12,6 +12,7 @@
 
 use std::fmt;
 
+use crate::buffer::text::emacs_char_count_bytes;
 use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent};
 
 /// Default extra gap bytes to pre-allocate on any growth.
@@ -932,15 +933,6 @@ impl fmt::Debug for GapBuffer {
 // ---------------------------------------------------------------------------
 // Free helper functions
 // ---------------------------------------------------------------------------
-
-#[inline]
-fn emacs_char_count_bytes(bytes: &[u8], multibyte: bool) -> usize {
-    if multibyte {
-        crate::emacs_core::emacs_char::chars_in_multibyte(bytes)
-    } else {
-        bytes.len()
-    }
-}
 
 #[inline]
 fn emacs_char_to_byte_in_slice(bytes: &[u8], char_pos: usize, multibyte: bool) -> usize {

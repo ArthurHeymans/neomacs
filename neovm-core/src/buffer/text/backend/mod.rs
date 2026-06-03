@@ -201,20 +201,6 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn insert_str(&mut self, pos: usize, text: &str) {
-        match self {
-            Self::Gap(gap) => gap.insert_str(pos, text),
-            Self::PieceTree(piece_tree) => piece_tree.insert_str(pos, text),
-        }
-    }
-
-    pub(in crate::buffer) fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
-        match self {
-            Self::Gap(gap) => gap.insert_emacs_bytes(pos, bytes),
-            Self::PieceTree(piece_tree) => piece_tree.insert_emacs_bytes(pos, bytes),
-        }
-    }
-
     pub(in crate::buffer) fn insert_measured_emacs_bytes(
         &mut self,
         pos: EmacsBytePos,
@@ -226,13 +212,6 @@ impl TextBackend {
             Self::PieceTree(piece_tree) => {
                 piece_tree.insert_measured_emacs_bytes(pos, bytes, extent)
             }
-        }
-    }
-
-    pub(in crate::buffer) fn delete_range(&mut self, start: usize, end: usize) {
-        match self {
-            Self::Gap(gap) => gap.delete_range(start, end),
-            Self::PieceTree(piece_tree) => piece_tree.delete_range(start, end),
         }
     }
 
