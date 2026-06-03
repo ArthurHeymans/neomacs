@@ -128,10 +128,6 @@ impl PieceTreeTextBackend {
         self.rebuild_from_bytes(bytes, multibyte);
     }
 
-    pub(in crate::buffer) fn byte_at(&self, pos: usize) -> u8 {
-        self.byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
         let pos = pos.get();
         assert!(
@@ -142,16 +138,8 @@ impl PieceTreeTextBackend {
         self.contiguous_slice(pos, pos + 1).expect("single byte")[0]
     }
 
-    pub(in crate::buffer) fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
-        self.emacs_byte_at_pos(EmacsBytePos::new(pos))
-    }
-
     pub(in crate::buffer) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         (pos.get() < self.len()).then(|| self.byte_at_emacs_byte_pos(pos))
-    }
-
-    pub(in crate::buffer) fn char_at(&self, pos: usize) -> Option<char> {
-        self.char_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     pub(in crate::buffer) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
@@ -159,18 +147,15 @@ impl PieceTreeTextBackend {
             .and_then(char::from_u32)
     }
 
-    pub(in crate::buffer) fn char_code_at(&self, pos: usize) -> Option<u32> {
-        self.char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
-    }
-
     pub(in crate::buffer) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
-        let pos = pos.get();
+        let byte_pos = pos;
+        let pos = byte_pos.get();
         if pos >= self.len() {
             return None;
         }
-        self.byte_to_char(pos);
+        self.emacs_byte_pos_to_char_pos(byte_pos);
         if !self.multibyte {
-            return Some(self.byte_at(pos) as u32);
+            return Some(self.byte_at_emacs_byte_pos(byte_pos) as u32);
         }
 
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
@@ -189,11 +174,6 @@ impl PieceTreeTextBackend {
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..written]).0)
     }
 
-    pub(in crate::buffer) fn byte_to_char(&self, byte_pos: usize) -> usize {
-        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-            .get()
-    }
-
     pub(in crate::buffer) fn emacs_byte_pos_to_char_pos(&self, byte_pos: EmacsBytePos) -> CharPos0 {
         let byte_pos = byte_pos.get();
         assert!(
@@ -202,11 +182,6 @@ impl PieceTreeTextBackend {
             self.len()
         );
         CharPos0::new(self.byte_to_char_in_node(&self.root, byte_pos))
-    }
-
-    pub(in crate::buffer) fn char_to_byte(&self, char_pos: usize) -> usize {
-        self.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-            .get()
     }
 
     pub(in crate::buffer) fn char_pos_to_emacs_byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {
@@ -224,11 +199,6 @@ impl PieceTreeTextBackend {
         EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
     }
 
-    pub(in crate::buffer) fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
-        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
-            .get()
-    }
-
     pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,
@@ -236,20 +206,11 @@ impl PieceTreeTextBackend {
         EmacsBytePos::new(byte_pos.get().min(self.len()))
     }
 
-    pub(in crate::buffer) fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
-        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
-            .get()
-    }
-
     pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
         &self,
         byte_pos: EmacsBytePos,
     ) -> StorageBytePos {
         StorageBytePos::new(byte_pos.get().min(self.len()))
-    }
-
-    pub(in crate::buffer) fn text_range(&self, start: usize, end: usize) -> String {
-        self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
     }
 
     pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
@@ -264,19 +225,6 @@ impl PieceTreeTextBackend {
         let mut out = Vec::with_capacity(end - start);
         self.copy_emacs_byte_range_to(range, &mut out);
         crate::emacs_core::string_escape::emacs_bytes_to_storage_string(&out, self.multibyte)
-    }
-
-    pub(in crate::buffer) fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
-    }
-
-    pub(in crate::buffer) fn copy_emacs_bytes_to(
-        &self,
-        start: usize,
-        end: usize,
-        out: &mut Vec<u8>,
-    ) {
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub(in crate::buffer) fn copy_emacs_byte_range_to(
@@ -304,15 +252,6 @@ impl PieceTreeTextBackend {
         .expect("infallible byte copy");
     }
 
-    pub(in crate::buffer) fn for_each_emacs_byte_chunk<E>(
-        &self,
-        start: usize,
-        end: usize,
-        mut f: impl FnMut(&[u8]) -> Result<(), E>,
-    ) -> Result<(), E> {
-        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), &mut f)
-    }
-
     pub(in crate::buffer) fn for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
@@ -332,10 +271,6 @@ impl PieceTreeTextBackend {
         self.for_each_range(&self.root, start, end, &mut f)
     }
 
-    pub(in crate::buffer) fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
-        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-    }
-
     pub(in crate::buffer) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
         let start = range.start_usize();
         let end = range.end_usize();
@@ -349,15 +284,6 @@ impl PieceTreeTextBackend {
             self.len()
         );
         start == end || self.contiguous_slice(start, end).is_some()
-    }
-
-    pub(in crate::buffer) fn with_contiguous_emacs_bytes<R>(
-        &self,
-        start: usize,
-        end: usize,
-        f: impl FnOnce(&[u8]) -> R,
-    ) -> Option<R> {
-        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub(in crate::buffer) fn with_contiguous_emacs_byte_range<R>(
@@ -380,36 +306,6 @@ impl PieceTreeTextBackend {
             return Some(f(&[]));
         }
         self.contiguous_slice(start, end).map(f)
-    }
-
-    pub(in crate::buffer) fn insert_str(&mut self, pos: usize, text: &str) {
-        if text.is_empty() {
-            return;
-        }
-        let bytes =
-            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, self.multibyte);
-        self.insert_emacs_bytes(pos, &bytes);
-    }
-
-    pub(in crate::buffer) fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        let nchars = emacs_char_count_bytes(bytes, self.multibyte);
-        self.insert_emacs_bytes_both(pos, bytes, nchars);
-    }
-
-    pub(in crate::buffer) fn insert_emacs_bytes_both(
-        &mut self,
-        pos: usize,
-        bytes: &[u8],
-        nchars: usize,
-    ) {
-        self.insert_measured_emacs_bytes(
-            EmacsBytePos::new(pos),
-            bytes,
-            TextExtent::from_usize(nchars, bytes.len()),
-        );
     }
 
     pub(in crate::buffer) fn insert_measured_emacs_bytes(
@@ -438,7 +334,7 @@ impl PieceTreeTextBackend {
             emacs_char_count_bytes(bytes, self.multibyte),
             "insert_emacs_bytes_both: caller-supplied nchars mismatches actual"
         );
-        self.byte_to_char(pos);
+        self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
 
         let add_start = self.add.len();
         self.add.extend_from_slice(bytes);
@@ -451,30 +347,6 @@ impl PieceTreeTextBackend {
         let root = self.root.take();
         let (left, right) = self.split_at_byte(root, pos);
         self.root = Self::merge(Self::merge(left, piece), right);
-    }
-
-    pub(in crate::buffer) fn delete_range(&mut self, start: usize, end: usize) {
-        assert!(start <= end, "delete_range: start ({start}) > end ({end})");
-        assert!(
-            end <= self.len(),
-            "delete_range: end ({end}) > len ({})",
-            self.len()
-        );
-        if start == end {
-            return;
-        }
-        let nchars = self.byte_to_char(end) - self.byte_to_char(start);
-        self.delete_range_both(start, end, nchars);
-    }
-
-    pub(in crate::buffer) fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
-        let start_char = self.byte_to_char(start);
-        self.delete_measured_range(TextEditRange::from_usize(
-            start,
-            end,
-            start_char,
-            start_char + nchars,
-        ));
     }
 
     pub(in crate::buffer) fn delete_measured_range(&mut self, range: TextEditRange) {
@@ -495,7 +367,8 @@ impl PieceTreeTextBackend {
         }
         debug_assert_eq!(
             nchars,
-            self.byte_to_char(end) - self.byte_to_char(start),
+            self.emacs_byte_pos_to_char_pos(range.byte_end()).get()
+                - self.emacs_byte_pos_to_char_pos(range.byte_start()).get(),
             "delete_range_both: caller-supplied nchars mismatches actual"
         );
 
@@ -503,15 +376,6 @@ impl PieceTreeTextBackend {
         let (left, rest) = self.split_at_byte(root, start);
         let (_deleted, right) = self.split_at_byte(rest, end - start);
         self.root = Self::merge(left, right);
-    }
-
-    pub(in crate::buffer) fn replace_same_len_emacs_bytes(
-        &mut self,
-        start: usize,
-        end: usize,
-        replacement: &[u8],
-    ) {
-        self.replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
     }
 
     pub(in crate::buffer) fn replace_same_len_emacs_byte_range(
@@ -541,14 +405,9 @@ impl PieceTreeTextBackend {
             return;
         }
 
-        let start_char = self.byte_to_char(start);
-        let old_chars = self.byte_to_char(end) - start_char;
-        self.delete_measured_range(TextEditRange::from_usize(
-            start,
-            end,
-            start_char,
-            start_char + old_chars,
-        ));
+        let start_char = self.emacs_byte_pos_to_char_pos(range.start());
+        let end_char = self.emacs_byte_pos_to_char_pos(range.end());
+        self.delete_measured_range(TextEditRange::new(range, start_char, end_char));
         let new_chars = emacs_char_count_bytes(replacement, self.multibyte);
         self.insert_measured_emacs_bytes(
             EmacsBytePos::new(start),
@@ -559,7 +418,7 @@ impl PieceTreeTextBackend {
 
     pub(in crate::buffer) fn dump_text(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.len());
-        self.copy_emacs_bytes_to(0, self.len(), &mut out);
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, self.len()), &mut out);
         out
     }
 
@@ -817,7 +676,7 @@ impl PieceTreeTextBackend {
 
 impl fmt::Display for PieceTreeTextBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.text_range(0, self.len()))
+        f.write_str(&self.text_emacs_byte_range(EmacsByteRange::from_usize(0, self.len())))
     }
 }
 
@@ -896,25 +755,31 @@ mod tests {
 
         let mut piece_bytes = Vec::new();
         let mut gap_bytes = Vec::new();
-        piece.copy_emacs_bytes_to(0, piece.len(), &mut piece_bytes);
+        copy_piece_bytes(piece, 0, piece.len(), &mut piece_bytes);
         gap.copy_emacs_bytes_to(0, gap.len(), &mut gap_bytes);
         assert_eq!(piece_bytes, gap_bytes);
 
         for byte_pos in 0..piece.len() {
-            assert_eq!(piece.byte_at(byte_pos), gap.byte_at(byte_pos));
-            assert_eq!(piece.emacs_byte_at(byte_pos), gap.emacs_byte_at(byte_pos));
+            assert_eq!(piece_byte_at(piece, byte_pos), gap.byte_at(byte_pos));
+            assert_eq!(
+                piece_emacs_byte_at(piece, byte_pos),
+                gap.emacs_byte_at(byte_pos)
+            );
         }
-        assert_eq!(piece.emacs_byte_at(piece.len()), None);
+        assert_eq!(piece_emacs_byte_at(piece, piece.len()), None);
         assert_eq!(gap.emacs_byte_at(gap.len()), None);
 
         for char_pos in 0..=piece.metrics().chars() {
-            let piece_byte = piece.char_to_byte(char_pos);
+            let piece_byte = piece_char_to_byte(piece, char_pos);
             let gap_byte = gap.char_to_byte(char_pos);
             assert_eq!(piece_byte, gap_byte, "char_to_byte({char_pos})");
-            assert_eq!(piece.byte_to_char(piece_byte), char_pos);
+            assert_eq!(piece_byte_to_char(piece, piece_byte), char_pos);
             assert_eq!(gap.byte_to_char(gap_byte), char_pos);
             if char_pos < piece.metrics().chars() {
-                assert_eq!(piece.char_code_at(piece_byte), gap.char_code_at(gap_byte));
+                assert_eq!(
+                    piece_char_code_at(piece, piece_byte),
+                    gap.char_code_at(gap_byte)
+                );
             }
         }
     }
@@ -956,6 +821,80 @@ mod tests {
         }
     }
 
+    fn piece_byte_to_char(piece: &PieceTreeTextBackend, byte_pos: usize) -> usize {
+        piece
+            .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+            .get()
+    }
+
+    fn piece_char_to_byte(piece: &PieceTreeTextBackend, char_pos: usize) -> usize {
+        piece
+            .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+            .get()
+    }
+
+    fn piece_byte_at(piece: &PieceTreeTextBackend, byte_pos: usize) -> u8 {
+        piece.byte_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn piece_emacs_byte_at(piece: &PieceTreeTextBackend, byte_pos: usize) -> Option<u8> {
+        piece.emacs_byte_at_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn piece_char_code_at(piece: &PieceTreeTextBackend, byte_pos: usize) -> Option<u32> {
+        piece.char_code_at_emacs_byte_pos(EmacsBytePos::new(byte_pos))
+    }
+
+    fn copy_piece_bytes(piece: &PieceTreeTextBackend, start: usize, end: usize, out: &mut Vec<u8>) {
+        piece.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+    }
+
+    fn insert_piece_str(piece: &mut PieceTreeTextBackend, byte_pos: usize, text: &str) {
+        let bytes =
+            crate::emacs_core::string_escape::storage_string_to_buffer_bytes(text, piece.multibyte);
+        let extent =
+            TextExtent::from_usize(emacs_char_count_bytes(&bytes, piece.multibyte), bytes.len());
+        piece.insert_measured_emacs_bytes(EmacsBytePos::new(byte_pos), &bytes, extent);
+    }
+
+    fn insert_piece_bytes_both(
+        piece: &mut PieceTreeTextBackend,
+        byte_pos: usize,
+        bytes: &[u8],
+        nchars: usize,
+    ) {
+        piece.insert_measured_emacs_bytes(
+            EmacsBytePos::new(byte_pos),
+            bytes,
+            TextExtent::from_usize(nchars, bytes.len()),
+        );
+    }
+
+    fn delete_piece_range_both(
+        piece: &mut PieceTreeTextBackend,
+        start: usize,
+        end: usize,
+        nchars: usize,
+    ) {
+        let start_char = piece_byte_to_char(piece, start);
+        piece.delete_measured_range(TextEditRange::from_usize(
+            start,
+            end,
+            start_char,
+            start_char + nchars,
+        ));
+    }
+
+    fn replace_piece_same_len(
+        piece: &mut PieceTreeTextBackend,
+        start: usize,
+        end: usize,
+        replacement: &[u8],
+    ) {
+        piece
+            .replace_same_len_emacs_byte_range(EmacsByteRange::from_usize(start, end), replacement);
+    }
+
     #[test]
     fn piece_tree_reports_metrics_and_layout() {
         let backend = PieceTreeTextBackend::from_str("éz");
@@ -967,8 +906,8 @@ mod tests {
             backend.debug_layout(),
             TextBackendDebugLayout::PieceTree(TextMetrics::new(2, 3))
         );
-        assert_eq!(backend.char_to_byte(1), "é".len());
-        assert_eq!(backend.byte_to_char("é".len()), 1);
+        assert_eq!(piece_char_to_byte(&backend, 1), "é".len());
+        assert_eq!(piece_byte_to_char(&backend, "é".len()), 1);
     }
 
     #[test]
@@ -977,21 +916,21 @@ mod tests {
         let mut gap = GapBuffer::from_str("abécd日本");
         assert_matches_gap(&piece, &gap);
 
-        let pos = piece.char_to_byte(2);
-        piece.insert_str(pos, "XYZ");
+        let pos = piece_char_to_byte(&piece, 2);
+        insert_piece_str(&mut piece, pos, "XYZ");
         gap.insert_str(pos, "XYZ");
         assert_matches_gap(&piece, &gap);
 
-        let start = piece.char_to_byte(1);
-        let end = piece.char_to_byte(5);
-        let nchars = piece.byte_to_char(end) - piece.byte_to_char(start);
-        piece.delete_range_both(start, end, nchars);
+        let start = piece_char_to_byte(&piece, 1);
+        let end = piece_char_to_byte(&piece, 5);
+        let nchars = piece_byte_to_char(&piece, end) - piece_byte_to_char(&piece, start);
+        delete_piece_range_both(&mut piece, start, end, nchars);
         gap.delete_range_both(start, end, nchars);
         assert_matches_gap(&piece, &gap);
 
-        let start = piece.char_to_byte(1);
-        let end = piece.char_to_byte(2);
-        piece.replace_same_len_emacs_bytes(start, end, "ß".as_bytes());
+        let start = piece_char_to_byte(&piece, 1);
+        let end = piece_char_to_byte(&piece, 2);
+        replace_piece_same_len(&mut piece, start, end, "ß".as_bytes());
         gap.replace_same_len_emacs_bytes(start, end, "ß".as_bytes());
         assert_matches_gap(&piece, &gap);
     }
@@ -999,12 +938,12 @@ mod tests {
     #[test]
     fn piece_tree_visits_piece_chunks_without_coalescing() {
         let mut backend = PieceTreeTextBackend::from_str("abcdef");
-        backend.insert_str(3, "XY");
-        backend.delete_range(4, 5);
+        insert_piece_str(&mut backend, 3, "XY");
+        delete_piece_range_both(&mut backend, 4, 5, 1);
 
         let mut chunks = Vec::new();
         backend
-            .for_each_emacs_byte_chunk(1, 7, |chunk| {
+            .for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(1, 7), |chunk| {
                 chunks.push(chunk.to_vec());
                 Ok::<(), ()>(())
             })
@@ -1016,16 +955,16 @@ mod tests {
     fn piece_tree_unibyte_raw_bytes_round_trip() {
         let raw = vec![0xFF, b'A', 0x80];
         let mut backend = PieceTreeTextBackend::from_emacs_bytes(&raw, false);
-        backend.insert_emacs_bytes(1, &[b'\n']);
+        insert_piece_bytes_both(&mut backend, 1, &[b'\n'], 1);
 
         assert!(!backend.is_multibyte());
         assert_eq!(backend.metrics().chars(), 4);
         assert_eq!(backend.metrics().emacs_bytes(), 4);
-        assert_eq!(backend.byte_to_char(3), 3);
-        assert_eq!(backend.char_to_byte(4), 4);
+        assert_eq!(piece_byte_to_char(&backend, 3), 3);
+        assert_eq!(piece_char_to_byte(&backend, 4), 4);
 
         let mut bytes = Vec::new();
-        backend.copy_emacs_bytes_to(0, backend.len(), &mut bytes);
+        copy_piece_bytes(&backend, 0, backend.len(), &mut bytes);
         assert_eq!(bytes, vec![0xFF, b'\n', b'A', 0x80]);
     }
 
@@ -1042,9 +981,9 @@ mod tests {
                 match kind {
                     0 => {
                         let char_pos = a % (piece.metrics().chars() + 1);
-                        let byte_pos = piece.char_to_byte(char_pos);
+                        let byte_pos = piece_char_to_byte(&piece, char_pos);
                         let text = sample_insert(seed);
-                        piece.insert_str(byte_pos, text);
+                        insert_piece_str(&mut piece, byte_pos, text);
                         gap.insert_str(byte_pos, text);
                     }
                     1 => {
@@ -1053,20 +992,20 @@ mod tests {
                             let char_b = b % (piece.metrics().chars() + 1);
                             let start_char = char_a.min(char_b);
                             let end_char = char_a.max(char_b);
-                            let start = piece.char_to_byte(start_char);
-                            let end = piece.char_to_byte(end_char);
+                            let start = piece_char_to_byte(&piece, start_char);
+                            let end = piece_char_to_byte(&piece, end_char);
                             let nchars = end_char - start_char;
-                            piece.delete_range_both(start, end, nchars);
+                            delete_piece_range_both(&mut piece, start, end, nchars);
                             gap.delete_range_both(start, end, nchars);
                         }
                     }
                     _ => {
                         if piece.metrics().chars() > 0 {
                             let char_pos = a % piece.metrics().chars();
-                            let start = piece.char_to_byte(char_pos);
-                            let end = piece.char_to_byte(char_pos + 1);
+                            let start = piece_char_to_byte(&piece, char_pos);
+                            let end = piece_char_to_byte(&piece, char_pos + 1);
                             if let Some(replacement) = replacement_bytes_for_len(end - start, seed) {
-                                piece.replace_same_len_emacs_bytes(start, end, &replacement);
+                                replace_piece_same_len(&mut piece, start, end, &replacement);
                                 gap.replace_same_len_emacs_bytes(start, end, &replacement);
                             }
                         }
@@ -1092,7 +1031,7 @@ mod tests {
                     0 => {
                         let byte_pos = a % (piece.len() + 1);
                         let bytes = sample_unibyte_insert(seed);
-                        piece.insert_emacs_bytes_both(byte_pos, &bytes, bytes.len());
+                        insert_piece_bytes_both(&mut piece, byte_pos, &bytes, bytes.len());
                         gap.insert_emacs_bytes_both(byte_pos, &bytes, bytes.len());
                     }
                     1 => {
@@ -1101,7 +1040,7 @@ mod tests {
                             let byte_b = b % (piece.len() + 1);
                             let start = byte_a.min(byte_b);
                             let end = byte_a.max(byte_b);
-                            piece.delete_range_both(start, end, end - start);
+                            delete_piece_range_both(&mut piece, start, end, end - start);
                             gap.delete_range_both(start, end, end - start);
                         }
                     }
@@ -1110,7 +1049,7 @@ mod tests {
                             let start = a % piece.len();
                             let end = (start + 1 + (b % 4)).min(piece.len());
                             let replacement = vec![seed; end - start];
-                            piece.replace_same_len_emacs_bytes(start, end, &replacement);
+                            replace_piece_same_len(&mut piece, start, end, &replacement);
                             gap.replace_same_len_emacs_bytes(start, end, &replacement);
                         }
                     }
