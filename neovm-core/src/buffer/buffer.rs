@@ -1962,6 +1962,11 @@ impl Buffer {
         AccessibleEmacsByteRange::new(self.accessible_emacs_byte_range())
     }
 
+    pub fn is_narrowed(&self) -> bool {
+        let accessible = self.accessible_emacs_byte_region();
+        accessible.start_usize() > 0 || accessible.end_usize() < self.total_bytes()
+    }
+
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {

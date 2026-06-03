@@ -1437,7 +1437,7 @@ pub(crate) fn builtin_set_buffer_multibyte(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
             current.get_multibyte(),
-            current.begv_byte > 0 || current.zv_byte < current.text.len(),
+            current.is_narrowed(),
             current.base_buffer,
             eval.buffers.shared_text_buffer_ids(current_id),
         )
@@ -1958,8 +1958,7 @@ pub(crate) fn builtin_compute_motion(
         ]));
     };
     let text = buf.text.to_string();
-    let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
+    let accessible = buf.accessible_emacs_byte_region();
     let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
         .map(|info| buf.slots[info.offset])
         .or_else(|| buf.get_buffer_local("tab-width"))
@@ -1975,8 +1974,8 @@ pub(crate) fn builtin_compute_motion(
     let from_byte = char_pos_to_buffer_byte(buf, ((from - 1).max(0) as usize).min(max_chars));
     let to_byte = char_pos_to_buffer_byte(buf, ((to - 1).max(0) as usize).min(max_chars));
 
-    let from_pos = from_byte.clamp(begv, zv);
-    let to_pos = to_byte.clamp(begv, zv);
+    let from_pos = accessible.clamp_usize(from_byte);
+    let to_pos = accessible.clamp_usize(to_byte);
 
     let mut hpos = from_hpos;
     let mut vpos = from_vpos;
@@ -2033,7 +2032,7 @@ pub(crate) fn builtin_compute_motion(
     }
 
     // Convert byte pos back to 1-based char position.
-    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(zv)));
+    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos.min(accessible.end_usize())));
 
     Ok(Value::list(vec![
         Value::fixnum(final_charpos),
@@ -3953,15 +3952,18 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        (buf.point() < buf.zv_byte).then_some(buf.point())
+        accessible
+            .contains_usize(buf.point())
+            .then_some(buf.point())
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
             return Ok(Value::NIL);
         }
-        let point_min = point_char_pos(buf, EmacsBytePos::new(buf.begv_byte));
-        let point_max = point_char_pos(buf, EmacsBytePos::new(buf.zv_byte));
+        let point_min = point_char_pos(buf, accessible.start());
+        let point_max = point_char_pos(buf, accessible.end());
         if pos < point_min || pos >= point_max {
             return Ok(Value::NIL);
         }
@@ -3979,15 +3981,18 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let accessible = buf.accessible_emacs_byte_region();
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        (buf.point() > buf.begv_byte).then_some(buf.point())
+        accessible
+            .contains_preceding_char_boundary_usize(buf.point())
+            .then_some(buf.point())
     } else {
         let pos = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
         if pos <= 0 {
             return Ok(Value::NIL);
         }
-        let point_min = point_char_pos(buf, EmacsBytePos::new(buf.begv_byte));
-        let point_max = point_char_pos(buf, EmacsBytePos::new(buf.zv_byte));
+        let point_min = point_char_pos(buf, accessible.start());
+        let point_max = point_char_pos(buf, accessible.end());
         if pos <= point_min || pos > point_max {
             return Ok(Value::NIL);
         }

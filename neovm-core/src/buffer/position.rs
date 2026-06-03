@@ -280,6 +280,14 @@ impl AccessibleEmacsByteRange {
         self.range.end_usize()
     }
 
+    pub fn contains_usize(self, pos: usize) -> bool {
+        self.start_usize() <= pos && pos < self.end_usize()
+    }
+
+    pub fn contains_preceding_char_boundary_usize(self, pos: usize) -> bool {
+        self.start_usize() < pos && pos <= self.end_usize()
+    }
+
     pub fn clamp_usize(self, pos: usize) -> usize {
         pos.clamp(self.start_usize(), self.end_usize())
     }
