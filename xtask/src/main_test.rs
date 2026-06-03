@@ -38,9 +38,26 @@ fn explicit_bin_dir_before_release_stays_in_effect() {
 }
 
 #[test]
-fn initial_cargo_build_enables_webkit_on_linux() {
+fn initial_cargo_build_passes_no_features_by_default_on_linux() {
     let options = parse_options(&["--release"]);
-    let args = initial_cargo_build_args(&options, "linux");
+    let args = initial_cargo_build_args(&options);
+
+    assert_eq!(
+        args,
+        vec![
+            OsString::from("build"),
+            OsString::from("--verbose"),
+            OsString::from("-p"),
+            OsString::from("neomacs"),
+            OsString::from("--release"),
+        ]
+    );
+}
+
+#[test]
+fn initial_cargo_build_passes_wpe_webkit_when_requested() {
+    let options = parse_options(&["--features", "wpe-webkit", "--release"]);
+    let args = initial_cargo_build_args(&options);
 
     assert_eq!(
         args,
@@ -57,9 +74,9 @@ fn initial_cargo_build_enables_webkit_on_linux() {
 }
 
 #[test]
-fn initial_cargo_build_keeps_webkit_off_non_linux() {
+fn initial_cargo_build_passes_no_features_on_non_linux() {
     let options = parse_options(&["--release"]);
-    let args = initial_cargo_build_args(&options, "windows");
+    let args = initial_cargo_build_args(&options);
 
     assert_eq!(
         args,
@@ -1288,6 +1305,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         native_comp: false,
         skip_build: false,
         no_byte_compile: false,
+        features: Vec::new(),
     };
     let paths = PipelinePaths {
         lisp_root: lisp.clone(),

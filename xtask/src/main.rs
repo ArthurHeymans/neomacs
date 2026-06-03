@@ -31,6 +31,7 @@ struct FreshBuildOptions {
     native_comp: bool,
     skip_build: bool,
     no_byte_compile: bool,
+    features: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +286,7 @@ impl FreshBuildOptions {
             env::var("NEOMACS_NATIVE_COMP").is_ok_and(|value| value.eq_ignore_ascii_case("yes"));
         let mut skip_build = false;
         let mut no_byte_compile = false;
+        let mut features: Vec<String> = Vec::new();
 
         while let Some(arg) = args.next() {
             match arg.to_string_lossy().as_ref() {
@@ -306,6 +308,17 @@ impl FreshBuildOptions {
                 "--no-native-comp" => native_comp = false,
                 "--skip-build" => skip_build = true,
                 "--no-byte-compile" => no_byte_compile = true,
+                "--features" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--features requires a comma-separated list".to_string())?;
+                    features = value
+                        .to_string_lossy()
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                }
                 "--help" | "-h" => {
                     print_usage();
                     std::process::exit(0);
@@ -327,6 +340,7 @@ impl FreshBuildOptions {
             native_comp,
             skip_build,
             no_byte_compile,
+            features,
         })
     }
 }
@@ -366,7 +380,7 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     ensure_runtime_inputs(&paths)?;
 
     if !options.skip_build {
-        let cargo_args = initial_cargo_build_args(options, env::consts::OS);
+        let cargo_args = initial_cargo_build_args(options);
         run_command(
             options,
             &options.repo_root,
@@ -605,16 +619,16 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     Ok(())
 }
 
-fn initial_cargo_build_args(options: &FreshBuildOptions, target_os: &str) -> Vec<OsString> {
+fn initial_cargo_build_args(options: &FreshBuildOptions) -> Vec<OsString> {
     let mut cargo_args = vec![
         OsString::from("build"),
         OsString::from("--verbose"),
         OsString::from("-p"),
         OsString::from("neomacs"),
     ];
-    if target_os == "linux" {
+    if !options.features.is_empty() {
         cargo_args.push(OsString::from("--features"));
-        cargo_args.push(OsString::from("wpe-webkit"));
+        cargo_args.push(OsString::from(options.features.join(",")));
     }
     if options.release {
         cargo_args.push(OsString::from("--release"));
