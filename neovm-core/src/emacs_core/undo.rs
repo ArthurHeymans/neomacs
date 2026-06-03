@@ -7,7 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
-use crate::buffer::CharPos0;
+use crate::buffer::{Buffer, CharPos0};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -86,6 +86,32 @@ fn char_pos1_to_char0(pos1: i64) -> usize {
 fn char_pos1_to_byte_clamped(buf: &crate::buffer::Buffer, pos1: i64) -> usize {
     buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos1_to_char0(pos1)))
         .get()
+}
+
+fn accessible_lisp_char_bounds(buf: &Buffer) -> (i64, i64) {
+    let accessible = buf.accessible_char_region();
+    (
+        accessible.start_usize() as i64 + 1,
+        accessible.end_usize() as i64 + 1,
+    )
+}
+
+fn lisp_char_position_is_visible(buf: &Buffer, pos: i64) -> bool {
+    let (point_min, point_max) = accessible_lisp_char_bounds(buf);
+    point_min <= pos && pos <= point_max
+}
+
+fn ensure_undo_lisp_range_is_visible(buf: &Buffer, beg: i64, end: i64) -> Result<(), Flow> {
+    let (point_min, point_max) = accessible_lisp_char_bounds(buf);
+    if beg < point_min || end > point_max {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "Changes to be undone are outside visible portion of buffer",
+            )],
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
@@ -224,16 +250,7 @@ fn primitive_undo_inner(
                 // (BEG . END) both integers — undo an insertion by deleting.
                 (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                        let point_min = buf.point_min_char() as i64 + 1;
-                        let point_max = buf.point_max_char() as i64 + 1;
-                        if beg1 < point_min || end1 > point_max {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string(
-                                    "Changes to be undone are outside visible portion of buffer",
-                                )],
-                            ));
-                        }
+                        ensure_undo_lisp_range_is_visible(buf, beg1, end1)?;
                         let clamped_beg = char_pos1_to_byte_clamped(buf, beg1);
                         let clamped_end = char_pos1_to_byte_clamped(buf, end1);
                         ctx.buffers
@@ -244,9 +261,7 @@ fn primitive_undo_inner(
                 (ValueKind::String, ValueKind::Fixnum(pos1)) => {
                     if let Some(buf) = ctx.buffers.get(buf_id) {
                         let apos1 = pos1.abs();
-                        let point_min = buf.point_min_char() as i64 + 1;
-                        let point_max = buf.point_max_char() as i64 + 1;
-                        if apos1 < point_min || apos1 > point_max {
+                        if !lisp_char_position_is_visible(buf, apos1) {
                             return Err(signal(
                                 "error",
                                 vec![Value::string(
@@ -350,8 +365,9 @@ fn primitive_undo_inner(
                             let del_end = buf
                                 .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(del_end_char))
                                 .get();
-                            if del_start_char >= buf.point_min_char()
-                                && del_end_char <= buf.point_max_char()
+                            let accessible = buf.accessible_char_region();
+                            if accessible.contains_boundary_usize(del_start_char)
+                                && accessible.contains_boundary_usize(del_end_char)
                             {
                                 ctx.buffers.goto_buffer_byte(buf_id, del_start);
                                 ctx.buffers.delete_buffer_region(buf_id, del_start, del_end);
@@ -375,23 +391,16 @@ fn primitive_undo_inner(
                                     (beg_val.as_fixnum(), end_val.as_fixnum())
                                 {
                                     if let Some(buf) = ctx.buffers.get(buf_id) {
-                                        let point_min = buf.point_min_char() as i64 + 1;
-                                        let point_max = buf.point_max_char() as i64 + 1;
-                                        if b < point_min || e > point_max {
-                                            return Err(signal(
-                                                "error",
-                                                vec![Value::string(
-                                                    "Changes to be undone are outside visible portion of buffer",
-                                                )],
-                                            ));
-                                        }
+                                        ensure_undo_lisp_range_is_visible(buf, b, e)?;
+                                        let accessible_start =
+                                            buf.accessible_emacs_byte_region().start_usize();
                                         let byte_beg = if b > 0 {
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
                                                 (b - 1) as usize,
                                             ))
                                             .get()
                                         } else {
-                                            buf.point_min_byte()
+                                            accessible_start
                                         };
                                         let byte_end = if e > 0 {
                                             buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
@@ -399,7 +408,7 @@ fn primitive_undo_inner(
                                             ))
                                             .get()
                                         } else {
-                                            buf.point_min_byte()
+                                            accessible_start
                                         };
                                         let _ = ctx.buffers.put_buffer_text_property(
                                             buf_id, byte_beg, byte_end, prop, val,
@@ -437,16 +446,7 @@ fn primitive_undo_inner(
                                 (start_v.as_fixnum(), end_v.as_fixnum())
                             {
                                 if let Some(buf) = ctx.buffers.get(buf_id) {
-                                    let point_min = buf.point_min_char() as i64 + 1;
-                                    let point_max = buf.point_max_char() as i64 + 1;
-                                    if start1 < point_min || end1 > point_max {
-                                        return Err(signal(
-                                            "error",
-                                            vec![Value::string(
-                                                "Changes to be undone are outside visible portion of buffer",
-                                            )],
-                                        ));
-                                    }
+                                    ensure_undo_lisp_range_is_visible(buf, start1, end1)?;
                                 }
                             }
                             if !rest3.is_cons() {
