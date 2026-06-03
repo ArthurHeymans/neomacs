@@ -12,6 +12,7 @@ use std::mem;
 use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
+use super::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
 use super::text::BufferTextBackendKind;
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
 // in `Buffer::local_var_alist` (for LOCALIZED), `Buffer::slots[]`
@@ -1931,8 +1932,13 @@ impl Buffer {
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_to_byte_clamped(&self, char_pos: usize) -> usize {
+        self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+            .get()
+    }
+
+    pub(crate) fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
         self.text
-            .char_to_emacs_byte(char_pos.min(self.total_chars()))
+            .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos.get().min(self.total_chars())))
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping
@@ -2015,21 +2021,51 @@ impl Buffer {
 
     // -- Text queries --------------------------------------------------------
 
-    pub fn emacs_byte_to_storage_byte(&self, pos: usize) -> usize {
+    fn clamped_emacs_byte_range(&self, range: EmacsByteRange) -> EmacsByteRange {
+        let total = self.total_bytes();
+        let start = range.start_usize().min(total);
+        let end = range.end_usize().max(start).min(total);
+        EmacsByteRange::from_usize(start, end)
+    }
+
+    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(&self, pos: EmacsBytePos) -> StorageBytePos {
         self.text
-            .emacs_byte_to_storage_byte(pos.min(self.total_bytes()))
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(
+                pos.get().min(self.total_bytes()),
+            ))
+    }
+
+    pub fn emacs_byte_to_storage_byte(&self, pos: usize) -> usize {
+        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
+            .get()
+    }
+
+    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(&self, pos: StorageBytePos) -> EmacsBytePos {
+        self.text
+            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(pos.get().min(self.text.len())))
     }
 
     pub fn storage_byte_to_emacs_byte(&self, pos: usize) -> usize {
+        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(pos))
+            .get()
+    }
+
+    pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.text
-            .storage_byte_to_emacs_byte(pos.min(self.text.len()))
+            .copy_emacs_byte_range_to(self.clamped_emacs_byte_range(range), out);
     }
 
     pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        let total = self.total_bytes();
-        let s = start.min(total);
-        let e = end.max(s).min(total);
-        self.text.copy_emacs_bytes_to(s, e, out);
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+    }
+
+    pub(crate) fn for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.text
+            .for_each_emacs_byte_range_chunk(self.clamped_emacs_byte_range(range), f)
     }
 
     pub fn for_each_emacs_byte_chunk<E>(
@@ -2038,17 +2074,25 @@ impl Buffer {
         end: usize,
         f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
-        let total = self.total_bytes();
-        let s = start.min(total);
-        let e = end.max(s).min(total);
-        self.text.for_each_emacs_byte_chunk(s, e, f)
+        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), f)
+    }
+
+    pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
+        self.text
+            .has_contiguous_emacs_byte_range(self.clamped_emacs_byte_range(range))
     }
 
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
-        let total = self.total_bytes();
-        let s = start.min(total);
-        let e = end.max(s).min(total);
-        self.text.has_contiguous_emacs_bytes(s, e)
+        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(crate) fn with_contiguous_emacs_byte_range<R>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnOnce(&[u8]) -> R,
+    ) -> Option<R> {
+        self.text
+            .with_contiguous_emacs_byte_range(self.clamped_emacs_byte_range(range), f)
     }
 
     pub fn with_contiguous_emacs_bytes<R>(
@@ -2057,10 +2101,7 @@ impl Buffer {
         end: usize,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
-        let total = self.total_bytes();
-        let s = start.min(total);
-        let e = end.max(s).min(total);
-        self.text.with_contiguous_emacs_bytes(s, e, f)
+        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
     }
 
     /// Return a raw Emacs-byte copy of the range `[start, end)`.
