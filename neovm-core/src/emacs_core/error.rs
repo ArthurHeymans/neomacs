@@ -8,6 +8,7 @@ use super::intern::{SymId, intern, resolve_sym};
 use super::print::PrintOptions;
 use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
 use super::value::{Value, ValueKind, VecLikeType, get_string_text_properties_for_value};
+use crate::buffer::EmacsBytePos;
 use crate::emacs_core::eval::ResumeTarget;
 use crate::window::WindowId;
 use strum::{EnumString, IntoStaticStr};
@@ -246,8 +247,12 @@ fn format_opaque_handle_in_state(
         {
             return Some(format!(
                 "#<overlay from {} to {} in {}>",
-                buffer.text.emacs_byte_to_char(overlay.start) + 1,
-                buffer.text.emacs_byte_to_char(overlay.end) + 1,
+                EmacsBytePos::new(overlay.start)
+                    .to_lisp(&buffer.text)
+                    .as_i64(),
+                EmacsBytePos::new(overlay.end)
+                    .to_lisp(&buffer.text)
+                    .as_i64(),
                 buffer.name_runtime_string_owned()
             ));
         }

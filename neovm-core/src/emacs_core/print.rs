@@ -13,6 +13,7 @@ use super::value::{
     HashKey, HashTableTest, LispHashTable, StringTextPropertyRun, Value,
     get_string_text_properties_for_value, list_to_vec,
 };
+use crate::buffer::EmacsBytePos;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1483,8 +1484,12 @@ fn format_overlay_handle(
 
     Some(format!(
         "#<overlay from {} to {} in {}>",
-        buffer.text.emacs_byte_to_char(overlay.start) + 1,
-        buffer.text.emacs_byte_to_char(overlay.end) + 1,
+        EmacsBytePos::new(overlay.start)
+            .to_lisp(&buffer.text)
+            .as_i64(),
+        EmacsBytePos::new(overlay.end)
+            .to_lisp(&buffer.text)
+            .as_i64(),
         buffer.name_runtime_string_owned()
     ))
 }
