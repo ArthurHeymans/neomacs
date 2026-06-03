@@ -315,7 +315,7 @@ fn test_primitive_undo_reverts_raw_unibyte_deletion() {
         .buffers
         .current_buffer()
         .expect("scratch buffer")
-        .buffer_substring_lisp_string(0, 1);
+        .buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::from_usize(0, 1));
     assert!(!contents.is_multibyte());
     assert_eq!(contents.as_bytes(), &[0xFF]);
 }

@@ -738,7 +738,7 @@ fn internal_default_process_filter_moves_stored_process_mark() {
         ev.buffers
             .get(buffer_id)
             .expect("buffer")
-            .buffer_substring_lisp_string(0, 2)
+            .buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::from_usize(0, 2))
             .as_bytes(),
         b"ab"
     );

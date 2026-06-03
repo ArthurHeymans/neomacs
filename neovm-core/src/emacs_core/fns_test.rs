@@ -302,7 +302,7 @@ fn base64_region_preserves_unibyte_raw_bytes() {
         .buffers
         .current_buffer()
         .expect("current buffer")
-        .buffer_substring_lisp_string(0, 1);
+        .buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::from_usize(0, 1));
     assert_eq!(decoded_text.as_bytes(), &[0xFF]);
     assert!(!decoded_text.is_multibyte());
 }

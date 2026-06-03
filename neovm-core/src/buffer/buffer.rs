@@ -2105,11 +2105,6 @@ impl Buffer {
         out
     }
 
-    /// Return a raw Emacs-byte copy of the range `[start, end)`.
-    pub fn buffer_substring_bytes(&self, start: usize, end: usize) -> Vec<u8> {
-        self.buffer_substring_bytes_range(EmacsByteRange::from_usize(start, end))
-    }
-
     /// Return the range `[start, end)` as a Lisp string preserving the
     /// buffer's multibyte/unibyte semantics.
     pub fn buffer_substring_lisp_string_range(
@@ -2131,24 +2126,9 @@ impl Buffer {
         string
     }
 
-    /// Return the range `[start, end)` as a Lisp string preserving the
-    /// buffer's multibyte/unibyte semantics.
-    pub fn buffer_substring_lisp_string(
-        &self,
-        start: usize,
-        end: usize,
-    ) -> crate::heap_types::LispString {
-        self.buffer_substring_lisp_string_range(EmacsByteRange::from_usize(start, end))
-    }
-
     /// Return the range `[start, end)` as a Lisp value string.
     pub fn buffer_substring_value_range(&self, range: EmacsByteRange) -> Value {
         Value::heap_string(self.buffer_substring_lisp_string_range(range))
-    }
-
-    /// Return the range `[start, end)` as a Lisp value string.
-    pub fn buffer_substring_value(&self, start: usize, end: usize) -> Value {
-        self.buffer_substring_value_range(EmacsByteRange::from_usize(start, end))
     }
 
     /// Return a `String` copy of the Emacs-byte range `[start, end)`.
@@ -2158,11 +2138,6 @@ impl Buffer {
             &bytes,
             self.get_multibyte(),
         )
-    }
-
-    /// Return a `String` copy of the Emacs-byte range `[start, end)`.
-    pub fn buffer_substring(&self, start: usize, end: usize) -> String {
-        self.buffer_substring_range(EmacsByteRange::from_usize(start, end))
     }
 
     /// Return the entire accessible portion of the buffer as a `String`.

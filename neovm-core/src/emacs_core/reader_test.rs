@@ -1066,7 +1066,7 @@ fn expired_minibuffer_buffer_is_erased_before_restore() {
         .buffer_manager()
         .get(active_buffer)
         .expect("active minibuffer buffer");
-    let text = active_minibuffer.buffer_substring(0, active_minibuffer.total_bytes());
+    let text = active_minibuffer.buffer_substring_range(active_minibuffer.full_emacs_byte_range());
     assert_eq!(text, "");
     let frame = ev.frame_manager().get(frame_id).expect("frame");
     assert_eq!(frame.selected_window, previous_selected_window);

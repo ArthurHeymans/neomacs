@@ -640,7 +640,10 @@ fn delete_empty_range_is_noop() {
 fn buffer_substring_range() {
     crate::test_utils::init_test_tracing();
     let buf = buf_with_text("hello world");
-    assert_eq!(buf.buffer_substring(6, 11), "world");
+    assert_eq!(
+        buf.buffer_substring_range(EmacsByteRange::from_usize(6, 11)),
+        "world"
+    );
 }
 
 #[test]

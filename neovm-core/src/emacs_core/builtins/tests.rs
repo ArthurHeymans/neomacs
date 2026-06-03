@@ -2996,7 +2996,7 @@ fn replace_buffer_contents_preserves_unibyte_raw_bytes() {
         .buffers
         .get(dest_id)
         .expect("destination buffer should exist");
-    let text = dest.buffer_substring_lisp_string(dest.point_min(), dest.point_max());
+    let text = dest.buffer_substring_lisp_string_range(dest.accessible_emacs_byte_range());
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
 }
@@ -3050,8 +3050,9 @@ fn buffer_swap_text_preserves_unibyte_raw_bytes() {
         .buffers
         .get(second_id)
         .expect("second buffer should exist");
-    let first_text = first.buffer_substring_lisp_string(first.point_min(), first.point_max());
-    let second_text = second.buffer_substring_lisp_string(second.point_min(), second.point_max());
+    let first_text = first.buffer_substring_lisp_string_range(first.accessible_emacs_byte_range());
+    let second_text =
+        second.buffer_substring_lisp_string_range(second.accessible_emacs_byte_range());
     assert_eq!(first_text.as_bytes(), &[0xFF]);
     assert_eq!(second_text.as_bytes(), &[0xFE]);
     assert!(!first_text.is_multibyte());
@@ -3072,7 +3073,7 @@ fn buffer_swap_text_signal_message(result: EvalResult) -> String {
 
 fn full_buffer_bytes(buffer: &crate::buffer::Buffer) -> Vec<u8> {
     buffer
-        .buffer_substring_lisp_string(0, buffer.total_bytes())
+        .buffer_substring_lisp_string_range(buffer.full_emacs_byte_range())
         .as_bytes()
         .to_vec()
 }
