@@ -1,7 +1,7 @@
 # Buffer Text Backend Refactor Plan
 
 Date: 2026-06-03
-Status: design
+Status: in progress
 Scope: `neovm-core` buffer text storage, edit semantics, text properties,
 markers, backend selection, and backend parity tests
 
@@ -390,6 +390,28 @@ Recommended implementation order:
 8. Harden piece-tree conversion and chunk iteration.
 9. Add virtual gap compatibility state for non-gap backends.
 10. Only after these are stable, add a real rope backend.
+
+## Progress
+
+Completed so far:
+
+- Replaced gap-shaped public layout aliases with `TextMetrics`,
+  `GapDebugLayout`, and `TextBackendDebugLayout`.
+- Moved layout types into `buffer/text/layout.rs`.
+- Added typed position, range, length, extent, insertion, and edit range
+  wrappers.
+- Tightened private backend boundaries for byte ranges, position conversion,
+  edit mutation, byte access, storage/Emacs byte conversion, and conversion
+  anchors.
+- Centralized Emacs-byte character counting for buffer text storage.
+
+Next work:
+
+- Continue migrating semantic layers above `TextBackend` to typed positions.
+- Add backend matrix tests for markers, text properties, undo, narrowing, and
+  indirect buffers.
+- Move insert/delete/replace semantic ordering into an explicit transaction
+  module once the boundary is fully typed.
 
 ## Success Criteria
 
