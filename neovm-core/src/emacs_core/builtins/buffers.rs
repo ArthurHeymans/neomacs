@@ -5,7 +5,8 @@ use super::*;
 // ===========================================================================
 
 use crate::buffer::{
-    Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos,
+    Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    StorageBytePos,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -1471,17 +1472,17 @@ pub(crate) fn builtin_set_buffer_multibyte(
     #[derive(Clone, Copy)]
     struct OverlaySnapshot {
         overlay: Value,
-        start_byte: usize,
-        end_byte: usize,
+        start_old_emacs_byte: EmacsBytePos,
+        end_old_emacs_byte: EmacsBytePos,
     }
 
     struct BufferSnapshot {
         id: BufferId,
-        pt_byte: usize,
-        begv_byte: usize,
-        zv_byte: usize,
-        mark_byte: Option<usize>,
-        last_window_start_byte: usize,
+        pt_old_emacs_byte: EmacsBytePos,
+        begv_old_emacs_byte: EmacsBytePos,
+        zv_old_emacs_byte: EmacsBytePos,
+        mark_old_emacs_byte: Option<EmacsBytePos>,
+        last_window_start_old_emacs_byte: EmacsBytePos,
         overlays: Vec<OverlaySnapshot>,
     }
 
@@ -1500,51 +1501,37 @@ pub(crate) fn builtin_set_buffer_multibyte(
                     let data = overlay.as_overlay_data()?;
                     Some(OverlaySnapshot {
                         overlay,
-                        start_byte: buffer
+                        start_old_emacs_byte: buffer
                             .text
-                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.start))
-                            .get(),
-                        end_byte: buffer
+                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.start)),
+                        end_old_emacs_byte: buffer
                             .text
-                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.end))
-                            .get(),
+                            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(data.end)),
                     })
                 })
                 .collect();
+            let last_window_start = LispCharPos1::new(buffer.last_window_start.max(1) as i64);
             snapshots.push(BufferSnapshot {
                 id: *id,
-                pt_byte: buffer
-                    .text
-                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
-                        buffer.pt_byte.min(buffer.text.len()),
-                    ))
-                    .get(),
-                begv_byte: buffer
-                    .text
-                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
-                        buffer.begv_byte.min(buffer.text.len()),
-                    ))
-                    .get(),
-                zv_byte: buffer
-                    .text
-                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
-                        buffer.zv_byte.min(buffer.text.len()),
-                    ))
-                    .get(),
-                mark_byte: buffer.mark_byte().map(|mark| {
+                pt_old_emacs_byte: buffer.text.storage_byte_pos_to_emacs_byte_pos(
+                    StorageBytePos::new(buffer.pt_byte.min(buffer.text.len())),
+                ),
+                begv_old_emacs_byte: buffer.text.storage_byte_pos_to_emacs_byte_pos(
+                    StorageBytePos::new(buffer.begv_byte.min(buffer.text.len())),
+                ),
+                zv_old_emacs_byte: buffer.text.storage_byte_pos_to_emacs_byte_pos(
+                    StorageBytePos::new(buffer.zv_byte.min(buffer.text.len())),
+                ),
+                mark_old_emacs_byte: buffer.mark_byte().map(|mark| {
                     buffer
                         .text
                         .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
                             mark.min(buffer.text.len()),
                         ))
-                        .get()
                 }),
-                last_window_start_byte: buffer
+                last_window_start_old_emacs_byte: buffer
                     .text
-                    .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(
-                        buffer.last_window_start.min(buffer.text.len()),
-                    ))
-                    .get(),
+                    .char_pos_to_emacs_byte_pos(last_window_start.to_char_pos()),
                 overlays,
             });
         }
@@ -1613,11 +1600,13 @@ pub(crate) fn builtin_set_buffer_multibyte(
             lisp_string_advance_byte_to_boundary(&new_storage, logical_byte.min(new_total_bytes))
         };
 
-        let pt_byte = map_boundary(snapshot.pt_byte);
-        let begv_byte = map_boundary(snapshot.begv_byte);
-        let zv_byte = map_boundary(snapshot.zv_byte);
-        let mark_byte = snapshot.mark_byte.map(map_boundary);
-        let last_window_start_byte = map_boundary(snapshot.last_window_start_byte);
+        let pt_byte = map_boundary(snapshot.pt_old_emacs_byte.get());
+        let begv_byte = map_boundary(snapshot.begv_old_emacs_byte.get());
+        let zv_byte = map_boundary(snapshot.zv_old_emacs_byte.get());
+        let mark_byte = snapshot
+            .mark_old_emacs_byte
+            .map(|old_byte| map_boundary(old_byte.get()));
+        let last_window_start_byte = map_boundary(snapshot.last_window_start_old_emacs_byte.get());
 
         buf.pt = lisp_string_byte_to_char(&new_storage, pt_byte);
         buf.pt_byte = pt_byte;
@@ -1635,11 +1624,11 @@ pub(crate) fn builtin_set_buffer_multibyte(
             buf.mark_marker_ptr = std::ptr::null_mut();
         }
 
-        buf.last_window_start = last_window_start_byte;
+        buf.last_window_start = lisp_string_byte_to_char(&new_storage, last_window_start_byte) + 1;
 
         for overlay in snapshot.overlays {
-            let start_byte = map_boundary(overlay.start_byte);
-            let end_byte = map_boundary(overlay.end_byte);
+            let start_byte = map_boundary(overlay.start_old_emacs_byte.get());
+            let end_byte = map_boundary(overlay.end_old_emacs_byte.get());
             buf.overlays
                 .move_overlay(overlay.overlay, start_byte, end_byte);
         }

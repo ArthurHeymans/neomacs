@@ -12412,6 +12412,37 @@ fn set_buffer_multibyte_reinterprets_bytes_like_gnu() {
 }
 
 #[test]
+fn set_buffer_multibyte_remaps_last_window_start_as_lisp_position() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let current_id = eval.buffers.current_buffer_id().expect("current buffer");
+
+    builtin_insert(&mut eval, vec![Value::string("éx")]).unwrap();
+    eval.buffers
+        .get_mut(current_id)
+        .expect("current buffer")
+        .last_window_start = 2;
+
+    builtin_set_buffer_multibyte(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(
+        eval.buffers
+            .get(current_id)
+            .expect("current buffer")
+            .last_window_start,
+        3
+    );
+
+    builtin_set_buffer_multibyte(&mut eval, vec![Value::T]).unwrap();
+    assert_eq!(
+        eval.buffers
+            .get(current_id)
+            .expect("current buffer")
+            .last_window_start,
+        2
+    );
+}
+
+#[test]
 fn set_buffer_multibyte_rejects_narrowed_and_indirect_buffers() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
