@@ -1004,10 +1004,6 @@ impl BufferText {
             .try_for_each_interval_in_range(range.start_usize(), range.end_usize(), f)
     }
 
-    pub fn adjust_text_props_for_insert(&self, pos: usize, len: usize) {
-        self.adjust_text_props_for_insert_at(CharPos0::new(pos), CharLen::new(len));
-    }
-
     pub(crate) fn adjust_text_props_for_insert_at(&self, pos: CharPos0, len: CharLen) {
         self.storage
             .borrow_mut()
@@ -1015,23 +1011,11 @@ impl BufferText {
             .adjust_for_insert(pos.get(), len.get());
     }
 
-    pub fn adjust_text_props_for_delete(&self, start: usize, end: usize) {
-        self.adjust_text_props_for_delete_range(CharRange::from_usize(start, end));
-    }
-
     pub(crate) fn adjust_text_props_for_delete_range(&self, range: CharRange) {
         self.storage
             .borrow_mut()
             .text_props
             .adjust_for_delete(range.start_usize(), range.end_usize());
-    }
-
-    pub fn adjust_text_props_for_replace(&self, start: usize, old_len: usize, new_len: usize) {
-        self.adjust_text_props_for_replace_at(
-            CharPos0::new(start),
-            CharLen::new(old_len),
-            CharLen::new(new_len),
-        );
     }
 
     pub(crate) fn adjust_text_props_for_replace_at(
@@ -1159,15 +1143,6 @@ impl BufferText {
         } else {
             unsafe { (*ptr).data.charpos }
         }
-    }
-
-    /// Update the byte and char position of a marker in this chain.
-    pub fn move_marker_to(&self, marker_id: u64, bytepos: usize, charpos: usize) {
-        self.move_marker_to_position(
-            marker_id,
-            EmacsBytePos::new(bytepos),
-            CharPos0::new(charpos),
-        );
     }
 
     pub(crate) fn move_marker_to_position(
@@ -1314,13 +1289,6 @@ impl BufferText {
         false
     }
 
-    pub fn adjust_markers_for_insert(&self, insert_pos: usize, byte_len: usize, char_len: usize) {
-        self.adjust_markers_for_insert_extent(
-            EmacsBytePos::new(insert_pos),
-            TextExtent::from_usize(char_len, byte_len),
-        );
-    }
-
     pub(crate) fn adjust_markers_for_insert_extent(
         &self,
         insert_pos: EmacsBytePos,
@@ -1354,24 +1322,11 @@ impl BufferText {
         }
     }
 
-    /// Like `adjust_markers_for_insert`, but ignores `insertion_type` for
-    /// markers AT `insert_pos`. Used by the GNU-equivalent replace path,
-    /// where markers that ended up at `from_byte` (after the prior delete
-    /// collapsed inside-region markers there) must NOT advance past the
-    /// inserted text — matching GNU `adjust_markers_for_replace`
-    /// (insdel.c:341).
-    pub fn adjust_markers_for_insert_strict_after(
-        &self,
-        insert_pos: usize,
-        byte_len: usize,
-        char_len: usize,
-    ) {
-        self.adjust_markers_for_insert_extent_strict_after(
-            EmacsBytePos::new(insert_pos),
-            TextExtent::from_usize(char_len, byte_len),
-        );
-    }
-
+    /// Like normal insert marker adjustment, but ignores `insertion_type` for
+    /// markers AT `insert_pos`. Used by the GNU-equivalent replace path, where
+    /// markers that ended up at `from_byte` (after the prior delete collapsed
+    /// inside-region markers there) must NOT advance past the inserted text —
+    /// matching GNU `adjust_markers_for_replace` (insdel.c:341).
     pub(crate) fn adjust_markers_for_insert_extent_strict_after(
         &self,
         insert_pos: EmacsBytePos,
@@ -1396,18 +1351,6 @@ impl BufferText {
                 curr = data.next_marker;
             }
         }
-    }
-
-    pub fn adjust_markers_for_delete(
-        &self,
-        start: usize,
-        end: usize,
-        start_char: usize,
-        end_char: usize,
-    ) {
-        self.adjust_markers_for_delete_range(TextEditRange::from_usize(
-            start, end, start_char, end_char,
-        ));
     }
 
     pub(crate) fn adjust_markers_for_delete_range(&self, range: TextEditRange) {
@@ -1435,21 +1378,6 @@ impl BufferText {
                 curr = data.next_marker;
             }
         }
-    }
-
-    pub fn adjust_markers_for_replace(
-        &self,
-        start: usize,
-        end: usize,
-        start_char: usize,
-        end_char: usize,
-        new_byte_len: usize,
-        new_char_len: usize,
-    ) {
-        self.adjust_markers_for_replace_range(
-            TextEditRange::from_usize(start, end, start_char, end_char),
-            TextExtent::from_usize(new_char_len, new_byte_len),
-        );
     }
 
     pub(crate) fn adjust_markers_for_replace_range(
@@ -1485,13 +1413,6 @@ impl BufferText {
                 curr = data.next_marker;
             }
         }
-    }
-
-    pub fn advance_markers_at(&self, pos: usize, byte_len: usize, char_len: usize) {
-        self.advance_markers_at_position(
-            EmacsBytePos::new(pos),
-            TextExtent::from_usize(char_len, byte_len),
-        );
     }
 
     pub(crate) fn advance_markers_at_position(&self, pos: EmacsBytePos, extent: TextExtent) {

@@ -12,7 +12,7 @@
 //! caches are refreshed by `sync_window_positions_from_markers` after every
 //! text edit.
 
-use crate::buffer::{Buffer, BufferId, BufferManager, InsertionType};
+use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType};
 use crate::window::{Frame, FrameManager, Window, WindowId};
 
 /// Window-start markers use `InsertionType::Before` so the marker stays
@@ -119,7 +119,8 @@ fn move_marker(
     let (bytepos, charpos) =
         lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
     if let Some(buf) = bm.get(buffer_id) {
-        buf.text.move_marker_to(mid, bytepos, charpos);
+        buf.text
+            .move_marker_to_position(mid, EmacsBytePos::new(bytepos), CharPos0::new(charpos));
     }
 }
 

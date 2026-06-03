@@ -2257,10 +2257,6 @@ impl Buffer {
             .update_marker_insertion_type(marker_id, insertion_type);
     }
 
-    pub fn advance_markers_at(&mut self, pos: usize, byte_len: usize, char_len: usize) {
-        self.text.advance_markers_at(pos, byte_len, char_len);
-    }
-
     // -- Mark ----------------------------------------------------------------
     // GNU: the mark IS a Lisp_Marker (BVAR(buf, mark)).  There are no
     // separate position fields.  The marker tracks its own position
