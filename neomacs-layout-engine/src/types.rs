@@ -131,6 +131,19 @@ pub struct CursorLayout {
 
 /// Parameters for a window that the layout engine needs.
 /// Populated from Emacs data via FFI before layout runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct LayoutCharPos0(i64);
+
+impl LayoutCharPos0 {
+    pub const fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WindowParams {
     /// Window identifier (pointer value)
@@ -146,15 +159,17 @@ pub struct WindowParams {
     /// Whether this is the minibuffer window
     pub is_minibuffer: bool,
 
-    /// First visible buffer position (marker_position(w->start))
+    /// First visible buffer position in layout 0-based char coordinates.
+    /// Derived from GNU `marker_position (w->start)`.
     pub window_start: i64,
-    /// Last visible buffer position from previous frame (0 = unknown)
+    /// Last visible buffer position from previous frame in layout 0-based
+    /// char coordinates.  0 means unknown for this legacy raw field.
     pub window_end: i64,
-    /// Point position in this window's buffer
+    /// Point position in this window's buffer in layout 0-based char coordinates.
     pub point: i64,
-    /// Buffer size (ZV - narrowing end)
+    /// Accessible end (ZV) in layout 0-based exclusive char coordinates.
     pub buffer_size: i64,
-    /// Buffer beginning (BEGV - narrowing start)
+    /// Accessible start (BEGV) in layout 0-based char coordinates.
     pub buffer_begv: i64,
 
     /// Horizontal scroll offset in columns
@@ -262,6 +277,28 @@ pub struct WindowParams {
     pub scroll_bar_pixel_width: f32,
     /// Horizontal scroll bar track height in pixels (0 when disabled).
     pub scroll_bar_pixel_height: f32,
+}
+
+impl WindowParams {
+    pub fn window_start_charpos(&self) -> LayoutCharPos0 {
+        LayoutCharPos0::new(self.window_start)
+    }
+
+    pub fn previous_window_end_charpos(&self) -> Option<LayoutCharPos0> {
+        (self.window_end > 0).then(|| LayoutCharPos0::new(self.window_end))
+    }
+
+    pub fn point_charpos(&self) -> LayoutCharPos0 {
+        LayoutCharPos0::new(self.point)
+    }
+
+    pub fn accessible_start_charpos(&self) -> LayoutCharPos0 {
+        LayoutCharPos0::new(self.buffer_begv)
+    }
+
+    pub fn accessible_end_charpos(&self) -> LayoutCharPos0 {
+        LayoutCharPos0::new(self.buffer_size)
+    }
 }
 
 #[derive(Clone, Debug)]

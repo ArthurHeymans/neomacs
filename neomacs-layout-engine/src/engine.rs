@@ -3107,54 +3107,60 @@ impl LayoutEngine {
         let window_text_row = |row: usize| text_matrix_row_base as i64 + row as i64;
         let window_text_row_u32 = |row: usize| (text_matrix_row_base + row) as u32;
 
+        let requested_window_start = params.window_start_charpos().get();
+        let previous_window_end = params.previous_window_end_charpos().map(|pos| pos.get());
+        let point_charpos = params.point_charpos().get();
+        let accessible_start = params.accessible_start_charpos().get();
+        let accessible_end = params.accessible_end_charpos().get();
+
         // Read buffer text starting from window_start.
         // Auto-adjust window_start when point is above the visible region.
         let window_start = {
-            let mut ws = params.window_start.max(params.buffer_begv);
+            let mut ws = requested_window_start.max(accessible_start);
             // GNU Emacs xdisp.c: if window-start is beyond the buffer content
             // that can fill the window, scroll back to show meaningful content.
             // This happens after buffer deletions that shrink the buffer below
             // the previous window-start.
-            if ws > params.buffer_begv {
-                let remaining_chars = params.buffer_size - ws;
-                if remaining_chars < max_rows as i64 && params.buffer_size > max_rows as i64 {
+            if ws > accessible_start {
+                let remaining_chars = accessible_end - ws;
+                if remaining_chars < max_rows as i64 && accessible_end > max_rows as i64 {
                     // Not enough content after ws to fill the window.
                     // Recenter around point.
                     let target_rows_above = (max_rows / 2).max(1) as i64;
                     let mut lines_back: i64 = 0;
-                    let mut scan_pos = params.point.max(params.buffer_begv);
-                    while scan_pos > params.buffer_begv && lines_back < target_rows_above {
+                    let mut scan_pos = point_charpos.max(accessible_start);
+                    while scan_pos > accessible_start && lines_back < target_rows_above {
                         scan_pos -= 1;
                         let bp = buf_access.charpos_to_bytepos(scan_pos);
                         if buf_access.byte_at(bp) == Some(b'\n') {
                             lines_back += 1;
                         }
                     }
-                    ws = scan_pos.max(params.buffer_begv);
+                    ws = scan_pos.max(accessible_start);
                 }
             }
-            if params.point >= params.buffer_begv && params.point < ws {
+            if point_charpos >= accessible_start && point_charpos < ws {
                 // Point is above the visible region: scroll backward.
                 // Target: show point about 25% of the way down from the top.
                 let target_rows_above = (max_rows / 4).max(1) as i64;
                 let mut lines_back: i64 = 0;
-                let mut scan_pos = params.point;
+                let mut scan_pos = point_charpos;
                 // Scan backward through buffer text counting newlines
-                while scan_pos > params.buffer_begv && lines_back < target_rows_above {
+                while scan_pos > accessible_start && lines_back < target_rows_above {
                     scan_pos -= 1;
                     let bp = buf_access.charpos_to_bytepos(scan_pos);
                     if buf_access.byte_at(bp) == Some(b'\n') {
                         lines_back += 1;
                     }
                 }
-                ws = scan_pos.max(params.buffer_begv);
+                ws = scan_pos.max(accessible_start);
                 tracing::debug!(
                     "layout_window_rust: adjusted window_start {} -> {} (point={})",
-                    params.window_start,
+                    requested_window_start,
                     ws,
-                    params.point
+                    point_charpos
                 );
-            } else if params.point > 0 && !params.is_minibuffer && {
+            } else if point_charpos > 0 && !params.is_minibuffer && {
                 // Forward-scroll trigger: either
                 //   (a) we have a previous window_end and
                 //       point is past it (standard
@@ -3173,11 +3179,11 @@ impl LayoutEngine {
                 // expect layout_frame_rust to publish geometry
                 // that includes point without a second
                 // redisplay pass.
-                let has_prev_end = params.window_end > 0 && params.point > params.window_end;
+                let has_prev_end = previous_window_end.is_some_and(|end| point_charpos > end);
                 let max_visible_chars =
                     (max_rows.max(1) as i64) * (params.bounds.width.max(1.0) as i64);
                 let far_below_without_prev_end =
-                    params.window_end == 0 && params.point - ws > max_visible_chars;
+                    previous_window_end.is_none() && point_charpos - ws > max_visible_chars;
                 has_prev_end || far_below_without_prev_end
             } {
                 // Mirror GNU/legacy forward scroll: when point moved below the
@@ -3185,21 +3191,21 @@ impl LayoutEngine {
                 // current redisplay already includes point.
                 let target_rows_above = ((max_rows * 3) / 4).max(1) as i64;
                 let mut lines_back: i64 = 0;
-                let mut scan_pos = params.point;
-                while scan_pos > params.buffer_begv && lines_back < target_rows_above {
+                let mut scan_pos = point_charpos;
+                while scan_pos > accessible_start && lines_back < target_rows_above {
                     scan_pos -= 1;
                     let bp = buf_access.charpos_to_bytepos(scan_pos);
                     if buf_access.byte_at(bp) == Some(b'\n') {
                         lines_back += 1;
                     }
                 }
-                ws = scan_pos.max(params.buffer_begv);
+                ws = scan_pos.max(accessible_start);
                 tracing::debug!(
                     "layout_window_rust: forward-adjusted window_start {} -> {} (point={}, prev_end={})",
-                    params.window_start,
+                    requested_window_start,
                     ws,
-                    params.point,
-                    params.window_end
+                    point_charpos,
+                    previous_window_end.unwrap_or(0)
                 );
             }
             ws
@@ -3209,13 +3215,13 @@ impl LayoutEngine {
         // character budget.  Capping the text slice here truncates long
         // wrapped or truncated lines before they are actually offscreen, which
         // breaks both redisplay and geometry queries.
-        let read_chars = params.buffer_size - window_start + 1;
+        let read_chars = accessible_end - window_start + 1;
 
         let text_start_byte = buf_access.charpos_to_bytepos(window_start) as usize;
         let bytes_read = if read_chars <= 0 {
             0i64
         } else {
-            let text_end = (window_start + read_chars).min(params.buffer_size);
+            let text_end = (window_start + read_chars).min(accessible_end);
             let byte_to = buf_access.charpos_to_bytepos(text_end);
             buf_access.copy_text(text_start_byte as i64, byte_to, &mut self.text_buf);
             self.text_buf.len() as i64
