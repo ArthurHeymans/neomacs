@@ -13,7 +13,9 @@
 use std::fmt;
 
 use crate::buffer::text::emacs_char_count_bytes;
-use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent};
+use crate::buffer::{
+    CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextEditRange, TextExtent,
+};
 
 /// Default extra gap bytes to pre-allocate on any growth.
 /// Matches GNU Emacs `GAP_BYTES_DFL` (`src/buffer.h:205`).
@@ -247,14 +249,18 @@ impl GapBuffer {
         self.byte_to_char(byte_pos)
     }
 
-    /// Convert a storage-byte boundary to the corresponding logical Emacs byte offset.
-    pub fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
-        byte_pos.min(self.len())
+    pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
+        &self,
+        byte_pos: StorageBytePos,
+    ) -> EmacsBytePos {
+        EmacsBytePos::new(byte_pos.get().min(self.len()))
     }
 
-    /// Convert a logical Emacs byte boundary to the corresponding storage-byte offset.
-    pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
-        byte_pos.min(self.total_bytes)
+    pub(crate) fn emacs_byte_pos_to_storage_byte_pos(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> StorageBytePos {
+        StorageBytePos::new(byte_pos.get().min(self.total_bytes))
     }
 
     // -----------------------------------------------------------------------

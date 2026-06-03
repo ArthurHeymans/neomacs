@@ -508,11 +508,6 @@ impl BufferText {
             .get()
     }
 
-    pub fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
-        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
-            .get()
-    }
-
     pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,
@@ -521,11 +516,6 @@ impl BufferText {
             .borrow()
             .backend
             .storage_byte_pos_to_emacs_byte_pos(byte_pos)
-    }
-
-    pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
-        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
-            .get()
     }
 
     pub(crate) fn emacs_byte_pos_to_storage_byte_pos(

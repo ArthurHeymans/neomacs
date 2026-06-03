@@ -2035,19 +2035,9 @@ impl Buffer {
             ))
     }
 
-    pub fn emacs_byte_to_storage_byte(&self, pos: usize) -> usize {
-        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
-            .get()
-    }
-
     pub(crate) fn storage_byte_pos_to_emacs_byte_pos(&self, pos: StorageBytePos) -> EmacsBytePos {
         self.text
             .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(pos.get().min(self.text.len())))
-    }
-
-    pub fn storage_byte_to_emacs_byte(&self, pos: usize) -> usize {
-        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(pos))
-            .get()
     }
 
     pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
@@ -2139,8 +2129,10 @@ impl Buffer {
         if pos >= self.total_bytes() {
             return None;
         }
-        let storage_pos = self.text.emacs_byte_to_storage_byte(pos);
-        self.text.char_code_at(storage_pos)
+        let storage_pos = self
+            .text
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos));
+        self.text.char_code_at(storage_pos.get())
     }
 
     /// Character immediately before Emacs byte position `pos`, or `None`.
@@ -2158,8 +2150,10 @@ impl Buffer {
             return None;
         }
         let prior_byte = self.text.char_to_emacs_byte(prior_char - 1);
-        let storage_pos = self.text.emacs_byte_to_storage_byte(prior_byte);
-        self.text.char_code_at(storage_pos)
+        let storage_pos = self
+            .text
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(prior_byte));
+        self.text.char_code_at(storage_pos.get())
     }
 
     /// Storage-byte width of the character starting at Emacs byte position `pos`.
@@ -2167,7 +2161,10 @@ impl Buffer {
         if pos >= self.total_bytes() {
             return None;
         }
-        let storage_pos = self.text.emacs_byte_to_storage_byte(pos);
+        let storage_pos = self
+            .text
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
+            .get();
         let char_idx = self.text.emacs_byte_to_char(pos);
         Some(self.text.char_to_byte(char_idx + 1) - storage_pos)
     }
@@ -2182,7 +2179,10 @@ impl Buffer {
             return None;
         }
         let prior_byte = self.text.char_to_byte(prior_char - 1);
-        let storage_pos = self.text.emacs_byte_to_storage_byte(pos);
+        let storage_pos = self
+            .text
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
+            .get();
         Some(storage_pos - prior_byte)
     }
 

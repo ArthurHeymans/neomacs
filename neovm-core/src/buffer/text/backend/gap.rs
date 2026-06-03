@@ -116,14 +116,14 @@ impl GapTextBackend {
         &self,
         byte_pos: StorageBytePos,
     ) -> EmacsBytePos {
-        EmacsBytePos::new(self.gap.storage_byte_to_emacs_byte(byte_pos.get()))
+        self.gap.storage_byte_pos_to_emacs_byte_pos(byte_pos)
     }
 
     pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
         &self,
         byte_pos: EmacsBytePos,
     ) -> StorageBytePos {
-        StorageBytePos::new(self.gap.emacs_byte_to_storage_byte(byte_pos.get()))
+        self.gap.emacs_byte_pos_to_storage_byte_pos(byte_pos)
     }
 
     pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
