@@ -166,8 +166,8 @@ fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Op
 
 /// Convert a 1-based Emacs char position to a 0-based byte position in the
 /// current buffer.  Clamps to valid range.
-fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> usize {
-    buf.lisp_pos_to_byte(pos)
+fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> EmacsBytePos {
+    buf.lisp_pos_to_emacs_byte_pos(pos)
 }
 
 /// Convert a 0-based byte position to a 1-based Emacs char position.
@@ -676,7 +676,7 @@ pub(crate) fn builtin_line_number_at_pos(
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
     let current_buffer_id = buf.id;
     let byte_pos = if args.is_empty() || args[0].is_nil() {
-        buf.pt_byte
+        EmacsBytePos::new(buf.pt_byte)
     } else {
         match args[0].kind() {
             ValueKind::Veclike(VecLikeType::Marker) => {
@@ -687,6 +687,7 @@ pub(crate) fn builtin_line_number_at_pos(
                         .and_then(|marker_id| {
                             eval.buffers.marker_position(current_buffer_id, marker_id)
                         })
+                        .map(EmacsBytePos::new)
                         .unwrap_or_else(|| char_pos_to_byte(buf, marker.charpos as i64 + 1))
                 } else {
                     char_pos_to_byte(buf, marker.charpos as i64 + 1)
@@ -715,7 +716,7 @@ pub(crate) fn builtin_line_number_at_pos(
     // Count newlines from start of buffer to byte_pos.
     let text = buffer_bytes(buf);
     let start = if _absolute { 0 } else { buf.begv_byte };
-    let line_num = count_newlines(&text, start, byte_pos) + 1;
+    let line_num = count_newlines(&text, start, byte_pos.get()) + 1;
     Ok(Value::fixnum(line_num as i64))
 }
 
@@ -734,11 +735,11 @@ pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Val
         (byte_end, byte_beg)
     };
     let text = buffer_bytes(buf);
-    let mut n = count_newlines(&text, s, e);
+    let mut n = count_newlines(&text, s.get(), e.get());
     // GNU Emacs: "can be one more if START is not equal to END and the
     // greater of them is not at the start of a line."
     // i.e., if the region is non-empty and the char before `e` is not '\n'.
-    if s != e && e > 0 && buf.char_code_before(e) != Some('\n' as u32) {
+    if s != e && e.get() > 0 && buf.char_code_before(e.get()) != Some('\n' as u32) {
         n += 1;
     }
     Ok(Value::fixnum(n as i64))
@@ -1142,7 +1143,7 @@ pub(crate) fn builtin_skip_chars_forward(
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
         let lim_byte = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?)
+            char_pos_to_byte(buf, expect_int(&args[1])?).get()
         } else {
             buf.zv_byte
         };
@@ -1194,7 +1195,7 @@ pub(crate) fn builtin_skip_chars_backward(
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
         let limit = if args.len() > 1 && !args[1].is_nil() {
-            char_pos_to_byte(buf, expect_int(&args[1])?)
+            char_pos_to_byte(buf, expect_int(&args[1])?).get()
         } else {
             buf.begv_byte
         };
