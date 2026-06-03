@@ -8,7 +8,7 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::{BufferManager, EmacsByteRange};
+use crate::buffer::{BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -171,8 +171,8 @@ fn char_pos_to_byte(buf: &crate::buffer::Buffer, pos: i64) -> usize {
 }
 
 /// Convert a 0-based byte position to a 1-based Emacs char position.
-fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
-    buf.text.emacs_byte_to_char(byte_pos) as i64 + 1
+fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
+    byte_pos.to_lisp(&buf.text).as_i64()
 }
 
 fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
@@ -283,8 +283,8 @@ pub(crate) fn check_point_motion_hooks(
             Some(b) => b,
             None => return Ok(()),
         };
-        let ol = buf.text.emacs_byte_to_char(old_byte) as i64 + 1;
-        let nl = buf.text.emacs_byte_to_char(new_byte) as i64 + 1;
+        let ol = byte_to_char_pos(buf, EmacsBytePos::new(old_byte));
+        let nl = byte_to_char_pos(buf, EmacsBytePos::new(new_byte));
         let leave_before = point_motion_property(
             &eval.obarray,
             &eval.buffers,
@@ -381,7 +381,12 @@ fn lookup_buffer_char_property(
     byte_pos: usize,
     prop: Value,
 ) -> Value {
-    if byte_pos >= buf.text.char_to_emacs_byte(buf.text.char_count()) {
+    if byte_pos
+        >= buf
+            .text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(buf.text.char_count()))
+            .get()
+    {
         return Value::NIL;
     }
     if let Some((value, _overlay)) =
@@ -583,8 +588,8 @@ pub(crate) fn pos_bol_compute(
         line_beginning_byte_narrowed(&text, pos, begv)
     };
     Ok((
-        byte_to_char_pos(buf, bol),
-        byte_to_char_pos(buf, buf.pt_byte),
+        byte_to_char_pos(buf, EmacsBytePos::new(bol)),
+        byte_to_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
         moved,
     ))
 }
@@ -614,8 +619,8 @@ pub(crate) fn pos_eol_compute(
         line_end_byte_narrowed(&text, pos, zv)
     };
     Ok((
-        byte_to_char_pos(buf, eol),
-        byte_to_char_pos(buf, buf.pt_byte),
+        byte_to_char_pos(buf, EmacsBytePos::new(eol)),
+        byte_to_char_pos(buf, EmacsBytePos::new(buf.pt_byte)),
     ))
 }
 
@@ -794,7 +799,9 @@ pub(crate) fn builtin_beginning_of_line(
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
-        buf.text.char_to_emacs_byte(zero_based)
+        buf.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(zero_based))
+            .get()
     };
     let old_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
@@ -829,7 +836,9 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     let target_byte = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
         let zero_based = (target_char - 1).max(0) as usize;
-        buf.text.char_to_emacs_byte(zero_based)
+        buf.text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(zero_based))
+            .get()
     };
     let adjusted = adjust_for_intangible(eval, target_byte, 1);
     let _ = eval.buffers.goto_buffer_byte(current_id, adjusted);
@@ -871,7 +880,9 @@ pub(crate) fn builtin_forward_char(
             cur_char,
             begv_char,
             zv_char,
-            buf.text.char_to_emacs_byte(clamped_char),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(clamped_char))
+                .get(),
         )
     };
     let direction = if n >= 0 { 1 } else { -1 };
@@ -1222,7 +1233,10 @@ pub(crate) fn builtin_mark_nav(eval: &mut super::eval::Context, args: Vec<Value>
     let _force = args.first().is_some_and(|v| v.is_truthy());
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
     match buf.mark() {
-        Some(byte_pos) => Ok(Value::fixnum(byte_to_char_pos(buf, byte_pos))),
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_char_pos(
+            buf,
+            EmacsBytePos::new(byte_pos),
+        ))),
         None => Ok(Value::NIL),
     }
 }
@@ -1245,7 +1259,10 @@ pub(crate) fn builtin_region_beginning(
     let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
     let mark = clamp_byte_to_accessible(buf, mark);
     let start = pt.min(mark);
-    Ok(Value::fixnum(byte_to_char_pos(buf, start)))
+    Ok(Value::fixnum(byte_to_char_pos(
+        buf,
+        EmacsBytePos::new(start),
+    )))
 }
 
 /// (region-end) -> integer
@@ -1263,7 +1280,7 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
     let pt = clamp_byte_to_accessible(buf, buf.pt_byte);
     let mark = clamp_byte_to_accessible(buf, mark);
     let end = pt.max(mark);
-    Ok(Value::fixnum(byte_to_char_pos(buf, end)))
+    Ok(Value::fixnum(byte_to_char_pos(buf, EmacsBytePos::new(end))))
 }
 
 // ===========================================================================
