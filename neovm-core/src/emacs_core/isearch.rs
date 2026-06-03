@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::{Value, ValueKind};
-use crate::buffer::Buffer;
+use crate::buffer::{Buffer, EmacsBytePos};
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -127,8 +127,8 @@ fn expect_sequence_string(val: &Value) -> Result<String, Flow> {
     }
 }
 
-fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, raw: i64) -> usize {
-    buf.lisp_pos_to_accessible_byte(raw)
+fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, raw: i64) -> EmacsBytePos {
+    buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
 }
 
 fn replacement_region_bounds(
@@ -152,12 +152,12 @@ fn replacement_region_bounds(
     }
 
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ if backward => buf.point_min(),
         _ => buf.point(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ if backward => buf.point(),
         _ => buf.point_max(),
     };
@@ -174,11 +174,11 @@ fn line_operation_region_bounds(
     end_arg: Option<&Value>,
 ) -> Result<(usize, usize), Flow> {
     let start = match start_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ => buf.point(),
     };
     let end = match end_arg {
-        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?),
+        Some(v) if !v.is_nil() => lisp_pos_to_byte(buf, expect_integer_or_marker(v)?).get(),
         _ => buf.point_max(),
     };
     if start <= end {
