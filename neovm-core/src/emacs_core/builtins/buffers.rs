@@ -5,7 +5,7 @@ use super::*;
 // ===========================================================================
 
 use crate::buffer::{
-    BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos,
+    Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
@@ -770,16 +770,12 @@ pub(crate) fn builtin_buffer_substring(
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
-    let start = start as usize;
-    let end = end as usize;
-    let byte_start = buf.lisp_pos_to_accessible_byte(start as i64);
-    let byte_end = buf.lisp_pos_to_accessible_byte(end as i64);
-    let (byte_lo, byte_hi) = if byte_start <= byte_end {
-        (byte_start, byte_end)
-    } else {
-        (byte_end, byte_start)
-    };
-    Ok(buffer_slice_value(buf, byte_lo, byte_hi))
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    Ok(buffer_slice_value(
+        buf,
+        byte_range.start_usize(),
+        byte_range.end_usize(),
+    ))
 }
 
 pub(crate) fn builtin_buffer_string(
@@ -862,6 +858,18 @@ fn buffer_slice_for_char_region(
     super::runtime_string_from_lisp_string(&buf.buffer_substring_lisp_string(from_byte, to_byte))
 }
 
+fn accessible_lisp_range_to_byte_range(buf: &Buffer, start: i64, end: i64) -> EmacsByteRange {
+    let (from, to) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(from),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(to),
+    )
+}
+
 fn checked_buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
@@ -883,15 +891,9 @@ fn checked_buffer_slice_for_char_region(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let from_byte = buf.lisp_pos_to_accessible_byte(from);
-    let to_byte = buf.lisp_pos_to_accessible_byte(to);
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string(from_byte, to_byte),
+        &buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()),
     ))
 }
 
@@ -952,15 +954,9 @@ fn checked_buffer_slice_for_char_region_in_manager(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let from_byte = buf.lisp_pos_to_accessible_byte(from);
-    let to_byte = buf.lisp_pos_to_accessible_byte(to);
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(super::runtime_string_from_lisp_string(
-        &buf.buffer_substring_lisp_string(from_byte, to_byte),
+        &buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()),
     ))
 }
 
@@ -989,14 +985,12 @@ fn checked_buffer_substring_for_char_region_in_manager(
         return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
     }
 
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let from_byte = buf.lisp_pos_to_accessible_byte(from);
-    let to_byte = buf.lisp_pos_to_accessible_byte(to);
-    Ok(buffer_slice_value(buf, from_byte, to_byte))
+    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
+    Ok(buffer_slice_value(
+        buf,
+        byte_range.start_usize(),
+        byte_range.end_usize(),
+    ))
 }
 
 fn compare_buffer_substring_strings(left: &str, right: &str, case_fold: bool) -> i64 {
@@ -2651,7 +2645,10 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        (buf.pt_byte, buf.lisp_pos_to_accessible_byte(pos))
+        (
+            buf.pt_byte,
+            buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get(),
+        )
     };
     // Adjust for intangible text property
     let direction = if byte_pos >= old_byte { 1 } else { -1 };
@@ -3963,7 +3960,7 @@ pub(crate) fn builtin_char_after(eval: &mut super::eval::Context, args: Vec<Valu
         if pos < point_min || pos >= point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_byte(pos))
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
     };
     match byte_pos.and_then(|pos| buf.char_code_after(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
@@ -3989,7 +3986,7 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         if pos <= point_min || pos > point_max {
             return Ok(Value::NIL);
         }
-        Some(buf.lisp_pos_to_accessible_byte(pos))
+        Some(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get())
     };
     match byte_pos.and_then(|pos| buf.char_code_before(pos)) {
         Some(code) => Ok(Value::fixnum(code as i64)),
@@ -4146,7 +4143,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
                 vec![args[0], Value::fixnum(point_min), Value::fixnum(point_max)],
             ));
         }
-        buf.lisp_pos_to_accessible_byte(pos)
+        buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
     };
 
     if byte_pos >= buf.text.len() {
