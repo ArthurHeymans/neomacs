@@ -176,7 +176,7 @@ fn byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 
 }
 
 fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
-    byte_pos.clamp(buf.point_min_byte(), buf.point_max_byte())
+    buf.accessible_emacs_byte_region().clamp_usize(byte_pos)
 }
 
 /// Return the full buffer text as raw Emacs bytes.
@@ -355,13 +355,14 @@ fn point_motion_property(
     after_point: bool,
     property: &str,
 ) -> Value {
+    let accessible = buf.accessible_emacs_byte_region();
     if after_point {
-        if point_byte >= buf.zv_byte {
+        if point_byte >= accessible.end_usize() {
             return Value::NIL;
         }
         lookup_buffer_text_property(obarray, buffers, buf, point_byte, Value::symbol(property))
     } else {
-        if point_byte <= buf.begv_byte {
+        if point_byte <= accessible.start_usize() {
             return Value::NIL;
         }
         lookup_buffer_text_property(
@@ -398,13 +399,14 @@ fn lookup_buffer_char_property(
 }
 
 fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+    let accessible = buf.accessible_emacs_byte_region();
     let text_next = buf
         .text
         .text_props_next_change(byte_pos)
-        .filter(|next| *next <= buf.zv_byte);
+        .filter(|next| *next <= accessible.end_usize());
     let overlay_next = buf
         .overlays
-        .next_boundary_after_until(byte_pos, buf.zv_byte);
+        .next_boundary_after_until(byte_pos, accessible.end_usize());
     match (text_next, overlay_next) {
         (Some(text), Some(overlay)) => Some(text.min(overlay)),
         (Some(text), None) => Some(text),
@@ -414,13 +416,14 @@ fn next_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Op
 }
 
 fn previous_char_property_change(buf: &crate::buffer::Buffer, byte_pos: usize) -> Option<usize> {
+    let accessible = buf.accessible_emacs_byte_region();
     let text_prev = buf
         .text
         .text_props_previous_change(byte_pos)
-        .filter(|prev| *prev >= buf.begv_byte);
+        .filter(|prev| *prev >= accessible.start_usize());
     let overlay_prev = buf
         .overlays
-        .previous_boundary_before_since(byte_pos, buf.begv_byte);
+        .previous_boundary_before_since(byte_pos, accessible.start_usize());
     match (text_prev, overlay_prev) {
         (Some(text), Some(overlay)) => Some(text.max(overlay)),
         (Some(text), None) => Some(text),
@@ -450,6 +453,7 @@ pub(crate) fn adjust_for_intangible(
         Some(b) => b,
         None => return pos,
     };
+    let accessible = buf.accessible_emacs_byte_region();
     let intangible = lookup_buffer_char_property(
         &eval.obarray,
         &eval.buffers,
@@ -478,7 +482,7 @@ pub(crate) fn adjust_for_intangible(
                     }
                 }
                 None => {
-                    cursor = buf.zv_byte;
+                    cursor = accessible.end_usize();
                     break;
                 }
             }
@@ -501,7 +505,7 @@ pub(crate) fn adjust_for_intangible(
                     }
                 }
                 None => {
-                    cursor = buf.begv_byte;
+                    cursor = accessible.start_usize();
                     break;
                 }
             }
@@ -518,21 +522,25 @@ pub(crate) fn adjust_for_intangible(
 pub(crate) fn builtin_bobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("bobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    Ok(Value::bool_val(buf.pt_byte == buf.begv_byte))
+    Ok(Value::bool_val(
+        buf.pt_byte == buf.accessible_emacs_byte_region().start_usize(),
+    ))
 }
 
 /// (eobp) -- at end of buffer?
 pub(crate) fn builtin_eobp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("eobp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    Ok(Value::bool_val(buf.pt_byte == buf.zv_byte))
+    Ok(Value::bool_val(
+        buf.pt_byte == buf.accessible_emacs_byte_region().end_usize(),
+    ))
 }
 
 /// (bolp) -- at beginning of line?
 pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("bolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.pt_byte == buf.begv_byte {
+    if buf.pt_byte == buf.accessible_emacs_byte_region().start_usize() {
         return Ok(Value::T);
     }
     Ok(Value::bool_val(
@@ -544,7 +552,7 @@ pub(crate) fn builtin_bolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> 
 pub(crate) fn builtin_eolp(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("eolp", &args, 0)?;
     let buf = current_buffer_in_manager(&ctx.buffers)?;
-    if buf.pt_byte == buf.zv_byte {
+    if buf.pt_byte == buf.accessible_emacs_byte_region().end_usize() {
         return Ok(Value::T);
     }
     match buf.char_code_after(buf.pt_byte) {
@@ -568,8 +576,9 @@ pub(crate) fn pos_bol_compute(
 ) -> Result<(i64, i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
-    let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
+    let accessible = buf.accessible_emacs_byte_region();
+    let begv = accessible.start_usize();
+    let zv = accessible.end_usize();
     let mut pos = buf.pt_byte;
     let mut moved: i64 = 0;
     if scan_count != 0 {
@@ -603,8 +612,9 @@ pub(crate) fn pos_eol_compute(
 ) -> Result<(i64, i64), Flow> {
     let buf = current_buffer_in_manager(&ctx.buffers)?;
     let text = buffer_bytes(buf);
-    let begv = buf.begv_byte;
-    let zv = buf.zv_byte;
+    let accessible = buf.accessible_emacs_byte_region();
+    let begv = accessible.start_usize();
+    let zv = accessible.end_usize();
     let mut pos = buf.pt_byte;
     let mut moved = 0;
     let delta = scan_count.saturating_sub(1);
@@ -715,7 +725,11 @@ pub(crate) fn builtin_line_number_at_pos(
     let _absolute = args.get(1).is_some_and(|v| v.is_truthy());
     // Count newlines from start of buffer to byte_pos.
     let text = buffer_bytes(buf);
-    let start = if _absolute { 0 } else { buf.begv_byte };
+    let start = if _absolute {
+        0
+    } else {
+        buf.accessible_emacs_byte_region().start_usize()
+    };
     let line_num = count_newlines(&text, start, byte_pos.get()) + 1;
     Ok(Value::fixnum(line_num as i64))
 }
@@ -755,7 +769,13 @@ pub(crate) fn builtin_forward_line(
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (text, begv, zv, pt) = {
         let buf = eval.buffers.get(current_id).ok_or_else(no_buffer)?;
-        (buffer_bytes(buf), buf.begv_byte, buf.zv_byte, buf.pt_byte)
+        let accessible = buf.accessible_emacs_byte_region();
+        (
+            buffer_bytes(buf),
+            accessible.start_usize(),
+            accessible.end_usize(),
+            buf.pt_byte,
+        )
     };
     let old_byte = pt;
     let (new_pos, moved) = move_by_lines_narrowed(&text, pt, n, begv, zv);
@@ -1142,15 +1162,16 @@ pub(crate) fn builtin_skip_chars_forward(
     let (start_pos, pos, limit, moved_chars) = {
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
+        let accessible = buf.accessible_emacs_byte_region();
         let lim_byte = if args.len() > 1 && !args[1].is_nil() {
             char_pos_to_byte(buf, expect_int(&args[1])?).get()
         } else {
-            buf.zv_byte
+            accessible.end_usize()
         };
         let start_pos = buf.pt_byte;
         let mut pos = buf.pt_byte;
         let mut moved_chars = 0_i64;
-        let limit = lim_byte.min(buf.zv_byte);
+        let limit = lim_byte.min(accessible.end_usize());
 
         while pos < limit {
             if let Some(code) = buf.char_code_after(pos) {
@@ -1194,10 +1215,11 @@ pub(crate) fn builtin_skip_chars_backward(
     let (pos, moved_chars) = {
         let buf = ctx.buffers.get(current_id).ok_or_else(no_buffer)?;
         let syntax_table = SyntaxTable::for_buffer(buf);
+        let accessible = buf.accessible_emacs_byte_region();
         let limit = if args.len() > 1 && !args[1].is_nil() {
             char_pos_to_byte(buf, expect_int(&args[1])?).get()
         } else {
-            buf.begv_byte
+            accessible.start_usize()
         };
         let start_pos = buf.pt_byte;
         let mut pos = buf.pt_byte;

@@ -54,6 +54,16 @@ pub struct EmacsByteRange {
     end: EmacsBytePos,
 }
 
+/// Accessible logical Emacs byte range `[BEGV_BYTE, ZV_BYTE)`.
+///
+/// This is still an Emacs byte range, but carrying the narrowing meaning in
+/// the type keeps higher-level motion/search code from reaching directly into
+/// raw buffer fields for `begv_byte` and `zv_byte`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AccessibleEmacsByteRange {
+    range: EmacsByteRange,
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextPositionAnchor {
     pub char_pos: CharPos0,
@@ -242,6 +252,36 @@ impl EmacsByteRange {
 
     pub const fn is_empty(self) -> bool {
         self.start.get() >= self.end.get()
+    }
+}
+
+impl AccessibleEmacsByteRange {
+    pub const fn new(range: EmacsByteRange) -> Self {
+        Self { range }
+    }
+
+    pub const fn range(self) -> EmacsByteRange {
+        self.range
+    }
+
+    pub const fn start(self) -> EmacsBytePos {
+        self.range.start()
+    }
+
+    pub const fn end(self) -> EmacsBytePos {
+        self.range.end()
+    }
+
+    pub const fn start_usize(self) -> usize {
+        self.range.start_usize()
+    }
+
+    pub const fn end_usize(self) -> usize {
+        self.range.end_usize()
+    }
+
+    pub fn clamp_usize(self, pos: usize) -> usize {
+        pos.clamp(self.start_usize(), self.end_usize())
     }
 }
 
