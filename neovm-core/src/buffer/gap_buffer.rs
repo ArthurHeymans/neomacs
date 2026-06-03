@@ -339,6 +339,43 @@ impl GapBuffer {
         self.copy_bytes_to(start, end, out);
     }
 
+    /// Visit each physically contiguous chunk of logical Emacs bytes in
+    /// `[start, end)`.
+    ///
+    /// Gap-buffer storage has at most two chunks: bytes before the gap and
+    /// bytes after the gap. Non-gap backends can use the same contract without
+    /// pretending their text is contiguous.
+    pub fn for_each_emacs_byte_chunk<E>(
+        &self,
+        start: usize,
+        end: usize,
+        mut f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        assert!(
+            start <= end,
+            "for_each_emacs_byte_chunk: start ({start}) > end ({end})"
+        );
+        assert!(
+            end <= self.total_bytes,
+            "for_each_emacs_byte_chunk: end ({end}) > emacs len ({})",
+            self.total_bytes
+        );
+        if start == end {
+            return Ok(());
+        }
+        if end <= self.gap_start_bytes {
+            return f(&self.buf[start..end]);
+        }
+        if start >= self.gap_start_bytes {
+            let gap = self.gap_size();
+            return f(&self.buf[start + gap..end + gap]);
+        }
+
+        f(&self.buf[start..self.gap_start])?;
+        let gap = self.gap_size();
+        f(&self.buf[self.gap_start + gap..end + gap])
+    }
+
     /// Return whether logical Emacs bytes in `[start, end)` are physically
     /// contiguous in the backing store.
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {

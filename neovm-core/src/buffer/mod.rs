@@ -11,7 +11,9 @@ pub use buffer::{
     Buffer, BufferId, BufferManager, InsertionType, LabeledRestriction, LabeledRestrictionLabel,
     SavedRestrictionKind, SavedRestrictionState,
 };
-pub use buffer_text::BufferText;
+pub use buffer_text::{
+    BufferText, BufferTextBackendLayout, BufferTextLayout, BufferTextMetrics, GapTextLayout,
+};
 pub use overlay::{Overlay, OverlayList};
 pub use shared::SharedUndoState;
 pub use text::BufferTextBackendKind;

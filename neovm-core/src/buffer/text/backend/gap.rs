@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::buffer::buffer_text::GapTextLayout;
 use crate::buffer::gap_buffer::GapBuffer;
 
 #[derive(Clone)]
@@ -52,10 +53,6 @@ impl GapTextBackend {
         self.gap.char_count()
     }
 
-    pub(in crate::buffer) fn emacs_byte_len(&self) -> usize {
-        self.gap.emacs_byte_len()
-    }
-
     pub(in crate::buffer) fn gpt(&self) -> usize {
         self.gap.gpt()
     }
@@ -74,6 +71,16 @@ impl GapTextBackend {
 
     pub(in crate::buffer) fn gap_size(&self) -> usize {
         self.gap.gap_size()
+    }
+
+    pub(in crate::buffer) fn layout(&self) -> GapTextLayout {
+        GapTextLayout {
+            gpt: self.gpt(),
+            z: self.z(),
+            gpt_byte: self.gpt_byte(),
+            z_byte: self.z_byte(),
+            gap_size: self.gap_size(),
+        }
     }
 
     pub(in crate::buffer) fn byte_at(&self, pos: usize) -> u8 {
@@ -123,6 +130,15 @@ impl GapTextBackend {
         out: &mut Vec<u8>,
     ) {
         self.gap.copy_emacs_bytes_to(start, end, out);
+    }
+
+    pub(in crate::buffer) fn for_each_emacs_byte_chunk<E>(
+        &self,
+        start: usize,
+        end: usize,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.gap.for_each_emacs_byte_chunk(start, end, f)
     }
 
     pub(in crate::buffer) fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {

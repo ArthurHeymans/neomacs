@@ -688,6 +688,35 @@ fn copy_emacs_bytes_to_unibyte_storage_sentinels() {
 }
 
 #[test]
+fn for_each_emacs_byte_chunk_visits_before_and_after_gap() {
+    crate::test_utils::init_test_tracing();
+    let mut gb = GapBuffer::from_str("abcdef");
+    gb.move_gap_to(3);
+
+    let mut chunks = Vec::new();
+    gb.for_each_emacs_byte_chunk(1, 5, |chunk| {
+        chunks.push(chunk.to_vec());
+        Ok::<(), ()>(())
+    })
+    .unwrap();
+    assert_eq!(chunks, vec![b"bc".to_vec(), b"de".to_vec()]);
+}
+
+#[test]
+fn for_each_emacs_byte_chunk_skips_empty_range() {
+    crate::test_utils::init_test_tracing();
+    let gb = GapBuffer::from_str("abcdef");
+    let mut called = false;
+
+    gb.for_each_emacs_byte_chunk(2, 2, |_| {
+        called = true;
+        Ok::<(), ()>(())
+    })
+    .unwrap();
+    assert!(!called);
+}
+
+#[test]
 fn contiguous_emacs_bytes_borrows_before_and_after_gap() {
     crate::test_utils::init_test_tracing();
     let mut gb = GapBuffer::from_str("abcdef");

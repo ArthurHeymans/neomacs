@@ -1988,6 +1988,18 @@ impl Buffer {
         self.text.copy_emacs_bytes_to(s, e, out);
     }
 
+    pub fn for_each_emacs_byte_chunk<E>(
+        &self,
+        start: usize,
+        end: usize,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let total = self.total_bytes();
+        let s = start.min(total);
+        let e = end.max(s).min(total);
+        self.text.for_each_emacs_byte_chunk(s, e, f)
+    }
+
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
         let total = self.total_bytes();
         let s = start.min(total);

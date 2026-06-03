@@ -3,6 +3,7 @@ mod gap;
 use std::fmt;
 
 use super::BufferTextBackendKind;
+use crate::buffer::buffer_text::BufferTextBackendLayout;
 use gap::GapTextBackend;
 
 #[derive(Clone)]
@@ -33,6 +34,18 @@ impl TextBackend {
         }
     }
 
+    pub(in crate::buffer) fn layout(&self) -> BufferTextBackendLayout {
+        match self {
+            Self::Gap(gap) => BufferTextBackendLayout::Gap(gap.layout()),
+        }
+    }
+
+    pub(in crate::buffer) fn primary_anchor(&self) -> Option<(usize, usize)> {
+        match self {
+            Self::Gap(gap) => Some((gap.gpt(), gap.gpt_byte())),
+        }
+    }
+
     pub(in crate::buffer) fn len(&self) -> usize {
         match self {
             Self::Gap(gap) => gap.len(),
@@ -54,48 +67,6 @@ impl TextBackend {
     pub(in crate::buffer) fn set_multibyte(&mut self, multibyte: bool) {
         match self {
             Self::Gap(gap) => gap.set_multibyte(multibyte),
-        }
-    }
-
-    pub(in crate::buffer) fn char_count(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.char_count(),
-        }
-    }
-
-    pub(in crate::buffer) fn emacs_byte_len(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.emacs_byte_len(),
-        }
-    }
-
-    pub(in crate::buffer) fn gpt(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.gpt(),
-        }
-    }
-
-    pub(in crate::buffer) fn z(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.z(),
-        }
-    }
-
-    pub(in crate::buffer) fn gpt_byte(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.gpt_byte(),
-        }
-    }
-
-    pub(in crate::buffer) fn z_byte(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.z_byte(),
-        }
-    }
-
-    pub(in crate::buffer) fn gap_size(&self) -> usize {
-        match self {
-            Self::Gap(gap) => gap.gap_size(),
         }
     }
 
@@ -167,6 +138,17 @@ impl TextBackend {
     ) {
         match self {
             Self::Gap(gap) => gap.copy_emacs_bytes_to(start, end, out),
+        }
+    }
+
+    pub(in crate::buffer) fn for_each_emacs_byte_chunk<E>(
+        &self,
+        start: usize,
+        end: usize,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        match self {
+            Self::Gap(gap) => gap.for_each_emacs_byte_chunk(start, end, f),
         }
     }
 

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use crate::buffer::BufferTextBackendKind;
+use crate::buffer::buffer_text::{BufferTextBackendLayout, BufferTextMetrics};
 
 use super::BufferText;
 
@@ -72,19 +73,42 @@ fn deep_clone_keeps_independent_char_count_cache() {
 fn layout_tracks_gnu_style_gap_and_end_positions() {
     crate::test_utils::init_test_tracing();
     let mut text = BufferText::from_str("éz");
-    let layout = text.layout();
+    assert_eq!(text.metrics(), BufferTextMetrics { z: 2, z_byte: 3 });
+    let layout = text.gap_layout().expect("default backend is a gap buffer");
+    assert_eq!(text.backend_layout(), BufferTextBackendLayout::Gap(layout));
     assert_eq!(layout.gpt, 2);
     assert_eq!(layout.z, 2);
     assert_eq!(layout.gpt_byte, 3);
     assert_eq!(layout.z_byte, 3);
 
     text.insert_str('é'.len_utf8(), "x");
-    let layout = text.layout();
+    assert_eq!(text.metrics(), BufferTextMetrics { z: 3, z_byte: 4 });
+    let layout = text.gap_layout().expect("default backend is a gap buffer");
+    assert_eq!(text.backend_layout(), BufferTextBackendLayout::Gap(layout));
     assert_eq!(layout.gpt, 2);
     assert_eq!(layout.z, 3);
     assert_eq!(layout.gpt_byte, 3);
     assert_eq!(layout.z_byte, 4);
     assert_eq!(text.to_string(), "éxz");
+}
+
+#[test]
+fn emacs_byte_chunks_cross_gap_without_copying_to_single_slice() {
+    crate::test_utils::init_test_tracing();
+    let mut text = BufferText::from_str("abcdef");
+    text.insert_str(3, "X");
+    text.delete_range(3, 4);
+
+    let layout = text.gap_layout().expect("default backend is a gap buffer");
+    assert_eq!(layout.gpt_byte, 3);
+
+    let mut chunks = Vec::new();
+    text.for_each_emacs_byte_chunk(1, 5, |chunk| {
+        chunks.push(chunk.to_vec());
+        Ok::<(), ()>(())
+    })
+    .unwrap();
+    assert_eq!(chunks, vec![b"bc".to_vec(), b"de".to_vec()]);
 }
 
 #[test]

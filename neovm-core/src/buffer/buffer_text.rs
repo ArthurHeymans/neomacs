@@ -19,12 +19,52 @@ use super::text::backend::TextBackend;
 use super::text_props::{PropertyInterval, TextPropertyTable};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct BufferTextLayout {
+pub struct BufferTextMetrics {
+    pub z: usize,
+    pub z_byte: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GapTextLayout {
     pub gpt: usize,
     pub z: usize,
     pub gpt_byte: usize,
     pub z_byte: usize,
     pub gap_size: usize,
+}
+
+pub type BufferTextLayout = GapTextLayout;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BufferTextBackendLayout {
+    Gap(GapTextLayout),
+    PieceTree(BufferTextMetrics),
+    Rope(BufferTextMetrics),
+}
+
+impl BufferTextBackendLayout {
+    pub fn metrics(self) -> BufferTextMetrics {
+        match self {
+            Self::Gap(layout) => BufferTextMetrics {
+                z: layout.z,
+                z_byte: layout.z_byte,
+            },
+            Self::PieceTree(metrics) | Self::Rope(metrics) => metrics,
+        }
+    }
+
+    pub fn gap(self) -> Option<GapTextLayout> {
+        match self {
+            Self::Gap(layout) => Some(layout),
+            Self::PieceTree(_) | Self::Rope(_) => None,
+        }
+    }
+}
+
+impl Default for BufferTextBackendLayout {
+    fn default() -> Self {
+        Self::Gap(GapTextLayout::default())
+    }
 }
 
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
@@ -44,7 +84,8 @@ struct PositionCache {
 }
 
 struct BufferTextStorage {
-    layout: BufferTextLayout,
+    metrics: BufferTextMetrics,
+    backend_layout: BufferTextBackendLayout,
     backend: TextBackend,
     modified_tick: i64,
     chars_modified_tick: i64,
@@ -66,7 +107,8 @@ struct BufferTextStorage {
 impl Clone for BufferTextStorage {
     fn clone(&self) -> Self {
         Self {
-            layout: self.layout.clone(),
+            metrics: self.metrics,
+            backend_layout: self.backend_layout,
             backend: self.backend.clone(),
             modified_tick: self.modified_tick,
             chars_modified_tick: self.chars_modified_tick,
@@ -104,9 +146,11 @@ impl Default for BufferText {
 
 impl BufferText {
     fn from_backend(backend: TextBackend) -> Self {
+        let backend_layout = backend.layout();
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
-                layout: Self::layout_from_backend(&backend),
+                metrics: backend_layout.metrics(),
+                backend_layout,
                 backend,
                 modified_tick: 1,
                 chars_modified_tick: 1,
@@ -120,14 +164,10 @@ impl BufferText {
         }
     }
 
-    fn layout_from_backend(backend: &TextBackend) -> BufferTextLayout {
-        BufferTextLayout {
-            gpt: backend.gpt(),
-            z: backend.z(),
-            gpt_byte: backend.gpt_byte(),
-            z_byte: backend.z_byte(),
-            gap_size: backend.gap_size(),
-        }
+    fn refresh_backend_layout(storage: &mut BufferTextStorage) {
+        let backend_layout = storage.backend.layout();
+        storage.metrics = backend_layout.metrics();
+        storage.backend_layout = backend_layout;
     }
 
     pub fn new() -> Self {
@@ -160,7 +200,7 @@ impl BufferText {
     pub fn set_multibyte(&self, multibyte: bool) {
         let mut storage = self.storage.borrow_mut();
         storage.backend.set_multibyte(multibyte);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -168,15 +208,23 @@ impl BufferText {
     }
 
     pub fn char_count(&self) -> usize {
-        self.storage.borrow().backend.char_count()
+        self.storage.borrow().metrics.z
     }
 
     pub fn emacs_byte_len(&self) -> usize {
-        self.storage.borrow().backend.emacs_byte_len()
+        self.storage.borrow().metrics.z_byte
     }
 
-    pub fn layout(&self) -> BufferTextLayout {
-        self.storage.borrow().layout
+    pub fn metrics(&self) -> BufferTextMetrics {
+        self.storage.borrow().metrics
+    }
+
+    pub fn backend_layout(&self) -> BufferTextBackendLayout {
+        self.storage.borrow().backend_layout
+    }
+
+    pub fn gap_layout(&self) -> Option<GapTextLayout> {
+        self.storage.borrow().backend_layout.gap()
     }
 
     pub fn modified_tick(&self) -> i64 {
@@ -222,6 +270,18 @@ impl BufferText {
             .copy_emacs_bytes_to(start, end, out);
     }
 
+    pub fn for_each_emacs_byte_chunk<E>(
+        &self,
+        start: usize,
+        end: usize,
+        f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.storage
+            .borrow()
+            .backend
+            .for_each_emacs_byte_chunk(start, end, f)
+    }
+
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
         self.storage
             .borrow()
@@ -247,7 +307,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.insert_str(pos, text);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn insert_emacs_bytes(&mut self, pos: usize, bytes: &[u8]) {
@@ -256,7 +316,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.insert_emacs_bytes(pos, bytes);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn insert_emacs_bytes_both(&mut self, pos: usize, bytes: &[u8], nchars: usize) {
@@ -265,7 +325,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.insert_emacs_bytes_both(pos, bytes, nchars);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn delete_range(&mut self, start: usize, end: usize) {
@@ -274,7 +334,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.delete_range(start, end);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn delete_range_both(&mut self, start: usize, end: usize, nchars: usize) {
@@ -283,7 +343,7 @@ impl BufferText {
         }
         let mut storage = self.storage.borrow_mut();
         storage.backend.delete_range_both(start, end, nchars);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn replace_same_len_emacs_bytes(&mut self, start: usize, end: usize, replacement: &[u8]) {
@@ -294,7 +354,7 @@ impl BufferText {
         storage
             .backend
             .replace_same_len_emacs_bytes(start, end, replacement);
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
     }
 
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
@@ -437,7 +497,7 @@ impl BufferText {
     ) {
         let mut storage = self.storage.borrow_mut();
         storage.backend = TextBackend::from_emacs_bytes_gap(text.as_bytes(), text.is_multibyte());
-        storage.layout = Self::layout_from_backend(&storage.backend);
+        Self::refresh_backend_layout(&mut storage);
         storage.text_props = text_props;
         // Wholesale content replacement: invalidate position caches. If the new
         // content happens to have the same (total_chars, total_bytes) as the old,
@@ -512,7 +572,7 @@ impl BufferText {
             (
                 storage.backend.byte_to_char(start),
                 storage.backend.byte_to_char(end),
-                storage.backend.char_count(),
+                storage.metrics.z,
             )
         };
         self.storage
@@ -605,7 +665,7 @@ impl BufferText {
             (
                 storage.backend.byte_to_char(start),
                 storage.backend.byte_to_char(end),
-                storage.backend.char_count(),
+                storage.metrics.z,
             )
         };
         self.storage
@@ -1276,8 +1336,8 @@ impl BufferText {
     /// (`src/marker.c:167`).
     pub fn buf_charpos_to_bytepos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
-        let total_chars = storage.backend.char_count();
-        let total_bytes = storage.backend.emacs_byte_len();
+        let total_chars = storage.metrics.z;
+        let total_bytes = storage.metrics.z_byte;
 
         if target >= total_chars {
             return storage.backend.len();
@@ -1298,9 +1358,9 @@ impl BufferText {
         let mut best_below: (usize, usize) = (0, 0);
         let mut best_above: (usize, usize) = (total_chars, total_bytes);
 
-        let gpt = storage.backend.gpt();
-        let gpt_byte = storage.backend.gpt_byte();
-        consider_anchor(target, (gpt, gpt_byte), &mut best_below, &mut best_above);
+        if let Some((gpt, gpt_byte)) = storage.backend.primary_anchor() {
+            consider_anchor(target, (gpt, gpt_byte), &mut best_below, &mut best_above);
+        }
 
         let cached = storage.pos_cache.get();
         if cached.epoch_chars == total_chars
@@ -1375,8 +1435,8 @@ impl BufferText {
     /// to `buf_charpos_to_bytepos` — shares the same anchor + cache machinery.
     pub fn buf_bytepos_to_charpos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
-        let total_chars = storage.backend.char_count();
-        let total_bytes = storage.backend.emacs_byte_len();
+        let total_chars = storage.metrics.z;
+        let total_bytes = storage.metrics.z_byte;
 
         if target >= total_bytes {
             return total_chars;
@@ -1398,9 +1458,9 @@ impl BufferText {
         let mut best_below: (usize, usize) = (0, 0);
         let mut best_above: (usize, usize) = (total_bytes, total_chars);
 
-        let gpt = storage.backend.gpt();
-        let gpt_byte = storage.backend.gpt_byte();
-        consider_anchor_byte(target, (gpt_byte, gpt), &mut best_below, &mut best_above);
+        if let Some((gpt, gpt_byte)) = storage.backend.primary_anchor() {
+            consider_anchor_byte(target, (gpt_byte, gpt), &mut best_below, &mut best_above);
+        }
 
         let cached = storage.pos_cache.get();
         if cached.epoch_chars == total_chars
