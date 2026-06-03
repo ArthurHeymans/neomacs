@@ -54,7 +54,14 @@ pub struct TextPositionAnchor {
 }
 
 impl TextPositionAnchor {
-    pub const fn new(char_pos: usize, emacs_byte_pos: usize) -> Self {
+    pub const fn new(char_pos: CharPos0, emacs_byte_pos: EmacsBytePos) -> Self {
+        Self {
+            char_pos,
+            emacs_byte_pos,
+        }
+    }
+
+    pub const fn from_usize(char_pos: usize, emacs_byte_pos: usize) -> Self {
         Self {
             char_pos: CharPos0::new(char_pos),
             emacs_byte_pos: EmacsBytePos::new(emacs_byte_pos),

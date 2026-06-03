@@ -67,7 +67,10 @@ impl TextBackend {
 
     pub(in crate::buffer) fn conversion_anchor(&self) -> Option<TextPositionAnchor> {
         match self {
-            Self::Gap(gap) => Some(TextPositionAnchor::new(gap.gpt(), gap.gpt_byte())),
+            Self::Gap(gap) => Some(TextPositionAnchor::new(
+                CharPos0::new(gap.gpt()),
+                EmacsBytePos::new(gap.gpt_byte()),
+            )),
             Self::PieceTree(_) => None,
         }
     }
