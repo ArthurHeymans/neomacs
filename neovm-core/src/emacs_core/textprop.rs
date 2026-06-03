@@ -995,8 +995,9 @@ fn record_interval_insert_hooks(
     };
     let behind_sym = Value::symbol("insert-behind-hooks");
     let front_sym = Value::symbol("insert-in-front-hooks");
+    let accessible = buf.accessible_emacs_byte_region();
 
-    if byte_pos > buf.begv_byte
+    if byte_pos > accessible.start_usize()
         && let Some(prev_len) = buf.char_before_storage_len(byte_pos)
     {
         let prev_byte = byte_pos.saturating_sub(prev_len);
@@ -1007,7 +1008,7 @@ fn record_interval_insert_hooks(
         }
     }
 
-    if byte_pos < buf.zv_byte
+    if byte_pos < accessible.end_usize()
         && let Some(hooks) = buf.text.text_props_get_property(byte_pos, front_sym)
         && !hooks.is_nil()
     {
@@ -1942,7 +1943,7 @@ pub(crate) fn builtin_next_single_property_change_in_state(
     };
 
     let current_val = lookup_buffer_text_property(obarray, buffers, buf, byte_pos, prop);
-    let buf_end = buf.point_max();
+    let buf_end = buf.accessible_emacs_byte_region().end_usize();
     let mut cursor = byte_pos;
 
     loop {
@@ -2159,7 +2160,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         let next = buf
             .text
             .text_props_next_interval_boundary(byte_pos)
-            .unwrap_or_else(|| buf.point_max());
+            .unwrap_or_else(|| buf.accessible_emacs_byte_region().end_usize());
         return Ok(Value::fixnum(byte_to_elisp_pos(buf, next)));
     }
     let (limit_pos, limit_val) = match limit_arg {
@@ -2169,7 +2170,7 @@ pub(crate) fn builtin_next_property_change_in_buffers(
         }
         _ => (None, None),
     };
-    let buf_end = buf.point_max();
+    let buf_end = buf.accessible_emacs_byte_region().end_usize();
 
     match buf.text.text_props_next_change(byte_pos) {
         Some(next) => {
@@ -2505,12 +2506,16 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
+    let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
-        .next_boundary_after_until(byte_pos.get(), buf.point_max_byte())
+        .next_boundary_after_until(byte_pos.get(), accessible.end_usize())
     {
         Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
-        None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_max()))),
+        None => Ok(Value::fixnum(byte_to_elisp_pos(
+            buf,
+            accessible.end_usize(),
+        ))),
     }
 }
 
@@ -2534,12 +2539,16 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
+    let accessible = buf.accessible_emacs_byte_region();
     match buf
         .overlays
-        .previous_boundary_before_since(byte_pos.get(), buf.point_min_byte())
+        .previous_boundary_before_since(byte_pos.get(), accessible.start_usize())
     {
         Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
-        None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_min()))),
+        None => Ok(Value::fixnum(byte_to_elisp_pos(
+            buf,
+            accessible.start_usize(),
+        ))),
     }
 }
 
@@ -2748,10 +2757,11 @@ pub(crate) fn builtin_overlays_in_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+    let accessible = buf.accessible_emacs_byte_region();
     let ids = buf.overlays.overlays_in_region(
         byte_range.start_usize(),
         byte_range.end_usize(),
-        buf.point_max_byte(),
+        accessible.end_usize(),
     );
     Ok(Value::list(ids))
 }
@@ -2973,9 +2983,10 @@ pub(crate) fn builtin_remove_overlays(
     };
 
     // Collect overlay ids in range.
+    let accessible = buf.accessible_emacs_byte_region();
     let ids = buf
         .overlays
-        .overlays_in_region(start_pos, end_pos, buf.point_max_byte());
+        .overlays_in_region(start_pos, end_pos, accessible.end_usize());
 
     // Filter and delete.
     for overlay in ids {
