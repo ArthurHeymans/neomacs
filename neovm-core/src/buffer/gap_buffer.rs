@@ -239,16 +239,6 @@ impl GapBuffer {
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..available]).0)
     }
 
-    /// Convert a character position to a logical Emacs byte offset.
-    pub fn char_to_emacs_byte(&self, char_pos: usize) -> usize {
-        self.char_to_byte(char_pos)
-    }
-
-    /// Convert a logical Emacs byte offset to a character position.
-    pub fn emacs_byte_to_char(&self, byte_pos: usize) -> usize {
-        self.byte_to_char(byte_pos)
-    }
-
     pub(crate) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,
