@@ -8,7 +8,7 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferManager, EmacsByteRange};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -182,7 +182,7 @@ fn clamp_byte_to_accessible(buf: &crate::buffer::Buffer, byte_pos: usize) -> usi
 /// Return the full buffer text as raw Emacs bytes.
 fn buffer_bytes(buf: &crate::buffer::Buffer) -> Vec<u8> {
     let mut out = Vec::new();
-    buf.copy_emacs_bytes_to(0, buf.total_bytes(), &mut out);
+    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(0, buf.total_bytes()), &mut out);
     out
 }
 

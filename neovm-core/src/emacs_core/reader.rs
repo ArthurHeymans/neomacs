@@ -7,6 +7,7 @@ use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
+use crate::buffer::EmacsByteRange;
 use std::io::Write;
 use std::time::Duration;
 use strum::{EnumString, IntoStaticStr};
@@ -535,7 +536,7 @@ fn signal_invalid_read_syntax_in_buffer_object(
     let start = buffer.point_min_byte();
     let end = absolute_error_pos.clamp(start, buffer.point_max_byte());
     let mut prefix = Vec::with_capacity(end.saturating_sub(start));
-    buffer.copy_emacs_bytes_to(start, end, &mut prefix);
+    buffer.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut prefix);
     let line = prefix.iter().filter(|&&byte| byte == b'\n').count() as i64 + 1;
     let line_start = prefix
         .iter()

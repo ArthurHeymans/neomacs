@@ -18,7 +18,7 @@ use malachite::integer::Integer;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + Vec<u8> directly
 use super::emacs_char;
-use crate::buffer::Buffer;
+use crate::buffer::{Buffer, EmacsByteRange};
 use smallvec::SmallVec;
 
 use super::builtins::collections::lookup_hash_table_test_alias;
@@ -2289,7 +2289,7 @@ impl<'a> Reader<'a> {
             }
             ReaderSource::Buffer(input) => {
                 let mut bytes = Vec::with_capacity(end - start);
-                input.copy_emacs_bytes_to(start, end, &mut bytes);
+                input.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
                 let slice = if input.get_multibyte() {
                     crate::heap_types::LispString::from_emacs_bytes(bytes)
                 } else {

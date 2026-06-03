@@ -15,7 +15,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::buffer::text_props::TextPropertyTable;
+use crate::buffer::{EmacsByteRange, text_props::TextPropertyTable};
 use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
@@ -5496,7 +5496,10 @@ pub(crate) fn builtin_do_auto_save(
             let auto_name = buf.auto_save_file_name_lisp_string().cloned();
             let visit_name = buf.file_name_lisp_string().cloned();
             let mut bytes = Vec::new();
-            buf.copy_emacs_bytes_to(0, buf.total_bytes(), &mut bytes);
+            buf.copy_emacs_byte_range_to(
+                EmacsByteRange::from_usize(0, buf.total_bytes()),
+                &mut bytes,
+            );
 
             (auto_name, visit_name, bytes, buf.total_bytes() as i64)
         };

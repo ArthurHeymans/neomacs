@@ -20,7 +20,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::hook_runtime;
 use super::intern::intern;
 use super::value::*;
-use crate::buffer::{Buffer, BufferId, TextPropertyTable};
+use crate::buffer::{Buffer, BufferId, EmacsByteRange, TextPropertyTable};
 use crate::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
     WindowId,
@@ -83,7 +83,10 @@ fn emacs_char_count(bytes: &[u8], multibyte: bool) -> usize {
 
 fn prefix_line_and_column(buf: &Buffer, end_byte: usize) -> (usize, usize) {
     let mut bytes = Vec::new();
-    buf.copy_emacs_bytes_to(0, end_byte.min(buf.total_bytes()), &mut bytes);
+    buf.copy_emacs_byte_range_to(
+        EmacsByteRange::from_usize(0, end_byte.min(buf.total_bytes())),
+        &mut bytes,
+    );
     let line = bytes.iter().filter(|&&b| b == b'\n').count() + 1;
     let tail = match bytes.iter().rposition(|&b| b == b'\n') {
         Some(idx) => &bytes[idx + 1..],
@@ -2584,7 +2587,10 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     // measure through the line ending the last non-empty line, not
     // through trailing blank lines.
     let mut bytes = Vec::new();
-    buf.copy_emacs_bytes_to(from_pos, to_pos.min(buf.total_bytes()), &mut bytes);
+    buf.copy_emacs_byte_range_to(
+        EmacsByteRange::from_usize(from_pos, to_pos.min(buf.total_bytes())),
+        &mut bytes,
+    );
     let measured = if args
         .get(2)
         .is_some_and(|v| v.is_t() || v.is_symbol_named("t"))

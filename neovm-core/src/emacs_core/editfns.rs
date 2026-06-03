@@ -13,7 +13,7 @@ use super::eval::OverlayModificationHook;
 use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager};
+use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
@@ -1083,7 +1083,7 @@ pub(crate) fn builtin_buffer_substring_no_properties(
         ));
     };
     let mut bytes = Vec::new();
-    buf.copy_emacs_bytes_to(start_byte, end_byte, &mut bytes);
+    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start_byte, end_byte), &mut bytes);
     Ok(Value::heap_string(
         crate::emacs_core::builtins::lisp_string_from_buffer_bytes(bytes, buf.get_multibyte()),
     ))
