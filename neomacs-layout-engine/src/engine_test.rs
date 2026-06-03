@@ -2977,7 +2977,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
         if pos == 0 {
             return None;
         }
-        let byte_pos = buffer.char_to_byte_clamped(pos - 1);
+        let byte_pos = buffer
+            .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
+            .get();
         buffer.char_after(byte_pos)
     }
 
@@ -3194,7 +3196,9 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
         if pos == 0 {
             return None;
         }
-        let byte_pos = buffer.char_to_byte_clamped(pos - 1);
+        let byte_pos = buffer
+            .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
+            .get();
         buffer.char_after(byte_pos)
     }
 
@@ -3446,7 +3450,9 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
         if pos == 0 {
             return None;
         }
-        let byte_pos = buffer.char_to_byte_clamped(pos - 1);
+        let byte_pos = buffer
+            .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
+            .get();
         buffer.char_after(byte_pos)
     }
 
@@ -4076,7 +4082,9 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
         if pos == 0 {
             return None;
         }
-        let byte_pos = buffer.char_to_byte_clamped(pos - 1);
+        let byte_pos = buffer
+            .char_pos_to_emacs_byte_pos_clamped(neovm_core::buffer::CharPos0::new(pos - 1))
+            .get();
         buffer.char_after(byte_pos)
     }
 

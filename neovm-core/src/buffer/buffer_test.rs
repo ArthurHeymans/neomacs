@@ -476,7 +476,11 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("ééz");
     assert_eq!(buf.total_chars(), 3);
-    assert_eq!(buf.char_to_byte_clamped(99), "ééz".len());
+    assert_eq!(
+        buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(99))
+            .get(),
+        "ééz".len()
+    );
     assert_eq!(buf.lisp_pos_to_byte(99), "ééz".len());
 
     buf.narrow_to_byte_region('é'.len_utf8(), "ééz".len());

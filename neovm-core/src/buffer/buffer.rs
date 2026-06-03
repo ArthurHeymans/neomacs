@@ -1931,12 +1931,7 @@ impl Buffer {
 
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
-    pub fn char_to_byte_clamped(&self, char_pos: usize) -> usize {
-        self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
-            .get()
-    }
-
-    pub(crate) fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
+    pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
         self.text
             .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos.get().min(self.total_chars())))
     }
@@ -1949,7 +1944,8 @@ impl Buffer {
         } else {
             0
         };
-        self.char_to_byte_clamped(char_pos)
+        self.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+            .get()
     }
 
     /// Convert a 1-based Lisp character position to a byte position, clamping

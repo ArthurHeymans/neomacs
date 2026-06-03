@@ -7,6 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::buffer::CharPos0;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,8 @@ fn char_pos1_to_char0(pos1: i64) -> usize {
 }
 
 fn char_pos1_to_byte_clamped(buf: &crate::buffer::Buffer, pos1: i64) -> usize {
-    buf.char_to_byte_clamped(char_pos1_to_char0(pos1))
+    buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos1_to_char0(pos1)))
+        .get()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
@@ -342,8 +344,12 @@ fn primitive_undo_inner(
                         if buf.pt >= len {
                             let del_start_char = buf.pt - len;
                             let del_end_char = buf.pt;
-                            let del_start = buf.char_to_byte_clamped(del_start_char);
-                            let del_end = buf.char_to_byte_clamped(del_end_char);
+                            let del_start = buf
+                                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(del_start_char))
+                                .get();
+                            let del_end = buf
+                                .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(del_end_char))
+                                .get();
                             if del_start_char >= buf.point_min_char()
                                 && del_end_char <= buf.point_max_char()
                             {
@@ -380,12 +386,18 @@ fn primitive_undo_inner(
                                             ));
                                         }
                                         let byte_beg = if b > 0 {
-                                            buf.char_to_byte_clamped((b - 1) as usize)
+                                            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                                                (b - 1) as usize,
+                                            ))
+                                            .get()
                                         } else {
                                             buf.point_min_byte()
                                         };
                                         let byte_end = if e > 0 {
-                                            buf.char_to_byte_clamped((e - 1) as usize)
+                                            buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(
+                                                (e - 1) as usize,
+                                            ))
+                                            .get()
                                         } else {
                                             buf.point_min_byte()
                                         };

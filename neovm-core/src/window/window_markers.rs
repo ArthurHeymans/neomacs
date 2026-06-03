@@ -12,7 +12,7 @@
 //! caches are refreshed by `sync_window_positions_from_markers` after every
 //! text edit.
 
-use crate::buffer::{Buffer, BufferId, BufferManager, InsertionType, TextPositionAnchor};
+use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, InsertionType, TextPositionAnchor};
 use crate::window::{Frame, FrameManager, Window, WindowId};
 
 /// Window-start markers use `InsertionType::Before` so the marker stays
@@ -42,7 +42,9 @@ fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> TextPosi
     let char_pos = lisp_position
         .saturating_sub(1)
         .clamp(buffer.point_min_char(), buffer.point_max_char());
-    let byte_pos = buffer.char_to_byte_clamped(char_pos);
+    let byte_pos = buffer
+        .char_pos_to_emacs_byte_pos_clamped(CharPos0::new(char_pos))
+        .get();
     TextPositionAnchor::from_usize(char_pos, byte_pos)
 }
 
