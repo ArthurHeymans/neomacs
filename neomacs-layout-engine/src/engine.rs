@@ -3051,7 +3051,7 @@ impl LayoutEngine {
                     // Scan all overlays in the buffer's Emacs-byte range.
                     let window_sym = Value::symbol("window");
                     let current_window_id = params.window_id as u64;
-                    let point_max = b.point_max();
+                    let accessible_end_byte = b.accessible_emacs_byte_region().end_usize();
                     let overlay_lines: usize = b
                         .overlays
                         .overlays_in(0, b.total_bytes())
@@ -3066,7 +3066,7 @@ impl LayoutEngine {
                             let before_lines = if b
                                 .overlays
                                 .overlay_start(*ov)
-                                .is_some_and(|start| start < point_max)
+                                .is_some_and(|start| start < accessible_end_byte)
                             {
                                 b.overlays
                                     .overlay_get_named(*ov, Value::symbol("before-string"))
