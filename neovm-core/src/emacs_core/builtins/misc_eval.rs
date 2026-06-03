@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::{CharPos0, EmacsBytePos};
 use crate::emacs_core::symbol::Obarray;
 
 fn runtime_string_value(value: Value) -> String {
@@ -244,7 +245,9 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
                 let check = if prev > 0 { prev - 1 } else { 0 };
                 let new_props = buf.text.text_props_get_properties(check);
                 if new_props != current_props {
-                    return Ok(Value::fixnum(buf.text.emacs_byte_to_char(prev) as i64 + 1));
+                    return Ok(Value::fixnum(
+                        EmacsBytePos::new(prev).to_lisp(&buf.text).as_i64(),
+                    ));
                 }
 
                 if prev == 0 {
@@ -822,7 +825,10 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     insert_start: usize,
     insert_len: usize,
 ) -> Vec<(Value, Value)> {
-    let insert_start_char = buf.text.emacs_byte_to_char(insert_start);
+    let insert_start_char = buf
+        .text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(insert_start))
+        .get();
     let left_props = if insert_start_char > buf.point_min_char() {
         // GNU intervals are indexed by character positions (`PT`), not raw
         // bytes. Step to the previous character boundary before consulting
@@ -830,15 +836,22 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
         // multibyte/non-Unicode storage sequence.
         let left_byte = buf
             .text
-            .char_to_emacs_byte(insert_start_char.saturating_sub(1));
+            .char_pos_to_emacs_byte_pos(CharPos0::new(insert_start_char.saturating_sub(1)))
+            .get();
         buf.text.text_props_get_properties_ordered(left_byte)
     } else {
         Vec::new()
     };
     let right_pos = insert_start.saturating_add(insert_len);
-    let right_char = buf.text.emacs_byte_to_char(right_pos);
+    let right_char = buf
+        .text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(right_pos))
+        .get();
     let right_props = if right_char < buf.point_max_char() {
-        let right_byte = buf.text.char_to_emacs_byte(right_char);
+        let right_byte = buf
+            .text
+            .char_pos_to_emacs_byte_pos(CharPos0::new(right_char))
+            .get();
         buf.text.text_props_get_properties_ordered(right_byte)
     } else {
         Vec::new()

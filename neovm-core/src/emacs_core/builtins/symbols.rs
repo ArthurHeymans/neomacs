@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::CharPos0;
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -3354,10 +3355,18 @@ pub(crate) fn builtin_transpose_regions(
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
-            buf.text.char_to_emacs_byte(start1),
-            buf.text.char_to_emacs_byte(end1),
-            buf.text.char_to_emacs_byte(start2),
-            buf.text.char_to_emacs_byte(end2),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(start1))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(end1))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(start2))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(end2))
+                .get(),
         )
     };
 
