@@ -4219,7 +4219,7 @@ pub(crate) fn builtin_parse_partial_sexp(
         commentstop,
         honor_properties,
     );
-    let stop_byte = lisp_pos_to_byte(buf, stop_pos);
+    let stop_byte = lisp_pos_to_byte(buf, stop_pos).get();
     if let Some(buf_mut) = eval.buffers.current_buffer_mut() {
         buf_mut.goto_char(stop_byte);
     }
@@ -4325,8 +4325,8 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
     }
 }
 
-fn lisp_pos_to_byte(buf: &Buffer, raw: i64) -> usize {
-    buf.lisp_pos_to_accessible_byte(raw)
+fn lisp_pos_to_byte(buf: &Buffer, raw: i64) -> EmacsBytePos {
+    buf.lisp_pos_to_accessible_emacs_byte_pos(raw)
 }
 
 /// `(skip-syntax-forward SYNTAX &optional LIMIT)` — skip forward over chars
@@ -4369,7 +4369,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let limit = limit.map(|raw| lisp_pos_to_byte(buf, raw));
+    let limit = limit.map(|raw| lisp_pos_to_byte(buf, raw).get());
     let new_pos =
         skip_syntax_forward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
 
@@ -4435,7 +4435,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
-    let limit = limit.map(|raw| lisp_pos_to_byte(buf, raw));
+    let limit = limit.map(|raw| lisp_pos_to_byte(buf, raw).get());
     let new_pos =
         skip_syntax_backward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
 
