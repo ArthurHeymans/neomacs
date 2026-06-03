@@ -352,24 +352,11 @@ impl BufferText {
         self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
-    pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
-    }
-
     pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
         self.storage
             .borrow()
             .backend
             .copy_emacs_byte_range_to(range, out);
-    }
-
-    pub fn for_each_emacs_byte_chunk<E>(
-        &self,
-        start: usize,
-        end: usize,
-        f: impl FnMut(&[u8]) -> Result<(), E>,
-    ) -> Result<(), E> {
-        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub(crate) fn for_each_emacs_byte_range_chunk<E>(
@@ -383,24 +370,11 @@ impl BufferText {
             .for_each_emacs_byte_range_chunk(range, f)
     }
 
-    pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
-        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
-    }
-
     pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
         self.storage
             .borrow()
             .backend
             .has_contiguous_emacs_byte_range(range)
-    }
-
-    pub fn with_contiguous_emacs_bytes<R>(
-        &self,
-        start: usize,
-        end: usize,
-        f: impl FnOnce(&[u8]) -> R,
-    ) -> Option<R> {
-        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub(crate) fn with_contiguous_emacs_byte_range<R>(

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::buffer::text::TextBackendDebugLayout;
-use crate::buffer::{BufferTextBackendKind, TextMetrics};
+use crate::buffer::{BufferTextBackendKind, EmacsByteRange, TextMetrics};
 
 use super::BufferText;
 
@@ -75,7 +75,10 @@ fn piece_tree_lisp_string_preserves_unibyte_raw_bytes() {
     assert_eq!(text.char_count(), 3);
 
     let mut bytes = Vec::new();
-    text.copy_emacs_bytes_to(0, text.emacs_byte_len(), &mut bytes);
+    text.copy_emacs_byte_range_to(
+        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
+        &mut bytes,
+    );
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
 
@@ -109,7 +112,10 @@ fn from_lisp_string_preserves_unibyte_raw_bytes() {
     assert_eq!(text.char_count(), 3);
 
     let mut bytes = Vec::new();
-    text.copy_emacs_bytes_to(0, text.emacs_byte_len(), &mut bytes);
+    text.copy_emacs_byte_range_to(
+        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
+        &mut bytes,
+    );
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
 
@@ -193,7 +199,7 @@ fn emacs_byte_chunks_cross_gap_without_copying_to_single_slice() {
     assert_eq!(layout.gpt_byte.get(), 3);
 
     let mut chunks = Vec::new();
-    text.for_each_emacs_byte_chunk(1, 5, |chunk| {
+    text.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(1, 5), |chunk| {
         chunks.push(chunk.to_vec());
         Ok::<(), ()>(())
     })
@@ -364,6 +370,9 @@ fn replace_lisp_string_handles_unibyte_raw_bytes() {
     assert_eq!(text.byte_at(2), 0x80);
 
     let mut bytes = Vec::new();
-    text.copy_emacs_bytes_to(0, text.emacs_byte_len(), &mut bytes);
+    text.copy_emacs_byte_range_to(
+        EmacsByteRange::from_usize(0, text.emacs_byte_len()),
+        &mut bytes,
+    );
     assert_eq!(bytes, vec![0xFF, b'A', 0x80]);
 }
