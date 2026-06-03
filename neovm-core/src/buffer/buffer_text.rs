@@ -292,8 +292,12 @@ impl BufferText {
 
     pub fn set_multibyte(&self, multibyte: bool) {
         let mut storage = self.storage.borrow_mut();
+        if storage.backend.is_multibyte() == multibyte {
+            return;
+        }
         storage.backend.set_multibyte(multibyte);
         Self::refresh_backend_layout(&mut storage);
+        Self::invalidate_position_caches(&mut storage);
     }
 
     pub fn is_empty(&self) -> bool {

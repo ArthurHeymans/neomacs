@@ -272,6 +272,24 @@ fn long_scan_populates_anchor_cache() {
 }
 
 #[test]
+fn set_multibyte_invalidates_position_caches() {
+    let mut s = String::new();
+    for _ in 0..20_000 {
+        s.push_str("日");
+    }
+    let text = BufferText::from_str(&s);
+
+    let _ = text.buf_charpos_to_bytepos(10_000);
+    assert!(text.anchor_cache_len() > 0);
+
+    text.set_multibyte(false);
+
+    assert_eq!(text.anchor_cache_len(), 0);
+    assert!(!text.is_multibyte());
+    assert_eq!(text.char_count(), text.emacs_byte_len());
+}
+
+#[test]
 fn replace_lisp_string_invalidates_position_cache() {
     crate::test_utils::init_test_tracing();
     // Build a buffer with a known multibyte char at charpos 2.
