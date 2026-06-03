@@ -30,15 +30,13 @@ fn lisp_string_from_buffer_bytes(bytes: Vec<u8>, multibyte: bool) -> LispString 
 }
 
 #[inline]
-fn char_pos_for_emacs_byte(text: &super::BufferText, byte_pos: usize) -> usize {
+fn char_pos_for_emacs_byte(text: &super::BufferText, byte_pos: usize) -> CharPos0 {
     text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
-        .get()
 }
 
 #[inline]
-fn emacs_byte_for_char_pos(text: &super::BufferText, char_pos: usize) -> usize {
+fn emacs_byte_for_char_pos(text: &super::BufferText, char_pos: usize) -> EmacsBytePos {
     text.char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
-        .get()
 }
 
 #[inline]
@@ -214,7 +212,7 @@ impl Buffer {
             }
         }
         debug_assert_eq!(
-            char_pos_for_emacs_byte(&self.text, insert_pos),
+            char_pos_for_emacs_byte(&self.text, insert_pos).get(),
             insert_char_pos,
             "insert-side-effect char position drifted from the source edit site"
         );
@@ -420,8 +418,9 @@ impl Buffer {
         let start_char = char_pos_for_emacs_byte(&self.text, start);
         let end_char = char_pos_for_emacs_byte(&self.text, end);
         let old_byte_len = end - start;
-        let old_char_len = end_char - start_char;
-        let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let old_char_len = end_char.get() - start_char.get();
+        let old_range =
+            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
         let old_pt_byte = self.pt_byte;
@@ -437,13 +436,13 @@ impl Buffer {
             // overlay endpoints on opposite sides of the replacement distinct.
             undo::undo_list_record_insert(
                 &mut ul,
-                end_char,
+                end_char.get(),
                 new_char_len,
                 self.undo_state.point_before_command_or_undo(),
             );
             undo::undo_list_record_delete(
                 &mut ul,
-                start_char,
+                start_char.get(),
                 deleted_text,
                 old_pt,
                 self.undo_state.point_before_command_or_undo(),
@@ -458,8 +457,8 @@ impl Buffer {
         if start < old_pt_byte || old_pt_byte == end {
             let clamped = old_pt_byte.min(end);
             self.pt_byte = old_pt_byte + start + new_byte_len - clamped;
-            let clamped_char = old_pt.min(end_char);
-            self.pt = old_pt + start_char + new_char_len - clamped_char;
+            let clamped_char = old_pt.min(end_char.get());
+            self.pt = old_pt + start_char.get() + new_char_len - clamped_char;
         } else if old_pt_byte > end {
             self.pt_byte = old_pt_byte + new_byte_len - old_byte_len;
             self.pt = old_pt + new_char_len - old_char_len;
@@ -470,7 +469,7 @@ impl Buffer {
             self.begv = self.begv + new_char_len - old_char_len;
         } else if self.begv_byte > start {
             self.begv_byte = start;
-            self.begv = start_char;
+            self.begv = start_char.get();
         }
 
         if self.zv_byte >= end {
@@ -478,7 +477,7 @@ impl Buffer {
             self.zv = self.zv + new_char_len - old_char_len;
         } else if self.zv_byte > start {
             self.zv_byte = start + new_byte_len;
-            self.zv = start_char + new_char_len;
+            self.zv = start_char.get() + new_char_len;
         }
 
         self.text
@@ -517,13 +516,13 @@ impl Buffer {
         if !undo::undo_list_is_disabled(&ul) {
             for (marker, adjustment) in self
                 .text
-                .marker_adjustments_for_delete(start_char, end_char)
+                .marker_adjustments_for_delete(start_char.get(), end_char.get())
             {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
             undo::undo_list_record_delete(
                 &mut ul,
-                start_char,
+                start_char.get(),
                 deleted_text,
                 self.pt,
                 self.undo_state.point_before_command_or_undo(),
@@ -531,7 +530,8 @@ impl Buffer {
             self.set_undo_list(ul);
         }
 
-        let range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let range =
+            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         self.text.delete_measured_range(range);
         self.apply_byte_delete_side_effects(range, true, false, true, true);
     }
@@ -552,8 +552,8 @@ impl Buffer {
         if start >= end {
             return false;
         }
-        let changed_chars =
-            char_pos_for_emacs_byte(&self.text, end) - char_pos_for_emacs_byte(&self.text, start);
+        let changed_chars = char_pos_for_emacs_byte(&self.text, end).get()
+            - char_pos_for_emacs_byte(&self.text, start).get();
 
         // Copy the region's raw Emacs bytes and build a replacement by
         // walking chars and substituting the matched ones with to_bytes.
@@ -616,14 +616,14 @@ impl Buffer {
                 }
                 undo::undo_list_record_delete(
                     &mut ul,
-                    start_char,
+                    start_char.get(),
                     deleted,
                     self.pt,
                     self.undo_state.point_before_command_or_undo(),
                 );
                 undo::undo_list_record_insert(
                     &mut ul,
-                    start_char,
+                    start_char.get(),
                     changed_chars,
                     self.undo_state.point_before_command_or_undo(),
                 );
@@ -786,7 +786,10 @@ impl Buffer {
             self.text
                 .remap_markers_through_byte_char(|old_byte, old_char| {
                     if old_byte > start1_byte && old_byte <= end2_byte {
-                        (emacs_byte_for_char_pos(&self.text, old_char), old_char)
+                        (
+                            emacs_byte_for_char_pos(&self.text, old_char).get(),
+                            old_char,
+                        )
                     } else {
                         (old_byte, old_char)
                     }
@@ -1096,7 +1099,8 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let start_char = char_pos_for_emacs_byte(&source.text, start);
         let end_char = char_pos_for_emacs_byte(&source.text, end);
-        let range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let range =
+            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         self.buffers.get_mut(&id)?.delete_region(start, end);
 
         for sibling_id in shared_ids {
@@ -1139,7 +1143,8 @@ impl BufferManager {
         let source = self.buffers.get(&id)?;
         let start_char = char_pos_for_emacs_byte(&source.text, start);
         let end_char = char_pos_for_emacs_byte(&source.text, end);
-        let old_range = TextEditRange::from_usize(start, end, start_char, end_char);
+        let old_range =
+            TextEditRange::new(EmacsByteRange::from_usize(start, end), start_char, end_char);
         let new_extent = TextExtent::from_usize(new_char_len, new_byte_len);
 
         self.buffers
@@ -1181,8 +1186,8 @@ impl BufferManager {
         let shared_ids = self.buffers_sharing_root_ids(root_id);
         let changed_chars = {
             let source = self.buffers.get(&id)?;
-            char_pos_for_emacs_byte(&source.text, end)
-                - char_pos_for_emacs_byte(&source.text, start)
+            char_pos_for_emacs_byte(&source.text, end).get()
+                - char_pos_for_emacs_byte(&source.text, start).get()
         };
         let changed = self
             .buffers
