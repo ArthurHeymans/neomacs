@@ -43,7 +43,9 @@ use super::symbol::Obarray;
 use super::threads::ThreadManager;
 use super::timer::TimerManager;
 use super::value::*;
-use crate::buffer::{BufferId, BufferManager};
+use crate::buffer::{
+    BufferId, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
+};
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
@@ -174,15 +176,15 @@ struct RedisplayBufferSignature {
     overlay_modified_tick: i64,
     save_modified_tick: i64,
     autosave_modified_tick: i64,
-    point: usize,
-    point_byte: usize,
-    begv: usize,
-    begv_byte: usize,
-    zv: usize,
-    zv_byte: usize,
-    total_chars: usize,
-    total_bytes: usize,
-    last_window_start: usize,
+    point: CharPos0,
+    point_emacs_byte: EmacsBytePos,
+    begv: CharPos0,
+    begv_emacs_byte: EmacsBytePos,
+    zv: CharPos0,
+    zv_emacs_byte: EmacsBytePos,
+    total_chars: CharLen,
+    total_emacs_bytes: EmacsByteLen,
+    last_window_start: LispCharPos1,
     last_selected_window: Option<u64>,
 }
 
@@ -6417,6 +6419,8 @@ impl Context {
         id: crate::buffer::BufferId,
     ) -> Option<RedisplayBufferSignature> {
         let buffer = self.buffers.get(id)?;
+        let accessible_chars = buffer.accessible_char_region();
+        let accessible_bytes = buffer.accessible_emacs_byte_region();
         Some(RedisplayBufferSignature {
             id: buffer.id.0,
             modified_tick: buffer.modified_tick(),
@@ -6424,15 +6428,15 @@ impl Context {
             overlay_modified_tick: buffer.overlay_modified_tick(),
             save_modified_tick: buffer.save_modified_tick(),
             autosave_modified_tick: buffer.autosave_modified_tick,
-            point: buffer.point_char(),
-            point_byte: buffer.point_byte(),
-            begv: buffer.begv,
-            begv_byte: buffer.begv_byte,
-            zv: buffer.zv,
-            zv_byte: buffer.zv_byte,
-            total_chars: buffer.total_chars(),
-            total_bytes: buffer.total_bytes(),
-            last_window_start: buffer.last_window_start,
+            point: CharPos0::new(buffer.point_char()),
+            point_emacs_byte: buffer.point_emacs_byte_pos(),
+            begv: accessible_chars.start(),
+            begv_emacs_byte: accessible_bytes.start(),
+            zv: accessible_chars.end(),
+            zv_emacs_byte: accessible_bytes.end(),
+            total_chars: CharLen::new(buffer.total_chars()),
+            total_emacs_bytes: EmacsByteLen::new(buffer.total_bytes()),
+            last_window_start: LispCharPos1::new(buffer.last_window_start.max(1) as i64),
             last_selected_window: buffer.last_selected_window.map(|id| id.0),
         })
     }
