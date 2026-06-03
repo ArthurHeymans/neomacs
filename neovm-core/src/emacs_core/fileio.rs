@@ -4470,14 +4470,16 @@ fn write_region_content_in_state(
             ],
         ));
     }
-    let (char_start, char_end) = if start <= end {
-        (start as usize - 1, end as usize - 1)
+    let (lisp_start, lisp_end) = if start <= end {
+        (start, end)
     } else {
-        (end as usize - 1, start as usize - 1)
+        (end, start)
     };
-    let byte_start = buf.lisp_pos_to_accessible_byte(char_start as i64 + 1);
-    let byte_end = buf.lisp_pos_to_accessible_byte(char_end as i64 + 1);
-    Ok(buf.buffer_substring_lisp_string(byte_start, byte_end))
+    let byte_range = EmacsByteRange::new(
+        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_start),
+        buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_end),
+    );
+    Ok(buf.buffer_substring_lisp_string(byte_range.start_usize(), byte_range.end_usize()))
 }
 
 struct DecodedFileContents {
