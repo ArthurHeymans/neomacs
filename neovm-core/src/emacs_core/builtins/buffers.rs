@@ -4,7 +4,7 @@ use super::*;
 // Buffer operations (require evaluator for BufferManager access)
 // ===========================================================================
 
-use crate::buffer::{BufferId, BufferManager};
+use crate::buffer::{BufferId, BufferManager, EmacsByteRange};
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
 use crate::emacs_core::value::{
@@ -1033,7 +1033,10 @@ pub(crate) fn builtin_buffer_line_statistics(
         .and_then(|id| {
             buffers.get(id).map(|buf| {
                 let mut bytes = Vec::new();
-                buf.copy_emacs_bytes_to(buf.point_min(), buf.point_max(), &mut bytes);
+                buf.copy_emacs_byte_range_to(
+                    EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
+                    &mut bytes,
+                );
                 bytes
             })
         })
@@ -2798,7 +2801,7 @@ pub(crate) fn buffer_slice_value(
     end_byte: usize,
 ) -> Value {
     let mut bytes = Vec::new();
-    buf.copy_emacs_bytes_to(start_byte, end_byte, &mut bytes);
+    buf.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start_byte, end_byte), &mut bytes);
     let string = lisp_string_from_buffer_bytes(bytes, buf.get_multibyte());
     let value = Value::heap_string(string);
     if !buf.text.text_props_is_empty() {
