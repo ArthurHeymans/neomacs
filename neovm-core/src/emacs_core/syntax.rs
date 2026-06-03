@@ -13,7 +13,7 @@ use strum::{EnumString, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
-use crate::buffer::{Buffer, BufferManager};
+use crate::buffer::{Buffer, BufferManager, EmacsByteRange};
 
 thread_local! {
     static STANDARD_SYNTAX_TABLE_OBJECT: RefCell<Option<Value>> = const { RefCell::new(None) };
@@ -683,16 +683,16 @@ fn syntax_chars_from_emacs_bytes(bytes: &[u8], multibyte: bool) -> Vec<char> {
     chars
 }
 
-fn buffer_chars_in_range(buf: &Buffer, start: usize, end: usize) -> Vec<char> {
+fn buffer_chars_in_range(buf: &Buffer, range: EmacsByteRange) -> Vec<char> {
     let multibyte = buf.get_multibyte();
-    if let Some(chars) = buf.with_contiguous_emacs_bytes(start, end, |bytes| {
+    if let Some(chars) = buf.with_contiguous_emacs_byte_range(range, |bytes| {
         syntax_chars_from_emacs_bytes(bytes, multibyte)
     }) {
         return chars;
     }
 
     let mut bytes = Vec::new();
-    buf.copy_emacs_bytes_to(start, end, &mut bytes);
+    buf.copy_emacs_byte_range_to(range, &mut bytes);
     syntax_chars_from_emacs_bytes(&bytes, multibyte)
 }
 
@@ -706,7 +706,10 @@ fn forward_word_with_options(
         return backward_word_with_options(buf, table, -count, honor_properties);
     }
 
-    let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
+    let chars = buffer_chars_in_range(
+        buf,
+        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
+    );
     // Convert byte pos to char index within accessible region.
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
@@ -775,7 +778,10 @@ fn backward_word_with_options(
         return forward_word_with_options(buf, table, -count, honor_properties);
     }
 
-    let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
+    let chars = buffer_chars_in_range(
+        buf,
+        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
+    );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
@@ -845,7 +851,10 @@ fn skip_syntax_forward_with_options(
 ) -> usize {
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
-    let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
+    let chars = buffer_chars_in_range(
+        buf,
+        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
+    );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
@@ -900,7 +909,10 @@ fn skip_syntax_backward_with_options(
 ) -> usize {
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
-    let chars = buffer_chars_in_range(buf, buf.point_min(), buf.point_max());
+    let chars = buffer_chars_in_range(
+        buf,
+        EmacsByteRange::from_usize(buf.point_min(), buf.point_max()),
+    );
     let base = buf.point_min();
     let rel_byte = buf.point().saturating_sub(base);
     let mut idx = buf.text.emacs_byte_to_char(base + rel_byte) - buf.text.emacs_byte_to_char(base);
@@ -971,7 +983,7 @@ fn scan_sexps_with_options(
         return Ok(Some(from));
     }
 
-    let chars = buffer_chars_in_range(buf, 0, buf.total_bytes());
+    let chars = buffer_chars_in_range(buf, EmacsByteRange::from_usize(0, buf.total_bytes()));
     let start_bound = buf.point_min_char();
     let stop_bound = buf.point_max_char();
 
@@ -1117,7 +1129,7 @@ fn scan_lists_with_options(
     initial_depth: i64,
     honor_properties: bool,
 ) -> Result<Option<usize>, ScanListError> {
-    let chars = buffer_chars_in_range(buf, 0, buf.total_bytes());
+    let chars = buffer_chars_in_range(buf, EmacsByteRange::from_usize(0, buf.total_bytes()));
     let mut idx = from;
     let start = buf.point_min_char();
     let stop = buf.point_max_char();
@@ -3781,8 +3793,10 @@ fn parse_state_from_range_with_options(
     let to_char = if to > 0 { to as usize - 1 } else { 0 }.clamp(point_min, point_max);
     let chars = buffer_chars_in_range(
         buf,
-        buf.text.char_to_emacs_byte(from_char),
-        buf.text.char_to_emacs_byte(to_char),
+        EmacsByteRange::from_usize(
+            buf.text.char_to_emacs_byte(from_char),
+            buf.text.char_to_emacs_byte(to_char),
+        ),
     );
     let to_idx = chars.len();
 
