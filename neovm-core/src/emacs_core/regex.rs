@@ -41,7 +41,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::buffer::{Buffer, BufferId, EmacsByteRange};
+use crate::buffer::{Buffer, BufferId, CharPos0, EmacsByteRange};
 use crate::emacs_core::casefiddle::apply_replace_match_case;
 use crate::emacs_core::regex_emacs::{
     self, BufferSyntaxLookup, CaseTranslation, CompiledPattern, DefaultSyntaxLookup,
@@ -2294,13 +2294,21 @@ pub(crate) fn compute_buffer_replacement_with_syntax(
     };
     let (buffer_start, buffer_end) = if md.searched_string.is_some() {
         (
-            buf.text.char_to_emacs_byte(match_start),
-            buf.text.char_to_emacs_byte(match_end),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_start))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_end))
+                .get(),
         )
     } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
         (
-            buf.text.char_to_emacs_byte(match_start.saturating_sub(1)),
-            buf.text.char_to_emacs_byte(match_end.saturating_sub(1)),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_start.saturating_sub(1)))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_end.saturating_sub(1)))
+                .get(),
         )
     } else {
         (match_start, match_end)

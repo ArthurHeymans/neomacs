@@ -15,6 +15,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::value::*;
+use crate::buffer::CharPos0;
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -639,13 +640,21 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
 
     let (buffer_start, buffer_end) = if md.searched_string.is_some() {
         (
-            buf.text.char_to_emacs_byte(match_start),
-            buf.text.char_to_emacs_byte(match_end),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_start))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_end))
+                .get(),
         )
     } else if md.searched_buffer.is_some() && !md.buffer_positions_are_bytes {
         (
-            buf.text.char_to_emacs_byte(match_start.saturating_sub(1)),
-            buf.text.char_to_emacs_byte(match_end.saturating_sub(1)),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_start.saturating_sub(1)))
+                .get(),
+            buf.text
+                .char_pos_to_emacs_byte_pos(CharPos0::new(match_end.saturating_sub(1)))
+                .get(),
         )
     } else {
         (match_start, match_end)
