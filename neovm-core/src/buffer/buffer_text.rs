@@ -14,7 +14,9 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
-use super::position::{CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, StorageBytePos};
+use super::position::{
+    CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
+};
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, GapDebugLayout, TextBackendDebugLayout, TextEditRange, TextExtent,
@@ -29,13 +31,15 @@ use super::text_props::{PropertyInterval, TextPropertyTable};
 /// `BufferText` without going through the `insdel.rs` tick-bumping path.
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
-    /// Total char count when this entry was stored. 0 = invalid.
-    epoch_chars: usize,
-    /// Total byte length when this entry was stored. 0 = invalid (disambiguates
-    /// a legitimately empty buffer from an uninitialised cache).
-    epoch_bytes: usize,
-    charpos: usize,
-    bytepos: usize,
+    /// Total text size when this entry was stored. Empty = invalid.
+    epoch: TextMetrics,
+    anchor: TextPositionAnchor,
+}
+
+impl PositionCache {
+    fn is_valid_for(self, metrics: TextMetrics) -> bool {
+        self.epoch == metrics && !self.epoch.is_empty()
+    }
 }
 
 struct BufferTextStorage {
@@ -53,10 +57,10 @@ struct BufferTextStorage {
     pos_cache: Cell<PositionCache>,
     /// Internal (non-Lisp-visible) anchor positions populated on long scans.
     /// Invalidated wholesale when `(total_chars, total_bytes)` advances.
-    anchor_cache: RefCell<Vec<(usize, usize)>>,
-    /// `(epoch_chars, epoch_bytes)` at which the anchor_cache is valid.
+    anchor_cache: RefCell<Vec<TextPositionAnchor>>,
+    /// Text size at which the anchor_cache is valid.
     /// Mismatch triggers a wholesale clear on next read.
-    anchor_cache_key: Cell<(usize, usize)>,
+    anchor_cache_key: Cell<TextMetrics>,
 }
 
 impl Clone for BufferTextStorage {
@@ -114,7 +118,7 @@ impl BufferText {
                 markers_head: std::ptr::null_mut(),
                 pos_cache: Cell::new(PositionCache::default()),
                 anchor_cache: RefCell::new(Vec::new()),
-                anchor_cache_key: Cell::new((0, 0)),
+                anchor_cache_key: Cell::new(TextMetrics::ZERO),
             })),
         }
     }
@@ -178,7 +182,7 @@ impl BufferText {
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {
         storage.pos_cache.set(PositionCache::default());
         storage.anchor_cache.borrow_mut().clear();
-        storage.anchor_cache_key.set((0, 0));
+        storage.anchor_cache_key.set(TextMetrics::ZERO);
     }
 
     fn byte_range_to_char_range_with_storage(
@@ -1580,52 +1584,40 @@ impl BufferText {
     /// (`src/marker.c:167`).
     pub fn buf_charpos_to_bytepos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
+        let metrics = storage.metrics;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
+        let target = CharPos0::new(target);
 
-        if target >= total_chars {
+        if target.get() >= total_chars {
             return storage.backend.len();
         }
 
         // Unibyte fast path: char == byte, no scan needed.
         if total_chars == total_bytes {
-            return target;
+            return target.get();
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
-        let current_key = (total_chars, total_bytes);
-        if storage.anchor_cache_key.get() != current_key {
+        if storage.anchor_cache_key.get() != metrics {
             storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(current_key);
+            storage.anchor_cache_key.set(metrics);
         }
 
-        let mut best_below: (usize, usize) = (0, 0);
-        let mut best_above: (usize, usize) = (total_chars, total_bytes);
+        let mut best_below = TextPositionAnchor::default();
+        let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
 
         if let Some(anchor) = storage.backend.conversion_anchor() {
-            consider_anchor(
-                target,
-                (anchor.char_pos.get(), anchor.emacs_byte_pos.get()),
-                &mut best_below,
-                &mut best_above,
-            );
+            consider_char_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
         let cached = storage.pos_cache.get();
-        if cached.epoch_chars == total_chars
-            && cached.epoch_bytes == total_bytes
-            && (cached.epoch_chars != 0 || cached.epoch_bytes != 0)
-        {
-            consider_anchor(
-                target,
-                (cached.charpos, cached.bytepos),
-                &mut best_below,
-                &mut best_above,
-            );
+        if cached.is_valid_for(metrics) {
+            consider_char_anchor(target, cached.anchor, &mut best_below, &mut best_above);
         }
 
-        for &(cp, bp) in storage.anchor_cache.borrow().iter() {
-            consider_anchor(target, (cp, bp), &mut best_below, &mut best_above);
+        for &anchor in storage.anchor_cache.borrow().iter() {
+            consider_char_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
         let mut distance: usize = POSITION_DISTANCE_BASE;
@@ -1640,14 +1632,14 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                consider_anchor(
+                consider_char_anchor(
                     target,
-                    (data.charpos, data.bytepos),
+                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
                     &mut best_below,
                     &mut best_above,
                 );
-                if best_above.0.saturating_sub(target) < distance
-                    || target.saturating_sub(best_below.0) < distance
+                if best_above.char_pos.get().saturating_sub(target.get()) < distance
+                    || target.get().saturating_sub(best_below.char_pos.get()) < distance
                 {
                     break;
                 }
@@ -1656,8 +1648,8 @@ impl BufferText {
             }
         }
 
-        let walked_below = target.saturating_sub(best_below.0);
-        let walked_above = best_above.0.saturating_sub(target);
+        let walked_below = target.get().saturating_sub(best_below.char_pos.get());
+        let walked_above = best_above.char_pos.get().saturating_sub(target.get());
         let result = if walked_below <= walked_above {
             scan_forward(&storage.backend, best_below, target)
         } else {
@@ -1668,69 +1660,57 @@ impl BufferText {
         // walked more than POSITION_ANCHOR_STRIDE positions.
         let walked = walked_below.min(walked_above);
         if walked > POSITION_ANCHOR_STRIDE {
-            storage.anchor_cache.borrow_mut().push((target, result));
+            storage
+                .anchor_cache
+                .borrow_mut()
+                .push(TextPositionAnchor::new(target, result));
         }
 
         storage.pos_cache.set(PositionCache {
-            epoch_chars: total_chars,
-            epoch_bytes: total_bytes,
-            charpos: target,
-            bytepos: result,
+            epoch: metrics,
+            anchor: TextPositionAnchor::new(target, result),
         });
-        result
+        result.get()
     }
 
     /// Convert a logical Emacs byte position to a character position. Symmetric
     /// to `buf_charpos_to_bytepos` — shares the same anchor + cache machinery.
     pub fn buf_bytepos_to_charpos(&self, target: usize) -> usize {
         let storage = self.storage.borrow();
+        let metrics = storage.metrics;
         let total_chars = storage.metrics.chars();
         let total_bytes = storage.metrics.emacs_bytes();
+        let target = EmacsBytePos::new(target);
 
-        if target >= total_bytes {
+        if target.get() >= total_bytes {
             return total_chars;
         }
 
         // Unibyte fast path: char == byte, no scan needed.
         if total_chars == total_bytes {
-            return target;
+            return target.get();
         }
 
         // Wholesale-invalidate the anchor cache when the buffer changed.
-        let current_key = (total_chars, total_bytes);
-        if storage.anchor_cache_key.get() != current_key {
+        if storage.anchor_cache_key.get() != metrics {
             storage.anchor_cache.borrow_mut().clear();
-            storage.anchor_cache_key.set(current_key);
+            storage.anchor_cache_key.set(metrics);
         }
 
-        // Bracket is expressed as (bytepos, charpos) for this direction.
-        let mut best_below: (usize, usize) = (0, 0);
-        let mut best_above: (usize, usize) = (total_bytes, total_chars);
+        let mut best_below = TextPositionAnchor::default();
+        let mut best_above = TextPositionAnchor::new(metrics.char_end(), metrics.emacs_byte_end());
 
         if let Some(anchor) = storage.backend.conversion_anchor() {
-            consider_anchor_byte(
-                target,
-                (anchor.emacs_byte_pos.get(), anchor.char_pos.get()),
-                &mut best_below,
-                &mut best_above,
-            );
+            consider_byte_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
         let cached = storage.pos_cache.get();
-        if cached.epoch_chars == total_chars
-            && cached.epoch_bytes == total_bytes
-            && (cached.epoch_chars != 0 || cached.epoch_bytes != 0)
-        {
-            consider_anchor_byte(
-                target,
-                (cached.bytepos, cached.charpos),
-                &mut best_below,
-                &mut best_above,
-            );
+        if cached.is_valid_for(metrics) {
+            consider_byte_anchor(target, cached.anchor, &mut best_below, &mut best_above);
         }
 
-        for &(cp, bp) in storage.anchor_cache.borrow().iter() {
-            consider_anchor_byte(target, (bp, cp), &mut best_below, &mut best_above);
+        for &anchor in storage.anchor_cache.borrow().iter() {
+            consider_byte_anchor(target, anchor, &mut best_below, &mut best_above);
         }
 
         let mut distance: usize = POSITION_DISTANCE_BASE;
@@ -1740,14 +1720,14 @@ impl BufferText {
         unsafe {
             while !curr.is_null() {
                 let data = &(*curr).data;
-                consider_anchor_byte(
+                consider_byte_anchor(
                     target,
-                    (data.bytepos, data.charpos),
+                    TextPositionAnchor::from_usize(data.charpos, data.bytepos),
                     &mut best_below,
                     &mut best_above,
                 );
-                if best_above.0.saturating_sub(target) < distance
-                    || target.saturating_sub(best_below.0) < distance
+                if best_above.emacs_byte_pos.get().saturating_sub(target.get()) < distance
+                    || target.get().saturating_sub(best_below.emacs_byte_pos.get()) < distance
                 {
                     break;
                 }
@@ -1756,8 +1736,8 @@ impl BufferText {
             }
         }
 
-        let walked_below = target.saturating_sub(best_below.0);
-        let walked_above = best_above.0.saturating_sub(target);
+        let walked_below = target.get().saturating_sub(best_below.emacs_byte_pos.get());
+        let walked_above = best_above.emacs_byte_pos.get().saturating_sub(target.get());
         let result = if walked_below <= walked_above {
             scan_forward_bytes(&storage.backend, best_below, target)
         } else {
@@ -1770,16 +1750,17 @@ impl BufferText {
         // anchor_cache entries in one canonical order.
         let walked = walked_below.min(walked_above);
         if walked > POSITION_ANCHOR_STRIDE {
-            storage.anchor_cache.borrow_mut().push((result, target));
+            storage
+                .anchor_cache
+                .borrow_mut()
+                .push(TextPositionAnchor::new(result, target));
         }
 
         storage.pos_cache.set(PositionCache {
-            epoch_chars: total_chars,
-            epoch_bytes: total_bytes,
-            charpos: result,
-            bytepos: target,
+            epoch: metrics,
+            anchor: TextPositionAnchor::new(result, target),
         });
-        result
+        result.get()
     }
 
     #[cfg(test)]
@@ -1815,26 +1796,31 @@ const POSITION_DISTANCE_INCR: usize = 50;
 /// Mirrors GNU `marker.c:238-241` (5000-char threshold).
 const POSITION_ANCHOR_STRIDE: usize = 5000;
 
-/// Update `(best_below, best_above)` in place using a new `(charpos, bytepos)` anchor.
-fn consider_anchor(
-    target: usize,
-    anchor: (usize, usize),
-    best_below: &mut (usize, usize),
-    best_above: &mut (usize, usize),
+/// Update `(best_below, best_above)` in place by character position.
+fn consider_char_anchor(
+    target: CharPos0,
+    anchor: TextPositionAnchor,
+    best_below: &mut TextPositionAnchor,
+    best_above: &mut TextPositionAnchor,
 ) {
-    if anchor.0 <= target && anchor.0 > best_below.0 {
+    if anchor.char_pos <= target && anchor.char_pos > best_below.char_pos {
         *best_below = anchor;
     }
-    if anchor.0 >= target && anchor.0 < best_above.0 {
+    if anchor.char_pos >= target && anchor.char_pos < best_above.char_pos {
         *best_above = anchor;
     }
 }
 
-/// Walk forward from `anchor = (charpos, bytepos)` to reach `target` chars.
+/// Walk forward from `anchor` to reach `target` chars.
 /// Returns the byte position.
-fn scan_forward(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
-    let (mut cp, mut bp) = anchor;
-    while cp < target {
+fn scan_forward(
+    backend: &TextBackend,
+    anchor: TextPositionAnchor,
+    target: CharPos0,
+) -> EmacsBytePos {
+    let mut cp = anchor.char_pos.get();
+    let mut bp = anchor.emacs_byte_pos.get();
+    while cp < target.get() {
         if !backend.is_multibyte() {
             bp += 1;
             cp += 1;
@@ -1849,14 +1835,19 @@ fn scan_forward(backend: &TextBackend, anchor: (usize, usize), target: usize) ->
         bp += len;
         cp += 1;
     }
-    bp
+    EmacsBytePos::new(bp)
 }
 
-/// Walk backward from `anchor = (charpos, bytepos)` to reach `target` chars.
+/// Walk backward from `anchor` to reach `target` chars.
 /// Returns the byte position.
-fn scan_backward(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
-    let (mut cp, mut bp) = anchor;
-    while cp > target {
+fn scan_backward(
+    backend: &TextBackend,
+    anchor: TextPositionAnchor,
+    target: CharPos0,
+) -> EmacsBytePos {
+    let mut cp = anchor.char_pos.get();
+    let mut bp = anchor.emacs_byte_pos.get();
+    while cp > target.get() {
         if !backend.is_multibyte() {
             bp -= 1;
             cp -= 1;
@@ -1869,29 +1860,34 @@ fn scan_backward(backend: &TextBackend, anchor: (usize, usize), target: usize) -
         bp = prev;
         cp -= 1;
     }
-    bp
+    EmacsBytePos::new(bp)
 }
 
-/// Update `(best_below, best_above)` in place using a new `(bytepos, charpos)` anchor.
-fn consider_anchor_byte(
-    target: usize,
-    anchor: (usize, usize), // (bytepos, charpos)
-    best_below: &mut (usize, usize),
-    best_above: &mut (usize, usize),
+/// Update `(best_below, best_above)` in place by byte position.
+fn consider_byte_anchor(
+    target: EmacsBytePos,
+    anchor: TextPositionAnchor,
+    best_below: &mut TextPositionAnchor,
+    best_above: &mut TextPositionAnchor,
 ) {
-    if anchor.0 <= target && anchor.0 > best_below.0 {
+    if anchor.emacs_byte_pos <= target && anchor.emacs_byte_pos > best_below.emacs_byte_pos {
         *best_below = anchor;
     }
-    if anchor.0 >= target && anchor.0 < best_above.0 {
+    if anchor.emacs_byte_pos >= target && anchor.emacs_byte_pos < best_above.emacs_byte_pos {
         *best_above = anchor;
     }
 }
 
-/// Walk forward from `anchor = (bytepos, charpos)` to reach `target` bytepos.
+/// Walk forward from `anchor` to reach `target` bytepos.
 /// Returns the char position.
-fn scan_forward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
-    let (mut bp, mut cp) = anchor;
-    while bp < target {
+fn scan_forward_bytes(
+    backend: &TextBackend,
+    anchor: TextPositionAnchor,
+    target: EmacsBytePos,
+) -> CharPos0 {
+    let mut bp = anchor.emacs_byte_pos.get();
+    let mut cp = anchor.char_pos.get();
+    while bp < target.get() {
         if !backend.is_multibyte() {
             bp += 1;
             cp += 1;
@@ -1906,14 +1902,19 @@ fn scan_forward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usi
         bp += len;
         cp += 1;
     }
-    cp
+    CharPos0::new(cp)
 }
 
-/// Walk backward from `anchor = (bytepos, charpos)` to reach `target` bytepos.
+/// Walk backward from `anchor` to reach `target` bytepos.
 /// Returns the char position.
-fn scan_backward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usize) -> usize {
-    let (mut bp, mut cp) = anchor;
-    while bp > target {
+fn scan_backward_bytes(
+    backend: &TextBackend,
+    anchor: TextPositionAnchor,
+    target: EmacsBytePos,
+) -> CharPos0 {
+    let mut bp = anchor.emacs_byte_pos.get();
+    let mut cp = anchor.char_pos.get();
+    while bp > target.get() {
         if !backend.is_multibyte() {
             bp -= 1;
             cp -= 1;
@@ -1926,7 +1927,7 @@ fn scan_backward_bytes(backend: &TextBackend, anchor: (usize, usize), target: us
         bp = prev;
         cp -= 1;
     }
-    cp
+    CharPos0::new(cp)
 }
 
 #[cfg(test)]
