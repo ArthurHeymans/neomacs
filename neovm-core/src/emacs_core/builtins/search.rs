@@ -1253,10 +1253,10 @@ pub(crate) fn builtin_match_string(
         return Ok(Value::NIL);
     }
 
-    let start_byte = buf.lisp_pos_to_byte(start as i64);
-    let end_byte = buf.lisp_pos_to_byte(end as i64);
-    if end_byte <= buf.total_bytes() && start_byte <= end_byte {
-        Ok(buf.buffer_substring_value(start_byte, end_byte))
+    let start_byte = buf.lisp_pos_to_emacs_byte_pos(start as i64);
+    let end_byte = buf.lisp_pos_to_emacs_byte_pos(end as i64);
+    if end_byte.get() <= buf.total_bytes() && start_byte <= end_byte {
+        Ok(buf.buffer_substring_value(start_byte.get(), end_byte.get()))
     } else {
         Ok(Value::NIL)
     }

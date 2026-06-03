@@ -1388,14 +1388,14 @@ pub(crate) fn builtin_replace_region_contents(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let start_byte = super::editfns::lisp_pos_to_byte(buf, start);
-        let end_byte = super::editfns::lisp_pos_to_byte(buf, end);
-        let (lo, hi) = if start_byte <= end_byte {
-            (start_byte, end_byte)
+        let start_byte = buf.lisp_pos_to_emacs_byte_pos(start);
+        let end_byte = buf.lisp_pos_to_emacs_byte_pos(end);
+        let byte_range = if start_byte <= end_byte {
+            EmacsByteRange::new(start_byte, end_byte)
         } else {
-            (end_byte, start_byte)
+            EmacsByteRange::new(end_byte, start_byte)
         };
-        (lo.get(), hi.get())
+        (byte_range.start_usize(), byte_range.end_usize())
     };
     // Signal before the combined delete+insert operation.
     super::editfns::signal_before_change(eval, lo, hi)?;
@@ -2287,7 +2287,7 @@ pub(crate) fn builtin_constrain_to_field(
             .buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        let byte_pos = super::editfns::lisp_pos_to_byte(buf, new_pos);
+        let byte_pos = buf.lisp_pos_to_emacs_byte_pos(new_pos);
         let _ = eval.buffers.goto_buffer_byte(current_id, byte_pos.get());
     }
 
