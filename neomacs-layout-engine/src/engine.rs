@@ -2858,8 +2858,8 @@ impl LayoutEngine {
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
         let buffer_name = buffer.name.clone();
-        let buffer_z_char = buffer.zv_char.saturating_add(1);
-        let buffer_z_byte = buffer.zv_byte.get();
+        let accessible_end_lisp_char = buffer.accessible_end_char.saturating_add(1);
+        let accessible_end_emacs_byte = buffer.accessible_end_emacs_byte.get();
 
         let buf_access = super::neovm_bridge::RustBufferAccess::new(buffer);
         if let Some(effects) = params.cursor_effects.clone() {
@@ -6466,8 +6466,8 @@ impl LayoutEngine {
             frame_id,
             neovm_core::window::WindowId(params.window_id as u64),
             window_start_lisp,
-            buffer_z_char,
-            buffer_z_byte,
+            accessible_end_lisp_char,
+            accessible_end_emacs_byte,
             window_end_lisp,
             window_end_byte,
             window_end_vpos,

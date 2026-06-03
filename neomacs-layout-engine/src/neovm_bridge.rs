@@ -95,9 +95,9 @@ pub(crate) trait LayoutBufferView {
 pub(crate) struct LayoutBufferSnapshot {
     pub name: String,
     pub text: BufferText,
-    pub begv_byte: EmacsBytePos,
-    pub zv_byte: EmacsBytePos,
-    pub zv_char: usize,
+    pub accessible_start_emacs_byte: EmacsBytePos,
+    pub accessible_end_emacs_byte: EmacsBytePos,
+    pub accessible_end_char: usize,
     pub local_var_alist: Value,
     pub slots: [Value; BUFFER_SLOT_COUNT],
     pub overlays: OverlayList,
@@ -109,9 +109,9 @@ impl LayoutBufferSnapshot {
         Self {
             name: buffer.name_runtime_string_owned(),
             text: buffer.text.clone(),
-            begv_byte: EmacsBytePos::new(buffer.begv_byte),
-            zv_byte: EmacsBytePos::new(buffer.zv_byte),
-            zv_char: buffer.zv,
+            accessible_start_emacs_byte: buffer.point_min_emacs_byte_pos(),
+            accessible_end_emacs_byte: buffer.point_max_emacs_byte_pos(),
+            accessible_end_char: buffer.point_max_char(),
             local_var_alist: buffer.local_var_alist,
             slots: buffer.slots,
             overlays: buffer.overlays.clone(),
@@ -216,15 +216,15 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     }
 
     fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
-        self.begv_byte
+        self.accessible_start_emacs_byte
     }
 
     fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos {
-        self.zv_byte
+        self.accessible_end_emacs_byte
     }
 
     fn layout_point_max_char(&self) -> usize {
-        self.zv_char
+        self.accessible_end_char
     }
 
     fn layout_text(&self) -> &BufferText {
@@ -1345,7 +1345,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     ///
     /// `WindowParams` used by the pure-Rust layout path carry neovm-core's
     /// internal character positions, which are 0-based and use an exclusive
-    /// end (`zv_char` / `buffer_size`).
+    /// accessible end (`accessible_end_char` / `buffer_size`).
     pub fn charpos_to_bytepos(&self, charpos: i64) -> i64 {
         if charpos <= 0 {
             return 0;
