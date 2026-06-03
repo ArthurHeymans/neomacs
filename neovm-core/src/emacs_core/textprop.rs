@@ -11,7 +11,7 @@ use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
-use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos};
+use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
 
@@ -366,12 +366,12 @@ fn lookup_overlay_property(
 /// This is only valid after GNU-style range validation.  Text-property
 /// builtins must not clamp positions: GNU `validate_interval_range` signals
 /// `args-out-of-range` for invalid positions.
-fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
+fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
     debug_assert!(pos >= 1);
-    buffer_char_to_byte_pos(buf, (pos - 1) as usize)
+    EmacsBytePos::new(buffer_char_to_byte_pos(buf, (pos - 1) as usize))
 }
 
-fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
+fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> EmacsBytePos {
     let max = buf.text.char_count() as i64 + 1;
     let clipped = pos.clamp(1, max);
     elisp_pos_to_byte(buf, clipped)
@@ -381,14 +381,14 @@ fn elisp_range_to_byte_clipped_full(
     buf: &crate::buffer::buffer::Buffer,
     mut beg: i64,
     mut end: i64,
-) -> (usize, usize) {
+) -> EmacsByteRange {
     if beg > end {
         std::mem::swap(&mut beg, &mut end);
     }
     let max = buf.text.char_count() as i64 + 1;
     let clipped_beg = beg.clamp(1, max);
     let clipped_end = end.clamp(clipped_beg, max);
-    (
+    EmacsByteRange::new(
         elisp_pos_to_byte(buf, clipped_beg),
         elisp_pos_to_byte(buf, clipped_end),
     )
@@ -460,7 +460,7 @@ pub(crate) fn validate_buffer_point_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point(pos));
     }
-    Ok(elisp_pos_to_byte(buf, pos))
+    Ok(elisp_pos_to_byte(buf, pos).get())
 }
 
 fn validate_buffer_property_point_raw(
@@ -473,7 +473,7 @@ fn validate_buffer_property_point_raw(
     if !(point_min <= pos && pos <= point_max) {
         return Err(args_out_of_range_point_pair(pos0));
     }
-    Ok(elisp_pos_to_byte(buf, pos))
+    Ok(elisp_pos_to_byte(buf, pos).get())
 }
 
 fn validate_buffer_property_range(
@@ -493,8 +493,8 @@ fn validate_buffer_property_range(
         return Err(args_out_of_range_range(beg0, end0));
     }
     Ok(Some((
-        elisp_pos_to_byte(buf, start),
-        elisp_pos_to_byte(buf, finish),
+        elisp_pos_to_byte(buf, start).get(),
+        elisp_pos_to_byte(buf, finish).get(),
     )))
 }
 
@@ -2507,7 +2507,7 @@ pub(crate) fn builtin_next_overlay_change_in_buffers(
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
     match buf
         .overlays
-        .next_boundary_after_until(byte_pos, buf.point_max_byte())
+        .next_boundary_after_until(byte_pos.get(), buf.point_max_byte())
     {
         Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_max()))),
@@ -2536,7 +2536,7 @@ pub(crate) fn builtin_previous_overlay_change_in_buffers(
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
     match buf
         .overlays
-        .previous_boundary_before_since(byte_pos, buf.point_min_byte())
+        .previous_boundary_before_since(byte_pos.get(), buf.point_min_byte())
     {
         Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
         None => Ok(Value::fixnum(byte_to_elisp_pos(buf, buf.point_min()))),
@@ -2569,13 +2569,13 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         .get_mut(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
+    let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
     let overlay = Value::make_overlay(crate::heap_types::OverlayData {
         serial: 0,
         plist: Value::NIL,
         buffer: Some(buf_id),
-        start: byte_beg,
-        end: byte_end,
+        start: byte_range.start_usize(),
+        end: byte_range.end_usize(),
         front_advance,
         rear_advance,
     });
@@ -2709,7 +2709,7 @@ pub(crate) fn builtin_overlays_at_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = elisp_pos_to_byte_clipped_full(buf, pos);
-    let mut ids = buf.overlays.overlays_at(byte_pos);
+    let mut ids = buf.overlays.overlays_at(byte_pos.get());
     if let Some(sorted) = args.get(1)
         && sorted.is_truthy()
     {
@@ -2747,10 +2747,12 @@ pub(crate) fn builtin_overlays_in_in_buffers(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
-    let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
-    let ids = buf
-        .overlays
-        .overlays_in_region(byte_beg, byte_end, buf.point_max_byte());
+    let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+    let ids = buf.overlays.overlays_in_region(
+        byte_range.start_usize(),
+        byte_range.end_usize(),
+        buf.point_max_byte(),
+    );
     Ok(Value::list(ids))
 }
 
@@ -2792,8 +2794,9 @@ pub(crate) fn builtin_move_overlay_in_buffers(
         let buf = buffers
             .get_mut(new_buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(buf, beg, end);
-        buf.overlays.move_overlay(overlay, byte_beg, byte_end);
+        let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+        buf.overlays
+            .move_overlay(overlay, byte_range.start_usize(), byte_range.end_usize());
         buf.increment_overlay_modified_tick();
         Ok(args[0])
     } else {
@@ -2808,15 +2811,15 @@ pub(crate) fn builtin_move_overlay_in_buffers(
         let new_buf = buffers
             .get_mut(new_buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-        let (byte_beg, byte_end) = elisp_range_to_byte_clipped_full(new_buf, beg, end);
+        let byte_range = elisp_range_to_byte_clipped_full(new_buf, beg, end);
         let _ = overlay.with_overlay_data_mut(|object| {
             object.buffer = Some(new_buf_id);
-            object.start = byte_beg;
-            object.end = byte_end;
+            object.start = byte_range.start_usize();
+            object.end = byte_range.end_usize();
         });
         new_buf.overlays.insert_overlay(overlay);
         new_buf.increment_overlay_modified_tick();
-        if byte_beg == byte_end
+        if byte_range.is_empty()
             && new_buf
                 .overlays
                 .overlay_get_named(overlay, Value::symbol("evaporate"))
@@ -2940,16 +2943,16 @@ pub(crate) fn builtin_remove_overlays(
             .get(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
         let start = if args.is_empty() || args[0].is_nil() {
-            buf.point_min()
+            buf.point_min_emacs_byte_pos()
         } else {
             elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[0])?)
         };
         let end = if args.len() < 2 || args[1].is_nil() {
-            buf.point_max()
+            buf.point_max_emacs_byte_pos()
         } else {
             elisp_pos_to_byte_clipped_full(buf, expect_int_eval(eval, &args[1])?)
         };
-        (start, end)
+        (start.get(), end.get())
     };
 
     let buf = eval
