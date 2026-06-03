@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod buffer_text;
 pub mod gap_buffer;
 pub mod overlay;
+pub mod position;
 pub mod shared;
 pub mod text;
 pub mod text_props;
@@ -11,12 +12,11 @@ pub use buffer::{
     Buffer, BufferId, BufferManager, InsertionType, LabeledRestriction, LabeledRestrictionLabel,
     SavedRestrictionKind, SavedRestrictionState,
 };
-pub use buffer_text::{
-    BufferText, BufferTextBackendLayout, BufferTextLayout, BufferTextMetrics, GapTextLayout,
-};
+pub use buffer_text::{BufferText, GapDebugLayout, TextBackendDebugLayout};
 pub use overlay::{Overlay, OverlayList};
+pub use position::{CharPos0, DisplayColumn, EmacsBytePos, LispCharPos1, StorageBytePos};
 pub use shared::SharedUndoState;
-pub use text::BufferTextBackendKind;
+pub use text::{BufferTextBackendKind, TextMetrics};
 pub use text_props::TextPropertyTable;
 pub use undo::{
     truncate_undo_list, undo_list_boundary, undo_list_contains_boundary,

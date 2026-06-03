@@ -4,7 +4,8 @@ mod piece;
 use std::fmt;
 
 use super::BufferTextBackendKind;
-use crate::buffer::buffer_text::BufferTextBackendLayout;
+use crate::buffer::buffer_text::TextBackendDebugLayout;
+use crate::buffer::position::TextPositionAnchor;
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
 
@@ -54,16 +55,16 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn layout(&self) -> BufferTextBackendLayout {
+    pub(in crate::buffer) fn debug_layout(&self) -> TextBackendDebugLayout {
         match self {
-            Self::Gap(gap) => BufferTextBackendLayout::Gap(gap.layout()),
-            Self::PieceTree(piece_tree) => piece_tree.layout(),
+            Self::Gap(gap) => TextBackendDebugLayout::Gap(gap.debug_layout()),
+            Self::PieceTree(piece_tree) => piece_tree.debug_layout(),
         }
     }
 
-    pub(in crate::buffer) fn primary_anchor(&self) -> Option<(usize, usize)> {
+    pub(in crate::buffer) fn conversion_anchor(&self) -> Option<TextPositionAnchor> {
         match self {
-            Self::Gap(gap) => Some((gap.gpt(), gap.gpt_byte())),
+            Self::Gap(gap) => Some(TextPositionAnchor::new(gap.gpt(), gap.gpt_byte())),
             Self::PieceTree(_) => None,
         }
     }

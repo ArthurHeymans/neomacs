@@ -1,7 +1,6 @@
 use std::str::FromStr;
 
-use crate::buffer::BufferTextBackendKind;
-use crate::buffer::buffer_text::{BufferTextBackendLayout, BufferTextMetrics};
+use crate::buffer::{BufferTextBackendKind, TextBackendDebugLayout, TextMetrics};
 
 use super::BufferText;
 
@@ -29,10 +28,10 @@ fn buffer_text_can_use_piece_tree_backend() {
 
     assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
     assert_eq!(
-        text.backend_layout(),
-        BufferTextBackendLayout::PieceTree(BufferTextMetrics { z: 5, z_byte: 6 })
+        text.backend_debug_layout(),
+        TextBackendDebugLayout::PieceTree(TextMetrics::new(5, 6))
     );
-    assert!(text.gap_layout().is_none());
+    assert!(text.gap_debug_layout().is_none());
 
     let insert_pos = text.buf_charpos_to_bytepos(2);
     text.insert_str(insert_pos, "XY");
@@ -43,8 +42,8 @@ fn buffer_text_can_use_piece_tree_backend() {
     text.delete_range(delete_start, delete_end);
     assert_eq!(text.to_string(), "aécd");
     assert_eq!(
-        text.backend_layout(),
-        BufferTextBackendLayout::PieceTree(BufferTextMetrics { z: 4, z_byte: 5 })
+        text.backend_debug_layout(),
+        TextBackendDebugLayout::PieceTree(TextMetrics::new(4, 5))
     );
 }
 
@@ -78,8 +77,8 @@ fn replace_lisp_string_preserves_piece_tree_backend() {
     assert_eq!(text.backend_kind(), BufferTextBackendKind::PieceTree);
     assert_eq!(text.to_string(), "日本");
     assert_eq!(
-        text.backend_layout(),
-        BufferTextBackendLayout::PieceTree(BufferTextMetrics { z: 2, z_byte: 6 })
+        text.backend_debug_layout(),
+        TextBackendDebugLayout::PieceTree(TextMetrics::new(2, 6))
     );
 }
 
@@ -136,22 +135,32 @@ fn deep_clone_keeps_independent_char_count_cache() {
 fn layout_tracks_gnu_style_gap_and_end_positions() {
     crate::test_utils::init_test_tracing();
     let mut text = BufferText::from_str("éz");
-    assert_eq!(text.metrics(), BufferTextMetrics { z: 2, z_byte: 3 });
-    let layout = text.gap_layout().expect("default backend is a gap buffer");
-    assert_eq!(text.backend_layout(), BufferTextBackendLayout::Gap(layout));
-    assert_eq!(layout.gpt, 2);
-    assert_eq!(layout.z, 2);
-    assert_eq!(layout.gpt_byte, 3);
-    assert_eq!(layout.z_byte, 3);
+    assert_eq!(text.metrics(), TextMetrics::new(2, 3));
+    let layout = text
+        .gap_debug_layout()
+        .expect("default backend is a gap buffer");
+    assert_eq!(
+        text.backend_debug_layout(),
+        TextBackendDebugLayout::Gap(layout)
+    );
+    assert_eq!(layout.gpt.get(), 2);
+    assert_eq!(layout.z.get(), 2);
+    assert_eq!(layout.gpt_byte.get(), 3);
+    assert_eq!(layout.z_byte.get(), 3);
 
     text.insert_str('é'.len_utf8(), "x");
-    assert_eq!(text.metrics(), BufferTextMetrics { z: 3, z_byte: 4 });
-    let layout = text.gap_layout().expect("default backend is a gap buffer");
-    assert_eq!(text.backend_layout(), BufferTextBackendLayout::Gap(layout));
-    assert_eq!(layout.gpt, 2);
-    assert_eq!(layout.z, 3);
-    assert_eq!(layout.gpt_byte, 3);
-    assert_eq!(layout.z_byte, 4);
+    assert_eq!(text.metrics(), TextMetrics::new(3, 4));
+    let layout = text
+        .gap_debug_layout()
+        .expect("default backend is a gap buffer");
+    assert_eq!(
+        text.backend_debug_layout(),
+        TextBackendDebugLayout::Gap(layout)
+    );
+    assert_eq!(layout.gpt.get(), 2);
+    assert_eq!(layout.z.get(), 3);
+    assert_eq!(layout.gpt_byte.get(), 3);
+    assert_eq!(layout.z_byte.get(), 4);
     assert_eq!(text.to_string(), "éxz");
 }
 
@@ -162,8 +171,10 @@ fn emacs_byte_chunks_cross_gap_without_copying_to_single_slice() {
     text.insert_str(3, "X");
     text.delete_range(3, 4);
 
-    let layout = text.gap_layout().expect("default backend is a gap buffer");
-    assert_eq!(layout.gpt_byte, 3);
+    let layout = text
+        .gap_debug_layout()
+        .expect("default backend is a gap buffer");
+    assert_eq!(layout.gpt_byte.get(), 3);
 
     let mut chunks = Vec::new();
     text.for_each_emacs_byte_chunk(1, 5, |chunk| {

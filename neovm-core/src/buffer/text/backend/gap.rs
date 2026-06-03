@@ -1,7 +1,8 @@
 use std::fmt;
 
-use crate::buffer::buffer_text::GapTextLayout;
+use crate::buffer::buffer_text::GapDebugLayout;
 use crate::buffer::gap_buffer::GapBuffer;
+use crate::buffer::position::{CharPos0, EmacsBytePos};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -73,12 +74,12 @@ impl GapTextBackend {
         self.gap.gap_size()
     }
 
-    pub(in crate::buffer) fn layout(&self) -> GapTextLayout {
-        GapTextLayout {
-            gpt: self.gpt(),
-            z: self.z(),
-            gpt_byte: self.gpt_byte(),
-            z_byte: self.z_byte(),
+    pub(in crate::buffer) fn debug_layout(&self) -> GapDebugLayout {
+        GapDebugLayout {
+            gpt: CharPos0::new(self.gpt()),
+            z: CharPos0::new(self.z()),
+            gpt_byte: EmacsBytePos::new(self.gpt_byte()),
+            z_byte: EmacsBytePos::new(self.z_byte()),
             gap_size: self.gap_size(),
         }
     }

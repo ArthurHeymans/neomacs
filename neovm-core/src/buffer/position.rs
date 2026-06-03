@@ -1,5 +1,4 @@
-//! Position types for distinguishing 0-based internal positions from
-//! 1-based Lisp positions.
+//! Position types for distinguishing buffer coordinate spaces.
 //!
 //! GNU Emacs uses 1-based positions everywhere (BEG=1, first char is at
 //! position 1).  NeoMacs stores positions 0-based internally but exposes
@@ -7,60 +6,122 @@
 //! at the boundary so the compiler catches accidental mixing.
 
 /// 0-based internal character position (first character = 0).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct CharPos(pub usize);
+pub struct CharPos0(usize);
 
-/// 0-based internal byte position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// 0-based logical Emacs byte position.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct BytePos(pub usize);
+pub struct EmacsBytePos(usize);
+
+/// 0-based physical storage byte position.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct StorageBytePos(usize);
 
 /// 1-based Lisp character position (first character = 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LispPos(pub i64);
+#[repr(transparent)]
+pub struct LispCharPos1(i64);
 
-impl CharPos {
+/// Display column coordinate. This is not a buffer character position.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
+pub struct DisplayColumn(usize);
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextPositionAnchor {
+    pub char_pos: CharPos0,
+    pub emacs_byte_pos: EmacsBytePos,
+}
+
+impl TextPositionAnchor {
+    pub const fn new(char_pos: usize, emacs_byte_pos: usize) -> Self {
+        Self {
+            char_pos: CharPos0::new(char_pos),
+            emacs_byte_pos: EmacsBytePos::new(emacs_byte_pos),
+        }
+    }
+}
+
+impl CharPos0 {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
     /// Convert to a 1-based Lisp position.
-    pub fn to_lisp(self) -> LispPos {
-        LispPos(self.0 as i64 + 1)
+    pub fn to_lisp(self) -> LispCharPos1 {
+        LispCharPos1(self.0 as i64 + 1)
     }
 
     /// Convert from a 1-based Lisp position (clamped to 0).
-    pub fn from_lisp(p: LispPos) -> Self {
-        CharPos((p.0 - 1).max(0) as usize)
+    pub fn from_lisp(p: LispCharPos1) -> Self {
+        Self((p.0 - 1).max(0) as usize)
     }
 
     /// Convert from a raw `usize` (for internal 0-based use).
     pub const fn from_usize(pos: usize) -> Self {
-        CharPos(pos)
+        Self(pos)
     }
 }
 
-impl BytePos {
+impl EmacsBytePos {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
     /// Convert to a 1-based Lisp position.
     /// Requires the buffer for byte-to-char conversion.
-    pub fn to_lisp(self, text: &super::BufferText) -> LispPos {
-        LispPos(text.byte_to_char(self.0) as i64 + 1)
+    pub fn to_lisp(self, text: &super::BufferText) -> LispCharPos1 {
+        LispCharPos1(text.byte_to_char(self.0) as i64 + 1)
     }
 
     /// Convert from a 1-based Lisp position.
     /// Requires the buffer for char-to-byte conversion.
-    pub fn from_lisp(p: LispPos, text: &super::BufferText) -> Self {
+    pub fn from_lisp(p: LispCharPos1, text: &super::BufferText) -> Self {
         let char_pos = (p.0 - 1).max(0) as usize;
-        BytePos(text.char_to_byte(char_pos))
+        Self(text.char_to_byte(char_pos))
     }
 }
 
-impl LispPos {
+impl StorageBytePos {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
+}
+
+impl LispCharPos1 {
+    pub const fn new(pos: i64) -> Self {
+        Self(pos)
+    }
+
     /// Convert to 0-based internal char position.
-    pub fn to_char_pos(self) -> CharPos {
-        CharPos::from_lisp(self)
+    pub fn to_char_pos(self) -> CharPos0 {
+        CharPos0::from_lisp(self)
     }
 
     /// Convert to 0-based internal byte position.
-    pub fn to_byte_pos(self, text: &super::BufferText) -> BytePos {
-        BytePos::from_lisp(self, text)
+    pub fn to_byte_pos(self, text: &super::BufferText) -> EmacsBytePos {
+        EmacsBytePos::from_lisp(self, text)
     }
 
     /// The raw i64 value.
@@ -69,22 +130,44 @@ impl LispPos {
     }
 }
 
-// Convenience: usize -> CharPos
-impl From<usize> for CharPos {
-    fn from(pos: usize) -> Self { CharPos(pos) }
+impl DisplayColumn {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn new(pos: usize) -> Self {
+        Self(pos)
+    }
+
+    pub const fn get(self) -> usize {
+        self.0
+    }
 }
 
-// Convenience: CharPos -> usize
-impl From<CharPos> for usize {
-    fn from(p: CharPos) -> Self { p.0 }
+impl From<usize> for CharPos0 {
+    fn from(pos: usize) -> Self {
+        Self(pos)
+    }
 }
 
-// Convenience: BytePos -> usize
-impl From<BytePos> for usize {
-    fn from(p: BytePos) -> Self { p.0 }
+impl From<CharPos0> for usize {
+    fn from(p: CharPos0) -> Self {
+        p.0
+    }
 }
 
-// Convenience: usize -> BytePos
-impl From<usize> for BytePos {
-    fn from(pos: usize) -> Self { BytePos(pos) }
+impl From<usize> for EmacsBytePos {
+    fn from(pos: usize) -> Self {
+        Self(pos)
+    }
 }
+
+impl From<EmacsBytePos> for usize {
+    fn from(p: EmacsBytePos) -> Self {
+        p.0
+    }
+}
+
+// Transitional aliases for older call sites. New code should use the explicit
+// coordinate-space names above.
+pub type CharPos = CharPos0;
+pub type BytePos = EmacsBytePos;
+pub type LispPos = LispCharPos1;
