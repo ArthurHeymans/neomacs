@@ -1,6 +1,6 @@
 use super::*;
-use crate::buffer::BufferText;
 use crate::buffer::buffer::{Buffer, BufferId};
+use crate::buffer::{BufferText, CharPos0};
 use crate::emacs_core::value::eq_value;
 
 /// Helper: create a buffer with given text, point at start, full accessible range.
@@ -10,6 +10,12 @@ fn buf_with_text(text: &str) -> Buffer {
     buf.widen();
     buf.goto_byte(0);
     buf
+}
+
+fn char_pos_to_byte(buf: &Buffer, char_pos: usize) -> usize {
+    buf.text
+        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
 }
 
 // -----------------------------------------------------------------------
@@ -1236,7 +1242,7 @@ fn backward_prefix_chars_default_is_noop() {
         let buf = eval.buffers.current_buffer_mut().expect("current buffer");
         buf.delete_region(buf.point_min(), buf.point_max());
         buf.insert("''foo");
-        buf.goto_char(buf.text.char_to_byte(2));
+        buf.goto_char(char_pos_to_byte(buf, 2));
     }
 
     let out = builtin_backward_prefix_chars(&mut eval, vec![]).unwrap();
@@ -1261,7 +1267,7 @@ fn backward_prefix_chars_moves_over_prefix_flag_chars() {
         buf.goto_char(buf.point_min());
         let entry = string_to_syntax(". p").unwrap();
         super::SyntaxTable::isolate_for_buffer(buf).modify_syntax_entry('\'', entry);
-        buf.goto_char(buf.text.char_to_byte(2));
+        buf.goto_char(char_pos_to_byte(buf, 2));
     }
 
     builtin_backward_prefix_chars(&mut eval, vec![]).unwrap();

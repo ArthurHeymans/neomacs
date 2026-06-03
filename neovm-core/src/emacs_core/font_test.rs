@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::{Buffer, CharPos0};
 use crate::emacs_core::eval::{
     Context, DisplayHost, FontResolveRequest, FontSpecResolveRequest, GuiFrameHostRequest,
     ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont,
@@ -35,6 +36,13 @@ fn ensure_selected_gui_frame(eval: &mut Context) -> FrameId {
         .expect("selected frame");
     frame.set_window_system(Some(Value::symbol("neo")));
     frame_id
+}
+
+fn buffer_char_pos_to_byte(buffer: &Buffer, char_pos: usize) -> usize {
+    buffer
+        .text
+        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
 }
 
 #[test]
@@ -885,8 +893,8 @@ fn font_at_eval_returns_font_object_for_multibyte_buffer_face() {
         .current_buffer_mut()
         .expect("current buffer for font-at buffer test");
     buffer.insert("a好b");
-    let start = buffer.text.char_to_byte(1);
-    let end = buffer.text.char_to_byte(2);
+    let start = buffer_char_pos_to_byte(buffer, 1);
+    let end = buffer_char_pos_to_byte(buffer, 2);
     buffer
         .text
         .text_props_put_property(start, end, Value::symbol("face"), face);
@@ -1021,8 +1029,8 @@ fn font_at_eval_reads_source_style_inline_face_keywords() {
         Value::symbol(":weight"),
         Value::symbol("normal"),
     ]);
-    let start = buffer.text.char_to_byte(0);
-    let end = buffer.text.char_to_byte(3);
+    let start = buffer_char_pos_to_byte(buffer, 0);
+    let end = buffer_char_pos_to_byte(buffer, 3);
     buffer
         .text
         .text_props_put_property(start, end, Value::symbol("face"), inline_face);
@@ -1075,8 +1083,8 @@ fn font_at_eval_passes_inline_face_weight_and_family_to_display_host() {
         Value::symbol(":weight"),
         Value::symbol("semi-bold"),
     ]);
-    let start = buffer.text.char_to_byte(0);
-    let end = buffer.text.char_to_byte(2);
+    let start = buffer_char_pos_to_byte(buffer, 0);
+    let end = buffer_char_pos_to_byte(buffer, 2);
     buffer
         .text
         .text_props_put_property(start, end, Value::symbol("face"), inline_face);
@@ -1128,8 +1136,8 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
         Value::symbol(":weight"),
         Value::symbol("normal"),
     ]);
-    let start = buffer.text.char_to_byte(1);
-    let end = buffer.text.char_to_byte(2);
+    let start = buffer_char_pos_to_byte(buffer, 1);
+    let end = buffer_char_pos_to_byte(buffer, 2);
     buffer
         .text
         .text_props_put_property(start, end, Value::symbol("face"), inline_face);
