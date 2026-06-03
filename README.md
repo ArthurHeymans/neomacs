@@ -367,6 +367,22 @@ cargo xtask fresh-build --release
 ./target/release/neomacs
 ```
 
+### Testing
+
+After a release fresh build, run the main parity suites with:
+
+```bash
+cargo nextest run -p neovm-core --no-fail-fast
+cargo nextest run -p neovm-oracle-tests --no-fail-fast
+cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
+```
+
+The TUI harness follows Cargo's active test profile when choosing the
+Neomacs binary. A plain `cargo nextest run -p neomacs-tui-tests` uses
+`target/debug/neomacs`; after `cargo xtask fresh-build --release`, use
+`--release` so the harness uses `target/release/neomacs` and its matching
+final image.
+
 ### Linux (Arch Linux)
 
 ```bash
