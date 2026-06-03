@@ -757,6 +757,7 @@ fn is_emacs_char_boundary(bytes: &[u8], byte_pos: usize, multibyte: bool) -> boo
 mod tests {
     use super::*;
     use crate::buffer::gap_buffer::GapBuffer;
+    use proptest::prelude::*;
 
     fn assert_matches_gap(piece: &PieceTreeTextBackend, gap: &GapBuffer) {
         assert_eq!(piece.len(), gap.len());
@@ -768,6 +769,39 @@ mod tests {
         piece.copy_emacs_bytes_to(0, piece.len(), &mut piece_bytes);
         gap.copy_emacs_bytes_to(0, gap.len(), &mut gap_bytes);
         assert_eq!(piece_bytes, gap_bytes);
+
+        for char_pos in 0..=piece.metrics().z {
+            let piece_byte = piece.char_to_byte(char_pos);
+            let gap_byte = gap.char_to_byte(char_pos);
+            assert_eq!(piece_byte, gap_byte, "char_to_byte({char_pos})");
+            assert_eq!(piece.byte_to_char(piece_byte), char_pos);
+            assert_eq!(gap.byte_to_char(gap_byte), char_pos);
+        }
+    }
+
+    fn sample_insert(seed: u8) -> &'static str {
+        match seed % 8 {
+            0 => "a",
+            1 => "XYZ",
+            2 => "é",
+            3 => "日本",
+            4 => "\n",
+            5 => "🙂",
+            6 => "ßΩ",
+            _ => "end",
+        }
+    }
+
+    fn replacement_bytes_for_len(len: usize, seed: u8) -> Option<Vec<u8>> {
+        let candidates = ["Q", "z", "\n", "é", "ß", "日", "界", "🙂", "🚀"];
+        let matches: Vec<Vec<u8>> = candidates
+            .iter()
+            .map(|candidate| {
+                crate::emacs_core::string_escape::storage_string_to_buffer_bytes(candidate, true)
+            })
+            .filter(|bytes| bytes.len() == len)
+            .collect();
+        (!matches.is_empty()).then(|| matches[seed as usize % matches.len()].clone())
     }
 
     #[test]
@@ -841,5 +875,53 @@ mod tests {
         let mut bytes = Vec::new();
         backend.copy_emacs_bytes_to(0, backend.len(), &mut bytes);
         assert_eq!(bytes, vec![0xFF, b'\n', b'A', 0x80]);
+    }
+
+    proptest! {
+        #[test]
+        fn piece_tree_random_edit_sequences_match_gap_buffer(
+            ops in prop::collection::vec((0u8..3, 0usize..200, 0usize..200, 0u8..32), 0..80)
+        ) {
+            let mut piece = PieceTreeTextBackend::from_str("abécd日本");
+            let mut gap = GapBuffer::from_str("abécd日本");
+            assert_matches_gap(&piece, &gap);
+
+            for (kind, a, b, seed) in ops {
+                match kind {
+                    0 => {
+                        let char_pos = a % (piece.metrics().z + 1);
+                        let byte_pos = piece.char_to_byte(char_pos);
+                        let text = sample_insert(seed);
+                        piece.insert_str(byte_pos, text);
+                        gap.insert_str(byte_pos, text);
+                    }
+                    1 => {
+                        if piece.metrics().z > 0 {
+                            let char_a = a % (piece.metrics().z + 1);
+                            let char_b = b % (piece.metrics().z + 1);
+                            let start_char = char_a.min(char_b);
+                            let end_char = char_a.max(char_b);
+                            let start = piece.char_to_byte(start_char);
+                            let end = piece.char_to_byte(end_char);
+                            let nchars = end_char - start_char;
+                            piece.delete_range_both(start, end, nchars);
+                            gap.delete_range_both(start, end, nchars);
+                        }
+                    }
+                    _ => {
+                        if piece.metrics().z > 0 {
+                            let char_pos = a % piece.metrics().z;
+                            let start = piece.char_to_byte(char_pos);
+                            let end = piece.char_to_byte(char_pos + 1);
+                            if let Some(replacement) = replacement_bytes_for_len(end - start, seed) {
+                                piece.replace_same_len_emacs_bytes(start, end, &replacement);
+                                gap.replace_same_len_emacs_bytes(start, end, &replacement);
+                            }
+                        }
+                    }
+                }
+                assert_matches_gap(&piece, &gap);
+            }
+        }
     }
 }
