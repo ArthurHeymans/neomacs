@@ -5,7 +5,9 @@ use std::fmt;
 
 use super::BufferTextBackendKind;
 use crate::buffer::buffer_text::TextBackendDebugLayout;
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, TextPositionAnchor};
+use crate::buffer::position::{
+    CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos, TextPositionAnchor,
+};
 use crate::buffer::text::{TextEditRange, TextExtent};
 use gap::GapTextBackend;
 use piece::PieceTreeTextBackend;
@@ -98,31 +100,31 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn byte_at(&self, pos: usize) -> u8 {
+    pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
         match self {
-            Self::Gap(gap) => gap.byte_at(pos),
-            Self::PieceTree(piece_tree) => piece_tree.byte_at(pos),
+            Self::Gap(gap) => gap.byte_at_emacs_byte_pos(pos),
+            Self::PieceTree(piece_tree) => piece_tree.byte_at_emacs_byte_pos(pos),
         }
     }
 
-    pub(in crate::buffer) fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
+    pub(in crate::buffer) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
         match self {
-            Self::Gap(gap) => gap.emacs_byte_at(pos),
-            Self::PieceTree(piece_tree) => piece_tree.emacs_byte_at(pos),
+            Self::Gap(gap) => gap.emacs_byte_at_pos(pos),
+            Self::PieceTree(piece_tree) => piece_tree.emacs_byte_at_pos(pos),
         }
     }
 
-    pub(in crate::buffer) fn char_at(&self, pos: usize) -> Option<char> {
+    pub(in crate::buffer) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
         match self {
-            Self::Gap(gap) => gap.char_at(pos),
-            Self::PieceTree(piece_tree) => piece_tree.char_at(pos),
+            Self::Gap(gap) => gap.char_at_emacs_byte_pos(pos),
+            Self::PieceTree(piece_tree) => piece_tree.char_at_emacs_byte_pos(pos),
         }
     }
 
-    pub(in crate::buffer) fn char_code_at(&self, pos: usize) -> Option<u32> {
+    pub(in crate::buffer) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
         match self {
-            Self::Gap(gap) => gap.char_code_at(pos),
-            Self::PieceTree(piece_tree) => piece_tree.char_code_at(pos),
+            Self::Gap(gap) => gap.char_code_at_emacs_byte_pos(pos),
+            Self::PieceTree(piece_tree) => piece_tree.char_code_at_emacs_byte_pos(pos),
         }
     }
 
@@ -140,17 +142,23 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
+    pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
+        &self,
+        byte_pos: StorageBytePos,
+    ) -> EmacsBytePos {
         match self {
-            Self::Gap(gap) => gap.storage_byte_to_emacs_byte(byte_pos),
-            Self::PieceTree(piece_tree) => piece_tree.storage_byte_to_emacs_byte(byte_pos),
+            Self::Gap(gap) => gap.storage_byte_pos_to_emacs_byte_pos(byte_pos),
+            Self::PieceTree(piece_tree) => piece_tree.storage_byte_pos_to_emacs_byte_pos(byte_pos),
         }
     }
 
-    pub(in crate::buffer) fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
+    pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> StorageBytePos {
         match self {
-            Self::Gap(gap) => gap.emacs_byte_to_storage_byte(byte_pos),
-            Self::PieceTree(piece_tree) => piece_tree.emacs_byte_to_storage_byte(byte_pos),
+            Self::Gap(gap) => gap.emacs_byte_pos_to_storage_byte_pos(byte_pos),
+            Self::PieceTree(piece_tree) => piece_tree.emacs_byte_pos_to_storage_byte_pos(byte_pos),
         }
     }
 

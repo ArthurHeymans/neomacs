@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::buffer::buffer_text::TextBackendDebugLayout;
-use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
 use crate::buffer::text::{TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,6 +128,11 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn byte_at(&self, pos: usize) -> u8 {
+        self.byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {
+        let pos = pos.get();
         assert!(
             pos < self.len(),
             "byte_at: position {pos} out of range (len {})",
@@ -137,14 +142,28 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
-        (pos < self.len()).then(|| self.byte_at(pos))
+        self.emacs_byte_at_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(in crate::buffer) fn emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8> {
+        (pos.get() < self.len()).then(|| self.byte_at_emacs_byte_pos(pos))
     }
 
     pub(in crate::buffer) fn char_at(&self, pos: usize) -> Option<char> {
-        self.char_code_at(pos).and_then(char::from_u32)
+        self.char_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(in crate::buffer) fn char_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<char> {
+        self.char_code_at_emacs_byte_pos(pos)
+            .and_then(char::from_u32)
     }
 
     pub(in crate::buffer) fn char_code_at(&self, pos: usize) -> Option<u32> {
+        self.char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
+    }
+
+    pub(in crate::buffer) fn char_code_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        let pos = pos.get();
         if pos >= self.len() {
             return None;
         }
@@ -205,11 +224,27 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn storage_byte_to_emacs_byte(&self, byte_pos: usize) -> usize {
-        byte_pos.min(self.len())
+        self.storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
+            .get()
+    }
+
+    pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
+        &self,
+        byte_pos: StorageBytePos,
+    ) -> EmacsBytePos {
+        EmacsBytePos::new(byte_pos.get().min(self.len()))
     }
 
     pub(in crate::buffer) fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
-        byte_pos.min(self.len())
+        self.emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
+            .get()
+    }
+
+    pub(in crate::buffer) fn emacs_byte_pos_to_storage_byte_pos(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> StorageBytePos {
+        StorageBytePos::new(byte_pos.get().min(self.len()))
     }
 
     pub(in crate::buffer) fn text_range(&self, start: usize, end: usize) -> String {

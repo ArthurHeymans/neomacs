@@ -14,7 +14,7 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
-use super::position::{CharPos0, EmacsBytePos, EmacsByteRange};
+use super::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, TextEditRange, TextExtent, TextMetrics, emacs_char_count_bytes,
@@ -329,19 +329,31 @@ impl BufferText {
     }
 
     pub fn byte_at(&self, pos: usize) -> u8 {
-        self.storage.borrow().backend.byte_at(pos)
+        self.storage
+            .borrow()
+            .backend
+            .byte_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     pub fn emacs_byte_at(&self, pos: usize) -> Option<u8> {
-        self.storage.borrow().backend.emacs_byte_at(pos)
+        self.storage
+            .borrow()
+            .backend
+            .emacs_byte_at_pos(EmacsBytePos::new(pos))
     }
 
     pub fn char_at(&self, pos: usize) -> Option<char> {
-        self.storage.borrow().backend.char_at(pos)
+        self.storage
+            .borrow()
+            .backend
+            .char_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     pub fn char_code_at(&self, pos: usize) -> Option<u32> {
-        self.storage.borrow().backend.char_code_at(pos)
+        self.storage
+            .borrow()
+            .backend
+            .char_code_at_emacs_byte_pos(EmacsBytePos::new(pos))
     }
 
     pub fn text_range(&self, start: usize, end: usize) -> String {
@@ -506,14 +518,16 @@ impl BufferText {
         self.storage
             .borrow()
             .backend
-            .storage_byte_to_emacs_byte(byte_pos)
+            .storage_byte_pos_to_emacs_byte_pos(StorageBytePos::new(byte_pos))
+            .get()
     }
 
     pub fn emacs_byte_to_storage_byte(&self, byte_pos: usize) -> usize {
         self.storage
             .borrow()
             .backend
-            .emacs_byte_to_storage_byte(byte_pos)
+            .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(byte_pos))
+            .get()
     }
 
     pub fn shared_clone(&self) -> Self {
@@ -1779,7 +1793,7 @@ fn scan_forward(backend: &TextBackend, anchor: (usize, usize), target: usize) ->
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
         let available = (backend.len() - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = backend.byte_at(bp + i);
+            *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
         }
         let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
         bp += len;
@@ -1799,7 +1813,7 @@ fn scan_backward(backend: &TextBackend, anchor: (usize, usize), target: usize) -
             continue;
         }
         let mut prev = bp - 1;
-        while prev > 0 && (backend.byte_at(prev) & 0xC0) == 0x80 {
+        while prev > 0 && (backend.byte_at_emacs_byte_pos(EmacsBytePos::new(prev)) & 0xC0) == 0x80 {
             prev -= 1;
         }
         bp = prev;
@@ -1836,7 +1850,7 @@ fn scan_forward_bytes(backend: &TextBackend, anchor: (usize, usize), target: usi
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
         let available = (backend.len() - bp).min(tmp.len());
         for (i, slot) in tmp[..available].iter_mut().enumerate() {
-            *slot = backend.byte_at(bp + i);
+            *slot = backend.byte_at_emacs_byte_pos(EmacsBytePos::new(bp + i));
         }
         let (_, len) = crate::emacs_core::emacs_char::string_char(&tmp[..available]);
         bp += len;
@@ -1856,7 +1870,7 @@ fn scan_backward_bytes(backend: &TextBackend, anchor: (usize, usize), target: us
             continue;
         }
         let mut prev = bp - 1;
-        while prev > 0 && (backend.byte_at(prev) & 0xC0) == 0x80 {
+        while prev > 0 && (backend.byte_at_emacs_byte_pos(EmacsBytePos::new(prev)) & 0xC0) == 0x80 {
             prev -= 1;
         }
         bp = prev;
