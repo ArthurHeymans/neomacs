@@ -554,6 +554,46 @@ fn neomacs_set_cursor_blink_forwards_to_display_host() {
 }
 
 #[test]
+fn neomacs_buffer_text_backend_default_is_gap_and_new_buffers_can_opt_into_piece_tree() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(list
+                 (neomacs-default-buffer-text-backend)
+                 (neomacs-buffer-text-backend)
+                 (neomacs-set-default-buffer-text-backend 'piece-tree)
+                 (neomacs-buffer-text-backend)
+                 (save-current-buffer
+                   (set-buffer (get-buffer-create "piece-backend"))
+                   (insert "abc")
+                   (list (neomacs-buffer-text-backend) (buffer-string))))"#
+        ),
+        r#"OK (gap-buffer gap-buffer piece-tree gap-buffer (piece-tree "abc"))"#
+    );
+}
+
+#[test]
+fn neomacs_buffer_text_backend_rejects_non_symbol_unknown_and_unimplemented_kinds() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(list
+                 (condition-case err
+                     (neomacs-set-default-buffer-text-backend "piece-tree")
+                   (error (car err)))
+                 (condition-case err
+                     (neomacs-set-default-buffer-text-backend 'missing-backend)
+                   (error (car err)))
+                 (condition-case err
+                     (neomacs-set-default-buffer-text-backend 'rope)
+                   (error (car err)))
+                 (neomacs-default-buffer-text-backend))"#
+        ),
+        "OK (wrong-type-argument error error gap-buffer)"
+    );
+}
+
+#[test]
 fn neomacs_cursor_effect_setters_forward_to_display_host() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

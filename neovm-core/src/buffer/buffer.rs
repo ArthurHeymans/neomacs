@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 use super::buffer_text::BufferText;
+use super::text::BufferTextBackendKind;
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
 // in `Buffer::local_var_alist` (for LOCALIZED), `Buffer::slots[]`
 // (for FORWARDED BUFFER_OBJFWD), and `Buffer::keymap` / the
@@ -1612,13 +1613,21 @@ impl Buffer {
 
     /// Create a new, empty buffer.
     pub fn new(id: BufferId, name: Value) -> Self {
+        Self::new_with_text_backend_kind(id, name, BufferTextBackendKind::GapBuffer)
+    }
+
+    pub(crate) fn new_with_text_backend_kind(
+        id: BufferId,
+        name: Value,
+        text_backend_kind: BufferTextBackendKind,
+    ) -> Self {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         Self {
             id,
             name,
             last_name: Value::NIL,
             base_buffer: None,
-            text: BufferText::new(),
+            text: BufferText::new_with_backend_kind(text_backend_kind),
             pt: 0,
             pt_byte: 0,
             mark_marker_id: None,
@@ -2917,6 +2926,7 @@ pub struct BufferManager {
     next_id: u64,
     next_marker_id: u64,
     labeled_restrictions: HashMap<BufferId, Vec<LabeledRestriction>>,
+    default_text_backend_kind: BufferTextBackendKind,
     /// Global default values for `BUFFER_OBJFWD` slots. Mirrors GNU's
     /// `buffer_defaults` (`buffer.c:84-90`), which is itself a
     /// sentinel `struct buffer` whose fields hold the global default
@@ -3097,6 +3107,7 @@ impl BufferManager {
             next_id: 1,
             next_marker_id: 1,
             labeled_restrictions: HashMap::new(),
+            default_text_backend_kind: BufferTextBackendKind::GapBuffer,
             buffer_defaults,
         };
         let scratch = mgr.create_buffer("*scratch*");
@@ -3122,7 +3133,8 @@ impl BufferManager {
         let id = BufferId(self.next_id);
         self.next_id += 1;
         let name_value = Value::string(name);
-        let mut buf = Buffer::new(id, name_value);
+        let mut buf =
+            Buffer::new_with_text_backend_kind(id, name_value, self.default_text_backend_kind);
         buf.set_last_name_value(name_value);
         // Phase 10D: seed every conditional slot from
         // `BufferManager::buffer_defaults` so a buffer created
@@ -3151,6 +3163,18 @@ impl BufferManager {
         self.buffers.insert(id, buf);
         self.buffer_order.push(id);
         id
+    }
+
+    pub fn default_text_backend_kind(&self) -> BufferTextBackendKind {
+        self.default_text_backend_kind
+    }
+
+    pub fn set_default_text_backend_kind(&mut self, kind: BufferTextBackendKind) {
+        assert!(
+            kind.is_implemented(),
+            "buffer text backend {kind:?} is not implemented"
+        );
+        self.default_text_backend_kind = kind;
     }
 
     /// Allocate a new indirect buffer that shares its root base buffer's text.
@@ -4719,6 +4743,7 @@ impl BufferManager {
             next_marker_id,
             labeled_restrictions: HashMap::new(),
             dead_buffers: HashMap::new(),
+            default_text_backend_kind: BufferTextBackendKind::GapBuffer,
             buffer_defaults,
         };
         if let Some(dumped_order) = dumped_buffer_order {
