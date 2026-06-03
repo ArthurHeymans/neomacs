@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::buffer::gap_buffer::GapBuffer;
 use crate::buffer::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
-use crate::buffer::text::{GapDebugLayout, TextEditRange, TextExtent};
+use crate::buffer::text::{GapDebugLayout, TextEditRange, TextExtent, TextMetrics};
 
 #[derive(Clone)]
 pub(in crate::buffer) struct GapTextBackend {
@@ -82,6 +82,10 @@ impl GapTextBackend {
             z_byte: EmacsBytePos::new(self.z_byte()),
             gap_size: self.gap_size(),
         }
+    }
+
+    pub(in crate::buffer) fn metrics(&self) -> TextMetrics {
+        TextMetrics::new(self.char_count(), self.len())
     }
 
     pub(in crate::buffer) fn byte_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> u8 {

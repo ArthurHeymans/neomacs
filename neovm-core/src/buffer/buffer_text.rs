@@ -103,7 +103,7 @@ impl Default for BufferText {
 
 impl BufferText {
     fn from_backend(backend: TextBackend) -> Self {
-        let metrics = backend.debug_layout().metrics();
+        let metrics = backend.metrics();
         Self {
             storage: Rc::new(RefCell::new(BufferTextStorage {
                 metrics,
@@ -171,7 +171,7 @@ impl BufferText {
     }
 
     fn refresh_backend_metrics(storage: &mut BufferTextStorage) {
-        storage.metrics = storage.backend.debug_layout().metrics();
+        storage.metrics = storage.backend.metrics();
     }
 
     fn invalidate_position_caches(storage: &mut BufferTextStorage) {

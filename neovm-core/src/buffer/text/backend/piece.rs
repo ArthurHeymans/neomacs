@@ -422,7 +422,7 @@ impl PieceTreeTextBackend {
         out
     }
 
-    fn metrics(&self) -> TextMetrics {
+    pub(in crate::buffer) fn metrics(&self) -> TextMetrics {
         node_metrics(&self.root)
     }
 
