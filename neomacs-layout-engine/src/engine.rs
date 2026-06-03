@@ -3401,7 +3401,7 @@ impl LayoutEngine {
             1
         };
         let point_line: i64 = if lnum_enabled && lnum_mode >= 2 {
-            let pt_byte = buf_access.charpos_to_bytepos(params.point);
+            let pt_byte = buf_access.charpos_to_bytepos(point_charpos);
             buf_access.count_lines(begin_byte, pt_byte) + 1
         } else {
             0
@@ -3781,9 +3781,10 @@ impl LayoutEngine {
                 let text_props = super::neovm_bridge::RustTextPropAccess::new(buffer);
                 let (invisible, next_visible) = text_props.check_invisible(charpos);
                 if invisible.hidden {
-                    let skip_to = next_visible.min(params.buffer_size);
-                    let point_in_hidden_region =
-                        cursor_info.is_none() && params.point >= charpos && params.point < skip_to;
+                    let skip_to = next_visible.min(accessible_end);
+                    let point_in_hidden_region = cursor_info.is_none()
+                        && point_charpos >= charpos
+                        && point_charpos < skip_to;
                     if point_in_hidden_region {
                         capture_cursor_info(
                             &mut cursor_info,
@@ -3971,7 +3972,7 @@ impl LayoutEngine {
                     if has_prefix {
                         need_prefix = 1;
                     }
-                    if cursor_info.is_none() && params.point == charpos {
+                    if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo {
@@ -4016,7 +4017,7 @@ impl LayoutEngine {
                             col,
                         );
                     }
-                    if cursor_info.is_none() && params.point == charpos {
+                    if cursor_info.is_none() && point_charpos == charpos {
                         capture_cursor_info(
                             &mut cursor_info,
                             CapturedCursorInfo {
@@ -4052,9 +4053,10 @@ impl LayoutEngine {
                 if let Some(prop_val) = display_prop_val {
                     flush_run(&self.run_buf, ligatures);
                     self.run_buf.clear();
-                    let skip_to = display_next_check.min(params.buffer_size);
-                    let point_in_display_replacement =
-                        cursor_info.is_none() && params.point >= charpos && params.point < skip_to;
+                    let skip_to = display_next_check.min(accessible_end);
+                    let point_in_display_replacement = cursor_info.is_none()
+                        && point_charpos >= charpos
+                        && point_charpos < skip_to;
                     // Case 1: String replacement — render the string instead of buffer text
                     if let Some(replacement) = prop_val.as_utf8_str() {
                         let replacement_start_x = x;
@@ -4865,7 +4867,7 @@ impl LayoutEngine {
             if ch == '\n' {
                 flush_run(&self.run_buf, ligatures);
                 self.run_buf.clear();
-                if cursor_info.is_none() && params.point == charpos {
+                if cursor_info.is_none() && point_charpos == charpos {
                     // GNU `set_cursor_from_row` treats the terminating
                     // newline as an exact match for point on this row.  The
                     // newline itself has no rendered text glyph, so the
@@ -5085,7 +5087,7 @@ impl LayoutEngine {
                 // face_space_w).  Recompute from the row-relative tab-stop pixel
                 // so per-character width drift before the tab is absorbed.
                 let next_tab_col = (next_tab_x / face_space_w.max(1.0)).round() as usize;
-                if cursor_info.is_none() && params.point == charpos {
+                if cursor_info.is_none() && point_charpos == charpos {
                     capture_cursor_info(
                         &mut cursor_info,
                         CapturedCursorInfo {
@@ -5740,7 +5742,7 @@ impl LayoutEngine {
 
             // Capture cursor metrics at point position during the main layout
             // so cursor emission uses the correct per-face height/width.
-            if cursor_info.is_none() && charpos == params.point {
+            if cursor_info.is_none() && charpos == point_charpos {
                 capture_cursor_info(
                     &mut cursor_info,
                     CapturedCursorInfo {
@@ -5956,20 +5958,19 @@ impl LayoutEngine {
         flush_run(&self.run_buf, ligatures);
         self.run_buf.clear();
 
-        let point_is_visible_eob =
-            params.point == params.buffer_size && charpos == params.buffer_size;
+        let point_is_visible_eob = point_charpos == accessible_end && charpos == accessible_end;
 
         // Capture cursor at end-of-buffer position.
         // GNU Emacs shows point at point-max+1 as a real cursor location.
-        // In the layout engine's internal 0-based space, that is `buffer_size`.
-        if cursor_info.is_none() && (charpos == params.point || point_is_visible_eob) {
+        // In the layout engine's internal 0-based space, that is `accessible_end`.
+        if cursor_info.is_none() && (charpos == point_charpos || point_is_visible_eob) {
             if point_is_visible_eob {
                 tracing::debug!(
                     "layout_window_rust: capturing EOB cursor at x={:.1} y={:.1} point={} point-max={}",
                     x,
                     y,
-                    params.point,
-                    params.buffer_size
+                    point_charpos,
+                    accessible_end
                 );
             }
             capture_cursor_info(
@@ -6140,7 +6141,7 @@ impl LayoutEngine {
             }
         }
 
-        if params.point >= window_start && (params.point <= charpos || point_is_visible_eob) {
+        if point_charpos >= window_start && (point_charpos <= charpos || point_is_visible_eob) {
             if let Some(cursor) = cursor_info {
                 let row_metric = row_metrics_for_cursor(
                     output_emitter.row_metrics(),
@@ -6226,7 +6227,7 @@ impl LayoutEngine {
                         if params.selected {
                             self.matrix_builder.set_phys_cursor(PhysCursor {
                                 window_id: resolved_cursor.window_id(),
-                                charpos: params.point.max(0) as usize,
+                                charpos: point_charpos.max(0) as usize,
                                 row: resolved_cursor.row(),
                                 col: resolved_cursor.col(),
                                 slot_id: resolved_cursor.slot_id,
@@ -6255,7 +6256,7 @@ impl LayoutEngine {
             } else {
                 tracing::debug!(
                     "layout_window_rust: no explicit cursor capture for point={} window_start={} charpos_end={}",
-                    params.point,
+                    point_charpos,
                     window_start,
                     charpos
                 );
@@ -6332,7 +6333,7 @@ impl LayoutEngine {
             .iter()
             .rev()
             .find_map(|row| row.end_buffer_pos);
-        let point_lisp = (params.point as usize).saturating_add(1);
+        let point_lisp = (point_charpos as usize).saturating_add(1);
         let visible_end_lisp = if point_is_visible_eob {
             Some(visible_end_lisp.unwrap_or(point_lisp).max(point_lisp))
         } else {
@@ -6343,14 +6344,14 @@ impl LayoutEngine {
             .unwrap_or(charpos);
         let point_beyond_visible_span = visible_end_lisp
             .map(|end_lisp| point_lisp > end_lisp)
-            .unwrap_or(params.point > charpos);
+            .unwrap_or(point_charpos > charpos);
 
         let scroll_down_ws = if point_beyond_visible_span
             && visible_progress > window_start
             && !params.is_minibuffer
         {
             let new_ws = next_window_start_from_visible_rows(output_emitter.rows(), window_start)
-                .map(|new_ws| new_ws.min(params.point.max(params.buffer_begv)));
+                .map(|new_ws| new_ws.min(point_charpos.max(accessible_start)));
             tracing::debug!(
                 "layout_window_rust: point={} beyond visible_end={:?} (charpos_end={}), visible_rows={}, new_window_start={:?}",
                 point_lisp,
@@ -6367,7 +6368,7 @@ impl LayoutEngine {
         let text_area_bottom = (text_y + text_height - window_top).round() as i64;
         let point_row_ws = next_window_start_for_partially_visible_point_row(
             output_emitter.rows(),
-            params.point,
+            point_charpos,
             text_area_top,
             text_area_bottom,
             window_start,
@@ -6375,7 +6376,7 @@ impl LayoutEngine {
         if point_row_ws.is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} row partially visible within {}..{}, new_window_start={:?}",
-                params.point,
+                point_charpos,
                 text_area_top,
                 text_area_bottom,
                 point_row_ws
@@ -6383,15 +6384,15 @@ impl LayoutEngine {
         }
         let point_line_ws = next_window_start_for_point_line_continuation(
             output_emitter.rows(),
-            params.point,
+            point_charpos,
             window_start,
             &buf_access,
-            params.buffer_size,
+            accessible_end,
         );
         if point_line_ws.is_some() {
             tracing::debug!(
                 "layout_window_rust: point={} line continues below final visible row, new_window_start={:?}",
-                params.point,
+                point_charpos,
                 point_line_ws
             );
         }
