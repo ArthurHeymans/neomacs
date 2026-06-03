@@ -560,17 +560,19 @@ fn make_node_value_for_parser(
 }
 
 fn lisp_pos_to_relative_byte(buf: &Buffer, pos: i64) -> Result<usize, Flow> {
-    let min = buf.point_min_char() as i64 + 1;
-    let max = buf.point_max_char() as i64 + 1;
+    let accessible_chars = buf.accessible_char_region();
+    let min = accessible_chars.start_usize() as i64 + 1;
+    let max = accessible_chars.end_usize() as i64 + 1;
     if pos < min || pos > max {
         return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
     }
-    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get() - buf.point_min_byte())
+    Ok(buf.lisp_pos_to_accessible_emacs_byte_pos(pos).get()
+        - buf.accessible_emacs_byte_region().start_usize())
 }
 
 fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize) -> Value {
     let char_offset = byte_to_char_pos(source.as_bytes(), byte_offset) as i64;
-    Value::fixnum(buf.point_min_char() as i64 + char_offset + 1)
+    Value::fixnum(buf.accessible_char_region().start_usize() as i64 + char_offset + 1)
 }
 
 fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Result<(), Flow> {
