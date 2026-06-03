@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer::EmacsBytePos;
 use crate::emacs_core::regex::{char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -19,6 +20,16 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 /// and per-buffer overrides are observed, matching the audit #3 fix.
 fn read_inhibit_changing_match_data(eval: &super::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "inhibit-changing-match-data").is_some_and(|v| !v.is_nil())
+}
+
+fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: usize) -> i64 {
+    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
+}
+
+fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: usize) -> usize {
+    buf.text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
 }
 
 pub(crate) fn builtin_search_forward(
@@ -192,7 +203,7 @@ fn parse_search_options_in_manager(
     let steps = count.unsigned_abs() as usize;
 
     if let Some(limit) = bound_lisp {
-        let point_lisp = buf.text.emacs_byte_to_char(buf.pt_byte) as i64 + 1;
+        let point_lisp = buffer_byte_to_lisp_char(buf, buf.pt_byte);
         match direction {
             SearchDirection::Forward if limit < point_lisp => {
                 return Err(signal(
@@ -231,7 +242,7 @@ fn current_search_context_in_manager(
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let opts = parse_search_options_in_manager(buffers, buf, args, kind)?;
     let start_pt = buf.pt_byte;
-    let start_char = buf.text.emacs_byte_to_char(buf.pt_byte) as i64 + 1;
+    let start_char = buffer_byte_to_lisp_char(buf, buf.pt_byte);
     Ok((current_id, opts, start_pt, start_char))
 }
 
@@ -243,7 +254,7 @@ fn buffer_byte_to_char_result_in_manager(
     let buf = buffers
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    Ok(Value::fixnum(buf.text.emacs_byte_to_char(byte) as i64 + 1))
+    Ok(Value::fixnum(buffer_byte_to_lisp_char(buf, byte)))
 }
 
 fn search_failure_position(buf: &crate::buffer::Buffer, opts: SearchOptions) -> usize {
@@ -1240,7 +1251,7 @@ pub(crate) fn builtin_match_beginning_with_state(
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if *start <= buf.total_bytes() {
-                            let pos = buf.text.emacs_byte_to_char(*start) as i64 + 1;
+                            let pos = buffer_byte_to_lisp_char(buf, *start);
                             Ok(Value::fixnum(pos))
                         } else {
                             Ok(Value::fixnum(*start as i64))
@@ -1296,7 +1307,7 @@ pub(crate) fn builtin_match_end_with_state(
                             .and_then(|buffer_id| buffers.and_then(|bufs| bufs.get(buffer_id)))
                     {
                         if *end <= buf.total_bytes() {
-                            let pos = buf.text.emacs_byte_to_char(*end) as i64 + 1;
+                            let pos = buffer_byte_to_lisp_char(buf, *end);
                             Ok(Value::fixnum(pos))
                         } else {
                             Ok(Value::fixnum(*end as i64))
@@ -1370,8 +1381,8 @@ pub(crate) fn builtin_match_data_with_state(
                             bufs.get(buffer_id).and_then(|buffer| {
                                 if *start <= *end && *end <= buffer.total_bytes() {
                                     Some((
-                                        buffer.text.emacs_byte_to_char(*start) as i64 + 1,
-                                        buffer.text.emacs_byte_to_char(*end) as i64 + 1,
+                                        buffer_byte_to_lisp_char(buffer, *start),
+                                        buffer_byte_to_lisp_char(buffer, *end),
                                     ))
                                 } else {
                                     None
@@ -1814,7 +1825,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         && oldstart < newend
         && let Some(buf) = buffers.get_mut(current_id)
     {
-        let start_char = buf.text.emacs_byte_to_char(oldstart);
+        let start_char = buffer_byte_to_char_pos(buf, oldstart);
         let cased_text = buf.buffer_substring_lisp_string(oldstart, newend);
         let mut undo_list = buf.get_undo_list();
         if !crate::buffer::undo::undo_list_is_disabled(&undo_list) {
