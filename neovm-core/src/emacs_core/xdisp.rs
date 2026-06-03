@@ -1932,7 +1932,7 @@ fn expand_mode_line_percent_in_state(
     let read_only = buf.is_some_and(|b| {
         crate::emacs_core::editfns::buffer_read_only_active_in_state(obarray, dynamic, b)
     });
-    let narrowed = buf.is_some_and(|b| b.begv_byte > 0 || b.zv_byte < b.total_bytes());
+    let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
     let (line_num, col_num) = if let Some(b) = buf {
         prefix_line_and_column(b, b.pt_byte)
@@ -1993,7 +1993,7 @@ fn expand_mode_line_percent_in_state(
             }
             Some('i') => {
                 let size = buf
-                    .map(|buffer| buffer.zv_byte.saturating_sub(buffer.begv_byte))
+                    .map(|buffer| buffer.accessible_emacs_byte_region().range().len().get())
                     .unwrap_or(0);
                 append_mode_line_percent_string_spec(
                     result,
@@ -2005,7 +2005,7 @@ fn expand_mode_line_percent_in_state(
             }
             Some('I') => {
                 let size = buf
-                    .map(|buffer| buffer.zv_byte.saturating_sub(buffer.begv_byte))
+                    .map(|buffer| buffer.accessible_emacs_byte_region().range().len().get())
                     .unwrap_or(0);
                 append_mode_line_percent_string_spec(
                     result,
@@ -2472,7 +2472,7 @@ pub(crate) fn zero_width_invisible_run_end_byte(
         let Some(buf) = eval.buffers.get(buffer_id) else {
             return Ok(None);
         };
-        if byte_pos >= buf.point_max_byte() {
+        if byte_pos >= buf.accessible_emacs_byte_region().end_usize() {
             return Ok(None);
         }
         super::textprop::byte_to_elisp_pos(buf, byte_pos)
@@ -2490,7 +2490,7 @@ pub(crate) fn zero_width_invisible_run_end_byte(
         };
         match next.as_fixnum() {
             Some(pos) => super::textprop::validate_buffer_point(buf, pos)?,
-            None => buf.point_max_byte(),
+            None => buf.accessible_emacs_byte_region().end_usize(),
         }
     };
 
