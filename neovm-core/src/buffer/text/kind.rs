@@ -15,6 +15,6 @@ impl BufferTextBackendKind {
     }
 
     pub fn is_implemented(self) -> bool {
-        matches!(self, Self::GapBuffer)
+        matches!(self, Self::GapBuffer | Self::PieceTree)
     }
 }
