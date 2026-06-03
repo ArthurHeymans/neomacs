@@ -84,8 +84,8 @@ impl DisplayLineNumbersMode {
 
 pub(crate) trait LayoutBufferView {
     fn layout_buffer_local_value(&self, name: &str) -> Option<Value>;
-    fn layout_point_min_byte(&self) -> usize;
-    fn layout_point_max_byte(&self) -> usize;
+    fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos;
+    fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos;
     fn layout_point_max_char(&self) -> usize;
     fn layout_text(&self) -> &BufferText;
     fn layout_overlays(&self) -> &OverlayList;
@@ -95,8 +95,8 @@ pub(crate) trait LayoutBufferView {
 pub(crate) struct LayoutBufferSnapshot {
     pub name: String,
     pub text: BufferText,
-    pub begv_byte: usize,
-    pub zv_byte: usize,
+    pub begv_byte: EmacsBytePos,
+    pub zv_byte: EmacsBytePos,
     pub zv_char: usize,
     pub local_var_alist: Value,
     pub slots: [Value; BUFFER_SLOT_COUNT],
@@ -109,8 +109,8 @@ impl LayoutBufferSnapshot {
         Self {
             name: buffer.name_runtime_string_owned(),
             text: buffer.text.clone(),
-            begv_byte: buffer.begv_byte,
-            zv_byte: buffer.zv_byte,
+            begv_byte: EmacsBytePos::new(buffer.begv_byte),
+            zv_byte: EmacsBytePos::new(buffer.zv_byte),
             zv_char: buffer.zv,
             local_var_alist: buffer.local_var_alist,
             slots: buffer.slots,
@@ -183,12 +183,12 @@ impl LayoutBufferView for Buffer {
         self.buffer_local_value(name)
     }
 
-    fn layout_point_min_byte(&self) -> usize {
-        self.point_min_byte()
+    fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::new(self.point_min_byte())
     }
 
-    fn layout_point_max_byte(&self) -> usize {
-        self.point_max_byte()
+    fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos {
+        EmacsBytePos::new(self.point_max_byte())
     }
 
     fn layout_point_max_char(&self) -> usize {
@@ -215,11 +215,11 @@ impl LayoutBufferView for LayoutBufferSnapshot {
             .or_else(|| self.default_value(name))
     }
 
-    fn layout_point_min_byte(&self) -> usize {
+    fn layout_point_min_emacs_byte_pos(&self) -> EmacsBytePos {
         self.begv_byte
     }
 
-    fn layout_point_max_byte(&self) -> usize {
+    fn layout_point_max_emacs_byte_pos(&self) -> EmacsBytePos {
         self.zv_byte
     }
 
@@ -1413,7 +1413,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 
     /// Get the buffer's narrowed beginning (begv) as byte position.
     pub fn begv(&self) -> i64 {
-        self.buffer.layout_point_min_byte() as i64
+        self.buffer.layout_point_min_emacs_byte_pos().get() as i64
     }
 
     /// Convert an absolute byte position to the layout engine's internal
@@ -1427,7 +1427,7 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
 
     /// Get the buffer's narrowed end (zv) as byte position.
     pub fn zv(&self) -> i64 {
-        self.buffer.layout_point_max_byte() as i64
+        self.buffer.layout_point_max_emacs_byte_pos().get() as i64
     }
 }
 
@@ -1488,7 +1488,7 @@ fn buffer_bytepos_to_charpos<B: LayoutBufferView>(buffer: &B, bytepos: usize) ->
     buffer
         .layout_text()
         .emacs_byte_pos_to_char_pos(EmacsBytePos::new(
-            bytepos.min(buffer.layout_point_max_byte()),
+            bytepos.min(buffer.layout_point_max_emacs_byte_pos().get()),
         ))
         .get()
         .min(buffer.layout_point_max_char())
