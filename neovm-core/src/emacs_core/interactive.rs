@@ -35,6 +35,7 @@ use super::keymap::{
 use super::mode::{MajorMode, MinorMode};
 use super::symbol::Obarray;
 use super::value::*;
+use crate::buffer::EmacsBytePos;
 use crate::emacs_core::SymId;
 
 // ---------------------------------------------------------------------------
@@ -1490,8 +1491,8 @@ fn interactive_region_args_in_buffers(
     let beg = pt.min(mark);
     let end = pt.max(mark);
     // Region-taking builtins use Emacs-style 1-based character positions.
-    let beg_char = buf.text.emacs_byte_to_char(beg) as i64 + 1;
-    let end_char = buf.text.emacs_byte_to_char(end) as i64 + 1;
+    let beg_char = EmacsBytePos::new(beg).to_lisp(&buf.text).as_i64();
+    let end_char = EmacsBytePos::new(end).to_lisp(&buf.text).as_i64();
     Ok(vec![Value::fixnum(beg_char), Value::fixnum(end_char)])
 }
 

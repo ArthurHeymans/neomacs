@@ -82,7 +82,7 @@ use super::threads::ThreadManager;
 use super::value::{
     StringTextPropertyRun, Value, ValueKind, VecLikeType, equal_value, list_to_vec, next_float_id,
 };
-use crate::buffer::BufferManager;
+use crate::buffer::{BufferManager, EmacsBytePos};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::window::FrameManager;
@@ -4257,7 +4257,7 @@ pub(crate) fn builtin_internal_default_process_filter(
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| Value::fixnum(b.text.emacs_byte_to_char(new_mark) as i64 + 1))
+            .map(|b| Value::fixnum(EmacsBytePos::new(new_mark).to_lisp(&b.text).as_i64()))
             .unwrap_or(Value::NIL);
         let _ = super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,
@@ -4350,7 +4350,7 @@ pub(crate) fn builtin_internal_default_process_sentinel(
         let new_mark_pos = eval
             .buffers
             .get(buf_id)
-            .map(|b| Value::fixnum(b.text.emacs_byte_to_char(new_mark) as i64 + 1))
+            .map(|b| Value::fixnum(EmacsBytePos::new(new_mark).to_lisp(&b.text).as_i64()))
             .unwrap_or(Value::NIL);
         super::marker::builtin_set_marker_in_buffers(
             &mut eval.buffers,
