@@ -11,7 +11,7 @@ use super::plist;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::text_props::TextPropertyTable;
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos};
+use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos};
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
 
@@ -54,6 +54,25 @@ pub(crate) fn init_textprop_vars(
 // ---------------------------------------------------------------------------
 // Helpers (local to this module)
 // ---------------------------------------------------------------------------
+
+#[inline]
+fn buffer_char_to_byte_pos(buf: &Buffer, char_pos: usize) -> usize {
+    buf.text
+        .char_pos_to_emacs_byte_pos(CharPos0::new(char_pos))
+        .get()
+}
+
+#[inline]
+fn buffer_byte_to_char_pos(buf: &Buffer, byte_pos: usize) -> usize {
+    buf.text
+        .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
+        .get()
+}
+
+#[inline]
+fn buffer_end_byte_pos(buf: &Buffer) -> usize {
+    buffer_char_to_byte_pos(buf, buf.text.char_count())
+}
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
@@ -301,7 +320,7 @@ fn lookup_buffer_text_property_at_char_pos(
         buffers,
         |name| {
             buf.text
-                .text_props_get_property(buf.text.char_to_byte(char_pos), name)
+                .text_props_get_property(buffer_char_to_byte_pos(buf, char_pos), name)
         },
         prop,
         true,
@@ -319,7 +338,7 @@ pub(crate) fn lookup_buffer_text_property(
         obarray,
         buffers,
         buf,
-        buf.text.byte_to_char(byte_pos),
+        buffer_byte_to_char_pos(buf, byte_pos),
         prop,
     )
 }
@@ -349,7 +368,7 @@ fn lookup_overlay_property(
 /// `args-out-of-range` for invalid positions.
 fn elisp_pos_to_byte(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
     debug_assert!(pos >= 1);
-    buf.text.char_to_byte((pos - 1) as usize)
+    buffer_char_to_byte_pos(buf, (pos - 1) as usize)
 }
 
 fn elisp_pos_to_byte_clipped_full(buf: &crate::buffer::buffer::Buffer, pos: i64) -> usize {
@@ -481,7 +500,7 @@ fn validate_buffer_property_range(
 
 /// Convert a 0-based byte position to a 1-based Elisp char position.
 pub(crate) fn byte_to_elisp_pos(buf: &crate::buffer::buffer::Buffer, byte_pos: usize) -> i64 {
-    buf.text.byte_to_char(byte_pos) as i64 + 1
+    EmacsBytePos::new(byte_pos).to_lisp(&buf.text).as_i64()
 }
 
 /// Resolve the optional OBJECT argument to a buffer id.
@@ -1137,7 +1156,7 @@ pub(crate) fn builtin_get_text_property_in_state(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
-    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+    if byte_pos == buffer_end_byte_pos(buf) {
         return Ok(Value::NIL);
     }
     Ok(lookup_buffer_text_property(
@@ -1224,7 +1243,7 @@ fn builtin_get_char_property_with_frames(
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
     let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
-    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+    if byte_pos == buffer_end_byte_pos(buf) {
         return Ok(Value::NIL);
     }
 
@@ -1837,7 +1856,7 @@ pub(crate) fn builtin_text_properties_at_in_buffers(
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
     let byte_pos = validate_buffer_property_point_raw(buf, pos, args[0])?;
-    if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+    if byte_pos == buffer_end_byte_pos(buf) {
         return Ok(Value::NIL);
     }
     Ok(buf.text.text_props_get_properties_plist_value(byte_pos))
@@ -2422,7 +2441,7 @@ fn builtin_get_char_property_and_overlay_with_frames(
 
     if let Some(buf) = buffers.get(buf_id) {
         let byte_pos = validate_buffer_point_raw(buf, pos, args[0])?;
-        if byte_pos == buf.text.char_to_byte(buf.text.char_count()) {
+        if byte_pos == buffer_end_byte_pos(buf) {
             return Ok(Value::cons(Value::NIL, Value::NIL));
         }
         if let Some((value, ov_val)) =
