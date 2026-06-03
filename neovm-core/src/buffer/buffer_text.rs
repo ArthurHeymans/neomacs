@@ -14,7 +14,7 @@ use crate::emacs_core::value::Value;
 use crate::gc_trace::GcTrace;
 
 use super::buffer::{BufferId, InsertionType};
-use super::position::{CharPos0, EmacsBytePos, EmacsByteRange, StorageBytePos};
+use super::position::{CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, StorageBytePos};
 use super::text::backend::TextBackend;
 use super::text::{
     BufferTextBackendKind, GapDebugLayout, TextBackendDebugLayout, TextEditRange, TextExtent,
@@ -179,6 +179,23 @@ impl BufferText {
         storage.pos_cache.set(PositionCache::default());
         storage.anchor_cache.borrow_mut().clear();
         storage.anchor_cache_key.set((0, 0));
+    }
+
+    fn byte_range_to_char_range_with_storage(
+        storage: &BufferTextStorage,
+        range: EmacsByteRange,
+    ) -> CharRange {
+        CharRange::new(
+            storage.backend.emacs_byte_pos_to_char_pos(range.start()),
+            storage.backend.emacs_byte_pos_to_char_pos(range.end()),
+        )
+    }
+
+    fn byte_range_to_char_range(&self, range: EmacsByteRange) -> CharRange {
+        CharRange::new(
+            CharPos0::new(self.buf_bytepos_to_charpos(range.start_usize())),
+            CharPos0::new(self.buf_bytepos_to_charpos(range.end_usize())),
+        )
     }
 
     pub fn new() -> Self {
@@ -726,47 +743,58 @@ impl BufferText {
     ) -> bool {
         // GNU intervals are character-indexed; BufferText owns the conversion
         // from buffer byte offsets into interval positions.
-        let (start, end, object_len) = {
+        let (range, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
-                    .get(),
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
-                    .get(),
+                Self::byte_range_to_char_range_with_storage(
+                    &storage,
+                    EmacsByteRange::from_usize(start, end),
+                ),
                 storage.metrics.chars(),
             )
         };
         self.storage
             .borrow_mut()
             .text_props
-            .put_property_for_object_len(start, end, object_len, name, value)
+            .put_property_for_object_len(
+                range.start_usize(),
+                range.end_usize(),
+                object_len,
+                name,
+                value,
+            )
     }
 
     pub fn text_props_get_property(&self, pos: usize, name: Value) -> Option<Value> {
-        let pos = self.buf_bytepos_to_charpos(pos);
-        self.storage.borrow().text_props.get_property(pos, name)
-    }
-
-    pub fn text_props_get_properties(&self, pos: usize) -> HashMap<Value, Value> {
-        let pos = self.buf_bytepos_to_charpos(pos);
-        self.storage.borrow().text_props.get_properties(pos)
-    }
-
-    pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
-        let pos = self.buf_bytepos_to_charpos(pos);
-        self.storage.borrow().text_props.get_properties_ordered(pos)
-    }
-
-    pub fn text_props_get_properties_plist_value(&self, pos: usize) -> Value {
-        let pos = self.buf_bytepos_to_charpos(pos);
+        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
         self.storage
             .borrow()
             .text_props
-            .get_properties_plist_value(pos)
+            .get_property(pos.start_usize(), name)
+    }
+
+    pub fn text_props_get_properties(&self, pos: usize) -> HashMap<Value, Value> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.storage
+            .borrow()
+            .text_props
+            .get_properties(pos.start_usize())
+    }
+
+    pub fn text_props_get_properties_ordered(&self, pos: usize) -> Vec<(Value, Value)> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.storage
+            .borrow()
+            .text_props
+            .get_properties_ordered(pos.start_usize())
+    }
+
+    pub fn text_props_get_properties_plist_value(&self, pos: usize) -> Value {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos));
+        self.storage
+            .borrow()
+            .text_props
+            .get_properties_plist_value(pos.start_usize())
     }
 
     pub fn text_props_range_has_all_properties(
@@ -775,12 +803,12 @@ impl BufferText {
         end: usize,
         properties: &[(Value, Value)],
     ) -> bool {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
-        self.storage
-            .borrow()
-            .text_props
-            .range_has_all_properties(start, end, properties)
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+        self.storage.borrow().text_props.range_has_all_properties(
+            range.start_usize(),
+            range.end_usize(),
+            properties,
+        )
     }
 
     pub fn text_props_range_has_any_property_named(
@@ -789,64 +817,64 @@ impl BufferText {
         end: usize,
         names: &[Value],
     ) -> bool {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
         self.storage
             .borrow()
             .text_props
-            .range_has_any_property_named(start, end, names)
+            .range_has_any_property_named(range.start_usize(), range.end_usize(), names)
     }
 
     pub fn text_props_range_has_any_interval(&self, start: usize, end: usize) -> bool {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
         self.storage
             .borrow()
             .text_props
-            .range_has_any_interval(start, end)
+            .range_has_any_interval(range.start_usize(), range.end_usize())
     }
 
     pub fn text_props_remove_property(&self, start: usize, end: usize, name: Value) -> bool {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
-        self.storage
-            .borrow_mut()
-            .text_props
-            .remove_property(start, end, name)
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+        self.storage.borrow_mut().text_props.remove_property(
+            range.start_usize(),
+            range.end_usize(),
+            name,
+        )
     }
 
     pub fn text_props_remove_all(&self, start: usize, end: usize) {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
         self.storage
             .borrow_mut()
             .text_props
-            .remove_all_properties(start, end);
+            .remove_all_properties(range.start_usize(), range.end_usize());
     }
 
     pub fn text_props_set_properties(&self, start: usize, end: usize, plist: Vec<(Value, Value)>) {
-        let (start, end, object_len) = {
+        let (range, object_len) = {
             let storage = self.storage.borrow();
             (
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(start))
-                    .get(),
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(end))
-                    .get(),
+                Self::byte_range_to_char_range_with_storage(
+                    &storage,
+                    EmacsByteRange::from_usize(start, end),
+                ),
                 storage.metrics.chars(),
             )
         };
         self.storage
             .borrow_mut()
             .text_props
-            .set_properties_for_object_len(start, end, object_len, plist);
+            .set_properties_for_object_len(
+                range.start_usize(),
+                range.end_usize(),
+                object_len,
+                plist,
+            );
     }
 
     pub fn text_props_next_change(&self, pos: usize) -> Option<usize> {
-        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .start_usize();
         let next = {
             self.storage
                 .borrow()
@@ -857,7 +885,9 @@ impl BufferText {
     }
 
     pub fn text_props_previous_change(&self, pos: usize) -> Option<usize> {
-        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .start_usize();
         let prev = {
             self.storage
                 .borrow()
@@ -868,7 +898,9 @@ impl BufferText {
     }
 
     pub fn text_props_next_interval_boundary(&self, pos: usize) -> Option<usize> {
-        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .start_usize();
         let next = {
             self.storage
                 .borrow()
@@ -885,18 +917,24 @@ impl BufferText {
         name: Value,
         value: Value,
     ) -> Option<usize> {
-        let char_start = self.buf_bytepos_to_charpos(start);
-        let char_end = self.buf_bytepos_to_charpos(end);
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
         let pos = self
             .storage
             .borrow()
             .text_props
-            .first_interval_pos_with_property_eq(char_start, char_end, name, value)?;
+            .first_interval_pos_with_property_eq(
+                range.start_usize(),
+                range.end_usize(),
+                name,
+                value,
+            )?;
         Some(self.buf_charpos_to_bytepos(pos))
     }
 
     pub fn text_props_previous_interval_boundary(&self, pos: usize) -> Option<usize> {
-        let char_pos = self.buf_bytepos_to_charpos(pos);
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(pos, pos))
+            .start_usize();
         let prev = {
             self.storage
                 .borrow()
@@ -907,7 +945,9 @@ impl BufferText {
     }
 
     pub fn text_props_append_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
-        let char_offset = self.buf_bytepos_to_charpos(byte_offset);
+        let char_offset = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(byte_offset, byte_offset))
+            .start_usize();
         self.storage
             .borrow_mut()
             .text_props
@@ -915,13 +955,9 @@ impl BufferText {
     }
 
     pub fn text_props_merge_missing_shifted(&self, other: &TextPropertyTable, byte_offset: usize) {
-        let char_offset = {
-            let storage = self.storage.borrow();
-            storage
-                .backend
-                .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_offset))
-                .get()
-        };
+        let char_offset = self
+            .byte_range_to_char_range(EmacsByteRange::from_usize(byte_offset, byte_offset))
+            .start_usize();
         self.storage
             .borrow_mut()
             .text_props
@@ -929,29 +965,19 @@ impl BufferText {
     }
 
     pub fn text_props_merge_adjacent_equal_around(&self, byte_start: usize, byte_end: usize) {
-        let (char_start, char_end) = {
-            let storage = self.storage.borrow();
-            (
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_start))
-                    .get(),
-                storage
-                    .backend
-                    .emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_end))
-                    .get(),
-            )
-        };
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(byte_start, byte_end));
         self.storage
             .borrow_mut()
             .text_props
-            .merge_adjacent_equal_properties_around(char_start, char_end);
+            .merge_adjacent_equal_properties_around(range.start_usize(), range.end_usize());
     }
 
     pub fn text_props_slice(&self, start: usize, end: usize) -> TextPropertyTable {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
-        self.storage.borrow().text_props.slice(start, end)
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
+        self.storage
+            .borrow()
+            .text_props
+            .slice(range.start_usize(), range.end_usize())
     }
 
     pub fn text_props_intervals_snapshot(&self) -> Vec<PropertyInterval> {
@@ -971,33 +997,54 @@ impl BufferText {
         end: usize,
         f: impl FnMut(usize, usize, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
-        let start = self.buf_bytepos_to_charpos(start);
-        let end = self.buf_bytepos_to_charpos(end);
+        let range = self.byte_range_to_char_range(EmacsByteRange::from_usize(start, end));
         self.storage
             .borrow()
             .text_props
-            .try_for_each_interval_in_range(start, end, f)
+            .try_for_each_interval_in_range(range.start_usize(), range.end_usize(), f)
     }
 
     pub fn adjust_text_props_for_insert(&self, pos: usize, len: usize) {
+        self.adjust_text_props_for_insert_at(CharPos0::new(pos), CharLen::new(len));
+    }
+
+    pub(crate) fn adjust_text_props_for_insert_at(&self, pos: CharPos0, len: CharLen) {
         self.storage
             .borrow_mut()
             .text_props
-            .adjust_for_insert(pos, len);
+            .adjust_for_insert(pos.get(), len.get());
     }
 
     pub fn adjust_text_props_for_delete(&self, start: usize, end: usize) {
+        self.adjust_text_props_for_delete_range(CharRange::from_usize(start, end));
+    }
+
+    pub(crate) fn adjust_text_props_for_delete_range(&self, range: CharRange) {
         self.storage
             .borrow_mut()
             .text_props
-            .adjust_for_delete(start, end);
+            .adjust_for_delete(range.start_usize(), range.end_usize());
     }
 
     pub fn adjust_text_props_for_replace(&self, start: usize, old_len: usize, new_len: usize) {
-        self.storage
-            .borrow_mut()
-            .text_props
-            .adjust_for_replace(start, old_len, new_len);
+        self.adjust_text_props_for_replace_at(
+            CharPos0::new(start),
+            CharLen::new(old_len),
+            CharLen::new(new_len),
+        );
+    }
+
+    pub(crate) fn adjust_text_props_for_replace_at(
+        &self,
+        start: CharPos0,
+        old_len: CharLen,
+        new_len: CharLen,
+    ) {
+        self.storage.borrow_mut().text_props.adjust_for_replace(
+            start.get(),
+            old_len.get(),
+            new_len.get(),
+        );
     }
 
     pub fn trace_text_prop_roots(&self, roots: &mut Vec<Value>) {
@@ -1116,13 +1163,26 @@ impl BufferText {
 
     /// Update the byte and char position of a marker in this chain.
     pub fn move_marker_to(&self, marker_id: u64, bytepos: usize, charpos: usize) {
+        self.move_marker_to_position(
+            marker_id,
+            EmacsBytePos::new(bytepos),
+            CharPos0::new(charpos),
+        );
+    }
+
+    pub(crate) fn move_marker_to_position(
+        &self,
+        marker_id: u64,
+        bytepos: EmacsBytePos,
+        charpos: CharPos0,
+    ) {
         let ptr = self.chain_find_by_id(marker_id);
         if ptr.is_null() {
             return;
         }
         unsafe {
-            (*ptr).data.bytepos = bytepos;
-            (*ptr).data.charpos = charpos;
+            (*ptr).data.bytepos = bytepos.get();
+            (*ptr).data.charpos = charpos.get();
         }
     }
 
@@ -1255,9 +1315,23 @@ impl BufferText {
     }
 
     pub fn adjust_markers_for_insert(&self, insert_pos: usize, byte_len: usize, char_len: usize) {
+        self.adjust_markers_for_insert_extent(
+            EmacsBytePos::new(insert_pos),
+            TextExtent::from_usize(char_len, byte_len),
+        );
+    }
+
+    pub(crate) fn adjust_markers_for_insert_extent(
+        &self,
+        insert_pos: EmacsBytePos,
+        extent: TextExtent,
+    ) {
+        let byte_len = extent.emacs_bytes().get();
         if byte_len == 0 {
             return;
         }
+        let insert_pos = insert_pos.get();
+        let char_len = extent.chars().get();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: `curr` walks live chain-owned MarkerObj pointers from
@@ -1292,9 +1366,23 @@ impl BufferText {
         byte_len: usize,
         char_len: usize,
     ) {
+        self.adjust_markers_for_insert_extent_strict_after(
+            EmacsBytePos::new(insert_pos),
+            TextExtent::from_usize(char_len, byte_len),
+        );
+    }
+
+    pub(crate) fn adjust_markers_for_insert_extent_strict_after(
+        &self,
+        insert_pos: EmacsBytePos,
+        extent: TextExtent,
+    ) {
+        let byte_len = extent.emacs_bytes().get();
         if byte_len == 0 {
             return;
         }
+        let insert_pos = insert_pos.get();
+        let char_len = extent.chars().get();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
@@ -1317,11 +1405,20 @@ impl BufferText {
         start_char: usize,
         end_char: usize,
     ) {
-        if start >= end {
+        self.adjust_markers_for_delete_range(TextEditRange::from_usize(
+            start, end, start_char, end_char,
+        ));
+    }
+
+    pub(crate) fn adjust_markers_for_delete_range(&self, range: TextEditRange) {
+        if range.is_empty() {
             return;
         }
-        let byte_len = end - start;
-        let char_len = end_char - start_char;
+        let start = range.byte_start_usize();
+        let end = range.byte_end_usize();
+        let start_char = range.char_start_usize();
+        let byte_len = range.byte_len().get();
+        let char_len = range.char_len().get();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
@@ -1349,13 +1446,29 @@ impl BufferText {
         new_byte_len: usize,
         new_char_len: usize,
     ) {
-        if start >= end {
-            self.adjust_markers_for_insert(start, new_byte_len, new_char_len);
+        self.adjust_markers_for_replace_range(
+            TextEditRange::from_usize(start, end, start_char, end_char),
+            TextExtent::from_usize(new_char_len, new_byte_len),
+        );
+    }
+
+    pub(crate) fn adjust_markers_for_replace_range(
+        &self,
+        old_range: TextEditRange,
+        new_extent: TextExtent,
+    ) {
+        let new_byte_len = new_extent.emacs_bytes().get();
+        let new_char_len = new_extent.chars().get();
+        if old_range.is_empty() {
+            self.adjust_markers_for_insert_extent(old_range.byte_start(), new_extent);
             return;
         }
 
-        let old_byte_len = end - start;
-        let old_char_len = end_char - start_char;
+        let start = old_range.byte_start_usize();
+        let end = old_range.byte_end_usize();
+        let start_char = old_range.char_start_usize();
+        let old_byte_len = old_range.byte_len().get();
+        let old_char_len = old_range.char_len().get();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.
@@ -1375,9 +1488,19 @@ impl BufferText {
     }
 
     pub fn advance_markers_at(&self, pos: usize, byte_len: usize, char_len: usize) {
+        self.advance_markers_at_position(
+            EmacsBytePos::new(pos),
+            TextExtent::from_usize(char_len, byte_len),
+        );
+    }
+
+    pub(crate) fn advance_markers_at_position(&self, pos: EmacsBytePos, extent: TextExtent) {
+        let byte_len = extent.emacs_bytes().get();
         if byte_len == 0 {
             return;
         }
+        let pos = pos.get();
+        let char_len = extent.chars().get();
         let storage = self.storage.borrow();
         let mut curr = storage.markers_head;
         // SAFETY: same invariant as adjust_markers_for_insert.

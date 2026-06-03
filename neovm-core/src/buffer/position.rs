@@ -25,6 +25,13 @@ pub struct CharLen(usize);
 #[repr(transparent)]
 pub struct EmacsByteLen(usize);
 
+/// Half-open internal character range `[start, end)`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CharRange {
+    start: CharPos0,
+    end: CharPos0,
+}
+
 /// 0-based physical storage byte position.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -134,6 +141,43 @@ impl CharLen {
 
     pub const fn is_empty(self) -> bool {
         self.0 == 0
+    }
+}
+
+impl CharRange {
+    pub const fn new(start: CharPos0, end: CharPos0) -> Self {
+        Self { start, end }
+    }
+
+    pub const fn from_usize(start: usize, end: usize) -> Self {
+        Self {
+            start: CharPos0::new(start),
+            end: CharPos0::new(end),
+        }
+    }
+
+    pub const fn start(self) -> CharPos0 {
+        self.start
+    }
+
+    pub const fn end(self) -> CharPos0 {
+        self.end
+    }
+
+    pub const fn start_usize(self) -> usize {
+        self.start.get()
+    }
+
+    pub const fn end_usize(self) -> usize {
+        self.end.get()
+    }
+
+    pub const fn len(self) -> CharLen {
+        CharLen::new(self.end.get().saturating_sub(self.start.get()))
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.start.get() >= self.end.get()
     }
 }
 
