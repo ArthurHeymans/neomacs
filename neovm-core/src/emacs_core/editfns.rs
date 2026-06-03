@@ -71,8 +71,8 @@ fn expect_integer(_name: &str, val: &Value) -> Result<i64, Flow> {
 
 /// Convert a Lisp 1-based character position to a 0-based byte position,
 /// clamping to the accessible region `[begv, zv]`.
-pub(crate) fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> usize {
-    buf.lisp_pos_to_accessible_byte(lisp_pos)
+pub(crate) fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, lisp_pos: i64) -> EmacsBytePos {
+    buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos)
 }
 
 fn dynamic_buffer_or_global_symbol_value(
