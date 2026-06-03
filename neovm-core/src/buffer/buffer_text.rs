@@ -343,18 +343,24 @@ impl BufferText {
     }
 
     pub fn text_range(&self, start: usize, end: usize) -> String {
-        self.storage.borrow().backend.text_range(start, end)
+        self.storage
+            .borrow()
+            .backend
+            .text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
     }
 
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        self.storage.borrow().backend.copy_bytes_to(start, end, out);
+        self.storage
+            .borrow()
+            .backend
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
         self.storage
             .borrow()
             .backend
-            .copy_emacs_bytes_to(start, end, out);
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub fn for_each_emacs_byte_chunk<E>(
@@ -366,14 +372,14 @@ impl BufferText {
         self.storage
             .borrow()
             .backend
-            .for_each_emacs_byte_chunk(start, end, f)
+            .for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
         self.storage
             .borrow()
             .backend
-            .has_contiguous_emacs_bytes(start, end)
+            .has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
     }
 
     pub fn with_contiguous_emacs_bytes<R>(
@@ -385,7 +391,7 @@ impl BufferText {
         self.storage
             .borrow()
             .backend
-            .with_contiguous_emacs_bytes(start, end, f)
+            .with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
     }
 
     pub fn insert_str(&mut self, pos: usize, text: &str) {
@@ -577,7 +583,7 @@ impl BufferText {
         self.storage
             .borrow()
             .backend
-            .copy_bytes_to(start, end, &mut bytes);
+            .copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), &mut bytes);
         if self.is_multibyte() {
             let mut pos = 0;
             while pos < bytes.len() {

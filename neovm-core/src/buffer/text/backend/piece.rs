@@ -156,12 +156,15 @@ impl PieceTreeTextBackend {
         let mut tmp = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
         let available = (self.len() - pos).min(tmp.len());
         let mut written = 0;
-        self.for_each_emacs_byte_chunk(pos, pos + available, |chunk| {
-            let take = (available - written).min(chunk.len());
-            tmp[written..written + take].copy_from_slice(&chunk[..take]);
-            written += take;
-            Ok::<(), ()>(())
-        })
+        self.for_each_emacs_byte_range_chunk(
+            EmacsByteRange::from_usize(pos, pos + available),
+            |chunk| {
+                let take = (available - written).min(chunk.len());
+                tmp[written..written + take].copy_from_slice(&chunk[..take]);
+                written += take;
+                Ok::<(), ()>(())
+            },
+        )
         .expect("infallible chunk copy");
         Some(crate::emacs_core::emacs_char::string_char(&tmp[..written]).0)
     }
@@ -198,6 +201,12 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn text_range(&self, start: usize, end: usize) -> String {
+        self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(start <= end, "text_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -205,24 +214,12 @@ impl PieceTreeTextBackend {
             self.len()
         );
         let mut out = Vec::with_capacity(end - start);
-        self.copy_bytes_to(start, end, &mut out);
+        self.copy_emacs_byte_range_to(range, &mut out);
         crate::emacs_core::string_escape::emacs_bytes_to_storage_string(&out, self.multibyte)
     }
 
     pub(in crate::buffer) fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        assert!(start <= end, "copy_bytes_to: start ({start}) > end ({end})");
-        assert!(
-            end <= self.len(),
-            "copy_bytes_to: end ({end}) > len ({})",
-            self.len()
-        );
-        out.clear();
-        out.reserve(end - start);
-        self.for_each_emacs_byte_chunk(start, end, |chunk| {
-            out.extend_from_slice(chunk);
-            Ok::<(), ()>(())
-        })
-        .expect("infallible byte copy");
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     pub(in crate::buffer) fn copy_emacs_bytes_to(
@@ -231,6 +228,16 @@ impl PieceTreeTextBackend {
         end: usize,
         out: &mut Vec<u8>,
     ) {
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+    }
+
+    pub(in crate::buffer) fn copy_emacs_byte_range_to(
+        &self,
+        range: EmacsByteRange,
+        out: &mut Vec<u8>,
+    ) {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "copy_emacs_bytes_to: start ({start}) > end ({end})"
@@ -240,7 +247,13 @@ impl PieceTreeTextBackend {
             "copy_emacs_bytes_to: end ({end}) > emacs len ({})",
             self.len()
         );
-        self.copy_bytes_to(start, end, out);
+        out.clear();
+        out.reserve(end - start);
+        self.for_each_emacs_byte_range_chunk(range, |chunk| {
+            out.extend_from_slice(chunk);
+            Ok::<(), ()>(())
+        })
+        .expect("infallible byte copy");
     }
 
     pub(in crate::buffer) fn for_each_emacs_byte_chunk<E>(
@@ -249,6 +262,16 @@ impl PieceTreeTextBackend {
         end: usize,
         mut f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
+        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), &mut f)
+    }
+
+    pub(in crate::buffer) fn for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        mut f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "for_each_emacs_byte_chunk: start ({start}) > end ({end})"
@@ -262,6 +285,12 @@ impl PieceTreeTextBackend {
     }
 
     pub(in crate::buffer) fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
+        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(in crate::buffer) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "has_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -280,6 +309,16 @@ impl PieceTreeTextBackend {
         end: usize,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
+        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
+    }
+
+    pub(in crate::buffer) fn with_contiguous_emacs_byte_range<R>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnOnce(&[u8]) -> R,
+    ) -> Option<R> {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "with_contiguous_emacs_bytes: start ({start}) > end ({end})"

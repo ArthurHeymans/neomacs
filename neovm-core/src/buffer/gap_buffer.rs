@@ -266,6 +266,12 @@ impl GapBuffer {
     ///
     /// Panics if `start > end` or `end > self.len()`.
     pub fn text_range(&self, start: usize, end: usize) -> String {
+        self.text_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(crate) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(start <= end, "text_range: start ({start}) > end ({end})");
         assert!(
             end <= self.len(),
@@ -289,11 +295,20 @@ impl GapBuffer {
     /// # Panics
     /// Panics if `start > end` or `end > self.len()`.
     pub fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        assert!(start <= end, "copy_bytes_to: start ({start}) > end ({end})");
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
+    }
+
+    pub(crate) fn copy_emacs_byte_range_to(&self, range: EmacsByteRange, out: &mut Vec<u8>) {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
-            end <= self.len(),
-            "copy_bytes_to: end ({end}) > len ({})",
-            self.len()
+            start <= end,
+            "copy_emacs_bytes_to: start ({start}) > end ({end})"
+        );
+        assert!(
+            end <= self.total_bytes,
+            "copy_emacs_bytes_to: end ({end}) > emacs len ({})",
+            self.total_bytes
         );
         out.clear();
         if start == end {
@@ -323,22 +338,7 @@ impl GapBuffer {
     /// # Panics
     /// Panics if `start > end` or `end > self.emacs_byte_len()`.
     pub fn copy_emacs_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        assert!(
-            start <= end,
-            "copy_emacs_bytes_to: start ({start}) > end ({end})"
-        );
-        assert!(
-            end <= self.total_bytes,
-            "copy_emacs_bytes_to: end ({end}) > emacs len ({})",
-            self.total_bytes
-        );
-        out.clear();
-        if start == end {
-            return;
-        }
-        out.reserve(end - start);
-
-        self.copy_bytes_to(start, end, out);
+        self.copy_emacs_byte_range_to(EmacsByteRange::from_usize(start, end), out);
     }
 
     /// Visit each physically contiguous chunk of logical Emacs bytes in
@@ -353,6 +353,16 @@ impl GapBuffer {
         end: usize,
         mut f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
+        self.for_each_emacs_byte_range_chunk(EmacsByteRange::from_usize(start, end), &mut f)
+    }
+
+    pub(crate) fn for_each_emacs_byte_range_chunk<E>(
+        &self,
+        range: EmacsByteRange,
+        mut f: impl FnMut(&[u8]) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "for_each_emacs_byte_chunk: start ({start}) > end ({end})"
@@ -381,6 +391,12 @@ impl GapBuffer {
     /// Return whether logical Emacs bytes in `[start, end)` are physically
     /// contiguous in the backing store.
     pub fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
+        self.has_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end))
+    }
+
+    pub(crate) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "has_contiguous_emacs_bytes: start ({start}) > end ({end})"
@@ -402,6 +418,16 @@ impl GapBuffer {
         end: usize,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
+        self.with_contiguous_emacs_byte_range(EmacsByteRange::from_usize(start, end), f)
+    }
+
+    pub(crate) fn with_contiguous_emacs_byte_range<R>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnOnce(&[u8]) -> R,
+    ) -> Option<R> {
+        let start = range.start_usize();
+        let end = range.end_usize();
         assert!(
             start <= end,
             "with_contiguous_emacs_bytes: start ({start}) > end ({end})"

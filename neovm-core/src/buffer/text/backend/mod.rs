@@ -154,60 +154,50 @@ impl TextBackend {
         }
     }
 
-    pub(in crate::buffer) fn text_range(&self, start: usize, end: usize) -> String {
+    pub(in crate::buffer) fn text_emacs_byte_range(&self, range: EmacsByteRange) -> String {
         match self {
-            Self::Gap(gap) => gap.text_range(start, end),
-            Self::PieceTree(piece_tree) => piece_tree.text_range(start, end),
+            Self::Gap(gap) => gap.text_emacs_byte_range(range),
+            Self::PieceTree(piece_tree) => piece_tree.text_emacs_byte_range(range),
         }
     }
 
-    pub(in crate::buffer) fn copy_bytes_to(&self, start: usize, end: usize, out: &mut Vec<u8>) {
-        match self {
-            Self::Gap(gap) => gap.copy_bytes_to(start, end, out),
-            Self::PieceTree(piece_tree) => piece_tree.copy_bytes_to(start, end, out),
-        }
-    }
-
-    pub(in crate::buffer) fn copy_emacs_bytes_to(
+    pub(in crate::buffer) fn copy_emacs_byte_range_to(
         &self,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         out: &mut Vec<u8>,
     ) {
         match self {
-            Self::Gap(gap) => gap.copy_emacs_bytes_to(start, end, out),
-            Self::PieceTree(piece_tree) => piece_tree.copy_emacs_bytes_to(start, end, out),
+            Self::Gap(gap) => gap.copy_emacs_byte_range_to(range, out),
+            Self::PieceTree(piece_tree) => piece_tree.copy_emacs_byte_range_to(range, out),
         }
     }
 
-    pub(in crate::buffer) fn for_each_emacs_byte_chunk<E>(
+    pub(in crate::buffer) fn for_each_emacs_byte_range_chunk<E>(
         &self,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         f: impl FnMut(&[u8]) -> Result<(), E>,
     ) -> Result<(), E> {
         match self {
-            Self::Gap(gap) => gap.for_each_emacs_byte_chunk(start, end, f),
-            Self::PieceTree(piece_tree) => piece_tree.for_each_emacs_byte_chunk(start, end, f),
+            Self::Gap(gap) => gap.for_each_emacs_byte_range_chunk(range, f),
+            Self::PieceTree(piece_tree) => piece_tree.for_each_emacs_byte_range_chunk(range, f),
         }
     }
 
-    pub(in crate::buffer) fn has_contiguous_emacs_bytes(&self, start: usize, end: usize) -> bool {
+    pub(in crate::buffer) fn has_contiguous_emacs_byte_range(&self, range: EmacsByteRange) -> bool {
         match self {
-            Self::Gap(gap) => gap.has_contiguous_emacs_bytes(start, end),
-            Self::PieceTree(piece_tree) => piece_tree.has_contiguous_emacs_bytes(start, end),
+            Self::Gap(gap) => gap.has_contiguous_emacs_byte_range(range),
+            Self::PieceTree(piece_tree) => piece_tree.has_contiguous_emacs_byte_range(range),
         }
     }
 
-    pub(in crate::buffer) fn with_contiguous_emacs_bytes<R>(
+    pub(in crate::buffer) fn with_contiguous_emacs_byte_range<R>(
         &self,
-        start: usize,
-        end: usize,
+        range: EmacsByteRange,
         f: impl FnOnce(&[u8]) -> R,
     ) -> Option<R> {
         match self {
-            Self::Gap(gap) => gap.with_contiguous_emacs_bytes(start, end, f),
-            Self::PieceTree(piece_tree) => piece_tree.with_contiguous_emacs_bytes(start, end, f),
+            Self::Gap(gap) => gap.with_contiguous_emacs_byte_range(range, f),
+            Self::PieceTree(piece_tree) => piece_tree.with_contiguous_emacs_byte_range(range, f),
         }
     }
 
