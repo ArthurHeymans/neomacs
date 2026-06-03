@@ -2177,8 +2177,12 @@ impl Buffer {
             .text
             .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))
             .get();
-        let char_idx = self.text.emacs_byte_to_char(pos);
-        Some(self.text.char_to_byte(char_idx + 1) - storage_pos)
+        let char_idx = self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
+        let next_storage_pos = self
+            .text
+            .char_pos_to_storage_byte_pos(CharPos0::new(char_idx.get() + 1))
+            .get();
+        Some(next_storage_pos - storage_pos)
     }
 
     /// Storage-byte width of the character ending at Emacs byte position `pos`.
@@ -2186,11 +2190,14 @@ impl Buffer {
         if pos == 0 || pos > self.total_bytes() {
             return None;
         }
-        let prior_char = self.text.emacs_byte_to_char(pos);
-        if prior_char == 0 {
+        let prior_char = self.text.emacs_byte_pos_to_char_pos(EmacsBytePos::new(pos));
+        if prior_char.get() == 0 {
             return None;
         }
-        let prior_byte = self.text.char_to_byte(prior_char - 1);
+        let prior_byte = self
+            .text
+            .char_pos_to_storage_byte_pos(CharPos0::new(prior_char.get() - 1))
+            .get();
         let storage_pos = self
             .text
             .emacs_byte_pos_to_storage_byte_pos(EmacsBytePos::new(pos))

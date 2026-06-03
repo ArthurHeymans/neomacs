@@ -818,6 +818,14 @@ impl GapBuffer {
         EmacsBytePos::new(self.len())
     }
 
+    pub(crate) fn char_pos_to_storage_byte_pos(&self, char_pos: CharPos0) -> StorageBytePos {
+        StorageBytePos::new(
+            self.char_pos_to_emacs_byte_pos(char_pos)
+                .get()
+                .min(self.len()),
+        )
+    }
+
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------

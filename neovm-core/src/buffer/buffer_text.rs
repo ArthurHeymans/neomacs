@@ -488,6 +488,13 @@ impl BufferText {
         EmacsBytePos::new(self.buf_charpos_to_bytepos(char_pos.get()))
     }
 
+    pub(crate) fn char_pos_to_storage_byte_pos(&self, char_pos: CharPos0) -> StorageBytePos {
+        self.storage
+            .borrow()
+            .backend
+            .char_pos_to_storage_byte_pos(char_pos)
+    }
+
     pub fn byte_to_char(&self, byte_pos: usize) -> usize {
         self.emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte_pos))
             .get()

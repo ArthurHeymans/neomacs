@@ -112,6 +112,13 @@ impl GapTextBackend {
         self.gap.char_pos_to_emacs_byte_pos(char_pos)
     }
 
+    pub(in crate::buffer) fn char_pos_to_storage_byte_pos(
+        &self,
+        char_pos: CharPos0,
+    ) -> StorageBytePos {
+        self.gap.char_pos_to_storage_byte_pos(char_pos)
+    }
+
     pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,

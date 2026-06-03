@@ -199,6 +199,17 @@ impl PieceTreeTextBackend {
         EmacsBytePos::new(self.char_to_byte_in_node(&self.root, char_pos))
     }
 
+    pub(in crate::buffer) fn char_pos_to_storage_byte_pos(
+        &self,
+        char_pos: CharPos0,
+    ) -> StorageBytePos {
+        StorageBytePos::new(
+            self.char_pos_to_emacs_byte_pos(char_pos)
+                .get()
+                .min(self.len()),
+        )
+    }
+
     pub(in crate::buffer) fn storage_byte_pos_to_emacs_byte_pos(
         &self,
         byte_pos: StorageBytePos,

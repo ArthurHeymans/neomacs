@@ -680,6 +680,29 @@ fn char_before_multibyte() {
     assert_eq!(buf.char_before(6), Some('\u{597d}'));
 }
 
+#[test]
+fn char_width_helpers_use_typed_emacs_and_storage_positions() {
+    crate::test_utils::init_test_tracing();
+    for kind in implemented_text_backends() {
+        let buf = buf_with_text_backend("a\u{4f60}b", kind);
+
+        assert_eq!(buf.char_after_emacs_len(0), Some(1));
+        assert_eq!(buf.char_after_emacs_len(1), Some('\u{4f60}'.len_utf8()));
+        assert_eq!(buf.char_after_emacs_len(4), Some(1));
+        assert_eq!(buf.char_after_emacs_len(5), None);
+
+        assert_eq!(buf.char_before_emacs_len(1), Some(1));
+        assert_eq!(buf.char_before_emacs_len(4), Some('\u{4f60}'.len_utf8()));
+        assert_eq!(buf.char_before_emacs_len(5), Some(1));
+        assert_eq!(buf.char_before_emacs_len(0), None);
+
+        assert_eq!(buf.char_after_storage_len(0), Some(1));
+        assert_eq!(buf.char_after_storage_len(1), Some('\u{4f60}'.len_utf8()));
+        assert_eq!(buf.char_before_storage_len(4), Some('\u{4f60}'.len_utf8()));
+        assert_eq!(buf.char_before_storage_len(5), Some(1));
+    }
+}
+
 // -----------------------------------------------------------------------
 // Narrowing
 // -----------------------------------------------------------------------
