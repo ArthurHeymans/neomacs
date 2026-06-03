@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferId, BufferManager};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos};
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
     Window, WindowBufferDisplayDefaults, WindowId, is_valid_horizontal_scroll_bar_value,
@@ -5469,7 +5469,7 @@ fn scroll_by_lines_in_state(
         }
     }
 
-    let point_lisp = buf.text.emacs_byte_to_char(pos) + 1;
+    let point_lisp = EmacsBytePos::new(pos).to_lisp(&buf.text).as_i64() as usize;
     let _ = buffers.goto_buffer_byte(buffer_id, pos);
     if let Some(window) = frames
         .get_mut(fid)
@@ -5568,7 +5568,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         }
 
         // Set window-start.
-        let pos_lisp = buf.text.emacs_byte_to_char(pos) as i64 + 1;
+        let pos_lisp = EmacsBytePos::new(pos).to_lisp(&buf.text).as_i64();
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
         {
             if let Some(window) = frames
