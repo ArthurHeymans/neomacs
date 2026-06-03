@@ -56,7 +56,7 @@ pub(crate) fn builtin_get_pos_property_impl(
     let buf = buffers
         .get(buf_id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-    let byte_pos = buf.lisp_pos_to_byte(pos);
+    let byte_pos = buf.lisp_pos_to_emacs_byte_pos(pos).get();
 
     if let Some((value, _overlay_id)) =
         super::textprop::buffer_overlay_property_for_inserted_char_at_byte_pos(buf, byte_pos, prop)
@@ -992,7 +992,7 @@ fn text_property_value_at_char_pos(
     pos: i64,
     prop: Value,
 ) -> Value {
-    let byte_pos = buf.lisp_pos_to_byte(pos);
+    let byte_pos = buf.lisp_pos_to_emacs_byte_pos(pos).get();
     super::textprop::lookup_buffer_text_property(obarray, buffers, buf, byte_pos, prop)
 }
 
@@ -1248,7 +1248,7 @@ fn write_print_output_to_target(
                     )],
                 ));
             }
-            let marker_byte = buffer.lisp_pos_to_byte(marker_pos);
+            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(marker_pos).get();
             let saved_current = ctx.buffers.current_buffer_id();
             let saved_point =
                 saved_current.and_then(|id| ctx.buffers.get(id).map(|buf| buf.point()));
