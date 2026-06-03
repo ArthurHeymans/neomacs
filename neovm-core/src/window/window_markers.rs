@@ -12,7 +12,7 @@
 //! caches are refreshed by `sync_window_positions_from_markers` after every
 //! text edit.
 
-use crate::buffer::{Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType};
+use crate::buffer::{Buffer, BufferId, BufferManager, InsertionType, TextPositionAnchor};
 use crate::window::{Frame, FrameManager, Window, WindowId};
 
 /// Window-start markers use `InsertionType::Before` so the marker stays
@@ -28,9 +28,9 @@ fn lisp_position_to_restricted_marker_position(
     bm: &BufferManager,
     buffer_id: BufferId,
     lisp_position: usize,
-) -> (usize, usize) {
+) -> TextPositionAnchor {
     let Some(buffer) = bm.get(buffer_id) else {
-        return (
+        return TextPositionAnchor::from_usize(
             lisp_position.saturating_sub(1),
             lisp_position.saturating_sub(1),
         );
@@ -38,12 +38,12 @@ fn lisp_position_to_restricted_marker_position(
     restricted_marker_position(buffer, lisp_position)
 }
 
-fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> (usize, usize) {
+fn restricted_marker_position(buffer: &Buffer, lisp_position: usize) -> TextPositionAnchor {
     let char_pos = lisp_position
         .saturating_sub(1)
         .clamp(buffer.point_min_char(), buffer.point_max_char());
     let byte_pos = buffer.char_to_byte_clamped(char_pos);
-    (byte_pos, char_pos)
+    TextPositionAnchor::from_usize(char_pos, byte_pos)
 }
 
 fn marker_lisp_position(bm: &BufferManager, buffer_id: BufferId, marker_id: u64) -> Option<usize> {
@@ -65,17 +65,21 @@ pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer
         return;
     };
 
-    let (start_byte, _) = lisp_position_to_restricted_marker_position(bm, buffer_id, *window_start);
-    let (start_mid, _) = bm.create_marker(buffer_id, start_byte, START_INSERTION_TYPE);
+    let start = lisp_position_to_restricted_marker_position(bm, buffer_id, *window_start);
+    let (start_mid, _) =
+        bm.create_marker(buffer_id, start.emacs_byte_pos.get(), START_INSERTION_TYPE);
     *start_marker_id = Some(start_mid);
 
-    let (point_byte, _) = lisp_position_to_restricted_marker_position(bm, buffer_id, *point);
-    let (pt_mid, _) = bm.create_marker(buffer_id, point_byte, POINT_INSERTION_TYPE);
+    let point = lisp_position_to_restricted_marker_position(bm, buffer_id, *point);
+    let (pt_mid, _) = bm.create_marker(buffer_id, point.emacs_byte_pos.get(), POINT_INSERTION_TYPE);
     *point_marker_id = Some(pt_mid);
 
-    let (old_point_byte, _) =
-        lisp_position_to_restricted_marker_position(bm, buffer_id, *old_point);
-    let (op_mid, _) = bm.create_marker(buffer_id, old_point_byte, OLD_POINT_INSERTION_TYPE);
+    let old_point = lisp_position_to_restricted_marker_position(bm, buffer_id, *old_point);
+    let (op_mid, _) = bm.create_marker(
+        buffer_id,
+        old_point.emacs_byte_pos.get(),
+        OLD_POINT_INSERTION_TYPE,
+    );
     *old_point_marker_id = Some(op_mid);
 }
 
@@ -116,11 +120,10 @@ fn move_marker(
     lisp_position: usize,
 ) {
     let Some(mid) = marker_id else { return };
-    let (bytepos, charpos) =
-        lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
+    let position = lisp_position_to_restricted_marker_position(bm, buffer_id, lisp_position);
     if let Some(buf) = bm.get(buffer_id) {
         buf.text
-            .move_marker_to_position(mid, EmacsBytePos::new(bytepos), CharPos0::new(charpos));
+            .move_marker_to_position(mid, position.emacs_byte_pos, position.char_pos);
     }
 }
 
